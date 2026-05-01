@@ -3,239 +3,119 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+# ─── Departments ──────────────────────────────────────────────────────────────
 class Department(db.Model):
     __tablename__ = 'departments'
-    id            = db.Column(db.Integer, primary_key=True)
-    code          = db.Column(db.String(10), unique=True, nullable=False)
-    name          = db.Column(db.String(100), nullable=False)
-    color         = db.Column(db.String(20), default='#1e40af')
+    id    = db.Column(db.Integer, primary_key=True)
+    code  = db.Column(db.String(10), unique=True)
+    name  = db.Column(db.String(100))
+    color = db.Column(db.String(20), default='#1e40af')
 
-class HazardReport(db.Model):
-    __tablename__ = 'hazard_reports'
-    id            = db.Column(db.String(30), primary_key=True)
-    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    location      = db.Column(db.String(200))
-    date          = db.Column(db.String(20))
-    description   = db.Column(db.Text)
-    immediate_action = db.Column(db.Text)
-    suggested_mitigation = db.Column(db.Text)
-    severity      = db.Column(db.String(2))
-    likelihood    = db.Column(db.Integer)
-    risk_index    = db.Column(db.String(5))
-    reporter      = db.Column(db.String(100), default='Anonymous')
-    hazard_id     = db.Column(db.String(30), db.ForeignKey('hazards.id'))
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+# ─── Audit Plan (Annual) ──────────────────────────────────────────────────────
+class AuditPlan(db.Model):
+    __tablename__ = 'audit_plans'
+    id                 = db.Column(db.String(30), primary_key=True)
+    year               = db.Column(db.Integer, nullable=False)
+    department_id      = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    audit_type         = db.Column(db.String(50))   # Internal / Compliance / IOSA-style
+    frequency          = db.Column(db.String(30))   # Quarterly / Semi-Annual / Annual
+    responsible_manager = db.Column(db.String(100))
+    scope              = db.Column(db.Text)
+    status             = db.Column(db.String(20), default='Active')  # Active / Cancelled
+    created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    department         = db.relationship('Department', foreign_keys=[department_id])
+    schedules          = db.relationship('AuditSchedule', backref='plan', lazy=True, cascade='all, delete-orphan')
 
-class ASRReport(db.Model):
-    __tablename__ = 'asr_reports'
-    id               = db.Column(db.String(30), primary_key=True)
-    report_type      = db.Column(db.String(20), default='Voluntary')
-    occurrence_type  = db.Column(db.String(50))
-    captain          = db.Column(db.String(100))
-    captain_staff_no = db.Column(db.String(20))
-    copilot          = db.Column(db.String(100))
-    copilot_staff_no = db.Column(db.String(20))
-    date             = db.Column(db.String(20))
-    time_local       = db.Column(db.String(10))
-    time_utc         = db.Column(db.String(10))
-    flight_no        = db.Column(db.String(20))
-    route_from       = db.Column(db.String(10))
-    route_to         = db.Column(db.String(10))
-    diverted_to      = db.Column(db.String(10))
-    squawk           = db.Column(db.String(10))
-    aircraft_type    = db.Column(db.String(30))
-    registration     = db.Column(db.String(20))
-    pax              = db.Column(db.Integer)
-    crew             = db.Column(db.Integer)
-    altitude_ft      = db.Column(db.Integer)
-    flight_phase     = db.Column(db.String(30))
-    weather_wind     = db.Column(db.String(20))
-    weather_vis_rvr  = db.Column(db.String(20))
-    weather_clouds   = db.Column(db.String(30))
-    weather_temp_c   = db.Column(db.Integer)
-    weather_qnh      = db.Column(db.Integer)
-    runway           = db.Column(db.String(10))
-    runway_state     = db.Column(db.String(20))
-    event_description = db.Column(db.Text)
-    action_taken     = db.Column(db.Text)
-    severity         = db.Column(db.String(2))
-    likelihood       = db.Column(db.Integer)
-    risk_index       = db.Column(db.String(5))
-    hazard_id        = db.Column(db.String(30), db.ForeignKey('hazards.id'))
-    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+# ─── Audit Schedule ───────────────────────────────────────────────────────────
+class AuditSchedule(db.Model):
+    __tablename__ = 'audit_schedules'
+    id             = db.Column(db.String(30), primary_key=True)
+    plan_id        = db.Column(db.String(30), db.ForeignKey('audit_plans.id'))
+    department_id  = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    audit_type     = db.Column(db.String(50))
+    title          = db.Column(db.String(200))
+    scheduled_date = db.Column(db.String(20))
+    actual_date    = db.Column(db.String(20))
+    lead_auditor   = db.Column(db.String(100))
+    co_auditor     = db.Column(db.String(100))
+    status         = db.Column(db.String(20), default='Planned')  # Planned / In Progress / Completed / Cancelled
+    opening_meeting_date = db.Column(db.String(20))
+    closing_meeting_date = db.Column(db.String(20))
+    closure_date   = db.Column(db.String(20))
+    closed_by      = db.Column(db.String(100))
+    final_remarks  = db.Column(db.Text)
+    can_close      = db.Column(db.Boolean, default=False)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    department     = db.relationship('Department', foreign_keys=[department_id])
+    checklist_items = db.relationship('ChecklistItem', backref='audit', lazy=True, cascade='all, delete-orphan')
+    findings       = db.relationship('AuditFinding', backref='audit', lazy=True, cascade='all, delete-orphan')
 
-class Hazard(db.Model):
-    __tablename__ = 'hazards'
-    id                     = db.Column(db.String(30), primary_key=True)
-    source                 = db.Column(db.String(30))   # Hazard Report / ASR / Audit / MOC / Investigation
-    linked_report_id       = db.Column(db.String(30))
-    department_id          = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    classification         = db.Column(db.String(30))   # Operational/Technical/Human Factors/Environmental/Organizational
-    type_of_activity       = db.Column(db.String(100))
-    generic_hazard         = db.Column(db.String(200))
-    specific_components    = db.Column(db.Text)
-    consequences           = db.Column(db.Text)
-    status                 = db.Column(db.String(20), default='Open')
-    owner                  = db.Column(db.String(100))
-    created_at             = db.Column(db.DateTime, default=datetime.utcnow)
-    department             = db.relationship('Department', foreign_keys=[department_id])
-    risks                  = db.relationship('Risk', backref='hazard', lazy=True, cascade='all, delete-orphan')
-    actions                = db.relationship('Action', backref='hazard', lazy=True)
+# ─── Audit Checklist ──────────────────────────────────────────────────────────
+class ChecklistItem(db.Model):
+    __tablename__ = 'checklist_items'
+    id          = db.Column(db.Integer, primary_key=True)
+    audit_id    = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'))
+    category    = db.Column(db.String(50))   # SOP / Training / Safety Reporting / Operational / Risk Management
+    reference   = db.Column(db.String(50))   # e.g. ICAO Annex 19, IOSA ISM 1.1.1
+    question    = db.Column(db.Text)
+    response    = db.Column(db.String(10))   # Yes / No / N/A
+    comment     = db.Column(db.Text)
+    finding_generated = db.Column(db.Boolean, default=False)
 
-class Risk(db.Model):
-    __tablename__ = 'risks'
-    id                    = db.Column(db.String(30), primary_key=True)
-    hazard_id             = db.Column(db.String(30), db.ForeignKey('hazards.id'), nullable=False)
-    description           = db.Column(db.Text)
-    initial_likelihood    = db.Column(db.Integer)
-    initial_severity      = db.Column(db.String(2))
-    initial_risk_index    = db.Column(db.String(5))
-    initial_tolerance     = db.Column(db.String(20))
-    residual_likelihood   = db.Column(db.Integer)
-    residual_severity     = db.Column(db.String(2))
-    residual_risk_index   = db.Column(db.String(5))
-    residual_tolerance    = db.Column(db.String(20))
-    created_at            = db.Column(db.DateTime, default=datetime.utcnow)
-    controls              = db.relationship('Control', backref='risk', lazy=True, cascade='all, delete-orphan')
-
-class Control(db.Model):
-    __tablename__ = 'controls'
-    id            = db.Column(db.String(30), primary_key=True)
-    risk_id       = db.Column(db.String(30), db.ForeignKey('risks.id'), nullable=False)
-    control_type  = db.Column(db.String(20))   # Preventive / Detective
-    description   = db.Column(db.Text)
-    owner         = db.Column(db.String(100))
-    effectiveness = db.Column(db.String(30))   # Effective / Partially Effective / Ineffective
-    review_date   = db.Column(db.String(20))
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Action(db.Model):
-    __tablename__ = 'actions'
-    id               = db.Column(db.String(30), primary_key=True)
-    source           = db.Column(db.String(30))   # Hazard / ASR / Audit / MOC / Investigation
-    hazard_id        = db.Column(db.String(30), db.ForeignKey('hazards.id'))
-    linked_ref_id    = db.Column(db.String(30))   # e.g. audit finding ID or investigation ID
-    description      = db.Column(db.Text)
-    owner            = db.Column(db.String(100))
-    due_date         = db.Column(db.String(20))
-    priority         = db.Column(db.String(20))   # High / Medium / Low
-    status           = db.Column(db.String(20), default='Open')  # Open / In Progress / Closed / Overdue
-    effectiveness_review = db.Column(db.Text)
-    closed_date      = db.Column(db.String(20))
-    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Audit(db.Model):
-    __tablename__ = 'audits'
-    id            = db.Column(db.String(30), primary_key=True)
-    title         = db.Column(db.String(200))
-    audit_type    = db.Column(db.String(50))   # Internal / External / IOSA / Regulatory
-    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    planned_date  = db.Column(db.String(20))
-    actual_date   = db.Column(db.String(20))
-    lead_auditor  = db.Column(db.String(100))
-    status        = db.Column(db.String(20), default='Planned')  # Planned / In Progress / Closed
-    summary       = db.Column(db.Text)
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
-    findings      = db.relationship('Finding', backref='audit', lazy=True, cascade='all, delete-orphan')
-
-class Finding(db.Model):
-    __tablename__ = 'findings'
+# ─── Audit Findings ───────────────────────────────────────────────────────────
+class AuditFinding(db.Model):
+    __tablename__ = 'audit_findings'
     id              = db.Column(db.String(30), primary_key=True)
-    audit_id        = db.Column(db.String(30), db.ForeignKey('audits.id'), nullable=False)
+    audit_id        = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'))
+    checklist_item_id = db.Column(db.Integer, db.ForeignKey('checklist_items.id'), nullable=True)
     description     = db.Column(db.Text)
+    category        = db.Column(db.String(30))   # Operational / Technical / Human Factors / Organizational
     severity        = db.Column(db.String(20))   # Major / Minor / Observation
     root_cause      = db.Column(db.Text)
-    corrective_action = db.Column(db.Text)
-    status          = db.Column(db.String(20), default='Open')
-    hazard_id       = db.Column(db.String(30))
-    action_id       = db.Column(db.String(30))
+    evidence        = db.Column(db.Text)
+    requirement_ref = db.Column(db.String(100))  # e.g. IOSA ISM 1.1.2
+    status          = db.Column(db.String(20), default='Open')  # Open / Action Raised / Verified / Closed
+    hazard_id       = db.Column(db.String(30), nullable=True)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    actions         = db.relationship('AuditAction', backref='finding', lazy=True, cascade='all, delete-orphan')
 
-class Investigation(db.Model):
-    __tablename__ = 'investigations'
+# ─── Corrective Actions ───────────────────────────────────────────────────────
+class AuditAction(db.Model):
+    __tablename__ = 'audit_actions'
+    id                   = db.Column(db.String(30), primary_key=True)
+    finding_id           = db.Column(db.String(30), db.ForeignKey('audit_findings.id'))
+    hazard_id            = db.Column(db.String(30), nullable=True)
+    description          = db.Column(db.Text)
+    owner                = db.Column(db.String(100))
+    due_date             = db.Column(db.String(20))
+    priority             = db.Column(db.String(20))   # High / Medium / Low
+    status               = db.Column(db.String(20), default='Open')  # Open / In Progress / Closed / Overdue
+    completion_date      = db.Column(db.String(20))
+    completion_evidence  = db.Column(db.Text)
+    effectiveness_review = db.Column(db.String(30))   # Effective / Partially Effective / Ineffective
+    effectiveness_notes  = db.Column(db.Text)
+    verified_by          = db.Column(db.String(100))
+    verification_date    = db.Column(db.String(20))
+    reopened             = db.Column(db.Boolean, default=False)
+    reopen_reason        = db.Column(db.Text)
+    created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+
+# ─── Hazard (linked from findings) ───────────────────────────────────────────
+class Hazard(db.Model):
+    __tablename__ = 'hazards'
     id                  = db.Column(db.String(30), primary_key=True)
-    title               = db.Column(db.String(200))
+    source              = db.Column(db.String(30))
     linked_report_id    = db.Column(db.String(30))
-    hazard_id           = db.Column(db.String(30), db.ForeignKey('hazards.id'))
     department_id       = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    date_of_occurrence  = db.Column(db.String(20))
-    investigator        = db.Column(db.String(100))
-    description         = db.Column(db.Text)
-    why1 = db.Column(db.Text)
-    why2 = db.Column(db.Text)
-    why3 = db.Column(db.Text)
-    why4 = db.Column(db.Text)
-    why5 = db.Column(db.Text)
-    root_cause          = db.Column(db.Text)
-    human_factors       = db.Column(db.Text)
-    technical_factors   = db.Column(db.Text)
-    organizational_factors = db.Column(db.Text)
-    environmental_factors  = db.Column(db.Text)
-    recommendations     = db.Column(db.Text)
+    classification      = db.Column(db.String(30))
+    generic_hazard      = db.Column(db.String(200))
+    specific_components = db.Column(db.Text)
+    consequences        = db.Column(db.Text)
+    initial_likelihood  = db.Column(db.Integer)
+    initial_severity    = db.Column(db.String(2))
+    initial_risk_index  = db.Column(db.String(5))
+    initial_tolerance   = db.Column(db.String(20))
     status              = db.Column(db.String(20), default='Open')
+    owner               = db.Column(db.String(100))
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
     department          = db.relationship('Department', foreign_keys=[department_id])
-
-class MOC(db.Model):
-    __tablename__ = 'moc'
-    id                  = db.Column(db.String(30), primary_key=True)
-    title               = db.Column(db.String(200))
-    description         = db.Column(db.Text)
-    department_id       = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    change_type         = db.Column(db.String(50))   # Process / Equipment / Personnel / Regulatory
-    initiator           = db.Column(db.String(100))
-    planned_date        = db.Column(db.String(20))
-    pre_change_risk     = db.Column(db.Text)
-    approval_status     = db.Column(db.String(30), default='Pending')  # Pending / Approved / Rejected
-    approved_by         = db.Column(db.String(100))
-    implementation_status = db.Column(db.String(30), default='Not Started')
-    post_change_review  = db.Column(db.Text)
-    hazard_id           = db.Column(db.String(30))
-    created_at          = db.Column(db.DateTime, default=datetime.utcnow)
-    department          = db.relationship('Department', foreign_keys=[department_id])
-
-class SPIIndicator(db.Model):
-    __tablename__ = 'spi_indicators'
-    id             = db.Column(db.Integer, primary_key=True)
-    code           = db.Column(db.String(20))
-    name           = db.Column(db.String(200))
-    department_ids = db.Column(db.String(50))   # comma-separated: "1,2"
-    unit           = db.Column(db.String(50))
-    spt_target     = db.Column(db.Float)
-    alert_l1       = db.Column(db.Float)
-    alert_l2       = db.Column(db.Float)
-    data_entries   = db.relationship('SPIData', backref='indicator', lazy=True)
-
-class SPIData(db.Model):
-    __tablename__ = 'spi_data'
-    id       = db.Column(db.Integer, primary_key=True)
-    spi_id   = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'))
-    year     = db.Column(db.Integer)
-    month    = db.Column(db.Integer)
-    events   = db.Column(db.Integer)
-    flights  = db.Column(db.Integer)
-    rate     = db.Column(db.Float)
-
-class SafetyBulletin(db.Model):
-    __tablename__ = 'safety_bulletins'
-    id            = db.Column(db.String(30), primary_key=True)
-    title         = db.Column(db.String(200))
-    bulletin_type = db.Column(db.String(30))   # Bulletin / Alert / Newsletter
-    content       = db.Column(db.Text)
-    issued_by     = db.Column(db.String(100))
-    department_ids = db.Column(db.String(100), default='all')
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Training(db.Model):
-    __tablename__ = 'trainings'
-    id             = db.Column(db.Integer, primary_key=True)
-    employee_name  = db.Column(db.String(100))
-    department_id  = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    training_type  = db.Column(db.String(100))
-    training_date  = db.Column(db.String(20))
-    expiry_date    = db.Column(db.String(20))
-    status         = db.Column(db.String(20), default='Completed')  # Completed / Due / Overdue
-    notes          = db.Column(db.Text)
-    department     = db.relationship('Department', foreign_keys=[department_id])
