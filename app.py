@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction
 from datetime import datetime, date
 import os, uuid
 
@@ -715,6 +715,459 @@ def new_training():
 @app.route('/risk-matrix')
 def risk_matrix():
     return render_template('risk_matrix.html')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  AUDIT MANAGEMENT MODULE ROUTES
+#  ICAO Annex 19 / IOSA ISM compliant
+#  Added as extension — existing routes unchanged
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Checklist templates per department ───────────────────────────────────────
+CHECKLIST_TEMPLATES = {
+    'default': [
+        ('SOP Compliance',      'ISM 1.1.1',  'Are Standard Operating Procedures current, approved and accessible to all relevant personnel?'),
+        ('SOP Compliance',      'ISM 1.1.2',  'Have SOPs been reviewed within the required timeframe?'),
+        ('Training Records',    'ISM 2.1.1',  'Are training records complete, current and properly filed for all personnel?'),
+        ('Training Records',    'ISM 2.1.2',  'Do all personnel hold valid certifications required for their role?'),
+        ('Safety Reporting',    'ISM 3.1.1',  'Is the safety reporting system accessible and promoted to all staff?'),
+        ('Safety Reporting',    'ISM 3.1.2',  'Are safety reports reviewed and actioned within defined timeframes?'),
+        ('Risk Management',     'ISM 4.1.1',  'Are hazard identification processes implemented and records maintained?'),
+        ('Risk Management',     'ISM 4.1.2',  'Are risk assessments reviewed and updated when changes occur?'),
+        ('Operational Procedures', 'ISM 5.1.1', 'Are operational procedures aligned with current regulatory requirements?'),
+        ('Operational Procedures', 'ISM 5.1.2', 'Are emergency/contingency procedures known and practised by personnel?'),
+    ],
+    'FO': [
+        ('SOP Compliance',      'FO-1.1',  'Are Operations Manual revisions current and controlled?'),
+        ('SOP Compliance',      'FO-1.2',  'Are MEL/CDL procedures understood and correctly applied?'),
+        ('Training Records',    'FO-2.1',  'Are all flight crew recency requirements met (line checks, simulator)?'),
+        ('Training Records',    'FO-2.2',  'Are CRM and UPRT training records current for all pilots?'),
+        ('Safety Reporting',    'FO-3.1',  'Are ASR reports submitted within 72 hours of occurrence?'),
+        ('Safety Reporting',    'FO-3.2',  'Are TCAS RA events reported and entered into the safety system?'),
+        ('Risk Management',     'FO-4.1',  'Are NOTAM and weather briefing procedures followed for all flights?'),
+        ('Risk Management',     'FO-4.2',  'Are fuel policy and alternates planned per company policy?'),
+        ('Operational Procedures', 'FO-5.1', 'Are sterile cockpit procedures enforced during critical phases of flight?'),
+        ('Operational Procedures', 'FO-5.2', 'Are fatigue risk management procedures followed and documented?'),
+    ],
+    'ME': [
+        ('SOP Compliance',      'ME-1.1',  'Are maintenance procedures documented and consistent with approved data?'),
+        ('SOP Compliance',      'ME-1.2',  'Are tooling calibration records maintained and current?'),
+        ('Training Records',    'ME-2.1',  'Do all certifying engineers hold valid licences and type ratings?'),
+        ('Training Records',    'ME-2.2',  'Are Human Factors in Maintenance training records current?'),
+        ('Safety Reporting',    'ME-3.1',  'Are occurrence reports filed for all significant maintenance events?'),
+        ('Safety Reporting',    'ME-3.2',  'Are defect reporting and follow-up processes properly implemented?'),
+        ('Risk Management',     'ME-4.1',  'Are safety risk assessments conducted before non-routine tasks?'),
+        ('Risk Management',     'ME-4.2',  'Are foreign object damage (FOD) prevention procedures in place?'),
+        ('Operational Procedures', 'ME-5.1', 'Are shift handover procedures formally documented and followed?'),
+        ('Operational Procedures', 'ME-5.2', 'Are critical maintenance tasks subject to independent inspection?'),
+    ],
+    'GO': [
+        ('SOP Compliance',      'GO-1.1',  'Are ramp operations procedures current and followed by all ground staff?'),
+        ('SOP Compliance',      'GO-1.2',  'Are aircraft loading instructions and mass & balance procedures complied with?'),
+        ('Training Records',    'GO-2.1',  'Are all ramp agents trained and current on vehicle airside driving?'),
+        ('Training Records',    'GO-2.2',  'Are dangerous goods handling training records maintained for all staff?'),
+        ('Safety Reporting',    'GO-3.1',  'Are ramp incidents and near-misses reported to the safety system?'),
+        ('Risk Management',     'GO-4.1',  'Are FOD inspection procedures conducted before aircraft movement?'),
+        ('Operational Procedures', 'GO-5.1', 'Are pushback procedures followed including communication protocols?'),
+        ('Operational Procedures', 'GO-5.2', 'Are fuelling safety procedures and bonding requirements enforced?'),
+    ],
+    'CC': [
+        ('SOP Compliance',      'CC-1.1',  'Are cabin crew procedures consistent with approved cabin safety manual?'),
+        ('Training Records',    'CC-2.1',  'Are all cabin crew recurrent safety training records current?'),
+        ('Training Records',    'CC-2.2',  'Are SEP (Safety & Emergency Procedures) drills completed on schedule?'),
+        ('Safety Reporting',    'CC-3.1',  'Are cabin safety incidents reported through the SMS system?'),
+        ('Risk Management',     'CC-4.1',  'Are pre-flight safety checks documented and completed for all flights?'),
+        ('Operational Procedures', 'CC-5.1', 'Are passenger safety briefings conducted per approved procedure?'),
+        ('Operational Procedures', 'CC-5.2', 'Are turbulence/emergency protocols reviewed and practised by crew?'),
+    ],
+    'SD': [
+        ('SOP Compliance',      'SD-1.1',  'Is the SMS manual current, approved and distributed to all departments?'),
+        ('Training Records',    'SD-2.1',  'Have all staff completed SMS awareness training within the required period?'),
+        ('Safety Reporting',    'SD-3.1',  'Are all safety reports triaged, investigated and actioned within KPI timelines?'),
+        ('Safety Reporting',    'SD-3.2',  'Are safety statistics reported to management at defined intervals?'),
+        ('Risk Management',     'SD-4.1',  'Is the hazard register reviewed and updated quarterly?'),
+        ('Risk Management',     'SD-4.2',  'Are SPI/SPT targets reviewed by the Safety Review Board?'),
+        ('Operational Procedures', 'SD-5.1', 'Are Safety Review Board meetings held per schedule with full attendance?'),
+        ('Operational Procedures', 'SD-5.2', 'Is the audit programme implemented as planned for the current year?'),
+    ],
+}
+
+def get_checklist_template(dept_code):
+    return CHECKLIST_TEMPLATES.get(dept_code, CHECKLIST_TEMPLATES['default'])
+
+
+# ─── AUDIT PLAN ───────────────────────────────────────────────────────────────
+@app.route('/audit-plans')
+def audit_plans():
+    year_f = request.args.get('year', str(datetime.now().year))
+    plans  = AuditPlan.query.filter_by(year=int(year_f)).order_by(AuditPlan.created_at).all()
+    years  = list(range(datetime.now().year - 1, datetime.now().year + 3))
+    return render_template('audit_plan_list.html', plans=plans,
+                           year_f=int(year_f), years=years)
+
+@app.route('/audit-plans/new', methods=['GET', 'POST'])
+def new_audit_plan():
+    if request.method == 'POST':
+        f   = request.form
+        pid = new_id('PLAN')
+        p   = AuditPlan(
+            id=pid,
+            year=int(f['year']),
+            department_id=int(f['department_id']),
+            audit_type=f['audit_type'],
+            frequency=f['frequency'],
+            responsible_manager=f['responsible_manager'],
+            scope=f.get('scope', ''),
+            objectives=f.get('objectives', ''),
+            status='Active'
+        )
+        db.session.add(p)
+        db.session.commit()
+        flash(f'✓ Audit Plan {pid} created for {f["year"]}.', 'success')
+        return redirect(url_for('audit_plans'))
+    years = list(range(datetime.now().year, datetime.now().year + 3))
+    return render_template('audit_plan_form.html', years=years)
+
+
+@app.route('/audit-plans/<pid>/schedule', methods=['POST'])
+def schedule_from_plan(pid):
+    """Convert an audit plan entry into a scheduled audit."""
+    plan = AuditPlan.query.get_or_404(pid)
+    f    = request.form
+    sid  = new_id('AUD')
+    s = AuditSchedule(
+        id=sid,
+        plan_id=pid,
+        department_id=plan.department_id,
+        audit_type=plan.audit_type,
+        scheduled_date=f['scheduled_date'],
+        lead_auditor=f['lead_auditor'],
+        audit_team=f.get('audit_team', ''),
+        scope=plan.scope,
+        objectives=plan.objectives,
+        status='Planned'
+    )
+    db.session.add(s)
+    # Auto-populate checklist from template
+    dept = Department.query.get(plan.department_id)
+    template = get_checklist_template(dept.code if dept else 'default')
+    for idx, (cat, ref, question) in enumerate(template):
+        item = AuditChecklist(
+            schedule_id=sid, category=cat,
+            item_ref=ref, question=question, sequence=idx
+        )
+        db.session.add(item)
+    db.session.commit()
+    flash(f'✓ Audit {sid} scheduled. Checklist auto-populated ({len(template)} items).', 'success')
+    return redirect(url_for('audit_schedule'))
+
+
+# ─── AUDIT SCHEDULE ───────────────────────────────────────────────────────────
+@app.route('/audit-schedule')
+def audit_schedule():
+    dept_f   = request.args.get('dept', '')
+    status_f = request.args.get('status', '')
+    q = AuditSchedule.query
+    if dept_f:   q = q.filter_by(department_id=int(dept_f))
+    if status_f: q = q.filter_by(status=status_f)
+    schedules = q.order_by(AuditSchedule.scheduled_date).all()
+
+    # Check/update overdue audit actions
+    today = date.today().isoformat()
+    changed = False
+    for s in AuditSchedule.query.all():
+        for f2 in s.findings:
+            for a in f2.actions:
+                if a.status in ('Open', 'In Progress') and a.due_date and a.due_date < today:
+                    a.status = 'Overdue'
+                    changed = True
+    if changed:
+        db.session.commit()
+
+    return render_template('audit_schedule.html', schedules=schedules,
+                           dept_f=dept_f, status_f=status_f)
+
+@app.route('/audit-schedule/new', methods=['GET', 'POST'])
+def new_audit_schedule():
+    """Create a scheduled audit without an existing plan (ad-hoc)."""
+    if request.method == 'POST':
+        f   = request.form
+        sid = new_id('AUD')
+        dept = Department.query.get(int(f['department_id']))
+        s = AuditSchedule(
+            id=sid, plan_id=None,
+            department_id=int(f['department_id']),
+            audit_type=f['audit_type'],
+            scheduled_date=f['scheduled_date'],
+            lead_auditor=f['lead_auditor'],
+            audit_team=f.get('audit_team', ''),
+            scope=f.get('scope', ''),
+            objectives=f.get('objectives', ''),
+            status='Planned'
+        )
+        db.session.add(s)
+        # Auto-populate checklist
+        template = get_checklist_template(dept.code if dept else 'default')
+        for idx, (cat, ref, question) in enumerate(template):
+            item = AuditChecklist(
+                schedule_id=sid, category=cat,
+                item_ref=ref, question=question, sequence=idx
+            )
+            db.session.add(item)
+        db.session.commit()
+        flash(f'✓ Audit {sid} created. Checklist auto-populated.', 'success')
+        return redirect(url_for('audit_schedule'))
+    return render_template('audit_schedule_form.html')
+
+
+# ─── AUDIT EXECUTION ─────────────────────────────────────────────────────────
+@app.route('/audit-schedule/<sid>')
+def audit_execution(sid):
+    s = AuditSchedule.query.get_or_404(sid)
+    # Group checklist by category
+    checklist = {}
+    for item in sorted(s.checklist_items, key=lambda x: x.sequence):
+        checklist.setdefault(item.category, []).append(item)
+    total   = len(s.checklist_items)
+    done    = sum(1 for i in s.checklist_items if i.response)
+    nc      = sum(1 for i in s.checklist_items if i.response == 'No')
+    # Closure eligibility
+    all_findings_actioned = all(len(f.actions) > 0 for f in s.findings) if s.findings else True
+    all_actions_closed    = all(
+        all(a.status == 'Closed' for a in f.actions) for f in s.findings
+    ) if s.findings else True
+    all_verified = all(
+        all(a.effectiveness in ('Effective', 'Partially Effective') for a in f.actions)
+        for f in s.findings
+    ) if s.findings else True
+    can_close = all_findings_actioned and all_actions_closed and all_verified
+    return render_template('audit_execution.html',
+        s=s, checklist=checklist, total=total, done=done, nc=nc,
+        can_close=can_close,
+        all_findings_actioned=all_findings_actioned,
+        all_actions_closed=all_actions_closed,
+        all_verified=all_verified)
+
+@app.route('/audit-schedule/<sid>/start', methods=['POST'])
+def start_audit(sid):
+    s = AuditSchedule.query.get_or_404(sid)
+    s.status       = 'In Progress'
+    s.actual_date  = date.today().isoformat()
+    s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
+    db.session.commit()
+    flash('✓ Audit started. Checklist is now active.', 'success')
+    return redirect(url_for('audit_execution', sid=sid))
+
+@app.route('/audit-schedule/<sid>/checklist', methods=['POST'])
+def save_checklist(sid):
+    s = AuditSchedule.query.get_or_404(sid)
+    for item in s.checklist_items:
+        item.response = request.form.get(f'resp_{item.id}', '')
+        item.comment  = request.form.get(f'comment_{item.id}', '')
+        item.evidence = request.form.get(f'evidence_{item.id}', '')
+    db.session.commit()
+    flash('✓ Checklist saved.', 'success')
+    return redirect(url_for('audit_execution', sid=sid))
+
+@app.route('/audit-schedule/<sid>/close', methods=['POST'])
+def close_audit(sid):
+    s = AuditSchedule.query.get_or_404(sid)
+    # Validate closure conditions
+    if s.findings:
+        for finding in s.findings:
+            if not finding.actions:
+                flash(f'✗ Cannot close: Finding {finding.id} has no corrective action.', 'error')
+                return redirect(url_for('audit_execution', sid=sid))
+            for a in finding.actions:
+                if a.status != 'Closed':
+                    flash(f'✗ Cannot close: Action {a.id} is not yet closed.', 'error')
+                    return redirect(url_for('audit_execution', sid=sid))
+                if not a.effectiveness:
+                    flash(f'✗ Cannot close: Action {a.id} has no effectiveness review.', 'error')
+                    return redirect(url_for('audit_execution', sid=sid))
+    s.status        = 'Completed'
+    s.closure_date  = date.today().isoformat()
+    s.closed_by     = request.form.get('closed_by', 'Safety Manager')
+    s.final_remarks = request.form.get('final_remarks', '')
+    s.closing_meeting = request.form.get('closing_meeting', date.today().isoformat())
+    db.session.commit()
+    flash(f'✓ Audit {sid} closed successfully. All conditions met.', 'success')
+    return redirect(url_for('audit_execution', sid=sid))
+
+
+# ─── AUDIT FINDINGS ───────────────────────────────────────────────────────────
+@app.route('/audit-schedule/<sid>/findings/new', methods=['POST'])
+def new_finding(sid):
+    s   = AuditSchedule.query.get_or_404(sid)
+    f   = request.form
+    fid = new_id('FND')
+
+    # Count findings for this audit to generate ref
+    count      = len(s.findings) + 1
+    finding_ref = f'F-{count:03d}'
+
+    finding = AuditFinding(
+        id=fid, schedule_id=sid,
+        finding_ref=finding_ref,
+        description=f['description'],
+        category=f['category'],
+        severity=f['severity'],
+        standard_ref=f.get('standard_ref', ''),
+        root_cause=f.get('root_cause', ''),
+        evidence=f.get('evidence', ''),
+        requirement=f.get('requirement', ''),
+        status='Open'
+    )
+    db.session.add(finding)
+    db.session.flush()
+
+    # Auto-create Hazard in main SMS Hazard Log
+    auto_hazard = f.get('auto_hazard') == 'yes'
+    hid = None
+    if auto_hazard:
+        hid  = new_id('HAZ')
+        sev  = f.get('risk_severity', 'C')
+        lik  = int(f.get('risk_likelihood', 3))
+        ri   = f'{lik}{sev}'
+        tol  = get_tolerance(ri)
+        h = Hazard(
+            id=hid, source='Audit',
+            linked_report_id=fid,
+            department_id=s.department_id,
+            classification='Organizational',
+            type_of_activity='Audit Finding',
+            generic_hazard=f['description'][:120],
+            specific_components=f.get('root_cause', ''),
+            consequences='To be assessed by Safety Department',
+            status='Open',
+            owner=f.get('action_owner', 'Safety Manager')
+        )
+        db.session.add(h)
+        db.session.flush()
+        risk = Risk(
+            id=new_id('RSK'), hazard_id=hid,
+            description=f['description'],
+            initial_likelihood=lik, initial_severity=sev,
+            initial_risk_index=ri, initial_tolerance=tol
+        )
+        db.session.add(risk)
+        finding.hazard_id = hid
+
+    # Auto-create corrective action (mandatory per IOSA)
+    act_desc = f.get('action_description', f['description'])
+    aid  = new_id('ACT')
+    action = AuditAction(
+        id=aid,
+        finding_id=fid,
+        hazard_id=hid,
+        description=act_desc,
+        action_type='Corrective',
+        owner=f.get('action_owner', ''),
+        due_date=f.get('due_date', ''),
+        priority='High' if f['severity'] == 'Major' else 'Medium',
+        status='Open'
+    )
+    db.session.add(action)
+    finding.status = 'Actioned'
+    db.session.commit()
+
+    msg = f'✓ Finding {finding_ref} recorded. Action {aid} created.'
+    if hid: msg += f' Hazard {hid} created in SMS Hazard Log.'
+    flash(msg, 'success')
+    return redirect(url_for('audit_execution', sid=sid))
+
+
+# ─── FINDING DETAIL ───────────────────────────────────────────────────────────
+@app.route('/audit-findings/<fid>')
+def finding_detail(fid):
+    finding = AuditFinding.query.get_or_404(fid)
+    return render_template('finding_detail.html', finding=finding)
+
+
+# ─── AUDIT ACTIONS ────────────────────────────────────────────────────────────
+@app.route('/audit-actions')
+def audit_actions():
+    today    = date.today().isoformat()
+    status_f = request.args.get('status', '')
+    pri_f    = request.args.get('priority', '')
+    q = AuditAction.query
+    if status_f: q = q.filter_by(status=status_f)
+    if pri_f:    q = q.filter_by(priority=pri_f)
+
+    # Auto-mark overdue
+    for a in AuditAction.query.filter(AuditAction.status.in_(['Open', 'In Progress'])).all():
+        if a.due_date and a.due_date < today:
+            a.status = 'Overdue'
+    db.session.commit()
+
+    actions  = q.order_by(AuditAction.created_at.desc()).all()
+    open_c   = AuditAction.query.filter_by(status='Open').count()
+    inprog   = AuditAction.query.filter_by(status='In Progress').count()
+    overdue  = AuditAction.query.filter_by(status='Overdue').count()
+    closed   = AuditAction.query.filter_by(status='Closed').count()
+    return render_template('audit_actions.html',
+        actions=actions, open_c=open_c, inprog=inprog,
+        overdue=overdue, closed=closed,
+        status_f=status_f, pri_f=pri_f)
+
+@app.route('/audit-actions/<aid>/update', methods=['POST'])
+def update_audit_action(aid):
+    a = AuditAction.query.get_or_404(aid)
+    f = request.form
+    a.status               = f.get('status', a.status)
+    a.owner                = f.get('owner', a.owner)
+    a.due_date             = f.get('due_date', a.due_date)
+    a.priority             = f.get('priority', a.priority)
+    a.implementation_notes = f.get('implementation_notes', a.implementation_notes)
+    a.effectiveness        = f.get('effectiveness', a.effectiveness)
+    a.effectiveness_notes  = f.get('effectiveness_notes', a.effectiveness_notes)
+    a.verified_by          = f.get('verified_by', a.verified_by)
+    a.verification_date    = f.get('verification_date', a.verification_date)
+    if a.status == 'Closed':
+        a.closed_date = date.today().isoformat()
+        # Update parent finding status
+        if a.finding and all(x.status == 'Closed' for x in a.finding.actions):
+            a.finding.status = 'Closed'
+    # Reopen if ineffective
+    if a.effectiveness == 'Ineffective' and a.reopen_reason is None:
+        a.status         = 'Open'
+        a.reopen_reason  = f.get('reopen_reason', 'Re-opened: action was ineffective')
+        a.effectiveness  = None
+        if a.finding:
+            a.finding.status = 'Open'
+        flash('⚠ Action re-opened: effectiveness was Ineffective.', 'error')
+    else:
+        flash('✓ Action updated.', 'success')
+    db.session.commit()
+    return redirect(url_for('audit_actions'))
+
+
+# ─── AUDIT DASHBOARD (summary view) ──────────────────────────────────────────
+@app.route('/audit-dashboard')
+def audit_dashboard():
+    total_plans     = AuditPlan.query.count()
+    total_scheduled = AuditSchedule.query.count()
+    in_progress     = AuditSchedule.query.filter_by(status='In Progress').count()
+    completed       = AuditSchedule.query.filter_by(status='Completed').count()
+    planned         = AuditSchedule.query.filter_by(status='Planned').count()
+    total_findings  = AuditFinding.query.count()
+    major           = AuditFinding.query.filter_by(severity='Major').count()
+    minor           = AuditFinding.query.filter_by(severity='Minor').count()
+    obs             = AuditFinding.query.filter_by(severity='Observation').count()
+    open_actions    = AuditAction.query.filter_by(status='Open').count()
+    overdue_actions = AuditAction.query.filter_by(status='Overdue').count()
+
+    recent_audits   = AuditSchedule.query.order_by(
+        AuditSchedule.scheduled_date.desc()).limit(5).all()
+    recent_findings = AuditFinding.query.order_by(
+        AuditFinding.created_at.desc()).limit(5).all()
+
+    return render_template('audit_dashboard.html',
+        total_plans=total_plans, total_scheduled=total_scheduled,
+        in_progress=in_progress, completed=completed, planned=planned,
+        total_findings=total_findings, major=major, minor=minor, obs=obs,
+        open_actions=open_actions, overdue_actions=overdue_actions,
+        recent_audits=recent_audits, recent_findings=recent_findings)
 
 # ─── Init ─────────────────────────────────────────────────────────────────────
 with app.app_context():
