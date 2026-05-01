@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}New Action{% endblock %}
+{% block content %}
+<div class="page-title">New Action</div>
+<div class="page-sub">Create a corrective or preventive action</div>
+<form class="form-card" method="POST">
+  <div class="sec">Action Details</div>
+  <div class="g2">
+    <div class="fg"><label>Source *</label>
+      <select name="source" required>
+        {% for s in ['Hazard Report','ASR','Audit','MOC','Investigation'] %}<option>{{ s }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Priority *</label>
+      <select name="priority" required><option>High</option><option>Medium</option><option>Low</option></select></div>
+  </div>
+  <div class="fg"><label>Linked Hazard (optional)</label>
+    <select name="hazard_id">
+      <option value="">None</option>
+      {% for h in hazards %}<option value="{{ h.id }}">{{ h.id }} — {{ h.generic_hazard[:60] }}</option>{% endfor %}
+    </select></div>
+  <div class="fg"><label>Linked Reference ID</label><input type="text" name="linked_ref_id" placeholder="e.g. AUD-2024-XXXX"/></div>
+  <div class="fg"><label>Action Description *</label><textarea name="description" required rows="4" placeholder="Describe the action to be taken…"></textarea></div>
+  <div class="g2">
+    <div class="fg"><label>Owner / Responsible *</label><input type="text" name="owner" required placeholder="Manager name"/></div>
+    <div class="fg"><label>Due Date *</label><input type="date" name="due_date" required/></div>
+  </div>
+  <button type="submit" class="btn btn-nav">Create Action</button>
+</form>
+{% endblock %}

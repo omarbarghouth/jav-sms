@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Annual Audit Plans{% endblock %}
+{% block content %}
+<div class="page-title">Annual Audit Plans</div>
+<div class="page-sub">Year-based audit planning covering all departments · ICAO Annex 19</div>
+
+<div class="fbar">
+  <form method="GET" style="display:flex;gap:8px">
+    <select name="year" onchange="this.form.submit()" style="border:1.5px solid var(--border);border-radius:7px;padding:6px 10px;background:#fff;font-size:12px;font-family:inherit">
+      {% for y in years %}<option value="{{ y }}" {% if y==year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+  </form>
+  <a href="/plans/new" class="btn btn-nav btn-sm" style="margin-left:auto">+ New Plan</a>
+</div>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Plan ID</th><th>Department</th><th>Audit Type</th><th>Frequency</th><th>Responsible Manager</th><th>Scope</th><th>Scheduled Audits</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for p in plans %}
+        <tr>
+          <td class="mono">{{ p.id }}</td>
+          <td><strong>{{ p.department.name if p.department else '—' }}</strong></td>
+          <td><span class="badge b-blue">{{ p.audit_type }}</span></td>
+          <td><span class="badge b-purple">{{ p.frequency }}</span></td>
+          <td style="font-size:12px">{{ p.responsible_manager }}</td>
+          <td style="max-width:200px;font-size:11px;color:var(--muted)">{{ (p.scope or '')[:80] }}{% if p.scope and p.scope|length > 80 %}…{% endif %}</td>
+          <td style="text-align:center"><span class="badge b-gray">{{ p.schedules|length }}</span></td>
+          <td><span class="badge b-green">{{ p.status }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">No audit plans for {{ year }}. <a href="/plans/new" style="color:var(--navy)">Create one →</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Coverage summary -->
+{% if plans %}
+<div class="card">
+  <div class="card-title">{{ year }} Audit Coverage</div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    {% set covered = plans|map(attribute='department')|selectattr('name')|map(attribute='name')|list %}
+    {% set all_depts = ['Flight Operations','Maintenance / Engineering','Ground Operations','Cabin Crew','Safety Department'] %}
+    {% for d in all_depts %}
+    <div style="padding:10px 16px;border-radius:8px;font-size:12px;font-weight:600;
+      {% if d in covered %}background:#dcfce7;color:#15803d;border:1px solid #bbf7d0{% else %}background:#fee2e2;color:#dc2626;border:1px solid #fca5a5{% endif %}">
+      {% if d in covered %}✓{% else %}✗{% endif %} {{ d }}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
