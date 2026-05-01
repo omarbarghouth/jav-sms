@@ -239,3 +239,111 @@ class Training(db.Model):
     status         = db.Column(db.String(20), default='Completed')  # Completed / Due / Overdue
     notes          = db.Column(db.Text)
     department     = db.relationship('Department', foreign_keys=[department_id])
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  AUDIT MANAGEMENT MODULE — ADDED TO EXISTING SMS
+#  Follows ICAO Annex 19, Doc 9859, IOSA ISM Standards
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AuditPlan(db.Model):
+    """Annual audit plan — defines what must be audited in a given year."""
+    __tablename__ = 'audit_plans'
+    id                 = db.Column(db.String(30), primary_key=True)
+    year               = db.Column(db.Integer, nullable=False)
+    department_id      = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    audit_type         = db.Column(db.String(50))   # Internal / Compliance / IOSA-style
+    frequency          = db.Column(db.String(30))   # Quarterly / Semi-Annual / Annual
+    responsible_manager = db.Column(db.String(100))
+    scope              = db.Column(db.Text)          # What will be audited
+    objectives         = db.Column(db.Text)
+    status             = db.Column(db.String(20), default='Active')  # Active / Completed / Cancelled
+    created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    department         = db.relationship('Department', foreign_keys=[department_id])
+    schedules          = db.relationship('AuditSchedule', backref='plan', lazy=True,
+                                         cascade='all, delete-orphan')
+
+class AuditSchedule(db.Model):
+    """Individual scheduled audit — converted from audit plan."""
+    __tablename__ = 'audit_schedules'
+    id                 = db.Column(db.String(30), primary_key=True)
+    plan_id            = db.Column(db.String(30), db.ForeignKey('audit_plans.id'))
+    department_id      = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    audit_type         = db.Column(db.String(50))
+    scheduled_date     = db.Column(db.String(20))
+    actual_date        = db.Column(db.String(20))
+    lead_auditor       = db.Column(db.String(100))
+    audit_team         = db.Column(db.String(200))   # comma-separated names
+    scope              = db.Column(db.Text)
+    objectives         = db.Column(db.Text)
+    status             = db.Column(db.String(20), default='Planned')
+    # Planned / In Progress / Completed / Cancelled
+    opening_meeting    = db.Column(db.String(20))    # date
+    closing_meeting    = db.Column(db.String(20))    # date
+    summary            = db.Column(db.Text)
+    closure_date       = db.Column(db.String(20))
+    closed_by          = db.Column(db.String(100))
+    final_remarks      = db.Column(db.Text)
+    created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    department         = db.relationship('Department', foreign_keys=[department_id])
+    checklist_items    = db.relationship('AuditChecklist', backref='schedule', lazy=True,
+                                          cascade='all, delete-orphan')
+    findings           = db.relationship('AuditFinding', backref='schedule', lazy=True,
+                                          cascade='all, delete-orphan')
+
+class AuditChecklist(db.Model):
+    """Dynamic checklist items for each scheduled audit."""
+    __tablename__ = 'audit_checklists'
+    id             = db.Column(db.Integer, primary_key=True)
+    schedule_id    = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'))
+    category       = db.Column(db.String(100))   # SOP / Training / Safety Reporting / Operations / Risk Mgmt
+    item_ref       = db.Column(db.String(30))    # e.g. IOSA ISM 1.1.1
+    question       = db.Column(db.Text)
+    response       = db.Column(db.String(10))    # Yes / No / N/A
+    comment        = db.Column(db.Text)
+    evidence       = db.Column(db.Text)
+    sequence       = db.Column(db.Integer, default=0)
+
+class AuditFinding(db.Model):
+    """Finding raised during an audit — linked to actions and hazards."""
+    __tablename__ = 'audit_findings'
+    id             = db.Column(db.String(30), primary_key=True)
+    schedule_id    = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'))
+    finding_ref    = db.Column(db.String(30))    # e.g. F-001 within the audit
+    description    = db.Column(db.Text)
+    category       = db.Column(db.String(50))    # Operational / Technical / Human Factors / Organizational
+    severity       = db.Column(db.String(20))    # Major / Minor / Observation
+    standard_ref   = db.Column(db.String(100))   # e.g. IOSA ISM 1.2.3 / ICAO Annex 19
+    root_cause     = db.Column(db.Text)
+    evidence       = db.Column(db.Text)
+    requirement    = db.Column(db.Text)          # What the standard requires
+    status         = db.Column(db.String(20), default='Open')  # Open / Actioned / Closed / Verified
+    # Auto-linked to SMS modules
+    hazard_id      = db.Column(db.String(30), db.ForeignKey('hazards.id'), nullable=True)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    # Actions linked via Action.linked_ref_id = finding.id
+    actions        = db.relationship('AuditAction', backref='finding', lazy=True,
+                                      cascade='all, delete-orphan')
+
+class AuditAction(db.Model):
+    """Corrective action generated from an audit finding."""
+    __tablename__ = 'audit_actions'
+    id                   = db.Column(db.String(30), primary_key=True)
+    finding_id           = db.Column(db.String(30), db.ForeignKey('audit_findings.id'))
+    hazard_id            = db.Column(db.String(30), db.ForeignKey('hazards.id'), nullable=True)
+    description          = db.Column(db.Text)
+    action_type          = db.Column(db.String(30))  # Corrective / Preventive / Improvement
+    owner                = db.Column(db.String(100))
+    due_date             = db.Column(db.String(20))
+    priority             = db.Column(db.String(20))  # High / Medium / Low
+    status               = db.Column(db.String(20), default='Open')
+    # Open / In Progress / Closed / Overdue
+    implementation_notes = db.Column(db.Text)
+    closed_date          = db.Column(db.String(20))
+    # Follow-up / verification
+    verified_by          = db.Column(db.String(100))
+    verification_date    = db.Column(db.String(20))
+    effectiveness        = db.Column(db.String(30))
+    # Effective / Partially Effective / Ineffective
+    effectiveness_notes  = db.Column(db.Text)
+    reopen_reason        = db.Column(db.Text)
+    created_at           = db.Column(db.DateTime, default=datetime.utcnow)
