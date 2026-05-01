@@ -347,3 +347,107 @@ class AuditAction(db.Model):
     effectiveness_notes  = db.Column(db.Text)
     reopen_reason        = db.Column(db.Text)
     created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SAFETY POLICY & OBJECTIVES MODULE — COMPONENT 1 OF SMS
+#  ICAO Annex 19 / Doc 9859 — Added as extension, existing tables unchanged
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class SafetyPolicy(db.Model):
+    """Safety Policy Statement — versioned, signed by Accountable Manager."""
+    __tablename__ = 'safety_policies'
+    id            = db.Column(db.String(30), primary_key=True)
+    version       = db.Column(db.String(10))      # REV0, REV1, REV2…
+    version_num   = db.Column(db.Integer, default=0)
+    title         = db.Column(db.String(200))
+    content       = db.Column(db.Text)            # Full policy statement
+    approved_by   = db.Column(db.String(100))     # Accountable Manager name
+    approved_by_title = db.Column(db.String(100))
+    effective_date = db.Column(db.String(20))
+    review_date   = db.Column(db.String(20))
+    status        = db.Column(db.String(20), default='Draft')
+    # Draft / Active / Archived
+    change_summary = db.Column(db.Text)           # What changed in this rev
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SafetyRole(db.Model):
+    """Safety accountability — roles and responsibilities."""
+    __tablename__ = 'safety_roles'
+    id            = db.Column(db.String(30), primary_key=True)
+    role_name     = db.Column(db.String(100))
+    # Accountable Manager / Safety Manager / Dept Manager / Safety Officer…
+    role_type     = db.Column(db.String(50))
+    person_name   = db.Column(db.String(100))
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    responsibilities = db.Column(db.Text)
+    authority     = db.Column(db.Text)
+    contact_email = db.Column(db.String(100))
+    contact_phone = db.Column(db.String(50))
+    effective_from = db.Column(db.String(20))
+    active        = db.Column(db.Boolean, default=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    department    = db.relationship('Department', foreign_keys=[department_id])
+
+class SafetyPersonnel(db.Model):
+    """Key safety personnel database."""
+    __tablename__ = 'safety_personnel'
+    id            = db.Column(db.String(30), primary_key=True)
+    name          = db.Column(db.String(100))
+    position      = db.Column(db.String(100))
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    sms_role      = db.Column(db.String(100))
+    # e.g. Accountable Manager / Safety Manager / SMS Coordinator
+    qualifications = db.Column(db.Text)
+    contact_email = db.Column(db.String(100))
+    contact_phone = db.Column(db.String(50))
+    sms_trained   = db.Column(db.Boolean, default=False)
+    training_date = db.Column(db.String(20))
+    active        = db.Column(db.Boolean, default=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    department    = db.relationship('Department', foreign_keys=[department_id])
+
+class ERPlan(db.Model):
+    """Emergency Response Plan — scenarios, procedures, contacts."""
+    __tablename__ = 'erp'
+    id              = db.Column(db.String(30), primary_key=True)
+    erp_ref         = db.Column(db.String(30))   # e.g. ERP-001
+    scenario_type   = db.Column(db.String(50))
+    # Accident / Serious Incident / Incident / Crisis / Security / Medical
+    title           = db.Column(db.String(200))
+    description     = db.Column(db.Text)
+    activation_criteria = db.Column(db.Text)
+    response_procedures = db.Column(db.Text)     # Step-by-step
+    responsible_roles   = db.Column(db.Text)     # comma-separated role IDs / names
+    emergency_contacts  = db.Column(db.Text)     # JSON-like text
+    resources_required  = db.Column(db.Text)
+    notification_list   = db.Column(db.Text)     # Who must be notified
+    review_date         = db.Column(db.String(20))
+    version             = db.Column(db.String(10), default='REV0')
+    status              = db.Column(db.String(20), default='Active')
+    created_at          = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SMSDocument(db.Model):
+    """Document Control System — full lifecycle with revision history."""
+    __tablename__ = 'sms_documents'
+    id            = db.Column(db.String(50), primary_key=True)
+    # Auto-generated: TYPE-DEPT-YEAR-SEQ-REV e.g. SOP-FO-2026-001-REV0
+    doc_type      = db.Column(db.String(10))
+    # POL / MAN / SOP / RA / AUD / MOC / INV / TRN / NEWS
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    title         = db.Column(db.String(200))
+    description   = db.Column(db.Text)
+    content       = db.Column(db.Text)           # Document body / notes
+    version       = db.Column(db.String(10))     # REV0, REV1…
+    version_num   = db.Column(db.Integer, default=0)
+    seq_num       = db.Column(db.Integer, default=1)  # sequential per type+dept+year
+    status        = db.Column(db.String(20), default='Draft')
+    # Draft / Under Review / Approved / Archived
+    created_by    = db.Column(db.String(100))
+    reviewed_by   = db.Column(db.String(100))
+    approved_by   = db.Column(db.String(100))
+    effective_date = db.Column(db.String(20))
+    review_due    = db.Column(db.String(20))
+    parent_doc_id = db.Column(db.String(50))     # previous version ID
+    change_summary = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    department    = db.relationship('Department', foreign_keys=[department_id])
