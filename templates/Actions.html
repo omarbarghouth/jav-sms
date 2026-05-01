@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Action Tracker — Jordan Aviation SMS{% endblock %}
+{% block content %}
+
+<div class="page-title">Action Tracker</div>
+<div class="page-sub">Corrective & preventive actions from hazards, ASRs, audits and investigations</div>
+
+<!-- Summary counts -->
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr)">
+  <div class="stat-card blue"><div class="stat-val" style="color:#1d4ed8">{{ counts.total }}</div><div class="stat-lbl">Total Actions</div></div>
+  <div class="stat-card yellow"><div class="stat-val" style="color:#d97706">{{ counts.open }}</div><div class="stat-lbl">Open</div></div>
+  <div class="stat-card blue"><div class="stat-val" style="color:#0891b2">{{ counts.in_progress }}</div><div class="stat-lbl">In Progress</div></div>
+  <div class="stat-card red"><div class="stat-val" style="color:#dc2626">{{ counts.overdue }}</div><div class="stat-lbl">Overdue</div></div>
+  <div class="stat-card green"><div class="stat-val" style="color:#15803d">{{ counts.closed }}</div><div class="stat-lbl">Closed</div></div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+  <form method="GET" action="/actions" class="filter-bar" style="margin:0">
+    <select name="status" onchange="this.form.submit()">
+      <option value="">All Statuses</option>
+      <option value="Open"        {% if status_f=='Open' %}selected{% endif %}>Open</option>
+      <option value="In Progress" {% if status_f=='In Progress' %}selected{% endif %}>In Progress</option>
+      <option value="Overdue"     {% if status_f=='Overdue' %}selected{% endif %}>Overdue</option>
+      <option value="Closed"      {% if status_f=='Closed' %}selected{% endif %}>Closed</option>
+    </select>
+    <select name="priority" onchange="this.form.submit()">
+      <option value="">All Priorities</option>
+      <option value="Critical" {% if priority_f=='Critical' %}selected{% endif %}>Critical</option>
+      <option value="High"     {% if priority_f=='High' %}selected{% endif %}>High</option>
+      <option value="Medium"   {% if priority_f=='Medium' %}selected{% endif %}>Medium</option>
+      <option value="Low"      {% if priority_f=='Low' %}selected{% endif %}>Low</option>
+    </select>
+    <select name="source" onchange="this.form.submit()">
+      <option value="">All Sources</option>
+      <option value="Hazard"    {% if source_f=='Hazard' %}selected{% endif %}>Hazard</option>
+      <option value="ASR"       {% if source_f=='ASR' %}selected{% endif %}>ASR</option>
+      <option value="Audit"     {% if source_f=='Audit' %}selected{% endif %}>Audit</option>
+      <option value="MOC"       {% if source_f=='MOC' %}selected{% endif %}>MOC</option>
+      <option value="Investigation" {% if source_f=='Investigation' %}selected{% endif %}>Investigation</option>
+    </select>
+    <a href="/actions" class="btn btn-outline btn-sm">Clear</a>
+  </form>
+  <button class="btn btn-nav" onclick="document.getElementById('add-action-modal').style.display='flex'">+ New Action</button>
+</div>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Action ID</th><th>Source</th><th>Description</th><th>Owner</th><th>Priority</th><th>Due Date</th><th>Status</th><th>Effectiveness</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for a in actions %}
+        <tr>
+          <td class="mono">{{ a.id }}</td>
+          <td>
+            {% if a.source == 'ASR' %}<span class="badge badge-blue">ASR</span>
+            {% elif a.source == 'Hazard' %}<span class="badge badge-yellow">Hazard</span>
+            {% elif a.source == 'Audit' %}<span class="badge badge-purple">Audit</span>
+            {% elif a.source == 'MOC' %}<span class="badge badge-orange">MOC</span>
+            {% else %}<span class="badge badge-gray">{{ a.source }}</span>{% endif %}
+          </td>
+          <td style="max-width:250px;font-size:12.5px">{{ a.description[:80] }}{% if a.description|length>80 %}…{% endif %}</td>
+          <td style="font-size:12px">{{ a.owner }}</td>
+          <td>
+            {% if a.priority == 'Critical' %}<span class="badge badge-red">Critical</span>
+            {% elif a.priority == 'High' %}<span class="badge badge-orange">High</span>
+            {% elif a.priority == 'Medium' %}<span class="badge badge-yellow">Medium</span>
+            {% else %}<span class="badge badge-gray">Low</span>{% endif %}
+          </td>
+          <td class="mono" style="font-size:11.5px{% if a.status=='Overdue' %};color:#dc2626;font-weight:700{% endif %}">{{ a.due_date }}</td>
+          <td>
+            {% if a.status == 'Overdue' %}<span class="badge badge-red">Overdue</span>
+            {% elif a.status == 'Closed' %}<span class="badge badge-green">Closed</span>
+            {% elif a.status == 'In Progress' %}<span class="badge badge-blue">In Progress</span>
+            {% else %}<span class="badge badge-yellow">Open</span>{% endif %}
+          </td>
+          <td style="font-size:11.5px;color:var(--muted)">{{ a.effectiveness_review[:40] if a.effectiveness_review else '—' }}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="openUpdateModal('{{ a.id }}','{{ a.status }}','{{ a.owner }}','{{ a.due_date }}')">Update</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:28px">No actions found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Action Modal -->
+<div id="add-action-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <strong>New Corrective Action</strong>
+      <button class="modal-close" onclick="document.getElementById('add-action-modal').style.display='none'">✕</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" action="/actions/add">
+        <div class="fg"><label>Action Description *</label><textarea name="description" required rows="3" placeholder="What needs to be done?"></textarea></div>
+        <div class="form-grid-2">
+          <div class="fg"><label>Source</label>
+            <select name="source">
+              <option value="Manual">Manual</option><option value="Hazard">Hazard</option>
+              <option value="ASR">ASR</option><option value="Audit">Audit</option>
+              <option value="MOC">MOC</option><option value="Investigation">Investigation</option>
+            </select>
+          </div>
+          <div class="fg"><label>Linked Record ID</label><input type="text" name="linked_id" placeholder="e.g. HAZ-2025-XXXXX"/></div>
+          <div class="fg"><label>Owner *</label><input type="text" name="owner" required/></div>
+          <div class="fg"><label>Due Date *</label><input type="date" name="due_date" required/></div>
+          <div class="fg"><label>Priority</label>
+            <select name="priority">
+              <option value="Critical">Critical</option><option value="High">High</option>
+              <option value="Medium" selected>Medium</option><option value="Low">Low</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-nav">Create Action</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Update Action Modal -->
+<div id="update-action-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <strong>Update Action</strong>
+      <button class="modal-close" onclick="document.getElementById('update-action-modal').style.display='none'">✕</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" id="update-action-form">
+        <div class="fg"><label>Status</label>
+          <select name="status" id="upd-status">
+            <option value="Open">Open</option><option value="In Progress">In Progress</option>
+            <option value="Closed">Closed</option>
+          </select>
+        </div>
+        <div class="fg"><label>Owner</label><input type="text" name="owner" id="upd-owner"/></div>
+        <div class="fg"><label>Revised Due Date</label><input type="date" name="due_date" id="upd-due"/></div>
+        <div class="fg"><label>Effectiveness Review</label><textarea name="effectiveness_review" rows="3" placeholder="Describe the outcome and effectiveness of this action…"></textarea></div>
+        <button type="submit" class="btn btn-nav">Save</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function openUpdateModal(id, status, owner, due) {
+  document.getElementById('update-action-form').action = '/actions/' + id + '/update';
+  document.getElementById('upd-status').value = status;
+  document.getElementById('upd-owner').value = owner;
+  document.getElementById('upd-due').value = due;
+  document.getElementById('update-action-modal').style.display = 'flex';
+}
+</script>
+{% endblock %}
