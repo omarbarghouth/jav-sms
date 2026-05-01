@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Investigations{% endblock %}
+{% block content %}
+<div class="page-title">Safety Investigations</div>
+<div class="page-sub">Root cause analysis for incidents and occurrences</div>
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+  <a href="/investigations/new" class="btn btn-nav">+ New Investigation</a>
+</div>
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Title</th><th>Department</th><th>Date</th><th>Investigator</th><th>Root Cause</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for i in investigations %}
+        <tr>
+          <td class="mono">{{ i.id }}</td>
+          <td style="max-width:200px;font-size:12px">{{ i.title }}</td>
+          <td>{{ i.department.code if i.department else '—' }}</td>
+          <td style="font-size:12px">{{ i.date_of_occurrence }}</td>
+          <td style="font-size:12px">{{ i.investigator }}</td>
+          <td style="max-width:160px;font-size:12px">{{ (i.root_cause or '—')[:60] }}</td>
+          <td>{% if i.status=='Closed' %}<span class="badge b-green">Closed</span>{% else %}<span class="badge b-yellow">Open</span>{% endif %}</td>
+          <td><a href="/investigations/{{ i.id }}" class="btn btn-nav btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">No investigations yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
