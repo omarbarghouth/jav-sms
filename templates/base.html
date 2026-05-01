@@ -124,7 +124,10 @@
     </a>
 
     <div class="sb-section">Safety Assurance</div>
-    <a href="/audits" class="nav-a {% if '/audits' in request.path %}active{% endif %}"><span class="nav-icon">🔍</span>Audits</a>
+    <a href="/audit-dashboard" class="nav-a {% if request.path=='/audit-dashboard' %}active{% endif %}"><span class="nav-icon">📅</span>Audit Dashboard</a>
+    <a href="/audit-plans" class="nav-a {% if '/audit-plan' in request.path %}active{% endif %}"><span class="nav-icon">📋</span>Audit Plans</a>
+    <a href="/audit-schedule" class="nav-a {% if '/audit-schedule' in request.path %}active{% endif %}"><span class="nav-icon">🗓</span>Audit Schedule</a>
+    <a href="/audit-actions" class="nav-a {% if '/audit-actions' in request.path %}active{% endif %}"><span class="nav-icon">✅</span>Audit Actions</a>
     <a href="/investigations" class="nav-a {% if '/investigations' in request.path %}active{% endif %}"><span class="nav-icon">🔎</span>Investigations</a>
     <a href="/moc" class="nav-a {% if '/moc' in request.path %}active{% endif %}"><span class="nav-icon">🔄</span>Mgmt of Change</a>
 
