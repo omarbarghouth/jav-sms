@@ -3,15 +3,13 @@
 {% block content %}
 
 <div class="page-title">Hazard Log</div>
-<div class="page-sub">All hazards from Hazard Reports, ASRs, Audits and MOC entries</div>
+<div class="page-sub">All hazards from Hazard Reports, ASRs, Audits, MOC and Investigations</div>
 
 <form method="GET" action="/hazard-log" class="filter-bar">
   <select name="dept" onchange="this.form.submit()">
     <option value="">All Departments</option>
     {% for d in departments %}
-      <option value="{{ d.id }}" {% if dept_filter==d.id|string %}selected{% endif %}>
-        {{ d.name }}
-      </option>
+      <option value="{{ d.id }}" {% if dept_filter==d.id|string %}selected{% endif %}>{{ d.name }}</option>
     {% endfor %}
   </select>
   <select name="status" onchange="this.form.submit()">
@@ -25,8 +23,16 @@
     <option value="TOLERABLE"   {% if tol_f=='TOLERABLE' %}selected{% endif %}>Tolerable</option>
     <option value="ACCEPTABLE"  {% if tol_f=='ACCEPTABLE' %}selected{% endif %}>Acceptable</option>
   </select>
+  <select name="classification" onchange="this.form.submit()">
+    <option value="">All Classifications</option>
+    <option value="Operational"    {% if class_f=='Operational' %}selected{% endif %}>Operational</option>
+    <option value="Technical"      {% if class_f=='Technical' %}selected{% endif %}>Technical</option>
+    <option value="Human Factors"  {% if class_f=='Human Factors' %}selected{% endif %}>Human Factors</option>
+    <option value="Environmental"  {% if class_f=='Environmental' %}selected{% endif %}>Environmental</option>
+    <option value="Organizational" {% if class_f=='Organizational' %}selected{% endif %}>Organizational</option>
+  </select>
   <a href="/hazard-log" class="btn btn-outline btn-sm">Clear</a>
-  <span style="margin-left:auto;color:#6b7280;font-size:13px">{{ hazards|length }} record(s)</span>
+  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ hazards|length }} record(s)</span>
 </form>
 
 <div class="card" style="padding:0">
@@ -34,15 +40,9 @@
     <table>
       <thead>
         <tr>
-          <th>Hazard ID</th>
-          <th>Source</th>
-          <th>Dept</th>
-          <th>Generic Hazard</th>
-          <th>Initial Risk</th>
-          <th>Residual Risk</th>
-          <th>Owner</th>
-          <th>Status</th>
-          <th></th>
+          <th>Hazard ID</th><th>Source</th><th>Dept</th><th>Class</th>
+          <th>Generic Hazard</th><th>Initial Risk</th><th>Residual Risk</th>
+          <th>Owner</th><th>Status</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -50,54 +50,38 @@
         <tr>
           <td class="mono">{{ h.id }}</td>
           <td>
-            {% if h.source == 'ASR' %}
-              <span class="badge badge-blue">ASR</span>
-            {% elif h.source == 'Hazard Report' %}
-              <span class="badge badge-gray">Hazard</span>
-            {% else %}
-              <span class="badge badge-gray">{{ h.source }}</span>
-            {% endif %}
+            {% if h.source == 'ASR' %}<span class="badge badge-blue">ASR</span>
+            {% elif h.source == 'Hazard Report' %}<span class="badge badge-gray">Hazard</span>
+            {% elif h.source == 'Audit' %}<span class="badge badge-purple">Audit</span>
+            {% elif h.source == 'MOC' %}<span class="badge badge-orange">MOC</span>
+            {% else %}<span class="badge badge-gray">{{ h.source }}</span>{% endif %}
           </td>
           <td><strong>{{ dept_code(h.department_id) }}</strong></td>
-          <td style="max-width:200px">{{ h.generic_hazard }}</td>
+          <td style="font-size:11px">{{ h.get('classification','—') }}</td>
+          <td style="max-width:180px;font-size:12.5px">{{ h.generic_hazard }}</td>
           <td>
             <strong>{{ h.initial_risk_index }}</strong>&nbsp;
-            {% if h.initial_risk_tolerance == 'INTOLERABLE' %}
-              <span class="badge badge-red">INTOLERABLE</span>
-            {% elif h.initial_risk_tolerance == 'TOLERABLE' %}
-              <span class="badge badge-yellow">TOLERABLE</span>
-            {% else %}
-              <span class="badge badge-green">ACCEPTABLE</span>
-            {% endif %}
+            {% if h.initial_risk_tolerance == 'INTOLERABLE' %}<span class="badge badge-red">INT</span>
+            {% elif h.initial_risk_tolerance == 'TOLERABLE' %}<span class="badge badge-yellow">TOL</span>
+            {% else %}<span class="badge badge-green">ACC</span>{% endif %}
           </td>
           <td>
             {% if h.residual_risk_index %}
               <strong>{{ h.residual_risk_index }}</strong>&nbsp;
-              {% if h.residual_risk_tolerance == 'INTOLERABLE' %}
-                <span class="badge badge-red">INTOLERABLE</span>
-              {% elif h.residual_risk_tolerance == 'TOLERABLE' %}
-                <span class="badge badge-yellow">TOLERABLE</span>
-              {% else %}
-                <span class="badge badge-green">ACCEPTABLE</span>
-              {% endif %}
-            {% else %}
-              <span style="color:#9ca3af;font-size:12px">Pending</span>
-            {% endif %}
+              {% if h.residual_risk_tolerance == 'INTOLERABLE' %}<span class="badge badge-red">INT</span>
+              {% elif h.residual_risk_tolerance == 'TOLERABLE' %}<span class="badge badge-yellow">TOL</span>
+              {% else %}<span class="badge badge-green">ACC</span>{% endif %}
+            {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
           </td>
-          <td style="font-size:12px">{{ h.owner or '—' }}</td>
+          <td style="font-size:11.5px">{{ h.owner or '—' }}</td>
           <td>
-            {% if h.status == 'Open' %}
-              <span class="badge badge-yellow">Open</span>
-            {% else %}
-              <span class="badge badge-green">Closed</span>
-            {% endif %}
+            {% if h.status == 'Open' %}<span class="badge badge-yellow">Open</span>
+            {% else %}<span class="badge badge-green">Closed</span>{% endif %}
           </td>
           <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:30px">
-          No hazards found matching the current filters.
-        </td></tr>
+        <tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:28px">No hazards found matching the current filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>
