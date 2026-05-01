@@ -5,10 +5,10 @@
 <div class="page-title">Hazard Report</div>
 <div class="page-sub">All Departments · Quick & Simple · Anonymous Option Available</div>
 
-<form class="form-card" method="POST" action="/hazard-report">
+<form class="form-card" method="POST" action="/hazard-report" style="max-width:920px">
 
   <div class="sec-title">General Information</div>
-  <div class="form-grid-2">
+  <div class="form-grid-3">
     <div class="fg">
       <label>Department *</label>
       <select name="department_id" required>
@@ -22,6 +22,16 @@
       <label>Date *</label>
       <input type="date" name="date" required value="{{ now.strftime('%Y-%m-%d') }}"/>
     </div>
+    <div class="fg">
+      <label>Classification *</label>
+      <select name="classification" required>
+        <option value="Operational">Operational</option>
+        <option value="Technical">Technical</option>
+        <option value="Human Factors">Human Factors</option>
+        <option value="Environmental">Environmental</option>
+        <option value="Organizational">Organizational</option>
+      </select>
+    </div>
   </div>
 
   <div class="fg">
@@ -31,9 +41,21 @@
   </div>
 
   <div class="fg">
+    <label>Generic Hazard Title</label>
+    <input type="text" name="generic_hazard"
+      placeholder="Short title, e.g. FOD on Ramp, Hydraulic Leak, Bird Strike Risk…"/>
+  </div>
+
+  <div class="fg">
     <label>Hazard Description *</label>
     <textarea name="hazard_description" required rows="4"
       placeholder="Describe the hazard clearly and specifically. What did you observe?"></textarea>
+  </div>
+
+  <div class="fg">
+    <label>Potential Consequences</label>
+    <textarea name="consequences" rows="2"
+      placeholder="What could go wrong if this hazard is not addressed?"></textarea>
   </div>
 
   <div class="fg">
@@ -79,9 +101,15 @@
     <span class="badge" id="ri-badge"></span>
   </div>
 
-  <div class="sec-title">Reporter (Optional)</div>
+  <div class="sec-title">Responsible Manager</div>
   <div class="fg">
-    <label>Your Name <span class="optional">(leave blank to report anonymously)</span></label>
+    <label>Owner / Responsible Manager</label>
+    <input type="text" name="owner" placeholder="e.g. Flight Operations Manager"/>
+  </div>
+
+  <div class="sec-title">Reporter <span style="font-weight:400;color:var(--muted)">(Optional)</span></div>
+  <div class="fg">
+    <label>Your Name <span style="font-weight:400;color:var(--muted)">(leave blank to report anonymously)</span></label>
     <input type="text" name="reporter" placeholder="Anonymous"/>
   </div>
 
@@ -93,7 +121,6 @@
 <script>
 const INTOLERABLE = new Set(["5A","5B","5C","4A","4B","3A"]);
 const TOLERABLE   = new Set(["5D","5E","4C","4D","4E","3B","3C","3D","2A","2B","2C","1A"]);
-
 function updateRisk() {
   const s = document.getElementById('sel-sev').value;
   const l = document.getElementById('sel-lik').value;
@@ -101,15 +128,13 @@ function updateRisk() {
   if (!s || !l) { preview.style.display='none'; return; }
   const ri = l + s;
   let tol, color;
-  if (INTOLERABLE.has(ri))      { tol='INTOLERABLE'; color='#dc2626'; }
-  else if (TOLERABLE.has(ri))   { tol='TOLERABLE';   color='#d97706'; }
-  else                          { tol='ACCEPTABLE';   color='#16a34a'; }
+  if (INTOLERABLE.has(ri))    { tol='INTOLERABLE'; color='#dc2626'; }
+  else if (TOLERABLE.has(ri)) { tol='TOLERABLE';   color='#d97706'; }
+  else                        { tol='ACCEPTABLE';   color='#16a34a'; }
   document.getElementById('ri-label').textContent = ri;
   const badge = document.getElementById('ri-badge');
   badge.textContent = tol;
-  badge.style.background = color+'20';
-  badge.style.color = color;
-  badge.style.border = '1px solid '+color+'40';
+  badge.style.cssText = `background:${color}20;color:${color};border:1px solid ${color}40`;
   preview.style.borderColor = color;
   preview.style.display = 'flex';
 }
