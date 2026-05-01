@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Jordan Aviation SMS{% endblock %}
+{% block content %}
+
+<div class="page-title">Safety Dashboard</div>
+<div class="page-sub">Jordan Aviation · ICAO Annex 19 · IOSA Compliant</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-val" style="color:#1e40af">{{ total }}</div>
+    <div class="stat-lbl">Total Hazards</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#d97706">{{ open_h }}</div>
+    <div class="stat-lbl">Open Hazards</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#dc2626">{{ intol }}</div>
+    <div class="stat-lbl">Intolerable Risks</div>
+    <div class="stat-sub">Immediate action required</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#0891b2">{{ asr_cnt }}</div>
+    <div class="stat-lbl">ASR Reports</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#7c3aed">{{ hr_cnt }}</div>
+    <div class="stat-lbl">Hazard Reports</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Recent Hazards</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Hazard ID</th>
+          <th>Source</th>
+          <th>Department</th>
+          <th>Hazard</th>
+          <th>Initial Risk</th>
+          <th>Residual Risk</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in recent %}
+        <tr>
+          <td class="mono">{{ h.id }}</td>
+          <td>{{ h.source }}</td>
+          <td>{{ dept_code(h.department_id) }}</td>
+          <td>{{ h.generic_hazard }}</td>
+          <td>
+            <strong>{{ h.initial_risk_index }}</strong>&nbsp;
+            {% if h.initial_risk_tolerance == 'INTOLERABLE' %}
+              <span class="badge badge-red">INTOLERABLE</span>
+            {% elif h.initial_risk_tolerance == 'TOLERABLE' %}
+              <span class="badge badge-yellow">TOLERABLE</span>
+            {% else %}
+              <span class="badge badge-green">ACCEPTABLE</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if h.residual_risk_index %}
+              <strong>{{ h.residual_risk_index }}</strong>&nbsp;
+              {% if h.residual_risk_tolerance == 'INTOLERABLE' %}
+                <span class="badge badge-red">INTOLERABLE</span>
+              {% elif h.residual_risk_tolerance == 'TOLERABLE' %}
+                <span class="badge badge-yellow">TOLERABLE</span>
+              {% else %}
+                <span class="badge badge-green">ACCEPTABLE</span>
+              {% endif %}
+            {% else %}
+              <span style="color:#9ca3af;font-size:12px">Pending</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if h.status == 'Open' %}
+              <span class="badge badge-yellow">Open</span>
+            {% else %}
+              <span class="badge badge-green">Closed</span>
+            {% endif %}
+          </td>
+          <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
+  <a href="/hazard-report" class="btn btn-nav">+ New Hazard Report</a>
+  <a href="/asr" class="btn btn-nav" style="background:#0f766e">+ New ASR (Flight Ops)</a>
+  <a href="/hazard-log" class="btn btn-outline">View Full Hazard Log →</a>
+</div>
+
+{% endblock %}

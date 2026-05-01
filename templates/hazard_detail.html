@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}{{ h.id }} — Hazard Detail{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:16px">
+  <a href="/hazard-log" style="color:#6b7280;font-size:13px">← Back to Hazard Log</a>
+</div>
+
+<div class="page-title">{{ h.id }}</div>
+<div class="page-sub">
+  Source: <strong>{{ h.source }}</strong> &nbsp;·&nbsp;
+  Linked Report: <span class="mono">{{ h.linked_report_id }}</span> &nbsp;·&nbsp;
+  Created: {{ h.created_at[:10] }}
+</div>
+
+<!-- Risk Compare Banner -->
+<div class="risk-compare" style="margin-bottom:20px">
+  <div class="risk-box">
+    <div class="risk-box-lbl">Initial Risk</div>
+    <div class="risk-idx">{{ h.initial_risk_index }}</div>
+    {% if h.initial_risk_tolerance == 'INTOLERABLE' %}
+      <span class="badge badge-red">INTOLERABLE</span>
+    {% elif h.initial_risk_tolerance == 'TOLERABLE' %}
+      <span class="badge badge-yellow">TOLERABLE</span>
+    {% else %}
+      <span class="badge badge-green">ACCEPTABLE</span>
+    {% endif %}
+  </div>
+  <div class="risk-arrow">→</div>
+  <div class="risk-box">
+    <div class="risk-box-lbl">Residual Risk</div>
+    <div class="risk-idx">{{ h.residual_risk_index or '?' }}</div>
+    {% if h.residual_risk_tolerance == 'INTOLERABLE' %}
+      <span class="badge badge-red">INTOLERABLE</span>
+    {% elif h.residual_risk_tolerance == 'TOLERABLE' %}
+      <span class="badge badge-yellow">TOLERABLE</span>
+    {% elif h.residual_risk_tolerance == 'ACCEPTABLE' %}
+      <span class="badge badge-green">ACCEPTABLE</span>
+    {% else %}
+      <span style="color:#9ca3af;font-size:12px">Not yet assessed</span>
+    {% endif %}
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex-wrap:wrap">
+
+  <!-- Left: Hazard Info -->
+  <div>
+    <div class="card">
+      <div class="card-title">Hazard Information</div>
+      <table style="width:100%;font-size:13.5px;border-collapse:collapse">
+        <tr><td style="padding:7px 0;color:#6b7280;width:160px">Department</td>
+            <td><strong>{{ dept_name(h.department_id) }}</strong></td></tr>
+        <tr><td style="padding:7px 0;color:#6b7280">Activity Type</td>
+            <td>{{ h.type_of_activity }}</td></tr>
+        <tr><td style="padding:7px 0;color:#6b7280">Generic Hazard</td>
+            <td>{{ h.generic_hazard }}</td></tr>
+        <tr><td style="padding:7px 0;color:#6b7280;vertical-align:top">Specific Components</td>
+            <td>{{ h.specific_components }}</td></tr>
+        <tr><td style="padding:7px 0;color:#6b7280;vertical-align:top">Consequences</td>
+            <td>{{ h.consequences }}</td></tr>
+        <tr><td style="padding:7px 0;color:#6b7280;vertical-align:top">Current Defenses</td>
+            <td>{{ h.current_defenses or '—' }}</td></tr>
+        <tr><td style="padding:7px 0;color:#6b7280;vertical-align:top">Further Mitigations</td>
+            <td>{{ h.further_mitigations or '—' }}</td></tr>
+        <tr><td style="padding:7px 0;color:#6b7280">Owner</td>
+            <td>{{ h.owner or '—' }}</td></tr>
+        <tr><td style="padding:7px 0;color:#6b7280">Status</td>
+            <td>
+              {% if h.status == 'Open' %}
+                <span class="badge badge-yellow">Open</span>
+              {% else %}
+                <span class="badge badge-green">Closed</span>
+              {% endif %}
+            </td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right: Update Form -->
+  <div>
+    <div class="card">
+      <div class="card-title">Update Hazard</div>
+      <form method="POST" action="/hazard-log/{{ h.id }}/update">
+
+        <div class="fg">
+          <label>Status</label>
+          <select name="status">
+            <option value="Open"   {% if h.status=='Open' %}selected{% endif %}>Open</option>
+            <option value="Closed" {% if h.status=='Closed' %}selected{% endif %}>Closed</option>
+          </select>
+        </div>
+
+        <div class="fg">
+          <label>Owner / Responsible Manager</label>
+          <input type="text" name="owner" value="{{ h.owner or '' }}"
+            placeholder="e.g. Flight Operations Manager"/>
+        </div>
+
+        <div class="fg">
+          <label>Further Mitigation Measures</label>
+          <textarea name="further_mitigations" rows="3">{{ h.further_mitigations or '' }}</textarea>
+        </div>
+
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;
+                    text-transform:uppercase;letter-spacing:.5px">Residual Risk Assessment</div>
+        <div class="form-grid-2">
+          <div class="fg">
+            <label>Residual Likelihood</label>
+            <select name="residual_likelihood" id="res-lik">
+              <option value="">Select…</option>
+              {% for v in [1,2,3,4,5] %}
+                <option value="{{ v }}" {% if h.residual_likelihood==v %}selected{% endif %}>
+                  {{ v }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="fg">
+            <label>Residual Severity</label>
+            <select name="residual_severity" id="res-sev">
+              <option value="">Select…</option>
+              {% for v in ['A','B','C','D','E'] %}
+                <option value="{{ v }}" {% if h.residual_severity==v %}selected{% endif %}>
+                  {{ v }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="risk-preview" id="res-preview" style="display:none;margin-bottom:14px">
+          <div>Residual Index: <span class="risk-big" id="res-ri" style="font-size:22px"></span></div>
+          <span class="badge" id="res-badge"></span>
+        </div>
+
+        <button type="submit" class="btn btn-nav">Save Changes</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const INTOLERABLE = new Set(["5A","5B","5C","4A","4B","3A"]);
+const TOLERABLE   = new Set(["5D","5E","4C","4D","4E","3B","3C","3D","2A","2B","2C","1A"]);
+
+function updateResidual() {
+  const s = document.getElementById('res-sev').value;
+  const l = document.getElementById('res-lik').value;
+  if (!s || !l) { document.getElementById('res-preview').style.display='none'; return; }
+  const ri = l + s;
+  let tol, color;
+  if (INTOLERABLE.has(ri))    { tol='INTOLERABLE'; color='#dc2626'; }
+  else if (TOLERABLE.has(ri)) { tol='TOLERABLE';   color='#d97706'; }
+  else                        { tol='ACCEPTABLE';   color='#16a34a'; }
+  document.getElementById('res-ri').textContent = ri;
+  const badge = document.getElementById('res-badge');
+  badge.textContent = tol;
+  badge.style.cssText = `background:${color}20;color:${color};border:1px solid ${color}40`;
+  const preview = document.getElementById('res-preview');
+  preview.style.borderColor = color;
+  preview.style.display = 'flex';
+}
+document.getElementById('res-sev').addEventListener('change', updateResidual);
+document.getElementById('res-lik').addEventListener('change', updateResidual);
+updateResidual();
+</script>
+{% endblock %}

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Hazard Report — Jordan Aviation SMS{% endblock %}
+{% block content %}
+
+<div class="page-title">Hazard Report</div>
+<div class="page-sub">All Departments · Quick & Simple · Anonymous Option Available</div>
+
+<form class="form-card" method="POST" action="/hazard-report">
+
+  <div class="sec-title">General Information</div>
+  <div class="form-grid-2">
+    <div class="fg">
+      <label>Department *</label>
+      <select name="department_id" required>
+        <option value="">Select department…</option>
+        {% for d in departments %}
+          <option value="{{ d.id }}">{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Date *</label>
+      <input type="date" name="date" required value="{{ now.strftime('%Y-%m-%d') }}"/>
+    </div>
+  </div>
+
+  <div class="fg">
+    <label>Location / Area *</label>
+    <input type="text" name="location" required
+      placeholder="e.g. Ramp Gate B3, Hangar 2, Galley Area, Flight Deck…"/>
+  </div>
+
+  <div class="fg">
+    <label>Hazard Description *</label>
+    <textarea name="hazard_description" required rows="4"
+      placeholder="Describe the hazard clearly and specifically. What did you observe?"></textarea>
+  </div>
+
+  <div class="fg">
+    <label>Immediate Action Taken</label>
+    <textarea name="immediate_action" rows="2"
+      placeholder="What was done immediately to contain or address the hazard?"></textarea>
+  </div>
+
+  <div class="fg">
+    <label>Suggested Mitigation</label>
+    <textarea name="suggested_mitigation" rows="2"
+      placeholder="Your recommendation to prevent recurrence…"></textarea>
+  </div>
+
+  <div class="sec-title">Risk Assessment</div>
+  <div class="form-grid-2">
+    <div class="fg">
+      <label>Severity *</label>
+      <select name="severity" required id="sel-sev">
+        <option value="">Select severity…</option>
+        <option value="A">A – Catastrophic (Aircraft destroyed / Multiple deaths)</option>
+        <option value="B">B – Hazardous (Serious injury / Major equipment damage)</option>
+        <option value="C">C – Major (Serious incident / Injury to persons)</option>
+        <option value="D">D – Minor (Operating limitations / Minor incident)</option>
+        <option value="E">E – Negligible (Few consequences)</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Likelihood *</label>
+      <select name="likelihood" required id="sel-lik">
+        <option value="">Select likelihood…</option>
+        <option value="5">5 – Frequent (Has occurred frequently)</option>
+        <option value="4">4 – Occasional (Has occurred infrequently)</option>
+        <option value="3">3 – Remote (Has occurred rarely)</option>
+        <option value="2">2 – Improbable (Not known to have occurred)</option>
+        <option value="1">1 – Extremely Improbable</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="risk-preview" id="risk-preview" style="display:none">
+    <div>Risk Index: <span class="risk-big" id="ri-label"></span></div>
+    <span class="badge" id="ri-badge"></span>
+  </div>
+
+  <div class="sec-title">Reporter (Optional)</div>
+  <div class="fg">
+    <label>Your Name <span class="optional">(leave blank to report anonymously)</span></label>
+    <input type="text" name="reporter" placeholder="Anonymous"/>
+  </div>
+
+  <button type="submit" class="btn btn-nav" style="margin-top:6px">Submit Hazard Report</button>
+</form>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const INTOLERABLE = new Set(["5A","5B","5C","4A","4B","3A"]);
+const TOLERABLE   = new Set(["5D","5E","4C","4D","4E","3B","3C","3D","2A","2B","2C","1A"]);
+
+function updateRisk() {
+  const s = document.getElementById('sel-sev').value;
+  const l = document.getElementById('sel-lik').value;
+  const preview = document.getElementById('risk-preview');
+  if (!s || !l) { preview.style.display='none'; return; }
+  const ri = l + s;
+  let tol, color;
+  if (INTOLERABLE.has(ri))      { tol='INTOLERABLE'; color='#dc2626'; }
+  else if (TOLERABLE.has(ri))   { tol='TOLERABLE';   color='#d97706'; }
+  else                          { tol='ACCEPTABLE';   color='#16a34a'; }
+  document.getElementById('ri-label').textContent = ri;
+  const badge = document.getElementById('ri-badge');
+  badge.textContent = tol;
+  badge.style.background = color+'20';
+  badge.style.color = color;
+  badge.style.border = '1px solid '+color+'40';
+  preview.style.borderColor = color;
+  preview.style.display = 'flex';
+}
+document.getElementById('sel-sev').addEventListener('change', updateRisk);
+document.getElementById('sel-lik').addEventListener('change', updateRisk);
+</script>
+{% endblock %}

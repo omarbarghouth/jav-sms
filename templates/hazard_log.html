@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Hazard Log — Jordan Aviation SMS{% endblock %}
+{% block content %}
+
+<div class="page-title">Hazard Log</div>
+<div class="page-sub">All hazards from Hazard Reports, ASRs, Audits and MOC entries</div>
+
+<form method="GET" action="/hazard-log" class="filter-bar">
+  <select name="dept" onchange="this.form.submit()">
+    <option value="">All Departments</option>
+    {% for d in departments %}
+      <option value="{{ d.id }}" {% if dept_filter==d.id|string %}selected{% endif %}>
+        {{ d.name }}
+      </option>
+    {% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    <option value="Open"   {% if status_f=='Open' %}selected{% endif %}>Open</option>
+    <option value="Closed" {% if status_f=='Closed' %}selected{% endif %}>Closed</option>
+  </select>
+  <select name="tolerance" onchange="this.form.submit()">
+    <option value="">All Risk Levels</option>
+    <option value="INTOLERABLE" {% if tol_f=='INTOLERABLE' %}selected{% endif %}>Intolerable</option>
+    <option value="TOLERABLE"   {% if tol_f=='TOLERABLE' %}selected{% endif %}>Tolerable</option>
+    <option value="ACCEPTABLE"  {% if tol_f=='ACCEPTABLE' %}selected{% endif %}>Acceptable</option>
+  </select>
+  <a href="/hazard-log" class="btn btn-outline btn-sm">Clear</a>
+  <span style="margin-left:auto;color:#6b7280;font-size:13px">{{ hazards|length }} record(s)</span>
+</form>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Hazard ID</th>
+          <th>Source</th>
+          <th>Dept</th>
+          <th>Generic Hazard</th>
+          <th>Initial Risk</th>
+          <th>Residual Risk</th>
+          <th>Owner</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in hazards %}
+        <tr>
+          <td class="mono">{{ h.id }}</td>
+          <td>
+            {% if h.source == 'ASR' %}
+              <span class="badge badge-blue">ASR</span>
+            {% elif h.source == 'Hazard Report' %}
+              <span class="badge badge-gray">Hazard</span>
+            {% else %}
+              <span class="badge badge-gray">{{ h.source }}</span>
+            {% endif %}
+          </td>
+          <td><strong>{{ dept_code(h.department_id) }}</strong></td>
+          <td style="max-width:200px">{{ h.generic_hazard }}</td>
+          <td>
+            <strong>{{ h.initial_risk_index }}</strong>&nbsp;
+            {% if h.initial_risk_tolerance == 'INTOLERABLE' %}
+              <span class="badge badge-red">INTOLERABLE</span>
+            {% elif h.initial_risk_tolerance == 'TOLERABLE' %}
+              <span class="badge badge-yellow">TOLERABLE</span>
+            {% else %}
+              <span class="badge badge-green">ACCEPTABLE</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if h.residual_risk_index %}
+              <strong>{{ h.residual_risk_index }}</strong>&nbsp;
+              {% if h.residual_risk_tolerance == 'INTOLERABLE' %}
+                <span class="badge badge-red">INTOLERABLE</span>
+              {% elif h.residual_risk_tolerance == 'TOLERABLE' %}
+                <span class="badge badge-yellow">TOLERABLE</span>
+              {% else %}
+                <span class="badge badge-green">ACCEPTABLE</span>
+              {% endif %}
+            {% else %}
+              <span style="color:#9ca3af;font-size:12px">Pending</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px">{{ h.owner or '—' }}</td>
+          <td>
+            {% if h.status == 'Open' %}
+              <span class="badge badge-yellow">Open</span>
+            {% else %}
+              <span class="badge badge-green">Closed</span>
+            {% endif %}
+          </td>
+          <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:30px">
+          No hazards found matching the current filters.
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

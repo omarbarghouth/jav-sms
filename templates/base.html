@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}Jordan Aviation SMS{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --navy:#0f1c3f; --navy2:#1a2d5a; --gold:#c9a84c; --gold2:#e8c96e;
+      --bg:#f4f6fb; --card:#ffffff; --text:#111827; --muted:#6b7280;
+      --border:#e5e7eb; --r:12px; --shadow:0 2px 12px rgba(15,28,63,.08);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;min-height:100vh}
+    a{text-decoration:none;color:inherit}
+
+    /* Sidebar */
+    .sidebar{width:230px;background:var(--navy);display:flex;flex-direction:column;flex-shrink:0;min-height:100vh;position:sticky;top:0}
+    .s-logo{display:flex;align-items:center;gap:12px;padding:20px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+    .s-icon{width:36px;height:36px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+    .s-text{color:#fff;font-size:13px;font-weight:700;line-height:1.3}
+    nav{flex:1;padding:12px 0}
+    .nav-a{display:flex;align-items:center;gap:12px;padding:11px 16px;color:rgba(255,255,255,.65);font-size:13px;font-weight:500;border-left:3px solid transparent;transition:all .15s}
+    .nav-a:hover{background:rgba(255,255,255,.08);color:#fff}
+    .nav-a.active{background:rgba(201,168,76,.15);color:var(--gold2);border-left-color:var(--gold)}
+    .nav-icon{font-size:17px;width:22px;text-align:center}
+    .nav-badge{background:var(--gold);color:var(--navy);font-size:9px;font-weight:800;padding:2px 6px;border-radius:99px;margin-left:4px}
+    .s-foot{padding:14px;font-size:11px;color:rgba(255,255,255,.35);text-align:center;border-top:1px solid rgba(255,255,255,.06);line-height:1.5}
+
+    /* Main */
+    .main{flex:1;display:flex;flex-direction:column;min-width:0}
+    .topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 28px;height:52px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+    .topbar-title{font-weight:700;font-size:15px;color:var(--navy)}
+    .topbar-date{margin-left:auto;font-size:12px;color:var(--muted)}
+    .content{padding:32px 36px;flex:1}
+
+    /* Flash */
+    .flash{padding:14px 18px;border-radius:10px;margin-bottom:20px;font-weight:600;font-size:13.5px}
+    .flash.success{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+    .flash.error{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+
+    /* Page titles */
+    .page-title{font-size:24px;font-weight:700;color:var(--navy);margin-bottom:4px}
+    .page-sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+
+    /* Cards */
+    .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--border);padding:24px;margin-bottom:20px}
+    .card-title{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:14px}
+
+    /* Stat grid */
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:14px;margin-bottom:24px}
+    .stat-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:18px;box-shadow:var(--shadow)}
+    .stat-val{font-size:34px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-bottom:4px}
+    .stat-lbl{font-size:12px;color:var(--muted);font-weight:600}
+    .stat-sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+    /* Tables */
+    .tbl-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#f8f9fc;color:#374151;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap}
+    td{padding:10px 12px;border-bottom:1px solid #f0f2f7;vertical-align:middle}
+    tr:hover td{background:#f8f9fc}
+    .mono{font-family:'IBM Plex Mono',monospace;font-size:12px}
+
+    /* Badge */
+    .badge{display:inline-block;border-radius:6px;padding:2px 10px;font-size:11px;font-weight:700;white-space:nowrap}
+    .badge-red{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+    .badge-yellow{background:#fef9c3;color:#b45309;border:1px solid #fde68a}
+    .badge-green{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+    .badge-blue{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
+    .badge-gray{background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db}
+
+    /* Forms */
+    .form-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:28px;box-shadow:var(--shadow);max-width:860px}
+    .form-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+    .fg{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+    .fg label{font-size:12px;font-weight:700;color:#374151}
+    .fg input,.fg select,.fg textarea{border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;background:#fafbfe;font-family:inherit;font-size:13.5px;transition:border-color .15s;width:100%}
+    .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--navy);outline:none;background:#fff}
+    .fg textarea{resize:vertical}
+    .sec-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);padding:8px 0 6px;border-bottom:2px solid var(--gold);margin:12px 0 14px}
+    .optional{font-weight:400;color:var(--muted)}
+    .risk-preview{display:flex;align-items:center;gap:16px;padding:14px 18px;border-radius:10px;border:2px solid var(--border);background:#fafbfe;margin-bottom:14px}
+    .risk-big{font-size:28px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--navy)}
+
+    /* Phase chips */
+    .phases{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+    .phase{display:inline-block;padding:6px 14px;border:1.5px solid var(--border);border-radius:99px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s}
+    .phase:hover,.phase.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+
+    /* Buttons */
+    .btn{display:inline-block;padding:10px 22px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;border:none;font-family:inherit;transition:background .15s}
+    .btn-nav{background:var(--navy);color:#fff}.btn-nav:hover{background:var(--navy2)}
+    .btn-sm{padding:5px 12px;font-size:12px;border-radius:6px}
+    .btn-outline{background:#fff;color:var(--navy);border:2px solid var(--border)}.btn-outline:hover{border-color:var(--navy)}
+
+    /* Filter bar */
+    .filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+    .filter-bar select{border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;background:#fff;font-size:13px;font-family:inherit}
+
+    /* Risk compare */
+    .risk-compare{display:flex;align-items:center;gap:20px;background:#f8f9fc;border-radius:10px;padding:20px;margin:16px 0}
+    .risk-box{flex:1;text-align:center}
+    .risk-box-lbl{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+    .risk-idx{font-size:40px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--navy);margin-bottom:6px}
+    .risk-arrow{font-size:28px;color:var(--muted)}
+
+    /* Risk matrix */
+    .rm-table{border-collapse:separate;border-spacing:4px}
+    .rm-table th{background:var(--navy);color:#fff;border-radius:6px;padding:10px 14px;font-size:11px}
+    .rm-cell{border-radius:6px;text-align:center;font-weight:800;font-size:16px;padding:16px;color:#fff}
+    .rm-row-lbl{background:var(--navy);color:#fff;border-radius:6px;padding:10px 14px;font-size:11px;font-weight:700;white-space:nowrap}
+
+    /* SPI table */
+    .spi-cell{text-align:center;font-size:12px;font-weight:600}
+    .spi-red{background:#fee2e2;color:#dc2626}
+    .spi-yellow{background:#fef9c3;color:#b45309}
+    .spi-orange{background:#ffedd5;color:#c2410c}
+    .spi-green{background:#dcfce7;color:#15803d}
+
+    @media(max-width:768px){
+      .sidebar{display:none}
+      .content{padding:16px}
+      .form-grid-2,.form-grid-3{grid-template-columns:1fr}
+      .stat-grid{grid-template-columns:repeat(2,1fr)}
+    }
+  </style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="s-logo">
+    <div class="s-icon">✈</div>
+    <div class="s-text">Jordan Aviation<br>SMS</div>
+  </div>
+  <nav>
+    <a href="/" class="nav-a {% if request.path=='/' %}active{% endif %}">
+      <span class="nav-icon">📊</span> Dashboard</a>
+    <a href="/hazard-report" class="nav-a {% if request.path=='/hazard-report' %}active{% endif %}">
+      <span class="nav-icon">⚠️</span> Hazard Report</a>
+    <a href="/asr" class="nav-a {% if request.path=='/asr' %}active{% endif %}">
+      <span class="nav-icon">✈️</span> Air Safety Report
+      <span class="nav-badge">Flight Ops</span></a>
+    <a href="/hazard-log" class="nav-a {% if '/hazard-log' in request.path %}active{% endif %}">
+      <span class="nav-icon">📋</span> Hazard Log</a>
+    <a href="/spi" class="nav-a {% if request.path=='/spi' %}active{% endif %}">
+      <span class="nav-icon">📈</span> SPI / SPT</a>
+    <a href="/risk-matrix" class="nav-a {% if request.path=='/risk-matrix' %}active{% endif %}">
+      <span class="nav-icon">🎯</span> Risk Matrix</a>
+  </nav>
+  <div class="s-foot">ICAO Annex 19<br>IOSA Compliant<br>Jav/SMS/001 Rev 01</div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title">Safety Management System</span>
+    <span class="topbar-date">{{ now.strftime('%d %b %Y') }}</span>
+  </div>
+  <div class="content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="flash {{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>
