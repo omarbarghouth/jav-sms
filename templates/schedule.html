@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Audit Schedule{% endblock %}
+{% block content %}
+<div class="page-title">Audit Schedule</div>
+<div class="page-sub">All scheduled audits — Plan → Execute → Close</div>
+<form method="GET" class="fbar">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Planned','In Progress','Completed','Cancelled'] %}<option {% if status_f==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="dept" onchange="this.form.submit()">
+    <option value="">All Departments</option>
+    {% for d in all_departments %}<option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+  </select>
+  <a href="/schedule" class="btn btn-outline btn-sm">Clear</a>
+  <a href="/schedule/new" class="btn btn-nav btn-sm" style="margin-left:auto">+ Schedule Audit</a>
+</form>
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Audit ID</th><th>Title</th><th>Type</th><th>Dept</th><th>Auditor</th><th>Scheduled</th><th>Findings</th><th>Open Actions</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for a in audits %}
+        {% set open_acts = namespace(n=0) %}
+        {% for f in a.findings %}{% for act in f.actions %}{% if act.status != 'Closed' %}{% set open_acts.n = open_acts.n + 1 %}{% endif %}{% endfor %}{% endfor %}
+        <tr>
+          <td class="mono">{{ a.id }}</td>
+          <td style="max-width:180px;font-size:12px">{{ a.title[:55] }}</td>
+          <td><span class="badge b-blue" style="font-size:9px">{{ a.audit_type }}</span></td>
+          <td><strong>{{ a.department.code if a.department else '—' }}</strong></td>
+          <td style="font-size:12px">{{ a.lead_auditor }}</td>
+          <td style="font-size:11px">{{ a.scheduled_date }}</td>
+          <td style="text-align:center">
+            <span class="badge {% if a.findings|length > 0 %}b-orange{% else %}b-gray{% endif %}">{{ a.findings|length }}</span>
+          </td>
+          <td style="text-align:center">
+            <span class="badge {% if open_acts.n > 0 %}b-red{% else %}b-green{% endif %}">{{ open_acts.n }}</span>
+          </td>
+          <td>
+            {% if a.status=='Completed' %}<span class="badge b-green">Completed</span>
+            {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+            {% elif a.status=='Cancelled' %}<span class="badge b-red">Cancelled</span>
+            {% else %}<span class="badge b-gray">Planned</span>{% endif %}
+          </td>
+          <td><a href="/audit/{{ a.id }}" class="btn btn-nav btn-sm">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:24px">No audits found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ f.id }} — Finding{% endblock %}
+{% block content %}
+<div style="margin-bottom:12px"><a href="/audit/{{ f.audit_id }}" style="color:var(--muted);font-size:12px">← {{ f.audit_id }}</a></div>
+<div class="page-title">{{ f.id }}</div>
+<div class="page-sub">
+  {% if f.severity=='Major' %}<span class="badge b-red">Major</span>
+  {% elif f.severity=='Minor' %}<span class="badge b-yellow">Minor</span>
+  {% else %}<span class="badge b-gray">Observation</span>{% endif %}
+  &nbsp;· {{ f.category }} · Ref: {{ f.requirement_ref or '—' }}
+  &nbsp;·&nbsp;
+  {% if f.status=='Closed' %}<span class="badge b-green">Closed</span>
+  {% elif f.status=='Verified' %}<span class="badge b-blue">Verified</span>
+  {% elif f.status=='Action Raised' %}<span class="badge b-orange">Action Raised</span>
+  {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+  <div>
+    <div class="card">
+      <div class="card-title">Finding Details</div>
+      <p style="font-size:13px;margin-bottom:10px">{{ f.description }}</p>
+      <div style="font-size:12px;margin-bottom:6px"><strong>Root Cause:</strong> {{ f.root_cause or '—' }}</div>
+      <div style="font-size:12px;margin-bottom:6px"><strong>Evidence:</strong> {{ f.evidence or '—' }}</div>
+      {% if f.hazard_id %}
+      <div style="padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;margin-top:8px;font-size:12px">
+        ⚠ <strong>Linked Hazard:</strong> <span class="mono">{{ f.hazard_id }}</span>
+      </div>{% endif %}
+      <form method="POST" action="/finding/{{ f.id }}/update" style="margin-top:12px">
+        <div class="g2">
+          <div class="fg"><label>Status</label>
+            <select name="status">
+              {% for s in ['Open','Action Raised','Verified','Closed'] %}
+              <option {% if f.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+            </select></div>
+        </div>
+        <div class="fg"><label>Update Root Cause</label><textarea name="root_cause" rows="2">{{ f.root_cause or '' }}</textarea></div>
+        <div class="fg"><label>Update Evidence</label><textarea name="evidence" rows="2">{{ f.evidence or '' }}</textarea></div>
+        <button type="submit" class="btn btn-nav btn-sm">Update Finding</button>
+      </form>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-title">Corrective Actions ({{ f.actions|length }})</div>
+      {% for a in f.actions %}
+      <div style="border:1.5px solid var(--border);border-radius:9px;padding:12px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span class="mono">{{ a.id }}</span>
+          {% if a.status=='Overdue' %}<span class="badge b-red">Overdue</span>
+          {% elif a.status=='Closed' %}<span class="badge b-green">Closed</span>
+          {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+          {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+        </div>
+        <p style="font-size:12px;margin-bottom:6px">{{ a.description }}</p>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+          Owner: {{ a.owner or '—' }} · Due: {{ a.due_date or '—' }} ·
+          Priority: {% if a.priority=='High' %}<strong style="color:#dc2626">High</strong>{% elif a.priority=='Medium' %}<strong style="color:#d97706">Medium</strong>{% else %}<strong>Low</strong>{% endif %}
+        </div>
+        {% if a.effectiveness_review %}
+        <div style="padding:6px 10px;border-radius:6px;font-size:11px;
+          {% if a.effectiveness_review=='Effective' %}background:#dcfce7;color:#15803d{% elif a.effectiveness_review=='Ineffective' %}background:#fee2e2;color:#dc2626{% else %}background:#fef9c3;color:#b45309{% endif %}">
+          Effectiveness: <strong>{{ a.effectiveness_review }}</strong>
+          {% if a.effectiveness_notes %} — {{ a.effectiveness_notes }}{% endif %}
+        </div>{% endif %}
+        {% if a.reopened %}<div style="font-size:11px;color:#dc2626;margin-top:4px">⚠ Re-opened: {{ a.reopen_reason }}</div>{% endif %}
+
+        <!-- Update action form -->
+        <details style="margin-top:10px">
+          <summary style="font-size:11px;font-weight:700;cursor:pointer;color:var(--navy)">Update Action</summary>
+          <form method="POST" action="/action/{{ a.id }}/update" style="margin-top:8px;padding:10px;background:#f8f9fc;border-radius:8px">
+            <div class="g2">
+              <div class="fg"><label>Status</label>
+                <select name="status">
+                  {% for s in ['Open','In Progress','Closed','Overdue'] %}<option {% if a.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                </select></div>
+              <div class="fg"><label>Due Date</label><input type="date" name="due_date" value="{{ a.due_date or '' }}"/></div>
+            </div>
+            <div class="fg"><label>Owner</label><input type="text" name="owner" value="{{ a.owner or '' }}"/></div>
+            <div class="fg"><label>Completion Evidence</label><textarea name="completion_evidence" rows="2">{{ a.completion_evidence or '' }}</textarea></div>
+            <div class="g2">
+              <div class="fg"><label>Effectiveness Review</label>
+                <select name="effectiveness_review">
+                  <option value="">Not yet reviewed</option>
+                  {% for e in ['Effective','Partially Effective','Ineffective'] %}<option {% if a.effectiveness_review==e %}selected{% endif %}>{{ e }}</option>{% endfor %}
+                </select></div>
+              <div class="fg"><label>Verified By</label><input type="text" name="verified_by" value="{{ a.verified_by or '' }}"/></div>
+            </div>
+            <div class="fg"><label>Effectiveness Notes</label><textarea name="effectiveness_notes" rows="2">{{ a.effectiveness_notes or '' }}</textarea></div>
+            <div class="fg"><label>Re-open Reason (if Ineffective)</label><input type="text" name="reopen_reason" placeholder="Reason for re-opening…"/></div>
+            <button type="submit" class="btn btn-nav btn-sm">Save</button>
+          </form>
+        </details>
+      </div>
+      {% else %}<p style="color:var(--muted);font-size:13px">No actions yet.</p>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

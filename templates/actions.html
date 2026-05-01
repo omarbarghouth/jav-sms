@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Action Tracker{% endblock %}
+{% block content %}
+<div class="page-title">Corrective Action Tracker</div>
+<div class="page-sub">All corrective actions from audit findings · Full traceability</div>
+<div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_c }}</div><div class="stat-lbl">Open</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#1d4ed8">{{ inprog }}</div><div class="stat-lbl">In Progress</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ overdue }}</div><div class="stat-lbl">Overdue</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ closed }}</div><div class="stat-lbl">Closed</div></div>
+</div>
+<form method="GET" class="fbar">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Open','In Progress','Overdue','Closed'] %}<option {% if status_f==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="priority" onchange="this.form.submit()">
+    <option value="">All Priorities</option>
+    {% for p in ['High','Medium','Low'] %}<option {% if priority_f==p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+  </select>
+  <a href="/actions" class="btn btn-outline btn-sm">Clear</a>
+  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ actions|length }} action(s)</span>
+</form>
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Action ID</th><th>Finding</th><th>Description</th><th>Owner</th><th>Due Date</th><th>Priority</th><th>Effectiveness</th><th>Status</th><th>Update</th></tr></thead>
+      <tbody>
+        {% for a in actions %}
+        <tr>
+          <td class="mono">{{ a.id }}</td>
+          <td><a href="/finding/{{ a.finding_id }}" style="color:#1d4ed8;font-size:11px" class="mono">{{ a.finding_id }}</a></td>
+          <td style="max-width:200px;font-size:12px">{{ (a.description or '')[:70] }}</td>
+          <td style="font-size:12px">{{ a.owner or '—' }}</td>
+          <td style="font-size:11px;{% if a.status=='Overdue' %}color:#dc2626;font-weight:700{% endif %}">{{ a.due_date or '—' }}</td>
+          <td>{% if a.priority=='High' %}<span class="badge b-red">High</span>{% elif a.priority=='Medium' %}<span class="badge b-yellow">Medium</span>{% else %}<span class="badge b-gray">Low</span>{% endif %}</td>
+          <td>
+            {% if a.effectiveness_review=='Effective' %}<span class="badge b-green">Effective</span>
+            {% elif a.effectiveness_review=='Partially Effective' %}<span class="badge b-yellow">Partial</span>
+            {% elif a.effectiveness_review=='Ineffective' %}<span class="badge b-red">Ineffective</span>
+            {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
+          </td>
+          <td>{% if a.status=='Overdue' %}<span class="badge b-red">Overdue</span>{% elif a.status=='Closed' %}<span class="badge b-green">Closed</span>{% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>{% else %}<span class="badge b-yellow">Open</span>{% endif %}</td>
+          <td>
+            <form method="POST" action="/action/{{ a.id }}/update" style="display:flex;gap:4px">
+              <select name="status" style="font-size:10px;padding:3px 5px;border:1px solid var(--border);border-radius:5px">
+                {% for s in ['Open','In Progress','Closed','Overdue'] %}<option {% if a.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+              </select>
+              <button type="submit" class="btn btn-nav btn-sm" style="padding:3px 7px">✓</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">No actions found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

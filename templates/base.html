@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{% block title %}JAV Audit SMS{% endblock %}</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--navy:#0f1c3f;--navy2:#1a2d5a;--gold:#c9a84c;--gold2:#e8c96e;
+          --bg:#f4f6fb;--card:#fff;--text:#111827;--muted:#6b7280;
+          --border:#e5e7eb;--r:10px;--shadow:0 2px 12px rgba(15,28,63,.08)}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;min-height:100vh}
+    a{text-decoration:none;color:inherit}
+    .sb{width:224px;background:var(--navy);display:flex;flex-direction:column;flex-shrink:0;min-height:100vh;position:sticky;top:0;overflow-y:auto}
+    .sb-logo{display:flex;align-items:center;gap:10px;padding:18px 14px;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sb-icon{width:34px;height:34px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    .sb-text{color:#fff;font-size:11px;font-weight:700;line-height:1.4}
+    .sb-section{padding:10px 14px 3px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.3)}
+    .nav-a{display:flex;align-items:center;gap:10px;padding:9px 14px;color:rgba(255,255,255,.65);font-size:12.5px;font-weight:500;border-left:3px solid transparent;transition:all .15s}
+    .nav-a:hover{background:rgba(255,255,255,.08);color:#fff}
+    .nav-a.active{background:rgba(201,168,76,.15);color:var(--gold2);border-left-color:var(--gold)}
+    .nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+    .nav-badge{background:#dc2626;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:99px;margin-left:auto}
+    .sb-foot{padding:12px 14px;font-size:9px;color:rgba(255,255,255,.28);border-top:1px solid rgba(255,255,255,.06);margin-top:auto;line-height:1.6}
+    .main{flex:1;display:flex;flex-direction:column;min-width:0}
+    .topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 24px;height:50px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:10}
+    .topbar-title{font-weight:700;font-size:14px;color:var(--navy)}
+    .topbar-date{margin-left:auto;font-size:11px;color:var(--muted)}
+    .content{padding:26px 30px;flex:1}
+    .flash{padding:11px 15px;border-radius:8px;margin-bottom:16px;font-weight:600;font-size:13px}
+    .flash.success{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+    .flash.error{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+    .page-title{font-size:21px;font-weight:700;color:var(--navy);margin-bottom:3px}
+    .page-sub{color:var(--muted);font-size:12.5px;margin-bottom:20px}
+    .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--border);padding:18px;margin-bottom:16px}
+    .card-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:11px;margin-bottom:18px}
+    .stat-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:14px;box-shadow:var(--shadow)}
+    .stat-val{font-size:28px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-bottom:3px}
+    .stat-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+    .tbl-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#f8f9fc;color:#374151;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap}
+    td{padding:8px 10px;border-bottom:1px solid #f0f2f7;vertical-align:middle}
+    tr:hover td{background:#f8f9fc}
+    .mono{font-family:'IBM Plex Mono',monospace;font-size:11px}
+    .badge{display:inline-block;border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;white-space:nowrap}
+    .b-red{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+    .b-yellow{background:#fef9c3;color:#b45309;border:1px solid #fde68a}
+    .b-orange{background:#ffedd5;color:#c2410c;border:1px solid #fed7aa}
+    .b-green{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+    .b-blue{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
+    .b-purple{background:#f3e8ff;color:#7c3aed;border:1px solid #d8b4fe}
+    .b-gray{background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db}
+    .form-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:22px;box-shadow:var(--shadow);max-width:860px}
+    .g2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+    .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px}
+    .fg{display:flex;flex-direction:column;gap:4px;margin-bottom:11px}
+    .fg label{font-size:10px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.3px}
+    .fg input,.fg select,.fg textarea{border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;background:#fafbfe;font-family:inherit;font-size:13px;width:100%;transition:border-color .15s}
+    .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--navy);outline:none;background:#fff}
+    .fg textarea{resize:vertical}
+    .sec{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);padding:7px 0 5px;border-bottom:2px solid var(--gold);margin:10px 0 11px}
+    .btn{display:inline-block;padding:8px 18px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;border:none;font-family:inherit;transition:all .15s}
+    .btn-nav{background:var(--navy);color:#fff}.btn-nav:hover{background:var(--navy2)}
+    .btn-sm{padding:4px 10px;font-size:11px;border-radius:6px}
+    .btn-outline{background:#fff;color:var(--navy);border:1.5px solid var(--border)}.btn-outline:hover{border-color:var(--navy)}
+    .btn-success{background:#15803d;color:#fff}.btn-success:hover{background:#166534}
+    .btn-danger{background:#dc2626;color:#fff}.btn-danger:hover{background:#b91c1c}
+    .fbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+    .fbar select{border:1.5px solid var(--border);border-radius:7px;padding:6px 10px;background:#fff;font-size:12px;font-family:inherit}
+    /* Progress bar */
+    .progress-bar{height:10px;border-radius:99px;background:#e5e7eb;overflow:hidden;margin-top:4px}
+    .progress-fill{height:100%;border-radius:99px;transition:width .3s}
+    /* Timeline */
+    .timeline{display:flex;align-items:center;gap:0;margin:16px 0}
+    .tl-step{flex:1;text-align:center;position:relative}
+    .tl-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;margin:0 auto 6px;border:2px solid var(--border)}
+    .tl-dot.done{background:var(--navy);color:#fff;border-color:var(--navy)}
+    .tl-dot.active{background:var(--gold);color:var(--navy);border-color:var(--gold)}
+    .tl-dot.pending{background:#fff;color:var(--muted)}
+    .tl-label{font-size:10px;font-weight:600;color:var(--muted)}
+    .tl-line{position:absolute;top:14px;left:50%;width:100%;height:2px;background:var(--border);z-index:-1}
+    .tl-line.done{background:var(--navy)}
+    @media(max-width:768px){.sb{display:none}.content{padding:14px}.g2,.g3{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body>
+<aside class="sb">
+  <div class="sb-logo">
+    <div class="sb-icon">🔍</div>
+    <div class="sb-text">Jordan Aviation<br>Audit Management<br>System</div>
+  </div>
+  <nav>
+    <div class="sb-section">Overview</div>
+    <a href="/" class="nav-a {% if request.path=='/' %}active{% endif %}"><span class="nav-icon">📊</span>Dashboard</a>
+
+    <div class="sb-section">Audit Lifecycle</div>
+    <a href="/plans" class="nav-a {% if '/plans' in request.path %}active{% endif %}"><span class="nav-icon">📅</span>Annual Audit Plans</a>
+    <a href="/schedule" class="nav-a {% if '/schedule' in request.path %}active{% endif %}"><span class="nav-icon">🗓</span>Audit Schedule</a>
+
+    <div class="sb-section">Execution & Findings</div>
+    <a href="/schedule?status=In+Progress" class="nav-a"><span class="nav-icon">▶️</span>Active Audits</a>
+    <a href="/actions" class="nav-a {% if request.path=='/actions' %}active{% endif %}">
+      <span class="nav-icon">✅</span>Action Tracker
+      {% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}
+    </a>
+    <a href="/hazards" class="nav-a {% if request.path=='/hazards' %}active{% endif %}"><span class="nav-icon">⚠️</span>Hazard Register</a>
+
+    <div class="sb-section">New</div>
+    <a href="/schedule/new" class="nav-a"><span class="nav-icon">＋</span>New Audit</a>
+    <a href="/plans/new" class="nav-a"><span class="nav-icon">＋</span>New Plan</a>
+  </nav>
+  <div class="sb-foot">ICAO Annex 19 · Doc 9859<br>IOSA ISM Compliant<br>Jav/SMS/001 Rev 02</div>
+</aside>
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title">Jordan Aviation — Audit Management System</span>
+    <span class="topbar-date">{{ now.strftime('%d %b %Y') }}</span>
+  </div>
+  <div class="content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Management of Change{% endblock %}
+{% block content %}
+<div class="page-title">Management of Change (MOC)</div>
+<div class="page-sub">Track and assess changes that may impact safety</div>
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><a href="/moc/new" class="btn btn-nav">+ New MOC</a></div>
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>MOC ID</th><th>Title</th><th>Type</th><th>Department</th><th>Initiator</th><th>Planned</th><th>Approval</th><th>Implementation</th><th>Update</th></tr></thead>
+      <tbody>
+        {% for m in mocs %}
+        <tr>
+          <td class="mono">{{ m.id }}</td>
+          <td style="max-width:180px;font-size:12px">{{ m.title }}</td>
+          <td><span class="badge b-blue">{{ m.change_type }}</span></td>
+          <td>{{ m.department.code if m.department else '—' }}</td>
+          <td style="font-size:12px">{{ m.initiator }}</td>
+          <td style="font-size:12px">{{ m.planned_date }}</td>
+          <td>{% if m.approval_status=='Approved' %}<span class="badge b-green">Approved</span>{% elif m.approval_status=='Rejected' %}<span class="badge b-red">Rejected</span>{% else %}<span class="badge b-yellow">Pending</span>{% endif %}</td>
+          <td>{% if m.implementation_status=='Completed' %}<span class="badge b-green">Completed</span>{% elif m.implementation_status=='In Progress' %}<span class="badge b-blue">In Progress</span>{% else %}<span class="badge b-gray">Not Started</span>{% endif %}</td>
+          <td>
+            <form method="POST" action="/moc/{{ m.id }}/update" style="display:flex;flex-direction:column;gap:4px">
+              <select name="approval_status" style="font-size:11px;padding:3px;border:1px solid var(--border);border-radius:5px">
+                {% for s in ['Pending','Approved','Rejected'] %}<option {% if m.approval_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+              </select>
+              <select name="implementation_status" style="font-size:11px;padding:3px;border:1px solid var(--border);border-radius:5px">
+                {% for s in ['Not Started','In Progress','Completed'] %}<option {% if m.implementation_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+              </select>
+              <button type="submit" class="btn btn-nav btn-sm" style="padding:3px 8px">✓</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">No MOC records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

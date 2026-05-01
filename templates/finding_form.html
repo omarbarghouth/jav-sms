@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}New Finding{% endblock %}
+{% block content %}
+<div style="margin-bottom:12px"><a href="/audit/{{ a.id }}" style="color:var(--muted);font-size:12px">← {{ a.id }}</a></div>
+<div class="page-title">New Audit Finding</div>
+<div class="page-sub">{{ a.title }} — auto-generates corrective action and hazard (if Major)</div>
+<form class="form-card" method="POST">
+  <div class="sec">Finding Details</div>
+  {% if checklist_items %}
+  <div class="fg"><label>Linked Checklist Item (NO responses)</label>
+    <select name="checklist_item_id">
+      <option value="">None / Manual entry</option>
+      {% for i in checklist_items %}<option value="{{ i.id }}">[{{ i.reference }}] {{ i.question[:80] }}</option>{% endfor %}
+    </select></div>
+  {% endif %}
+  <div class="fg"><label>Finding Description *</label>
+    <textarea name="description" required rows="4" placeholder="Describe the non-conformance or observation clearly and specifically. Include what was found, where, and when."></textarea></div>
+  <div class="g3">
+    <div class="fg"><label>Category *</label>
+      <select name="category" required>
+        <option>Operational</option><option>Technical</option><option>Human Factors</option><option>Organizational</option>
+      </select></div>
+    <div class="fg"><label>Severity *</label>
+      <select name="severity" required id="sev-sel">
+        <option>Major</option><option>Minor</option><option>Observation</option>
+      </select></div>
+    <div class="fg"><label>Requirement Reference</label>
+      <input type="text" name="requirement_ref" placeholder="e.g. IOSA FLT 1.1.1"/></div>
+  </div>
+  <div class="fg"><label>Root Cause</label>
+    <textarea name="root_cause" rows="2" placeholder="Why did this non-conformance occur?"></textarea></div>
+  <div class="fg"><label>Evidence</label>
+    <textarea name="evidence" rows="2" placeholder="Documents reviewed, staff interviewed, observations made…"></textarea></div>
+
+  <div class="sec">Auto-generated Corrective Action</div>
+  <div class="fg"><label>Initial Action Description *</label>
+    <textarea name="initial_action" required rows="3" placeholder="What corrective action must be taken to address this finding?"></textarea></div>
+  <div class="g2">
+    <div class="fg"><label>Action Owner *</label><input type="text" name="action_owner" required placeholder="Responsible Manager"/></div>
+    <div class="fg"><label>Due Date *</label><input type="date" name="due_date" required/></div>
+  </div>
+  <div id="major-note" style="display:none;padding:10px;background:#fee2e2;border-radius:8px;font-size:12px;color:#dc2626;margin-bottom:12px">
+    ⚠ <strong>Major Finding</strong> — A Hazard record will be automatically created and logged in the Hazard Register.
+  </div>
+  <button type="submit" class="btn btn-nav">Submit Finding & Generate Action</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const sel = document.getElementById('sev-sel');
+const note = document.getElementById('major-note');
+sel.addEventListener('change', () => note.style.display = sel.value==='Major' ? 'block' : 'none');
+if(sel.value==='Major') note.style.display='block';
+</script>
+{% endblock %}
