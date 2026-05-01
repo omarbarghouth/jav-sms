@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Risk Register — Jordan Aviation SMS{% endblock %}
+{% block content %}
+
+<div class="page-title">Risk Register</div>
+<div class="page-sub">All identified risks across the Safety Risk Management system</div>
+
+<form method="GET" action="/risks" class="filter-bar">
+  <select name="dept" onchange="this.form.submit()">
+    <option value="">All Departments</option>
+    {% for d in departments %}
+      <option value="{{ d.id }}" {% if dept_filter==d.id|string %}selected{% endif %}>{{ d.name }}</option>
+    {% endfor %}
+  </select>
+  <select name="tolerance" onchange="this.form.submit()">
+    <option value="">All Risk Levels</option>
+    <option value="INTOLERABLE" {% if tol_f=='INTOLERABLE' %}selected{% endif %}>Intolerable</option>
+    <option value="TOLERABLE"   {% if tol_f=='TOLERABLE' %}selected{% endif %}>Tolerable</option>
+    <option value="ACCEPTABLE"  {% if tol_f=='ACCEPTABLE' %}selected{% endif %}>Acceptable</option>
+  </select>
+  <a href="/risks" class="btn btn-outline btn-sm">Clear</a>
+  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ risks|length }} risk(s)</span>
+</form>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Risk ID</th><th>Hazard</th><th>Dept</th><th>Risk Description</th>
+          <th>Initial</th><th>Residual</th><th>Controls</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in risks %}
+        {% set r = row.risk %}
+        {% set h = row.hazard %}
+        {% set ctrls = row.controls %}
+        <tr>
+          <td class="mono">{{ r.id }}</td>
+          <td class="mono" style="font-size:11px"><a href="/hazard-log/{{ h.id }}" style="color:var(--navy)">{{ h.id[:18] }}…</a></td>
+          <td><span class="badge badge-blue">{{ dept_code(h.get('department_id',1)) }}</span></td>
+          <td style="max-width:220px;font-size:12.5px">{{ r.risk_description[:70] }}{% if r.risk_description|length>70 %}…{% endif %}</td>
+          <td>
+            <strong>{{ r.risk_index }}</strong>&nbsp;
+            {% if r.tolerance == 'INTOLERABLE' %}<span class="badge badge-red">INT</span>
+            {% elif r.tolerance == 'TOLERABLE' %}<span class="badge badge-yellow">TOL</span>
+            {% else %}<span class="badge badge-green">ACC</span>{% endif %}
+          </td>
+          <td>
+            {% if r.residual_risk_index %}
+              <strong>{{ r.residual_risk_index }}</strong>&nbsp;
+              {% if r.residual_tolerance == 'INTOLERABLE' %}<span class="badge badge-red">INT</span>
+              {% elif r.residual_tolerance == 'TOLERABLE' %}<span class="badge badge-yellow">TOL</span>
+              {% else %}<span class="badge badge-green">ACC</span>{% endif %}
+            {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
+          </td>
+          <td>
+            {% for c in ctrls %}
+              {% if c.type == 'Preventive' %}<span class="badge badge-blue btn-sm">P</span>
+              {% else %}<span class="badge badge-purple btn-sm">D</span>{% endif %}
+            {% else %}<span style="color:#9ca3af;font-size:11px">None</span>{% endfor %}
+          </td>
+          <td><a href="/hazard-log/{{ h.id }}" class="btn btn-outline btn-sm">Hazard →</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:28px">No risks found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div style="margin-top:8px;font-size:12px;color:var(--muted)">
+  P = Preventive Control · D = Detective Control · Risks are added from within each Hazard record.
+</div>
+
+{% endblock %}
