@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Hazard Report{% endblock %}
+{% block content %}
+<div class="page-title">Hazard Report</div>
+<div class="page-sub">All Departments · Quick reporting · Anonymous option available</div>
+<form class="form-card" method="POST">
+  <div class="sec">General Information</div>
+  <div class="g2">
+    <div class="fg"><label>Department *</label>
+      <select name="department_id" required>
+        <option value="">Select…</option>
+        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Date *</label><input type="date" name="date" required value="{{ now.strftime('%Y-%m-%d') }}"/></div>
+  </div>
+  <div class="fg"><label>Location / Area *</label><input type="text" name="location" required placeholder="e.g. Gate B3, Hangar 2, Galley…"/></div>
+  <div class="sec">Hazard Classification</div>
+  <div class="g2">
+    <div class="fg"><label>Classification *</label>
+      <select name="classification" required>
+        <option>Operational</option><option>Technical</option>
+        <option>Human Factors</option><option>Environmental</option><option>Organizational</option>
+      </select></div>
+    <div class="fg"><label>Generic Hazard</label><input type="text" name="generic_hazard" placeholder="e.g. FOD, Weather, Equipment Failure…"/></div>
+  </div>
+  <div class="fg"><label>Hazard Description *</label><textarea name="hazard_description" required rows="4" placeholder="Describe the hazard clearly…"></textarea></div>
+  <div class="fg"><label>Potential Consequences</label><textarea name="consequences" rows="2" placeholder="What could happen if not controlled?"></textarea></div>
+  <div class="fg"><label>Immediate Action Taken</label><textarea name="immediate_action" rows="2"></textarea></div>
+  <div class="fg"><label>Suggested Mitigation</label><textarea name="suggested_mitigation" rows="2"></textarea></div>
+  <div class="sec">Risk Assessment</div>
+  <div class="g2">
+    <div class="fg"><label>Severity *</label>
+      <select name="severity" required id="sev">
+        <option value="">Select…</option>
+        <option value="A">A – Catastrophic</option><option value="B">B – Hazardous</option>
+        <option value="C">C – Major</option><option value="D">D – Minor</option><option value="E">E – Negligible</option>
+      </select></div>
+    <div class="fg"><label>Likelihood *</label>
+      <select name="likelihood" required id="lik">
+        <option value="">Select…</option>
+        <option value="5">5 – Frequent</option><option value="4">4 – Occasional</option>
+        <option value="3">3 – Remote</option><option value="2">2 – Improbable</option><option value="1">1 – Ext. Improbable</option>
+      </select></div>
+  </div>
+  <div class="risk-preview" id="rp" style="display:none">
+    Risk Index: <span class="risk-big" id="ri"></span>&nbsp;<span class="badge" id="rb"></span>
+  </div>
+  <div class="sec">Reporter</div>
+  <div class="fg"><label>Your Name <span style="font-weight:400;color:var(--muted)">(leave blank = anonymous)</span></label>
+    <input type="text" name="reporter" placeholder="Anonymous"/></div>
+  <button type="submit" class="btn btn-nav">Submit Hazard Report</button>
+</form>
+{% endblock %}
+{% block scripts %}<script>
+const IT=new Set(["5A","5B","5C","4A","4B","3A"]),TO=new Set(["5D","5E","4C","4D","4E","3B","3C","3D","2A","2B","2C","1A"]);
+function upd(){const s=document.getElementById('sev').value,l=document.getElementById('lik').value;
+if(!s||!l){document.getElementById('rp').style.display='none';return}
+const ri=l+s;let t,c;if(IT.has(ri)){t='INTOLERABLE';c='#dc2626'}else if(TO.has(ri)){t='TOLERABLE';c='#d97706'}else{t='ACCEPTABLE';c='#16a34a'}
+document.getElementById('ri').textContent=ri;const b=document.getElementById('rb');b.textContent=t;b.style.cssText=`background:${c}20;color:${c};border:1px solid ${c}40`;
+document.getElementById('rp').style.cssText=`display:flex;border-color:${c}`}
+document.getElementById('sev').addEventListener('change',upd);document.getElementById('lik').addEventListener('change',upd);
+</script>{% endblock %}

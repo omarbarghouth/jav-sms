@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Jordan Aviation SMS{% endblock %}
+{% block content %}
+<div class="page-title">Safety Dashboard</div>
+<div class="page-sub">Jordan Aviation · ICAO Annex 19 · IOSA Compliant · Real-time overview</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ total_haz }}</div><div class="stat-lbl">Total Hazards</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_haz }}</div><div class="stat-lbl">Open Hazards</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ intol }}</div><div class="stat-lbl">Intolerable Risks</div><div class="stat-sub">Immediate action required</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#7c3aed">{{ open_act }}</div><div class="stat-lbl">Open Actions</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ overdue_act }}</div><div class="stat-lbl">Overdue Actions</div><div class="stat-sub">Past due date</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#0891b2">{{ asr_cnt }}</div><div class="stat-lbl">ASR Reports</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#065f46">{{ audit_cnt }}</div><div class="stat-lbl">Audits</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#92400e">{{ moc_cnt }}</div><div class="stat-lbl">MOC Records</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+  <div class="card">
+    <div class="card-title">Recent Hazards</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Source</th><th>Hazard</th><th>Risk</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for h in recent_haz %}
+          <tr>
+            <td class="mono">{{ h.id }}</td>
+            <td><span class="badge b-blue">{{ h.source }}</span></td>
+            <td style="max-width:160px;font-size:12px">{{ h.generic_hazard[:50] }}</td>
+            <td>
+              {% if h.risks %}{% set r = h.risks[0] %}
+                <strong>{{ r.initial_risk_index }}</strong>
+                {% if r.initial_tolerance=='INTOLERABLE' %}<span class="badge b-red">!</span>
+                {% elif r.initial_tolerance=='TOLERABLE' %}<span class="badge b-yellow">~</span>
+                {% else %}<span class="badge b-green">✓</span>{% endif %}
+              {% else %}<span style="color:#9ca3af">—</span>{% endif %}
+            </td>
+            <td>{% if h.status=='Open' %}<span class="badge b-yellow">Open</span>{% else %}<span class="badge b-green">Closed</span>{% endif %}</td>
+            <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px"><a href="/hazard-log" class="btn btn-outline btn-sm">View All →</a></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Pending Actions</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Description</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for a in recent_act %}
+          <tr>
+            <td class="mono">{{ a.id }}</td>
+            <td style="max-width:160px;font-size:12px">{{ a.description[:50] if a.description else '—' }}</td>
+            <td style="font-size:12px">{{ a.owner or '—' }}</td>
+            <td style="font-size:12px">{{ a.due_date or '—' }}</td>
+            <td>
+              {% if a.status=='Overdue' %}<span class="badge b-red">Overdue</span>
+              {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+              {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px"><a href="/actions" class="btn btn-outline btn-sm">View All →</a></div>
+  </div>
+</div>
+
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+  <a href="/hazard-report" class="btn btn-nav">+ Hazard Report</a>
+  <a href="/asr" class="btn btn-nav" style="background:#0f766e">+ Air Safety Report</a>
+  <a href="/audits/new" class="btn btn-nav" style="background:#6b21a8">+ New Audit</a>
+  <a href="/moc/new" class="btn btn-nav" style="background:#92400e">+ New MOC</a>
+</div>
+{% endblock %}
