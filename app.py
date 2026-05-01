@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument
 from datetime import datetime, date
 import os, uuid
 
@@ -1170,6 +1170,341 @@ def audit_dashboard():
         recent_audits=recent_audits, recent_findings=recent_findings)
 
 # ─── Init ─────────────────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SAFETY POLICY & OBJECTIVES — COMPONENT 1 OF SMS
+#  ICAO Annex 19 §3 / Doc 9859 Ch.3 — Extension only, no existing code changed
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Document ID generator ────────────────────────────────────────────────────
+def gen_doc_id(doc_type, dept_code, year, seq, rev=0):
+    return f"{doc_type}-{dept_code}-{year}-{seq:03d}-REV{rev}"
+
+def next_seq(doc_type, dept_id, year):
+    existing = SMSDocument.query.filter_by(
+        doc_type=doc_type, department_id=dept_id).filter(
+        SMSDocument.id.like(f"%-{year}-%")).count()
+    return existing + 1
+
+# ─── SAFETY POLICY ───────────────────────────────────────────────────────────
+@app.route('/safety-policy')
+def safety_policy():
+    active  = SafetyPolicy.query.filter_by(status='Active').first()
+    history = SafetyPolicy.query.filter_by(status='Archived').order_by(
+              SafetyPolicy.version_num.desc()).all()
+    drafts  = SafetyPolicy.query.filter_by(status='Draft').all()
+    return render_template('safety_policy.html',
+                           active=active, history=history, drafts=drafts)
+
+@app.route('/safety-policy/new', methods=['GET','POST'])
+def new_safety_policy():
+    if request.method == 'POST':
+        f = request.form
+        # Get current max version
+        latest = SafetyPolicy.query.order_by(
+                 SafetyPolicy.version_num.desc()).first()
+        ver_num = (latest.version_num + 1) if latest else 0
+        pid = new_id('POL')
+        p = SafetyPolicy(
+            id=pid, version=f'REV{ver_num}', version_num=ver_num,
+            title=f['title'], content=f['content'],
+            approved_by=f['approved_by'],
+            approved_by_title=f.get('approved_by_title','Accountable Manager'),
+            effective_date=f['effective_date'],
+            review_date=f.get('review_date',''),
+            status='Draft',
+            change_summary=f.get('change_summary','Initial issue') if ver_num==0 else f.get('change_summary','')
+        )
+        db.session.add(p)
+        db.session.commit()
+        flash(f'✓ Safety Policy {pid} created as REV{ver_num} (Draft).', 'success')
+        return redirect(url_for('safety_policy'))
+    latest = SafetyPolicy.query.order_by(SafetyPolicy.version_num.desc()).first()
+    next_ver = (latest.version_num + 1) if latest else 0
+    return render_template('safety_policy_form.html', next_ver=next_ver, latest=latest)
+
+@app.route('/safety-policy/<pid>/activate', methods=['POST'])
+def activate_policy(pid):
+    # Archive current active
+    current = SafetyPolicy.query.filter_by(status='Active').first()
+    if current:
+        current.status = 'Archived'
+    policy = SafetyPolicy.query.get_or_404(pid)
+    policy.status = 'Active'
+    db.session.commit()
+    flash(f'✓ Policy {policy.version} is now Active. Previous version archived.', 'success')
+    return redirect(url_for('safety_policy'))
+
+@app.route('/safety-policy/<pid>/edit', methods=['POST'])
+def edit_policy(pid):
+    p = SafetyPolicy.query.get_or_404(pid)
+    f = request.form
+    if p.status == 'Archived':
+        flash('Cannot edit archived policy.', 'error')
+        return redirect(url_for('safety_policy'))
+    p.content          = f.get('content', p.content)
+    p.approved_by      = f.get('approved_by', p.approved_by)
+    p.effective_date   = f.get('effective_date', p.effective_date)
+    p.review_date      = f.get('review_date', p.review_date)
+    p.change_summary   = f.get('change_summary', p.change_summary)
+    db.session.commit()
+    flash('✓ Policy updated.', 'success')
+    return redirect(url_for('safety_policy'))
+
+# ─── SAFETY ACCOUNTABILITY (ROLES) ───────────────────────────────────────────
+@app.route('/safety-roles')
+def safety_roles():
+    roles = SafetyRole.query.filter_by(active=True).order_by(SafetyRole.role_type).all()
+    return render_template('safety_roles.html', roles=roles)
+
+@app.route('/safety-roles/new', methods=['GET','POST'])
+def new_safety_role():
+    if request.method == 'POST':
+        f = request.form
+        r = SafetyRole(
+            id=new_id('ROLE'),
+            role_name=f['role_name'],
+            role_type=f['role_type'],
+            person_name=f['person_name'],
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            responsibilities=f.get('responsibilities',''),
+            authority=f.get('authority',''),
+            contact_email=f.get('contact_email',''),
+            contact_phone=f.get('contact_phone',''),
+            effective_from=f.get('effective_from',''),
+            active=True
+        )
+        db.session.add(r)
+        db.session.commit()
+        flash(f'✓ Role {r.role_name} assigned to {r.person_name}.', 'success')
+        return redirect(url_for('safety_roles'))
+    return render_template('safety_role_form.html')
+
+@app.route('/safety-roles/<rid>/update', methods=['POST'])
+def update_safety_role(rid):
+    r = SafetyRole.query.get_or_404(rid)
+    f = request.form
+    r.person_name      = f.get('person_name', r.person_name)
+    r.responsibilities = f.get('responsibilities', r.responsibilities)
+    r.authority        = f.get('authority', r.authority)
+    r.contact_email    = f.get('contact_email', r.contact_email)
+    r.contact_phone    = f.get('contact_phone', r.contact_phone)
+    r.active           = f.get('active','true') == 'true'
+    db.session.commit()
+    flash('✓ Role updated.', 'success')
+    return redirect(url_for('safety_roles'))
+
+# ─── KEY SAFETY PERSONNEL ─────────────────────────────────────────────────────
+@app.route('/safety-personnel')
+def safety_personnel():
+    personnel = SafetyPersonnel.query.filter_by(active=True).order_by(
+                SafetyPersonnel.sms_role).all()
+    return render_template('safety_personnel.html', personnel=personnel)
+
+@app.route('/safety-personnel/new', methods=['GET','POST'])
+def new_safety_personnel():
+    if request.method == 'POST':
+        f = request.form
+        p = SafetyPersonnel(
+            id=new_id('PERS'),
+            name=f['name'], position=f['position'],
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            sms_role=f.get('sms_role',''),
+            qualifications=f.get('qualifications',''),
+            contact_email=f.get('contact_email',''),
+            contact_phone=f.get('contact_phone',''),
+            sms_trained=f.get('sms_trained') == 'yes',
+            training_date=f.get('training_date',''),
+            active=True
+        )
+        db.session.add(p)
+        db.session.commit()
+        flash(f'✓ Personnel record created for {p.name}.', 'success')
+        return redirect(url_for('safety_personnel'))
+    return render_template('safety_personnel_form.html')
+
+@app.route('/safety-personnel/<pid>/update', methods=['POST'])
+def update_personnel(pid):
+    p = SafetyPersonnel.query.get_or_404(pid)
+    f = request.form
+    p.position       = f.get('position', p.position)
+    p.sms_role       = f.get('sms_role', p.sms_role)
+    p.qualifications = f.get('qualifications', p.qualifications)
+    p.contact_email  = f.get('contact_email', p.contact_email)
+    p.contact_phone  = f.get('contact_phone', p.contact_phone)
+    p.sms_trained    = f.get('sms_trained') == 'yes'
+    p.training_date  = f.get('training_date', p.training_date)
+    p.active         = f.get('active','true') == 'true'
+    db.session.commit()
+    flash('✓ Personnel record updated.', 'success')
+    return redirect(url_for('safety_personnel'))
+
+# ─── EMERGENCY RESPONSE PLANNING ─────────────────────────────────────────────
+@app.route('/erp')
+def erp_list():
+    plans = ERPlan.query.filter_by(status='Active').order_by(ERPlan.scenario_type).all()
+    archived = ERPlan.query.filter_by(status='Archived').all()
+    return render_template('erp.html', plans=plans, archived=archived)
+
+@app.route('/erp/new', methods=['GET','POST'])
+def new_erp():
+    if request.method == 'POST':
+        f   = request.form
+        count = ERPlan.query.count() + 1
+        e = ERPlan(
+            id=new_id('ERP'),
+            erp_ref=f'ERP-{count:03d}',
+            scenario_type=f['scenario_type'],
+            title=f['title'],
+            description=f.get('description',''),
+            activation_criteria=f.get('activation_criteria',''),
+            response_procedures=f.get('response_procedures',''),
+            responsible_roles=f.get('responsible_roles',''),
+            emergency_contacts=f.get('emergency_contacts',''),
+            resources_required=f.get('resources_required',''),
+            notification_list=f.get('notification_list',''),
+            review_date=f.get('review_date',''),
+            version='REV0', status='Active'
+        )
+        db.session.add(e)
+        db.session.commit()
+        flash(f'✓ ERP {e.erp_ref} created: {e.title}', 'success')
+        return redirect(url_for('erp_list'))
+    return render_template('erp_form.html')
+
+@app.route('/erp/<eid>')
+def erp_detail(eid):
+    e = ERPlan.query.get_or_404(eid)
+    return render_template('erp_detail.html', e=e)
+
+@app.route('/erp/<eid>/update', methods=['POST'])
+def update_erp(eid):
+    e = ERPlan.query.get_or_404(eid)
+    f = request.form
+    e.response_procedures = f.get('response_procedures', e.response_procedures)
+    e.emergency_contacts  = f.get('emergency_contacts', e.emergency_contacts)
+    e.responsible_roles   = f.get('responsible_roles', e.responsible_roles)
+    e.notification_list   = f.get('notification_list', e.notification_list)
+    e.resources_required  = f.get('resources_required', e.resources_required)
+    e.review_date         = f.get('review_date', e.review_date)
+    e.status              = f.get('status', e.status)
+    db.session.commit()
+    flash('✓ ERP updated.', 'success')
+    return redirect(url_for('erp_detail', eid=eid))
+
+# ─── DOCUMENT CONTROL ─────────────────────────────────────────────────────────
+@app.route('/documents')
+def documents():
+    type_f   = request.args.get('type','')
+    dept_f   = request.args.get('dept','')
+    status_f = request.args.get('status','')
+    q = SMSDocument.query
+    if type_f:   q = q.filter_by(doc_type=type_f)
+    if dept_f:   q = q.filter_by(department_id=int(dept_f))
+    if status_f: q = q.filter_by(status=status_f)
+    docs = q.order_by(SMSDocument.created_at.desc()).all()
+    doc_types = ['POL','MAN','SOP','RA','AUD','MOC','INV','TRN','NEWS']
+    return render_template('documents.html', docs=docs, doc_types=doc_types,
+                           type_f=type_f, dept_f=dept_f, status_f=status_f)
+
+@app.route('/documents/new', methods=['GET','POST'])
+def new_document():
+    if request.method == 'POST':
+        f        = request.form
+        doc_type = f['doc_type']
+        dept_id  = int(f['department_id'])
+        year     = datetime.now().year
+        dept     = Department.query.get(dept_id)
+        dept_code = dept.code if dept else 'XX'
+        seq      = next_seq(doc_type, dept_id, year)
+        doc_id   = gen_doc_id(doc_type, dept_code, year, seq, 0)
+        d = SMSDocument(
+            id=doc_id, doc_type=doc_type,
+            department_id=dept_id,
+            title=f['title'],
+            description=f.get('description',''),
+            content=f.get('content',''),
+            version='REV0', version_num=0, seq_num=seq,
+            status='Draft',
+            created_by=f.get('created_by',''),
+            effective_date=f.get('effective_date',''),
+            review_due=f.get('review_due',''),
+            change_summary='Initial issue'
+        )
+        db.session.add(d)
+        db.session.commit()
+        flash(f'✓ Document {doc_id} created as Draft.', 'success')
+        return redirect(url_for('documents'))
+    doc_types = ['POL','MAN','SOP','RA','AUD','MOC','INV','TRN','NEWS']
+    return render_template('document_form.html', doc_types=doc_types)
+
+@app.route('/documents/<did>')
+def document_detail(did):
+    doc = SMSDocument.query.get_or_404(did)
+    # Get all versions (parent chain)
+    versions = []
+    current = doc
+    while current:
+        versions.append(current)
+        if current.parent_doc_id:
+            current = SMSDocument.query.get(current.parent_doc_id)
+        else:
+            break
+    return render_template('document_detail.html', doc=doc, versions=versions)
+
+@app.route('/documents/<did>/advance', methods=['POST'])
+def advance_document(did):
+    """Draft → Under Review → Approved → Archived"""
+    doc = SMSDocument.query.get_or_404(did)
+    f   = request.form
+    transitions = {
+        'Draft':        'Under Review',
+        'Under Review': 'Approved',
+        'Approved':     'Archived',
+    }
+    if doc.status in transitions:
+        doc.status = transitions[doc.status]
+        if doc.status == 'Approved':
+            doc.approved_by    = f.get('approved_by', doc.approved_by)
+            doc.effective_date = f.get('effective_date', doc.effective_date)
+            doc.review_due     = f.get('review_due', doc.review_due)
+            doc.reviewed_by    = f.get('reviewed_by', doc.reviewed_by)
+        db.session.commit()
+        flash(f'✓ Document status updated to {doc.status}.', 'success')
+    return redirect(url_for('document_detail', did=did))
+
+@app.route('/documents/<did>/revise', methods=['POST'])
+def revise_document(did):
+    """Create a new revision — old version becomes archived."""
+    old = SMSDocument.query.get_or_404(did)
+    if old.status != 'Approved':
+        flash('Only Approved documents can be revised.', 'error')
+        return redirect(url_for('document_detail', did=did))
+    f       = request.form
+    new_ver = old.version_num + 1
+    dept    = Department.query.get(old.department_id)
+    dept_code = dept.code if dept else 'XX'
+    year    = datetime.now().year
+    new_id_str = gen_doc_id(old.doc_type, dept_code, year, old.seq_num, new_ver)
+    new_doc = SMSDocument(
+        id=new_id_str, doc_type=old.doc_type,
+        department_id=old.department_id,
+        title=old.title,
+        description=old.description,
+        content=f.get('content', old.content),
+        version=f'REV{new_ver}', version_num=new_ver,
+        seq_num=old.seq_num,
+        status='Draft',
+        created_by=f.get('created_by', old.created_by),
+        change_summary=f.get('change_summary',''),
+        parent_doc_id=old.id
+    )
+    old.status = 'Archived'
+    db.session.add(new_doc)
+    db.session.commit()
+    flash(f'✓ New revision {new_id_str} created. {old.id} archived.', 'success')
+    return redirect(url_for('document_detail', did=new_id_str))
+
 with app.app_context():
     db.create_all()
     seed()
