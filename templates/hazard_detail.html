@@ -2,87 +2,143 @@
 {% block title %}{{ h.id }} — Hazard Detail{% endblock %}
 {% block content %}
 
-<div style="margin-bottom:16px">
-  <a href="/hazard-log" style="color:#6b7280;font-size:13px">← Back to Hazard Log</a>
+<div style="margin-bottom:14px">
+  <a href="/hazard-log" style="color:var(--muted);font-size:13px">← Back to Hazard Log</a>
 </div>
 
 <div class="page-title">{{ h.id }}</div>
 <div class="page-sub">
   Source: <strong>{{ h.source }}</strong> &nbsp;·&nbsp;
   Linked Report: <span class="mono">{{ h.linked_report_id }}</span> &nbsp;·&nbsp;
+  Classification: <strong>{{ h.get('classification','Operational') }}</strong> &nbsp;·&nbsp;
   Created: {{ h.created_at[:10] }}
 </div>
 
 <!-- Risk Compare Banner -->
-<div class="risk-compare" style="margin-bottom:20px">
+<div class="risk-compare" style="margin-bottom:18px">
   <div class="risk-box">
     <div class="risk-box-lbl">Initial Risk</div>
     <div class="risk-idx">{{ h.initial_risk_index }}</div>
-    {% if h.initial_risk_tolerance == 'INTOLERABLE' %}
-      <span class="badge badge-red">INTOLERABLE</span>
-    {% elif h.initial_risk_tolerance == 'TOLERABLE' %}
-      <span class="badge badge-yellow">TOLERABLE</span>
-    {% else %}
-      <span class="badge badge-green">ACCEPTABLE</span>
-    {% endif %}
+    {% if h.initial_risk_tolerance == 'INTOLERABLE' %}<span class="badge badge-red">INTOLERABLE</span>
+    {% elif h.initial_risk_tolerance == 'TOLERABLE' %}<span class="badge badge-yellow">TOLERABLE</span>
+    {% else %}<span class="badge badge-green">ACCEPTABLE</span>{% endif %}
   </div>
   <div class="risk-arrow">→</div>
   <div class="risk-box">
     <div class="risk-box-lbl">Residual Risk</div>
     <div class="risk-idx">{{ h.residual_risk_index or '?' }}</div>
-    {% if h.residual_risk_tolerance == 'INTOLERABLE' %}
-      <span class="badge badge-red">INTOLERABLE</span>
-    {% elif h.residual_risk_tolerance == 'TOLERABLE' %}
-      <span class="badge badge-yellow">TOLERABLE</span>
-    {% elif h.residual_risk_tolerance == 'ACCEPTABLE' %}
-      <span class="badge badge-green">ACCEPTABLE</span>
-    {% else %}
-      <span style="color:#9ca3af;font-size:12px">Not yet assessed</span>
-    {% endif %}
+    {% if h.residual_risk_tolerance == 'INTOLERABLE' %}<span class="badge badge-red">INTOLERABLE</span>
+    {% elif h.residual_risk_tolerance == 'TOLERABLE' %}<span class="badge badge-yellow">TOLERABLE</span>
+    {% elif h.residual_risk_tolerance == 'ACCEPTABLE' %}<span class="badge badge-green">ACCEPTABLE</span>
+    {% else %}<span style="color:#9ca3af;font-size:12px">Not yet assessed</span>{% endif %}
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex-wrap:wrap">
-
+<div class="two-col">
   <!-- Left: Hazard Info -->
   <div>
     <div class="card">
       <div class="card-title">Hazard Information</div>
-      <table style="width:100%;font-size:13.5px;border-collapse:collapse">
-        <tr><td style="padding:7px 0;color:#6b7280;width:160px">Department</td>
-            <td><strong>{{ dept_name(h.department_id) }}</strong></td></tr>
-        <tr><td style="padding:7px 0;color:#6b7280">Activity Type</td>
-            <td>{{ h.type_of_activity }}</td></tr>
-        <tr><td style="padding:7px 0;color:#6b7280">Generic Hazard</td>
-            <td>{{ h.generic_hazard }}</td></tr>
-        <tr><td style="padding:7px 0;color:#6b7280;vertical-align:top">Specific Components</td>
-            <td>{{ h.specific_components }}</td></tr>
-        <tr><td style="padding:7px 0;color:#6b7280;vertical-align:top">Consequences</td>
-            <td>{{ h.consequences }}</td></tr>
-        <tr><td style="padding:7px 0;color:#6b7280;vertical-align:top">Current Defenses</td>
-            <td>{{ h.current_defenses or '—' }}</td></tr>
-        <tr><td style="padding:7px 0;color:#6b7280;vertical-align:top">Further Mitigations</td>
-            <td>{{ h.further_mitigations or '—' }}</td></tr>
-        <tr><td style="padding:7px 0;color:#6b7280">Owner</td>
-            <td>{{ h.owner or '—' }}</td></tr>
-        <tr><td style="padding:7px 0;color:#6b7280">Status</td>
-            <td>
-              {% if h.status == 'Open' %}
-                <span class="badge badge-yellow">Open</span>
-              {% else %}
-                <span class="badge badge-green">Closed</span>
-              {% endif %}
-            </td></tr>
-      </table>
+      <div class="info-row"><span class="info-label">Department</span><strong>{{ dept_name(h.department_id) }}</strong></div>
+      <div class="info-row"><span class="info-label">Activity Type</span>{{ h.type_of_activity }}</div>
+      <div class="info-row"><span class="info-label">Classification</span><span class="badge badge-blue">{{ h.get('classification','—') }}</span></div>
+      <div class="info-row"><span class="info-label">Generic Hazard</span>{{ h.generic_hazard }}</div>
+      <div class="info-row"><span class="info-label">Specific Components</span>{{ h.specific_components }}</div>
+      <div class="info-row"><span class="info-label">Consequences</span>{{ h.consequences }}</div>
+      <div class="info-row"><span class="info-label">Current Defenses</span>{{ h.current_defenses or '—' }}</div>
+      <div class="info-row"><span class="info-label">Further Mitigations</span>{{ h.further_mitigations or '—' }}</div>
+      <div class="info-row"><span class="info-label">Owner</span>{{ h.owner or '—' }}</div>
+      <div class="info-row">
+        <span class="info-label">Status</span>
+        {% if h.status == 'Open' %}<span class="badge badge-yellow">Open</span>
+        {% else %}<span class="badge badge-green">Closed</span>{% endif %}
+      </div>
+    </div>
+
+    <!-- Risks -->
+    <div class="card" style="padding:0">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title" style="margin:0">Risk Register ({{ risks|length }})</div>
+        <button class="btn btn-nav btn-sm" onclick="document.getElementById('add-risk-modal').style.display='flex'">+ Add Risk</button>
+      </div>
+      {% if risks %}
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>Risk ID</th><th>Description</th><th>Initial</th><th>Residual</th></tr>
+          </thead>
+          <tbody>
+            {% for r in risks %}
+            <tr>
+              <td class="mono">{{ r.id }}</td>
+              <td style="font-size:12px">{{ r.risk_description[:60] }}{% if r.risk_description|length>60 %}…{% endif %}</td>
+              <td>
+                <strong>{{ r.risk_index }}</strong>&nbsp;
+                {% if r.tolerance == 'INTOLERABLE' %}<span class="badge badge-red">INT</span>
+                {% elif r.tolerance == 'TOLERABLE' %}<span class="badge badge-yellow">TOL</span>
+                {% else %}<span class="badge badge-green">ACC</span>{% endif %}
+              </td>
+              <td>
+                {% if r.residual_risk_index %}
+                  <strong>{{ r.residual_risk_index }}</strong>&nbsp;
+                  {% if r.residual_tolerance == 'INTOLERABLE' %}<span class="badge badge-red">INT</span>
+                  {% elif r.residual_tolerance == 'TOLERABLE' %}<span class="badge badge-yellow">TOL</span>
+                  {% else %}<span class="badge badge-green">ACC</span>{% endif %}
+                {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No risks added yet.</div>
+      {% endif %}
+    </div>
+
+    <!-- Controls -->
+    <div class="card" style="padding:0">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title" style="margin:0">Control Measures ({{ controls|length }})</div>
+        <button class="btn btn-nav btn-sm" onclick="document.getElementById('add-control-modal').style.display='flex'">+ Add Control</button>
+      </div>
+      {% if controls %}
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Type</th><th>Description</th><th>Effectiveness</th><th>Owner</th></tr>
+          </thead>
+          <tbody>
+            {% for c in controls %}
+            <tr>
+              <td class="mono">{{ c.id }}</td>
+              <td>
+                {% if c.type == 'Preventive' %}<span class="badge badge-blue">Preventive</span>
+                {% else %}<span class="badge badge-purple">Detective</span>{% endif %}
+              </td>
+              <td style="font-size:12px">{{ c.description[:60] }}…</td>
+              <td>
+                {% if c.effectiveness == 'Effective' %}<span class="badge badge-green">Effective</span>
+                {% elif c.effectiveness == 'Partially Effective' %}<span class="badge badge-yellow">Partial</span>
+                {% else %}<span class="badge badge-red">Ineffective</span>{% endif %}
+              </td>
+              <td style="font-size:12px">{{ c.owner }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No controls added yet.</div>
+      {% endif %}
     </div>
   </div>
 
-  <!-- Right: Update Form -->
+  <!-- Right: Update + Actions -->
   <div>
     <div class="card">
       <div class="card-title">Update Hazard</div>
       <form method="POST" action="/hazard-log/{{ h.id }}/update">
-
         <div class="fg">
           <label>Status</label>
           <select name="status">
@@ -90,55 +146,137 @@
             <option value="Closed" {% if h.status=='Closed' %}selected{% endif %}>Closed</option>
           </select>
         </div>
-
         <div class="fg">
           <label>Owner / Responsible Manager</label>
-          <input type="text" name="owner" value="{{ h.owner or '' }}"
-            placeholder="e.g. Flight Operations Manager"/>
+          <input type="text" name="owner" value="{{ h.owner or '' }}" placeholder="e.g. Flight Operations Manager"/>
         </div>
-
         <div class="fg">
           <label>Further Mitigation Measures</label>
           <textarea name="further_mitigations" rows="3">{{ h.further_mitigations or '' }}</textarea>
         </div>
-
-        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;
-                    text-transform:uppercase;letter-spacing:.5px">Residual Risk Assessment</div>
+        <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Residual Risk Assessment</div>
         <div class="form-grid-2">
           <div class="fg">
             <label>Residual Likelihood</label>
             <select name="residual_likelihood" id="res-lik">
               <option value="">Select…</option>
-              {% for v in [1,2,3,4,5] %}
-                <option value="{{ v }}" {% if h.residual_likelihood==v %}selected{% endif %}>
-                  {{ v }}
-                </option>
-              {% endfor %}
+              {% for v in [1,2,3,4,5] %}<option value="{{ v }}" {% if h.residual_likelihood==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
             </select>
           </div>
           <div class="fg">
             <label>Residual Severity</label>
             <select name="residual_severity" id="res-sev">
               <option value="">Select…</option>
-              {% for v in ['A','B','C','D','E'] %}
-                <option value="{{ v }}" {% if h.residual_severity==v %}selected{% endif %}>
-                  {{ v }}
-                </option>
-              {% endfor %}
+              {% for v in ['A','B','C','D','E'] %}<option value="{{ v }}" {% if h.residual_severity==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
             </select>
           </div>
         </div>
-
-        <div class="risk-preview" id="res-preview" style="display:none;margin-bottom:14px">
+        <div class="risk-preview" id="res-preview" style="display:none;margin-bottom:12px">
           <div>Residual Index: <span class="risk-big" id="res-ri" style="font-size:22px"></span></div>
           <span class="badge" id="res-badge"></span>
         </div>
-
         <button type="submit" class="btn btn-nav">Save Changes</button>
       </form>
     </div>
-  </div>
 
+    <!-- Linked Actions -->
+    <div class="card" style="padding:0">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title" style="margin:0">Linked Actions ({{ actions|length }})</div>
+        <a href="/actions" class="btn btn-outline btn-sm">View All</a>
+      </div>
+      {% if actions %}
+        {% for a in actions %}
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+            <span class="mono" style="font-size:11px">{{ a.id }}</span>
+            {% if a.status == 'Overdue' %}<span class="badge badge-red">Overdue</span>
+            {% elif a.status == 'Closed' %}<span class="badge badge-green">Closed</span>
+            {% elif a.status == 'In Progress' %}<span class="badge badge-blue">In Progress</span>
+            {% else %}<span class="badge badge-yellow">Open</span>{% endif %}
+          </div>
+          <div style="font-size:12.5px;margin-bottom:4px">{{ a.description[:80] }}…</div>
+          <div style="font-size:11px;color:var(--muted)">Owner: {{ a.owner }} · Due: {{ a.due_date }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="padding:18px;text-align:center;color:var(--muted);font-size:13px">No linked actions.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Add Risk Modal -->
+<div id="add-risk-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <strong>Add Risk to {{ h.id }}</strong>
+      <button class="modal-close" onclick="document.getElementById('add-risk-modal').style.display='none'">✕</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" action="/risks/add">
+        <input type="hidden" name="hazard_id" value="{{ h.id }}"/>
+        <div class="fg"><label>Risk Description *</label><textarea name="risk_description" required rows="3" placeholder="Describe the specific risk scenario…"></textarea></div>
+        <div class="form-grid-2">
+          <div class="fg">
+            <label>Likelihood *</label>
+            <select name="likelihood" required>
+              <option value="5">5 – Frequent</option><option value="4">4 – Occasional</option>
+              <option value="3" selected>3 – Remote</option><option value="2">2 – Improbable</option><option value="1">1 – Ext. Improbable</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Severity *</label>
+            <select name="severity" required>
+              <option value="A">A – Catastrophic</option><option value="B">B – Hazardous</option>
+              <option value="C" selected>C – Major</option><option value="D">D – Minor</option><option value="E">E – Negligible</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-nav">Add Risk</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Control Modal -->
+<div id="add-control-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <strong>Add Control Measure</strong>
+      <button class="modal-close" onclick="document.getElementById('add-control-modal').style.display='none'">✕</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" action="/controls/add">
+        <input type="hidden" name="hazard_id" value="{{ h.id }}"/>
+        <div class="fg">
+          <label>Linked Risk (ID)</label>
+          <select name="risk_id">
+            <option value="">— General (not risk-specific) —</option>
+            {% for r in risks %}<option value="{{ r.id }}">{{ r.id }} – {{ r.risk_description[:50] }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="fg"><label>Control Type *</label>
+          <select name="type" required>
+            <option value="Preventive">Preventive – prevents the hazard from occurring</option>
+            <option value="Detective">Detective – detects the hazard once present</option>
+          </select>
+        </div>
+        <div class="fg"><label>Description *</label><textarea name="description" required rows="3"></textarea></div>
+        <div class="form-grid-2">
+          <div class="fg"><label>Effectiveness</label>
+            <select name="effectiveness">
+              <option value="Effective">Effective</option>
+              <option value="Partially Effective">Partially Effective</option>
+              <option value="Ineffective">Ineffective</option>
+            </select>
+          </div>
+          <div class="fg"><label>Owner</label><input type="text" name="owner"/></div>
+        </div>
+        <button type="submit" class="btn btn-nav">Add Control</button>
+      </form>
+    </div>
+  </div>
 </div>
 
 {% endblock %}
@@ -146,7 +284,6 @@
 <script>
 const INTOLERABLE = new Set(["5A","5B","5C","4A","4B","3A"]);
 const TOLERABLE   = new Set(["5D","5E","4C","4D","4E","3B","3C","3D","2A","2B","2C","1A"]);
-
 function updateResidual() {
   const s = document.getElementById('res-sev').value;
   const l = document.getElementById('res-lik').value;
