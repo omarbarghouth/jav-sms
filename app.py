@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink
 from datetime import datetime, date
 import os, uuid
 
@@ -217,6 +217,7 @@ def seed():
     db.session.add_all(spi_entries)
     db.session.commit()
     print('✅ Database seeded.')
+    seed_traceability()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  ROUTES
@@ -1504,6 +1505,368 @@ def revise_document(did):
     db.session.commit()
     flash(f'✓ New revision {new_id_str} created. {old.id} archived.', 'success')
     return redirect(url_for('document_detail', did=new_id_str))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  DOCUMENT TRACEABILITY BACKBONE — FULL INTEGRATION
+#  Documents ↔ Hazards ↔ Risks ↔ Audits ↔ Actions ↔ MOC ↔ Training
+#  Added as extension — all existing routes unchanged
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Entity resolver — fetch any entity by type + id ─────────────────────────
+ENTITY_RESOLVERS = {
+    'hazard':         lambda eid: Hazard.query.get(eid),
+    'risk':           lambda eid: Risk.query.get(eid),
+    'action':         lambda eid: Action.query.get(eid),
+    'audit_schedule': lambda eid: AuditSchedule.query.get(eid),
+    'audit_finding':  lambda eid: AuditFinding.query.get(eid),
+    'audit_action':   lambda eid: AuditAction.query.get(eid),
+    'moc':            lambda eid: MOC.query.get(eid),
+    'investigation':  lambda eid: Investigation.query.get(eid),
+    'training':       lambda eid: Training.query.get(eid),
+    'erp':            lambda eid: ERPlan.query.get(eid),
+}
+
+ENTITY_LABELS = {
+    'hazard':         ('Hazard',           '/hazard-log/{}'),
+    'risk':           ('Risk',             '/hazard-log/{}'),   # risks shown via hazard
+    'action':         ('Action',           '/actions'),
+    'audit_schedule': ('Audit',            '/audit-schedule/{}'),
+    'audit_finding':  ('Audit Finding',    '/audit-findings/{}'),
+    'audit_action':   ('Audit Action',     '/audit-actions'),
+    'moc':            ('MOC',              '/moc'),
+    'investigation':  ('Investigation',    '/investigations/{}'),
+    'training':       ('Training Record',  '/safety-promotion'),
+    'erp':            ('ERP',              '/erp/{}'),
+}
+
+def resolve_entity_label(entity_type, entity_id):
+    """Return display name and URL for a linked entity."""
+    if entity_type not in ENTITY_LABELS:
+        return entity_type, '#'
+    label, url_tpl = ENTITY_LABELS[entity_type]
+    try:
+        url = url_tpl.format(entity_id)
+    except Exception:
+        url = url_tpl
+    return label, url
+
+def get_doc_links_for_entity(entity_type, entity_id):
+    """Return all documents linked to a given entity."""
+    links = DocumentLink.query.filter_by(
+        entity_type=entity_type, entity_id=str(entity_id)).all()
+    docs = []
+    for lnk in links:
+        doc = SMSDocument.query.get(lnk.document_id)
+        if doc:
+            docs.append({'doc': doc, 'link': lnk})
+    return docs
+
+def build_traceability(doc):
+    """Build full traceability map for a document — all linked entities."""
+    links = DocumentLink.query.filter_by(document_id=doc.id).all()
+    result = []
+    for lnk in links:
+        label, url = resolve_entity_label(lnk.entity_type, lnk.entity_id)
+        obj = None
+        resolver = ENTITY_RESOLVERS.get(lnk.entity_type)
+        if resolver:
+            try:
+                obj = resolver(lnk.entity_id)
+            except Exception:
+                pass
+        result.append({
+            'link': lnk,
+            'label': label,
+            'url': url,
+            'entity_type': lnk.entity_type,
+            'entity_id': lnk.entity_id,
+            'obj': obj,
+        })
+    return result
+
+# ─── DOCUMENT LINKING API ─────────────────────────────────────────────────────
+@app.route('/documents/<did>/link', methods=['POST'])
+def link_document(did):
+    doc = SMSDocument.query.get_or_404(did)
+    f   = request.form
+    entity_type = f['entity_type']
+    entity_id   = f['entity_id'].strip()
+    reason      = f.get('link_reason', '')
+
+    if not entity_type or not entity_id:
+        flash('Entity type and ID are required.', 'error')
+        return redirect(url_for('document_detail', did=did))
+
+    # Validate entity exists
+    resolver = ENTITY_RESOLVERS.get(entity_type)
+    if resolver:
+        obj = resolver(entity_id)
+        if not obj:
+            flash(f'No {entity_type} found with ID: {entity_id}', 'error')
+            return redirect(url_for('document_detail', did=did))
+
+    # Check duplicate
+    existing = DocumentLink.query.filter_by(
+        document_id=did, entity_type=entity_type, entity_id=entity_id).first()
+    if existing:
+        flash(f'Document already linked to this {entity_type}.', 'error')
+        return redirect(url_for('document_detail', did=did))
+
+    lnk = DocumentLink(
+        document_id=did,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        link_reason=reason
+    )
+    db.session.add(lnk)
+    db.session.commit()
+    flash(f'✓ Document linked to {entity_type} {entity_id}.', 'success')
+    return redirect(url_for('document_detail', did=did))
+
+@app.route('/documents/<did>/unlink/<int:link_id>', methods=['POST'])
+def unlink_document(did, link_id):
+    lnk = DocumentLink.query.get_or_404(link_id)
+    db.session.delete(lnk)
+    db.session.commit()
+    flash('✓ Link removed.', 'success')
+    return redirect(url_for('document_detail', did=did))
+
+# ─── DOCUMENT DETAIL (override — add traceability) ───────────────────────────
+@app.route('/documents/<did>/trace')
+def document_trace(did):
+    doc   = SMSDocument.query.get_or_404(did)
+    trace = build_traceability(doc)
+    versions = []
+    current = doc
+    while current:
+        versions.append(current)
+        current = SMSDocument.query.get(current.parent_doc_id) if current.parent_doc_id else None
+    return render_template('document_trace.html', doc=doc, trace=trace, versions=versions)
+
+# ─── ENTITY TRACEABILITY VIEWS ────────────────────────────────────────────────
+@app.route('/hazard-log/<hid>/documents')
+def hazard_documents(hid):
+    hazard = Hazard.query.get_or_404(hid)
+    # Documents linked to hazard
+    haz_docs  = get_doc_links_for_entity('hazard', hid)
+    # Documents linked to any risk of this hazard
+    risk_docs = []
+    for risk in hazard.risks:
+        for item in get_doc_links_for_entity('risk', risk.id):
+            item['risk'] = risk
+            risk_docs.append(item)
+    # Actions
+    action_docs = []
+    for action in hazard.actions:
+        for item in get_doc_links_for_entity('action', action.id):
+            item['action'] = action
+            action_docs.append(item)
+    return render_template('hazard_documents.html',
+        hazard=hazard, haz_docs=haz_docs,
+        risk_docs=risk_docs, action_docs=action_docs)
+
+@app.route('/audit-schedule/<sid>/documents')
+def audit_documents(sid):
+    schedule = AuditSchedule.query.get_or_404(sid)
+    audit_docs   = get_doc_links_for_entity('audit_schedule', sid)
+    finding_docs = []
+    for finding in schedule.findings:
+        for item in get_doc_links_for_entity('audit_finding', finding.id):
+            item['finding'] = finding
+            finding_docs.append(item)
+    return render_template('audit_documents.html',
+        schedule=schedule, audit_docs=audit_docs, finding_docs=finding_docs)
+
+# ─── TRACEABILITY DASHBOARD ───────────────────────────────────────────────────
+@app.route('/traceability')
+def traceability_dashboard():
+    total_docs  = SMSDocument.query.count()
+    total_links = DocumentLink.query.count()
+    approved    = SMSDocument.query.filter_by(status='Approved').count()
+    draft       = SMSDocument.query.filter_by(status='Draft').count()
+    archived    = SMSDocument.query.filter_by(status='Archived').count()
+    review      = SMSDocument.query.filter_by(status='Under Review').count()
+
+    # Documents with no links (orphans)
+    linked_ids = db.session.query(DocumentLink.document_id).distinct().all()
+    linked_ids = [x[0] for x in linked_ids]
+    orphan_docs = SMSDocument.query.filter(
+        ~SMSDocument.id.in_(linked_ids)).all() if linked_ids else SMSDocument.query.all()
+
+    # Hazards with no linked RA document
+    all_hazards = Hazard.query.filter_by(status='Open').all()
+    unlinked_hazards = []
+    for h in all_hazards:
+        ra_links = DocumentLink.query.filter_by(entity_type='hazard', entity_id=h.id).join(
+            SMSDocument, DocumentLink.document_id == SMSDocument.id).filter(
+            SMSDocument.doc_type == 'RA').first()
+        if not ra_links:
+            unlinked_hazards.append(h)
+
+    # Recent links
+    recent_links = DocumentLink.query.order_by(DocumentLink.created_at.desc()).limit(10).all()
+
+    # Link stats by entity type
+    link_stats = db.session.query(
+        DocumentLink.entity_type,
+        db.func.count(DocumentLink.id).label('cnt')
+    ).group_by(DocumentLink.entity_type).all()
+
+    return render_template('traceability.html',
+        total_docs=total_docs, total_links=total_links,
+        approved=approved, draft=draft, archived=archived, review=review,
+        orphan_docs=orphan_docs, unlinked_hazards=unlinked_hazards,
+        recent_links=recent_links, link_stats=link_stats,
+        resolve_entity_label=resolve_entity_label)
+
+# ─── QUICK LINK API (from any module page) ───────────────────────────────────
+@app.route('/quick-link', methods=['POST'])
+def quick_link():
+    """Link a document to an entity from any page in the system."""
+    f           = request.form
+    doc_id      = f['document_id']
+    entity_type = f['entity_type']
+    entity_id   = f['entity_id']
+    reason      = f.get('link_reason', '')
+    return_url  = f.get('return_url', '/documents')
+
+    doc = SMSDocument.query.get(doc_id)
+    if not doc:
+        flash(f'Document {doc_id} not found.', 'error')
+        return redirect(return_url)
+
+    existing = DocumentLink.query.filter_by(
+        document_id=doc_id, entity_type=entity_type, entity_id=entity_id).first()
+    if not existing:
+        lnk = DocumentLink(
+            document_id=doc_id, entity_type=entity_type,
+            entity_id=entity_id, link_reason=reason)
+        db.session.add(lnk)
+        db.session.commit()
+        flash(f'✓ {doc_id} linked to {entity_type} {entity_id}.', 'success')
+    else:
+        flash('Already linked.', 'error')
+    return redirect(return_url)
+
+# ─── AUTO-LINK HELPERS (called internally when creating objects) ──────────────
+def auto_link_document(doc_id, entity_type, entity_id, reason='Auto-linked'):
+    """Safe auto-link — skips if already exists or entity not found."""
+    if not doc_id or not entity_id:
+        return
+    existing = DocumentLink.query.filter_by(
+        document_id=doc_id, entity_type=entity_type,
+        entity_id=str(entity_id)).first()
+    if not existing:
+        lnk = DocumentLink(
+            document_id=doc_id, entity_type=entity_type,
+            entity_id=str(entity_id), link_reason=reason)
+        db.session.add(lnk)
+
+# ─── SEED TRACEABILITY DATA (called from seed()) ─────────────────────────────
+def seed_traceability():
+    if DocumentLink.query.first():
+        return
+    # Only run if we have demo data
+    demo_haz  = Hazard.query.get('HAZ-2024-DEMO1')
+    demo_haz2 = Hazard.query.get('HAZ-2024-DEMO2')
+    if not demo_haz:
+        return
+
+    dept_fo = Department.query.filter_by(code='FO').first()
+    dept_go = Department.query.filter_by(code='GO').first()
+    if not dept_fo:
+        return
+
+    year = 2024
+    # Create demo RA document for HAZ-2024-DEMO1
+    ra_id = f"RA-FO-{year}-001-REV0"
+    if not SMSDocument.query.get(ra_id):
+        ra = SMSDocument(
+            id=ra_id, doc_type='RA',
+            department_id=dept_fo.id if dept_fo else 1,
+            title='Low Visibility Operations — Risk Assessment',
+            description='Risk assessment for LVP operations at OJAI',
+            content='Risk: Diversion due to visibility below minima.\nLikelihood: 4 (Occasional)\nSeverity: B (Hazardous)\nRisk Index: 4B — INTOLERABLE\nControls: LVP procedures, alternate planning, real-time ATIS monitoring.',
+            version='REV0', version_num=0, seq_num=1,
+            status='Approved',
+            created_by='Safety Manager',
+            approved_by='Accountable Manager',
+            effective_date='2024-01-15',
+            review_due='2025-01-15',
+            change_summary='Initial issue'
+        )
+        db.session.add(ra)
+
+    # Create demo SOP
+    sop_id = f"SOP-FO-{year}-001-REV0"
+    if not SMSDocument.query.get(sop_id):
+        sop = SMSDocument(
+            id=sop_id, doc_type='SOP',
+            department_id=dept_fo.id if dept_fo else 1,
+            title='Low Visibility Procedures (LVP) — Standard Operating Procedure',
+            description='Crew procedures for operations in low visibility conditions',
+            content='1. Pre-flight: Check LVP NOTAM and minima.\n2. Dispatch: Load alternate fuel per LVP policy.\n3. Approach: Brief crew on LVP requirements.\n4. Decision: Apply CAT I/II/III minima per approved OpSpecs.\n5. Go-around: Execute immediately if visual reference not established.',
+            version='REV0', version_num=0, seq_num=1,
+            status='Approved',
+            created_by='Flight Operations Manager',
+            approved_by='Accountable Manager',
+            effective_date='2024-01-15',
+            review_due='2025-01-15',
+            change_summary='Initial issue'
+        )
+        db.session.add(sop)
+
+    # Create FOD SOP for Ground Ops
+    fod_id = f"SOP-GO-{year}-001-REV0"
+    if not SMSDocument.query.get(fod_id) and dept_go:
+        fod = SMSDocument(
+            id=fod_id, doc_type='SOP',
+            department_id=dept_go.id,
+            title='Foreign Object Debris (FOD) Prevention and Control',
+            description='Ramp FOD inspection and prevention procedures',
+            content='1. Pre-movement: Conduct FOD walk of ramp area.\n2. Post-rain: Mandatory FOD inspection before resuming ops.\n3. Supervisor sign-off required before aircraft movement.\n4. All FOD found must be logged and reported.',
+            version='REV0', version_num=0, seq_num=1,
+            status='Approved',
+            created_by='Ground Operations Manager',
+            approved_by='Accountable Manager',
+            effective_date='2024-03-01',
+            review_due='2025-03-01',
+            change_summary='Initial issue'
+        )
+        db.session.add(fod)
+
+    db.session.flush()
+
+    # Now create links — this is the traceability backbone
+    links_to_create = [
+        # RA linked to hazard and risk
+        (ra_id,  'hazard',  'HAZ-2024-DEMO1', 'Risk assessment for this hazard'),
+        (ra_id,  'risk',    'RSK-2024-DEMO1', 'RA covers this specific risk'),
+        # SOP linked to hazard and risk
+        (sop_id, 'hazard',  'HAZ-2024-DEMO1', 'SOP referenced as control measure'),
+        (sop_id, 'risk',    'RSK-2024-DEMO1', 'SOP is the primary Preventive Control'),
+        # FOD SOP linked to Ground Ops hazard
+        (fod_id, 'hazard',  'HAZ-2024-DEMO2', 'FOD SOP addresses this hazard'),
+    ]
+
+    # Also link to audit finding if it exists
+    demo_finding = AuditFinding.query.first()
+    if demo_finding:
+        links_to_create.append(
+            (sop_id, 'audit_finding', demo_finding.id, 'SOP referenced in finding')
+        )
+
+    for doc_id, etype, eid, reason in links_to_create:
+        existing = DocumentLink.query.filter_by(
+            document_id=doc_id, entity_type=etype, entity_id=eid).first()
+        if not existing:
+            db.session.add(DocumentLink(
+                document_id=doc_id, entity_type=etype,
+                entity_id=eid, link_reason=reason))
+
+    db.session.commit()
+    print('✅ Traceability seed data created.')
 
 with app.app_context():
     db.create_all()
