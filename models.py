@@ -552,9 +552,14 @@ class RiskAssessment(db.Model):
     reviewed_by_position  = db.Column(db.String(100))
     approved_by_name      = db.Column(db.String(100))
     approved_by_position  = db.Column(db.String(100))
-    # Status
+    # Lifecycle Status
     status                = db.Column(db.String(20), default='Draft')
-    # Draft / Under Review / Approved / Archived
+    # Draft → Submitted → Active → Under Review → Closed
+    submitted_date        = db.Column(db.String(20))   # when user clicks Submit
+    activated_date        = db.Column(db.String(20))   # when RA becomes Active
+    closed_date           = db.Column(db.String(20))   # when RA is closed
+    revision              = db.Column(db.Integer, default=0)  # REV0, REV1, REV2…
+    parent_ra_id          = db.Column(db.String(30))   # previous revision's RA id
     created_at            = db.Column(db.DateTime, default=datetime.utcnow)
     # Relationships
     hazard                = db.relationship('Hazard', backref=db.backref('risk_assessment', uselist=False))
