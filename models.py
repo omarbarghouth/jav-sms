@@ -451,3 +451,32 @@ class SMSDocument(db.Model):
     change_summary = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     department    = db.relationship('Department', foreign_keys=[department_id])
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  DOCUMENT TRACEABILITY BACKBONE
+#  Central linking table — connects SMSDocument to every module in the SMS
+#  ICAO Annex 19 §3.5 / IOSA ISM 1.1 — Full auditability
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class DocumentLink(db.Model):
+    """
+    Universal linking table — one document can be linked to many entities
+    and one entity can have many documents.
+
+    entity_type values:
+        hazard | risk | action | audit_schedule | audit_finding |
+        audit_action | moc | investigation | training | erp | spi_indicator
+    """
+    __tablename__ = 'document_links'
+    id            = db.Column(db.Integer, primary_key=True)
+    document_id   = db.Column(db.String(50), db.ForeignKey('sms_documents.id'), nullable=False)
+    entity_type   = db.Column(db.String(30), nullable=False)
+    entity_id     = db.Column(db.String(50), nullable=False)
+    link_reason   = db.Column(db.String(200))  # e.g. "SOP referenced in audit checklist"
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    document      = db.relationship('SMSDocument', backref=db.backref('links', lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint('document_id', 'entity_type', 'entity_id',
+                            name='uq_doc_entity'),
+    )
