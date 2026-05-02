@@ -47,7 +47,7 @@ def inject_globals():
     # Count overdue actions for nav badge
     overdue = Action.query.filter_by(status='Overdue').count()
     return dict(all_departments=depts, now=now, get_tolerance=get_tolerance,
-                nav_overdue=overdue)
+                nav_overdue=overdue, enumerate=enumerate)
 
 # ─── SEED DATABASE ────────────────────────────────────────────────────────────
 def seed():
