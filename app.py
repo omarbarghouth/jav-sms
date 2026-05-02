@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid
 
@@ -2097,6 +2097,312 @@ def srm_dashboard():
         trend_data=trend_data[:10],
         sources=sources, classifications=classifications,
         TREND_ICONS=TREND_ICONS, TREND_COLORS=TREND_COLORS)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RISK ASSESSMENT MODULE — Jav/SMS/001 Rev 01
+#  Converts the Jordan Aviation RA form into a full system module
+#  Connected to: Hazard Log, Risk Register, Actions, Documents
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def gen_control_number(dept_code):
+    """Generate RA control number: JAV/RA/DEPT/YEAR/SEQ"""
+    year = datetime.now().year
+    count = RiskAssessment.query.count() + 1
+    return f"JAV/RA/{dept_code}/{year}/{count:03d}"
+
+def compute_ra_summary(ra):
+    """Compute overall risk level before and after controls for page 2."""
+    if not ra.rows:
+        return None, None
+    # Worst initial risk
+    order = ['INTOLERABLE','TOLERABLE','ACCEPTABLE']
+    initial_levels  = [r.risk_tolerance_initial  for r in ra.rows if r.risk_tolerance_initial]
+    residual_levels = [r.risk_tolerance_residual for r in ra.rows if r.risk_tolerance_residual]
+    worst_initial  = min(initial_levels,  key=lambda x: order.index(x) if x in order else 99) if initial_levels else None
+    worst_residual = min(residual_levels, key=lambda x: order.index(x) if x in order else 99) if residual_levels else None
+    return worst_initial, worst_residual
+
+# ─── LIST ALL RISK ASSESSMENTS ───────────────────────────────────────────────
+@app.route('/risk-assessments')
+def ra_list():
+    dept_f  = request.args.get('dept','')
+    stat_f  = request.args.get('status','')
+    q = RiskAssessment.query
+    if dept_f: q = q.filter_by(department_id=int(dept_f))
+    if stat_f: q = q.filter_by(status=stat_f)
+    ras = q.order_by(RiskAssessment.created_at.desc()).all()
+    return render_template('ra_list.html', ras=ras, dept_f=dept_f, stat_f=stat_f)
+
+# ─── CREATE NEW RA (linked to hazard or standalone) ──────────────────────────
+@app.route('/risk-assessments/new', methods=['GET','POST'])
+def new_ra():
+    hid = request.args.get('hazard_id','')
+    hazard = Hazard.query.get(hid) if hid else None
+
+    if request.method == 'POST':
+        f       = request.form
+        dept_id = int(f['department_id'])
+        dept    = Department.query.get(dept_id)
+        ra_id   = new_id('RA')
+        ctrl_no = gen_control_number(dept.code if dept else 'XX')
+
+        ra = RiskAssessment(
+            id=ra_id,
+            control_number=f.get('control_number') or ctrl_no,
+            responsible_name=f['responsible_name'],
+            assessors_names=f.get('assessors_names',''),
+            assessment_date=f['assessment_date'],
+            next_review_date=f.get('next_review_date',''),
+            title=f['title'],
+            hazard_id=f.get('hazard_id') or None,
+            department_id=dept_id,
+            general_description=f.get('general_description',''),
+            reasons=f.get('reasons',''),
+            management_acceptance=f.get('management_acceptance',''),
+            acceptance_date=f.get('acceptance_date',''),
+            prepared_by_name=f.get('prepared_by_name',''),
+            prepared_by_position=f.get('prepared_by_position',''),
+            reviewed_by_name=f.get('reviewed_by_name',''),
+            reviewed_by_position=f.get('reviewed_by_position',''),
+            approved_by_name=f.get('approved_by_name',''),
+            approved_by_position=f.get('approved_by_position',''),
+            status='Draft'
+        )
+        db.session.add(ra)
+        db.session.flush()
+
+        # Page 3 — parse risk rows from the form
+        seq = 1
+        while f.get(f'activity_{seq}'):
+            lik_i = int(f.get(f'lik_i_{seq}', 3))
+            sev_i = f.get(f'sev_i_{seq}', 'C')
+            ri_i  = f'{lik_i}{sev_i}'
+            tol_i = get_tolerance(ri_i)
+
+            lik_r = f.get(f'lik_r_{seq}','')
+            sev_r = f.get(f'sev_r_{seq}','')
+            ri_r  = f'{lik_r}{sev_r}' if lik_r and sev_r else None
+            tol_r = get_tolerance(ri_r) if ri_r else None
+
+            # Create/link a Risk record in the existing risks table
+            risk_rec = Risk(
+                id=new_id('RSK'),
+                hazard_id=ra.hazard_id or '',
+                description=f.get(f'consequences_{seq}',''),
+                initial_likelihood=lik_i, initial_severity=sev_i,
+                initial_risk_index=ri_i, initial_tolerance=tol_i,
+                residual_likelihood=int(lik_r) if lik_r else None,
+                residual_severity=sev_r or None,
+                residual_risk_index=ri_r, residual_tolerance=tol_r
+            )
+            if ra.hazard_id:
+                db.session.add(risk_rec)
+                db.session.flush()
+
+            row = RARow(
+                assessment_id=ra_id, seq_num=seq,
+                risk_id=risk_rec.id if ra.hazard_id else None,
+                type_of_activity=f.get(f'activity_{seq}',''),
+                generic_hazard=f.get(f'generic_hazard_{seq}',''),
+                specific_components=f.get(f'specific_{seq}',''),
+                consequences=f.get(f'consequences_{seq}',''),
+                likelihood_initial=lik_i, severity_initial=sev_i,
+                risk_index_initial=ri_i, risk_tolerance_initial=tol_i,
+                current_defenses=f.get(f'defenses_{seq}',''),
+                further_mitigations=f.get(f'mitigations_{seq}',''),
+                likelihood_residual=int(lik_r) if lik_r else None,
+                severity_residual=sev_r or None,
+                risk_index_residual=ri_r, risk_tolerance_residual=tol_r
+            )
+            db.session.add(row)
+
+            # Page 4 — auto-create mitigation + action if mitigation text exists
+            mit_text = f.get(f'mitigations_{seq}','')
+            resp_mgr = f.get(f'resp_manager_{seq}','')
+            due_dt   = f.get(f'due_date_{seq}','')
+            if mit_text:
+                act_id = new_id('ACT')
+                mit = RAMitigation(
+                    assessment_id=ra_id,
+                    hazard_seq=str(seq),
+                    mitigation=mit_text,
+                    responsible_manager=resp_mgr,
+                    due_date=due_dt,
+                    action_id=act_id,
+                    status='Open'
+                )
+                db.session.add(mit)
+                # Create unified Action
+                action = Action(
+                    id=act_id,
+                    source='Risk Assessment',
+                    hazard_id=ra.hazard_id,
+                    linked_ref_id=ra_id,
+                    description=f'[RA {ra.control_number}] Seq {seq}: {mit_text}',
+                    owner=resp_mgr,
+                    due_date=due_dt,
+                    priority='High' if tol_i=='INTOLERABLE' else 'Medium',
+                    status='Open'
+                )
+                db.session.add(action)
+            seq += 1
+
+        # Update page 2 summary levels
+        worst_i, worst_r = compute_ra_summary(ra)
+        ra.risk_level_prior = worst_i or ''
+        ra.risk_level_after = worst_r or ''
+
+        # Auto-link RA document to hazard in traceability
+        if ra.hazard_id:
+            auto_link_document(None, 'hazard', ra.hazard_id, f'Risk Assessment {ra.control_number}')
+
+        db.session.commit()
+        flash(f'✓ Risk Assessment {ra.control_number} created. {seq-1} risk row(s) added.', 'success')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+
+    # GET — pre-populate from hazard if provided
+    return render_template('ra_form.html', hazard=hazard,
+                           today=date.today().isoformat())
+
+# ─── RA DETAIL (all 5 pages in one view) ────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>')
+def ra_detail(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    worst_i, worst_r = compute_ra_summary(ra)
+    return render_template('ra_detail.html', ra=ra,
+                           worst_initial=worst_i, worst_residual=worst_r,
+                           get_tolerance=get_tolerance)
+
+# ─── ADD ROW to existing RA ──────────────────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/add-row', methods=['POST'])
+def ra_add_row(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    f  = request.form
+    seq = len(ra.rows) + 1
+
+    lik_i = int(f.get('likelihood_initial', 3))
+    sev_i = f.get('severity_initial','C')
+    ri_i  = f'{lik_i}{sev_i}'
+    tol_i = get_tolerance(ri_i)
+    lik_r = f.get('likelihood_residual','')
+    sev_r = f.get('severity_residual','')
+    ri_r  = f'{lik_r}{sev_r}' if lik_r and sev_r else None
+    tol_r = get_tolerance(ri_r) if ri_r else None
+
+    # Create Risk record
+    if ra.hazard_id:
+        risk_rec = Risk(
+            id=new_id('RSK'), hazard_id=ra.hazard_id,
+            description=f.get('consequences',''),
+            initial_likelihood=lik_i, initial_severity=sev_i,
+            initial_risk_index=ri_i, initial_tolerance=tol_i,
+            residual_likelihood=int(lik_r) if lik_r else None,
+            residual_severity=sev_r or None,
+            residual_risk_index=ri_r, residual_tolerance=tol_r
+        )
+        db.session.add(risk_rec)
+        db.session.flush()
+        risk_id = risk_rec.id
+    else:
+        risk_id = None
+
+    row = RARow(
+        assessment_id=ra_id, seq_num=seq, risk_id=risk_id,
+        type_of_activity=f.get('type_of_activity',''),
+        generic_hazard=f.get('generic_hazard',''),
+        specific_components=f.get('specific_components',''),
+        consequences=f.get('consequences',''),
+        likelihood_initial=lik_i, severity_initial=sev_i,
+        risk_index_initial=ri_i, risk_tolerance_initial=tol_i,
+        current_defenses=f.get('current_defenses',''),
+        further_mitigations=f.get('further_mitigations',''),
+        likelihood_residual=int(lik_r) if lik_r else None,
+        severity_residual=sev_r or None,
+        risk_index_residual=ri_r, risk_tolerance_residual=tol_r
+    )
+    db.session.add(row)
+
+    # Create mitigation + action if provided
+    mit_text = f.get('further_mitigations','')
+    resp_mgr = f.get('responsible_manager','')
+    due_dt   = f.get('due_date','')
+    if mit_text:
+        act_id = new_id('ACT')
+        mit = RAMitigation(
+            assessment_id=ra_id, hazard_seq=str(seq),
+            mitigation=mit_text, responsible_manager=resp_mgr,
+            due_date=due_dt, action_id=act_id, status='Open'
+        )
+        db.session.add(mit)
+        action = Action(
+            id=act_id, source='Risk Assessment',
+            hazard_id=ra.hazard_id, linked_ref_id=ra_id,
+            description=f'[{ra.control_number}] Seq {seq}: {mit_text}',
+            owner=resp_mgr, due_date=due_dt,
+            priority='High' if tol_i=='INTOLERABLE' else 'Medium',
+            status='Open'
+        )
+        db.session.add(action)
+
+    # Refresh summary
+    worst_i, worst_r = compute_ra_summary(ra)
+    ra.risk_level_prior = worst_i or ra.risk_level_prior
+    ra.risk_level_after = worst_r or ra.risk_level_after
+    db.session.commit()
+    flash(f'✓ Risk row {seq} added. Risk index: {ri_i} ({tol_i}).', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+# ─── ADD REVIEW (Page 5) ─────────────────────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/add-review', methods=['POST'])
+def ra_add_review(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    f  = request.form
+    rev = RAReview(
+        assessment_id=ra_id,
+        risk_mitigation=f.get('risk_mitigation',''),
+        review_of_effectiveness=f.get('review_of_effectiveness',''),
+        effectiveness_rating=f.get('effectiveness_rating',''),
+        date_completed=f.get('date_completed',''),
+        actioner=f.get('actioner','')
+    )
+    db.session.add(rev)
+    # Update linked mitigation status if effectiveness is set
+    if f.get('effectiveness_rating') == 'Effective':
+        mit = RAMitigation.query.filter_by(
+            assessment_id=ra_id,
+            hazard_seq=f.get('hazard_seq','')).first()
+        if mit:
+            mit.status = 'Completed'
+    db.session.commit()
+    flash('✓ Mitigation review recorded.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+# ─── UPDATE RA HEADER (approval / status) ────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/update', methods=['POST'])
+def ra_update(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    f  = request.form
+    ra.status                = f.get('status', ra.status)
+    ra.management_acceptance = f.get('management_acceptance', ra.management_acceptance)
+    ra.acceptance_date       = f.get('acceptance_date', ra.acceptance_date)
+    ra.approved_by_name      = f.get('approved_by_name', ra.approved_by_name)
+    ra.approved_by_position  = f.get('approved_by_position', ra.approved_by_position)
+    ra.next_review_date      = f.get('next_review_date', ra.next_review_date)
+    db.session.commit()
+    flash('✓ Risk Assessment updated.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+# ─── TRIGGER RA FROM HAZARD LOG ──────────────────────────────────────────────
+@app.route('/hazard-log/<hid>/start-ra')
+def start_ra_from_hazard(hid):
+    """Redirect to new RA form pre-populated from hazard."""
+    hazard = Hazard.query.get_or_404(hid)
+    # Check if RA already exists
+    existing = RiskAssessment.query.filter_by(hazard_id=hid).first()
+    if existing:
+        return redirect(url_for('ra_detail', ra_id=existing.id))
+    return redirect(url_for('new_ra', hazard_id=hid))
 
 with app.app_context():
     db.create_all()
