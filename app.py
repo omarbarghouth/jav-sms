@@ -1,7 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
-import os, uuid
+import os, uuid, io
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+from flask import send_file, make_response
 
 app = Flask(__name__)
 
@@ -2712,6 +2716,259 @@ def ra_wizard_step(hid, step):
         get_tolerance=get_tolerance)
 
 # ─── RESUME wizard from hazard log ───────────────────────────────────────────
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PRINT & EXPORT MODULE
+#  1. Risk Assessment → Print-ready HTML (browser prints as PDF)
+#  2. Hazard Log      → Excel (.xlsx) download
+#  3. Hazard Report   → Print-ready HTML (browser prints as PDF)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── HELPER: Excel styling ────────────────────────────────────────────────────
+NAVY   = "0F1C3F"
+GOLD   = "C9A84C"
+WHITE  = "FFFFFF"
+RED    = "DC2626"
+YELLOW = "D97706"
+GREEN  = "15803D"
+GRAY   = "F4F6FB"
+LGRAY  = "E5E7EB"
+
+def hdr_font(bold=True, color=WHITE, size=11):
+    return Font(bold=bold, color=color, size=size, name='Calibri')
+
+def cell_font(bold=False, color="111827", size=10):
+    return Font(bold=bold, color=color, size=size, name='Calibri')
+
+def fill(hex_color):
+    return PatternFill("solid", fgColor=hex_color)
+
+def border():
+    s = Side(style='thin', color=LGRAY)
+    return Border(left=s, right=s, top=s, bottom=s)
+
+def set_col_widths(ws, widths):
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+def tol_color(tol):
+    if tol == 'INTOLERABLE': return RED
+    if tol == 'TOLERABLE':   return YELLOW
+    return GREEN
+
+# ─── 1. RISK ASSESSMENT PRINT ─────────────────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/print')
+def ra_print(ra_id):
+    """Returns a print-ready HTML page that users print as PDF from the browser."""
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    return render_template('ra_print.html', ra=ra, get_tolerance=get_tolerance)
+
+# ─── 2. HAZARD LOG → EXCEL ────────────────────────────────────────────────────
+@app.route('/hazard-log/export-excel')
+def hazard_log_excel():
+    dept_f = request.args.get('dept','')
+    stat_f = request.args.get('status','')
+    cls_f  = request.args.get('classification','')
+
+    q = Hazard.query
+    if dept_f: q = q.filter_by(department_id=int(dept_f))
+    if stat_f: q = q.filter_by(status=stat_f)
+    if cls_f:  q = q.filter_by(classification=cls_f)
+    hazards = q.order_by(Hazard.created_at.desc()).all()
+
+    wb = Workbook()
+
+    # ── Sheet 1: Hazard Log ───────────────────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "Hazard Log"
+
+    # Title row
+    ws1.merge_cells('A1:L1')
+    ws1['A1'] = 'JORDAN AVIATION — HAZARD LOG'
+    ws1['A1'].font = Font(bold=True, size=14, color=WHITE, name='Calibri')
+    ws1['A1'].fill = fill(NAVY)
+    ws1['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws1.row_dimensions[1].height = 28
+
+    ws1.merge_cells('A2:L2')
+    ws1['A2'] = f'Generated: {datetime.now().strftime("%d %b %Y %H:%M")} | Total Hazards: {len(hazards)} | Ref: Jav/SMS/001'
+    ws1['A2'].font = Font(size=9, color="6B7280", name='Calibri')
+    ws1['A2'].fill = fill(GRAY)
+    ws1['A2'].alignment = Alignment(horizontal='center')
+
+    # Headers
+    headers = ['Hazard ID','Source','Department','Classification','Generic Hazard',
+               'Specific Components','Consequences','Initial Risk','Tolerance',
+               'Residual Risk','Res. Tolerance','Status']
+    for col, h in enumerate(headers, 1):
+        cell = ws1.cell(row=3, column=col, value=h)
+        cell.font  = hdr_font()
+        cell.fill  = fill(NAVY)
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = border()
+    ws1.row_dimensions[3].height = 20
+
+    # Data rows
+    for row_num, haz in enumerate(hazards, 4):
+        dept  = haz.department.name if haz.department else '—'
+        risk  = haz.risks[0] if haz.risks else None
+        ri_i  = risk.initial_risk_index  if risk else '—'
+        tol_i = risk.initial_tolerance   if risk else '—'
+        ri_r  = risk.residual_risk_index if risk else '—'
+        tol_r = risk.residual_tolerance  if risk else '—'
+
+        row_data = [
+            haz.id, haz.source, dept, haz.classification or '—',
+            haz.generic_hazard or '—', haz.specific_components or '—',
+            haz.consequences or '—', ri_i, tol_i,
+            ri_r or 'Pending', tol_r or 'Pending', haz.status
+        ]
+        bg = "FFFFFF" if row_num % 2 == 0 else GRAY
+        for col, val in enumerate(row_data, 1):
+            cell = ws1.cell(row=row_num, column=col, value=val)
+            cell.font   = cell_font()
+            cell.fill   = fill(bg)
+            cell.border = border()
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            # Color code tolerance columns
+            if col == 9 and val in ('INTOLERABLE','TOLERABLE','ACCEPTABLE'):
+                cell.font = Font(bold=True, color=tol_color(val), size=10, name='Calibri')
+            if col == 11 and val in ('INTOLERABLE','TOLERABLE','ACCEPTABLE'):
+                cell.font = Font(bold=True, color=tol_color(val), size=10, name='Calibri')
+            if col == 12:  # Status
+                if val == 'Open':   cell.font = Font(bold=True, color=YELLOW, size=10, name='Calibri')
+                elif val == 'Closed': cell.font = Font(bold=True, color=GREEN, size=10, name='Calibri')
+        ws1.row_dimensions[row_num].height = 32
+
+    set_col_widths(ws1, [18, 14, 18, 16, 24, 32, 28, 10, 14, 10, 14, 10])
+
+    # Auto-filter
+    ws1.auto_filter.ref = f'A3:L{3 + len(hazards)}'
+    ws1.freeze_panes    = 'A4'
+
+    # ── Sheet 2: Risk Register ────────────────────────────────────────────────
+    ws2 = wb.create_sheet("Risk Register")
+    ws2.merge_cells('A1:K1')
+    ws2['A1'] = 'JORDAN AVIATION — RISK REGISTER'
+    ws2['A1'].font = Font(bold=True, size=14, color=WHITE, name='Calibri')
+    ws2['A1'].fill = fill(NAVY)
+    ws2['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws2.row_dimensions[1].height = 28
+
+    ws2.merge_cells('A2:K2')
+    ws2['A2'] = f'Generated: {datetime.now().strftime("%d %b %Y %H:%M")} | ICAO Annex 19 / Jav/SMS/001'
+    ws2['A2'].font = Font(size=9, color="6B7280", name='Calibri')
+    ws2['A2'].fill = fill(GRAY)
+    ws2['A2'].alignment = Alignment(horizontal='center')
+
+    rsk_headers = ['Risk ID','Hazard ID','Risk Description','Department',
+                   'Initial L','Initial S','Initial Index','Initial Tolerance',
+                   'Controls','Residual Index','Residual Tolerance']
+    for col, h in enumerate(rsk_headers, 1):
+        cell = ws2.cell(row=3, column=col, value=h)
+        cell.font  = hdr_font()
+        cell.fill  = fill(NAVY)
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = border()
+    ws2.row_dimensions[3].height = 20
+
+    all_risks = Risk.query.join(Hazard, Risk.hazard_id == Hazard.id)
+    if dept_f: all_risks = all_risks.filter(Hazard.department_id == int(dept_f))
+    all_risks = all_risks.order_by(Risk.created_at.desc()).all()
+
+    for row_num, rsk in enumerate(all_risks, 4):
+        haz   = rsk.hazard
+        dept  = haz.department.name if haz and haz.department else '—'
+        ctrl_summary = '; '.join([c.description[:40] for c in rsk.controls[:3]]) if rsk.controls else 'None'
+        bg = "FFFFFF" if row_num % 2 == 0 else GRAY
+        row_data = [
+            rsk.id, rsk.hazard_id, rsk.description or '—', dept,
+            rsk.initial_likelihood or '—', rsk.initial_severity or '—',
+            rsk.initial_risk_index or '—', rsk.initial_tolerance or '—',
+            ctrl_summary,
+            rsk.residual_risk_index or 'Pending',
+            rsk.residual_tolerance or 'Pending'
+        ]
+        for col, val in enumerate(row_data, 1):
+            cell = ws2.cell(row=row_num, column=col, value=val)
+            cell.font   = cell_font()
+            cell.fill   = fill(bg)
+            cell.border = border()
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            if col == 8 and val in ('INTOLERABLE','TOLERABLE','ACCEPTABLE'):
+                cell.font = Font(bold=True, color=tol_color(val), size=10, name='Calibri')
+            if col == 11 and val in ('INTOLERABLE','TOLERABLE','ACCEPTABLE'):
+                cell.font = Font(bold=True, color=tol_color(val), size=10, name='Calibri')
+        ws2.row_dimensions[row_num].height = 30
+
+    set_col_widths(ws2, [18, 18, 32, 18, 8, 8, 12, 16, 36, 12, 16])
+    ws2.auto_filter.ref = f'A3:K{3 + len(all_risks)}'
+    ws2.freeze_panes    = 'A4'
+
+    # ── Sheet 3: Actions ──────────────────────────────────────────────────────
+    ws3 = wb.create_sheet("Open Actions")
+    ws3.merge_cells('A1:H1')
+    ws3['A1'] = 'JORDAN AVIATION — OPEN ACTIONS'
+    ws3['A1'].font = Font(bold=True, size=14, color=WHITE, name='Calibri')
+    ws3['A1'].fill = fill(NAVY)
+    ws3['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws3.row_dimensions[1].height = 28
+
+    act_headers = ['Action ID','Source','Linked Hazard','Description','Owner','Due Date','Priority','Status']
+    for col, h in enumerate(act_headers, 1):
+        cell = ws3.cell(row=2, column=col, value=h)
+        cell.font  = hdr_font()
+        cell.fill  = fill(NAVY)
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border()
+
+    open_actions = Action.query.filter(Action.status != 'Closed').order_by(Action.due_date).all()
+    for row_num, act in enumerate(open_actions, 3):
+        bg = "FFFFFF" if row_num % 2 == 0 else GRAY
+        row_data = [
+            act.id, act.source, act.hazard_id or '—',
+            (act.description or '—')[:80], act.owner or '—',
+            act.due_date or '—', act.priority or '—', act.status
+        ]
+        for col, val in enumerate(row_data, 1):
+            cell = ws3.cell(row=row_num, column=col, value=val)
+            cell.font   = cell_font()
+            cell.fill   = fill(bg)
+            cell.border = border()
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            if col == 8:
+                color_map = {'Overdue': RED, 'Open': YELLOW, 'In Progress': '1D4ED8'}
+                c = color_map.get(val, "111827")
+                cell.font = Font(bold=True, color=c, size=10, name='Calibri')
+        ws3.row_dimensions[row_num].height = 24
+
+    set_col_widths(ws3, [18, 16, 18, 40, 20, 12, 10, 12])
+    ws3.freeze_panes = 'A3'
+
+    # Save to buffer and send
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f'JAV_Hazard_Log_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    return send_file(buf, as_attachment=True,
+                     download_name=filename,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+# ─── 3. HAZARD REPORT PRINT ───────────────────────────────────────────────────
+@app.route('/hazard-reports/<rep_id>/print')
+def hazard_report_print(rep_id):
+    rep    = HazardReport.query.get_or_404(rep_id)
+    hazard = Hazard.query.get(rep.hazard_id) if rep.hazard_id else None
+    ra     = RiskAssessment.query.filter_by(hazard_id=rep.hazard_id).first() if rep.hazard_id else None
+    return render_template('hazard_report_print.html', rep=rep, hazard=hazard, ra=ra,
+                           get_tolerance=get_tolerance)
+
+# ─── 4. ASR PRINT ─────────────────────────────────────────────────────────────
+@app.route('/asr/<asr_id>/print')
+def asr_print(asr_id):
+    asr = ASRReport.query.get_or_404(asr_id)
+    return render_template('asr_print.html', asr=asr)
 
 with app.app_context():
     db.create_all()
