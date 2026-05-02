@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid
 
@@ -291,8 +291,11 @@ def hazard_report():
                            hazard_id=hid)
         db.session.add(rep)
         db.session.commit()
-        flash(f'✓ Hazard Report submitted. ID: {rid} | Hazard: {hid} | Risk: {ri} — {get_tolerance(ri)}', 'success')
-        return redirect(url_for('hazard_report'))
+        # Set status to Under Assessment and redirect to guided RA wizard
+        h.status = 'Under Assessment'
+        db.session.commit()
+        flash(f'✓ Hazard {hid} created (Risk: {ri}). Complete the Risk Assessment to continue.', 'success')
+        return redirect(url_for('ra_wizard_start', hid=hid))
     return render_template('hazard_report.html')
 
 # ─── ASR ─────────────────────────────────────────────────────────────────────
@@ -342,8 +345,10 @@ def asr():
             severity=se, likelihood=li, risk_index=ri, hazard_id=hid)
         db.session.add(asr_rec)
         db.session.commit()
-        flash(f'✓ ASR submitted. ID: {aid} | Hazard: {hid} | Risk: {ri} — {get_tolerance(ri)}', 'success')
-        return redirect(url_for('asr'))
+        h.status = 'Under Assessment'
+        db.session.commit()
+        flash(f'✓ ASR {aid} submitted. Complete the Risk Assessment for hazard {hid}.', 'success')
+        return redirect(url_for('ra_wizard_start', hid=hid))
     return render_template('asr.html')
 
 # ─── Hazard Log ───────────────────────────────────────────────────────────────
@@ -2403,6 +2408,275 @@ def start_ra_from_hazard(hid):
     if existing:
         return redirect(url_for('ra_detail', ra_id=existing.id))
     return redirect(url_for('new_ra', hazard_id=hid))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  GUIDED RISK ASSESSMENT WIZARD — 6-STEP WORKFLOW
+#  Triggered automatically after Hazard Report / ASR submission
+#  ICAO Annex 19 §5 / Doc 9859 Ch.5
+# ═══════════════════════════════════════════════════════════════════════════════
+
+WIZARD_STEPS = [
+    (1, 'Hazard Review',        'Review the reported hazard'),
+    (2, 'Risk Identification',  'Identify consequences and risk scenarios'),
+    (3, 'Initial Risk Rating',  'Rate likelihood and severity'),
+    (4, 'Current Controls',     'Check existing defences and controls'),
+    (5, 'Further Mitigations',  'Define additional mitigation actions'),
+    (6, 'Residual Risk',        'Recalculate risk after controls'),
+]
+
+CONTROL_CHECKLIST = [
+    ('SOP',       'Standard Operating Procedure (SOP) available and current'),
+    ('SOP',       'Crew / staff briefed on relevant SOP'),
+    ('Training',  'Specific training programme exists for this hazard type'),
+    ('Training',  'Personnel have completed required training and are current'),
+    ('Monitoring','Regular monitoring / inspection process in place'),
+    ('Monitoring','Safety data collected and reviewed for this hazard'),
+    ('Equipment', 'Technical safeguards or equipment controls installed'),
+    ('Equipment', 'Equipment is serviceable and within maintenance cycle'),
+    ('Procedure', 'Emergency / contingency procedure defined'),
+    ('Procedure', 'Supervisory checks / sign-off required before operation'),
+    ('Reporting', 'Hazard reporting culture promoted in department'),
+    ('Reporting', 'Occurrence data analysed and fed back to department'),
+]
+
+def get_or_create_ra(hid):
+    """Get existing RA for hazard or create a new draft one."""
+    hazard = Hazard.query.get_or_404(hid)
+    ra = RiskAssessment.query.filter_by(hazard_id=hid).first()
+    if not ra:
+        dept = hazard.department
+        ctrl_no = gen_control_number(dept.code if dept else 'XX')
+        ra = RiskAssessment(
+            id=new_id('RA'),
+            control_number=ctrl_no,
+            responsible_name='',
+            assessment_date=date.today().isoformat(),
+            title=hazard.generic_hazard or 'Risk Assessment',
+            hazard_id=hid,
+            department_id=hazard.department_id,
+            general_description=hazard.specific_components or '',
+            reasons=f'Hazard reported from {hazard.source}',
+            status='Draft'
+        )
+        db.session.add(ra)
+        db.session.commit()
+    return ra
+
+# ─── WIZARD ENTRY POINT ───────────────────────────────────────────────────────
+@app.route('/ra-wizard/<hid>')
+def ra_wizard_start(hid):
+    hazard = Hazard.query.get_or_404(hid)
+    ra     = get_or_create_ra(hid)
+    return redirect(url_for('ra_wizard_step', hid=hid, step=1))
+
+# ─── STEP ROUTER ─────────────────────────────────────────────────────────────
+@app.route('/ra-wizard/<hid>/step/<int:step>', methods=['GET','POST'])
+def ra_wizard_step(hid, step):
+    hazard = Hazard.query.get_or_404(hid)
+    ra     = get_or_create_ra(hid)
+    if step < 1 or step > 6:
+        return redirect(url_for('ra_wizard_step', hid=hid, step=1))
+
+    # ── POST: save current step data ─────────────────────────────────────────
+    if request.method == 'POST':
+        f = request.form
+
+        if step == 1:
+            # Save admin header info
+            ra.responsible_name  = f.get('responsible_name', ra.responsible_name)
+            ra.assessors_names   = f.get('assessors_names', ra.assessors_names)
+            ra.assessment_date   = f.get('assessment_date', ra.assessment_date)
+            ra.next_review_date  = f.get('next_review_date', ra.next_review_date)
+            ra.title             = f.get('title', ra.title)
+            ra.reasons           = f.get('reasons', ra.reasons)
+            db.session.commit()
+
+        elif step == 2:
+            # Save risk rows (one or more risk scenarios)
+            activities  = f.getlist('type_of_activity[]')
+            hazards_g   = f.getlist('generic_hazard[]')
+            components  = f.getlist('specific_components[]')
+            consequences= f.getlist('consequences[]')
+            # Remove existing rows first if re-doing step 2
+            # Only add new rows that don't already exist (by seq)
+            existing_seqs = {r.seq_num for r in ra.rows}
+            for i, cons in enumerate(consequences):
+                if not cons.strip():
+                    continue
+                seq = i + 1
+                if seq not in existing_seqs:
+                    row = RARow(
+                        assessment_id=ra.id,
+                        seq_num=seq,
+                        type_of_activity=activities[i] if i < len(activities) else '',
+                        generic_hazard=hazards_g[i] if i < len(hazards_g) else '',
+                        specific_components=components[i] if i < len(components) else '',
+                        consequences=cons,
+                        likelihood_initial=3, severity_initial='C',
+                        risk_index_initial='3C', risk_tolerance_initial='TOLERABLE'
+                    )
+                    # Also create Risk record
+                    if ra.hazard_id:
+                        rsk = Risk(
+                            id=new_id('RSK'), hazard_id=ra.hazard_id,
+                            description=cons,
+                            initial_likelihood=3, initial_severity='C',
+                            initial_risk_index='3C', initial_tolerance='TOLERABLE'
+                        )
+                        db.session.add(rsk)
+                        db.session.flush()
+                        row.risk_id = rsk.id
+                    db.session.add(row)
+            db.session.commit()
+
+        elif step == 3:
+            # Save initial risk rating per row
+            for row in ra.rows:
+                lik = f.get(f'lik_{row.seq_num}')
+                sev = f.get(f'sev_{row.seq_num}')
+                if lik and sev:
+                    ri = f'{lik}{sev}'
+                    row.likelihood_initial     = int(lik)
+                    row.severity_initial       = sev
+                    row.risk_index_initial     = ri
+                    row.risk_tolerance_initial = get_tolerance(ri)
+                    # Update linked Risk record
+                    if row.risk_id:
+                        rsk = Risk.query.get(row.risk_id)
+                        if rsk:
+                            rsk.initial_likelihood = int(lik)
+                            rsk.initial_severity   = sev
+                            rsk.initial_risk_index = ri
+                            rsk.initial_tolerance  = get_tolerance(ri)
+                row.current_defenses = f.get(f'def_{row.seq_num}', row.current_defenses)
+            # Update RA summary
+            worst_i, _ = compute_ra_summary(ra)
+            if worst_i:
+                ra.risk_level_prior = get_tolerance(worst_i)
+            db.session.commit()
+
+        elif step == 4:
+            # Save checklist responses
+            for row in ra.rows:
+                # Delete existing checklist for this row
+                RAChecklistItem.query.filter_by(
+                    assessment_id=ra.id, row_seq=row.seq_num).delete()
+                for idx, (cat, desc) in enumerate(CONTROL_CHECKLIST):
+                    key     = f'ctrl_{row.seq_num}_{idx}'
+                    notes_k = f'notes_{row.seq_num}_{idx}'
+                    item = RAChecklistItem(
+                        assessment_id=ra.id,
+                        row_seq=row.seq_num,
+                        category=cat,
+                        description=desc,
+                        checked=key in f,
+                        notes=f.get(notes_k,'')
+                    )
+                    db.session.add(item)
+            db.session.commit()
+
+        elif step == 5:
+            # Save further mitigations + auto-create actions
+            for row in ra.rows:
+                mit_text = f.get(f'mitigation_{row.seq_num}','')
+                resp_mgr = f.get(f'manager_{row.seq_num}','')
+                due_dt   = f.get(f'due_{row.seq_num}','')
+                if mit_text:
+                    row.further_mitigations = mit_text
+                    # Check if mitigation already exists
+                    existing = RAMitigation.query.filter_by(
+                        assessment_id=ra.id, hazard_seq=str(row.seq_num)).first()
+                    if not existing:
+                        act_id = new_id('ACT')
+                        mit = RAMitigation(
+                            assessment_id=ra.id,
+                            hazard_seq=str(row.seq_num),
+                            mitigation=mit_text,
+                            responsible_manager=resp_mgr,
+                            due_date=due_dt,
+                            action_id=act_id, status='Open'
+                        )
+                        db.session.add(mit)
+                        action = Action(
+                            id=act_id, source='Risk Assessment',
+                            hazard_id=ra.hazard_id, linked_ref_id=ra.id,
+                            description=f'[{ra.control_number}] Seq {row.seq_num}: {mit_text}',
+                            owner=resp_mgr, due_date=due_dt,
+                            priority='High' if row.risk_tolerance_initial=='INTOLERABLE' else 'Medium',
+                            status='Open'
+                        )
+                        db.session.add(action)
+            db.session.commit()
+
+        elif step == 6:
+            # Save residual risk per row — final step
+            for row in ra.rows:
+                lik_r = f.get(f'res_lik_{row.seq_num}')
+                sev_r = f.get(f'res_sev_{row.seq_num}')
+                if lik_r and sev_r:
+                    ri_r = f'{lik_r}{sev_r}'
+                    row.likelihood_residual    = int(lik_r)
+                    row.severity_residual      = sev_r
+                    row.risk_index_residual    = ri_r
+                    row.risk_tolerance_residual = get_tolerance(ri_r)
+                    if row.risk_id:
+                        rsk = Risk.query.get(row.risk_id)
+                        if rsk:
+                            rsk.residual_likelihood = int(lik_r)
+                            rsk.residual_severity   = sev_r
+                            rsk.residual_risk_index = ri_r
+                            rsk.residual_tolerance  = get_tolerance(ri_r)
+            # Finalise assessment
+            _, worst_r = compute_ra_summary(ra)
+            if worst_r:
+                ra.risk_level_after = get_tolerance(worst_r)
+            ra.status = 'Under Review'
+            # Update hazard status
+            if ra.hazard_id:
+                h = Hazard.query.get(ra.hazard_id)
+                if h:
+                    h.status = 'Under Assessment'
+            ra.management_acceptance = f.get('acceptance','')
+            ra.prepared_by_name      = f.get('prepared_by','')
+            ra.prepared_by_position  = f.get('prepared_position','')
+            db.session.commit()
+
+            flash(f'✓ Risk Assessment {ra.control_number} completed. Review and approve below.', 'success')
+            return redirect(url_for('ra_detail', ra_id=ra.id))
+
+        # Advance to next step
+        if step < 6:
+            return redirect(url_for('ra_wizard_step', hid=hid, step=step+1))
+
+    # ── GET: render current step ──────────────────────────────────────────────
+    checklist_items = {}
+    if step == 4:
+        for row in ra.rows:
+            items = RAChecklistItem.query.filter_by(
+                assessment_id=ra.id, row_seq=row.seq_num).all()
+            checklist_items[row.seq_num] = {
+                item.description: item for item in items
+            }
+
+    # Compute progress
+    completed_steps = 0
+    if ra.responsible_name:                    completed_steps = max(completed_steps, 1)
+    if ra.rows:                                completed_steps = max(completed_steps, 2)
+    if ra.rows and ra.rows[0].risk_index_initial: completed_steps = max(completed_steps, 3)
+    if RAChecklistItem.query.filter_by(assessment_id=ra.id).first(): completed_steps = max(completed_steps, 4)
+    if ra.mitigations:                         completed_steps = max(completed_steps, 5)
+    if ra.rows and ra.rows[0].risk_index_residual: completed_steps = max(completed_steps, 6)
+
+    return render_template('ra_wizard.html',
+        hazard=hazard, ra=ra, step=step,
+        steps=WIZARD_STEPS,
+        completed_steps=completed_steps,
+        checklist=CONTROL_CHECKLIST,
+        checklist_items=checklist_items,
+        get_tolerance=get_tolerance)
+
+# ─── RESUME wizard from hazard log ───────────────────────────────────────────
 
 with app.app_context():
     db.create_all()
