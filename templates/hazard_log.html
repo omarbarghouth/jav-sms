@@ -21,11 +21,12 @@
   <a href="/hazard-log" class="btn btn-outline btn-sm">Clear</a>
   <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ hazards|length }} record(s)</span>
   <a href="/hazard-report" class="btn btn-nav btn-sm">+ New Hazard</a>
+  <a href="/hazard-log/export-excel{% if dept_f or stat_f or cls_f %}?dept={{ dept_f }}&status={{ stat_f }}&classification={{ cls_f }}{% endif %}" class="btn btn-nav btn-sm" style="background:#065f46">📥 Export Excel</a>
 </form>
 <div class="card" style="padding:0">
   <div class="tbl-wrap">
     <table>
-      <thead><tr><th>Hazard ID</th><th>Source</th><th>Dept</th><th>Classification</th><th>Hazard</th><th>Risks</th><th>Controls</th><th>Actions</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Hazard ID</th><th>Source</th><th>Dept</th><th>Classification</th><th>Hazard</th><th>Risks</th><th>Controls</th><th>Actions</th><th>RA</th><th>Status</th><th></th></tr></thead>
       <tbody>
         {% for h in hazards %}
         <tr>
@@ -52,8 +53,19 @@
             <span class="badge b-gray">{{ ctrl_count.n }}</span>
           </td>
           <td style="text-align:center"><span class="badge {% if h.actions|length > 0 %}b-blue{% else %}b-gray{% endif %}">{{ h.actions|length }}</span></td>
+          <td style="text-align:center">
+            {% if h.risk_assessment %}
+              <a href="/risk-assessments/{{ h.risk_assessment.id }}" class="badge b-green" style="font-size:10px;text-decoration:none">{{ h.risk_assessment.control_number }}</a>
+            {% else %}
+              <a href="/hazard-log/{{ h.id }}/start-ra" class="badge b-yellow" style="font-size:10px;text-decoration:none">+ Start RA</a>
+            {% endif %}
+          </td>
           <td>{% if h.status=='Open' %}<span class="badge b-yellow">Open</span>{% else %}<span class="badge b-green">Closed</span>{% endif %}</td>
-          <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a></td>
+          <td>
+            {% set hr = h.hazard_reports[0] if h.hazard_reports else none %}
+            {% if hr %}<a href="/hazard-reports/{{ hr.id }}/print" target="_blank" class="btn btn-sm" style="background:#065f46;color:#fff;margin-right:4px">🖨</a>{% endif %}
+            <a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a>
+          </td>
         </tr>
         {% else %}
         <tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:28px">No hazards found.</td></tr>
