@@ -624,3 +624,19 @@ class RAReview(db.Model):
     effectiveness_rating     = db.Column(db.String(30))   # Effective / Partially Effective / Ineffective
     date_completed           = db.Column(db.String(20))   # "Date Completed"
     actioner                 = db.Column(db.String(100))  # "Actioner"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  GUIDED RA WORKFLOW — STEP TRACKING
+#  Tracks progress through the 6-step risk assessment wizard
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RAChecklistItem(db.Model):
+    """Standard control checklist items checked during Step 4."""
+    __tablename__ = 'ra_checklist_items'
+    id            = db.Column(db.Integer, primary_key=True)
+    assessment_id = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'))
+    row_seq       = db.Column(db.Integer)         # which RARow this belongs to
+    category      = db.Column(db.String(50))      # SOP / Training / Monitoring / Equipment / Other
+    description   = db.Column(db.String(200))
+    checked       = db.Column(db.Boolean, default=False)
+    notes         = db.Column(db.Text)
