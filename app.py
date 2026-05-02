@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction
 from datetime import datetime, date
 import os, uuid
 
@@ -1851,6 +1851,252 @@ def seed_traceability():
 
     db.session.commit()
     print('✅ Traceability seed data created.')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SAFETY RISK MANAGEMENT (SRM) MODULE
+#  ICAO Annex 19 §5 / Doc 9859 Ch.5
+#  Hazard → Risk(s) → Control(s) → Residual Risk → Action(s) → Monitoring
+#  Extension only — all existing routes unchanged
+# ═══════════════════════════════════════════════════════════════════════════════
+
+TREND_ICONS = {'Increasing': '↑', 'Stable': '→', 'Decreasing': '↓', 'New': '●'}
+TREND_COLORS = {'Increasing': '#dc2626', 'Stable': '#d97706', 'Decreasing': '#15803d', 'New': '#1e40af'}
+
+def calculate_trend(hazard_id):
+    """Calculate trend based on occurrence count and recency."""
+    occurrences = RiskOccurrence.query.filter_by(hazard_id=hazard_id).order_by(
+        RiskOccurrence.created_at.desc()).all()
+    count = len(occurrences)
+    if count == 0:
+        return 'New', 0
+    if count == 1:
+        return 'Stable', count
+    # Compare recent 3 vs previous 3
+    recent = len([o for o in occurrences[:3]])
+    older  = len([o for o in occurrences[3:6]])
+    if recent > older:
+        return 'Increasing', count
+    elif recent < older:
+        return 'Decreasing', count
+    return 'Stable', count
+
+def get_srm_status(hazard):
+    """Derive SRM status from risks and controls."""
+    if not hazard.risks:
+        return 'Open'
+    all_controlled = all(
+        r.residual_risk_index and r.residual_tolerance in ('ACCEPTABLE','TOLERABLE')
+        for r in hazard.risks
+    )
+    any_intolerable = any(
+        r.initial_tolerance == 'INTOLERABLE' for r in hazard.risks
+    )
+    has_controls = any(len(r.controls) > 0 for r in hazard.risks)
+    if all_controlled:
+        return 'Controlled'
+    if has_controls:
+        return 'Under Assessment'
+    return 'Open'
+
+# ─── RISK REGISTER (central view — risks, not hazards) ───────────────────────
+@app.route('/risk-register')
+def risk_register():
+    dept_f  = request.args.get('dept','')
+    tol_f   = request.args.get('tolerance','')
+    stat_f  = request.args.get('status','')
+    src_f   = request.args.get('source','')
+
+    q = Risk.query.join(Hazard, Risk.hazard_id == Hazard.id)
+    if dept_f: q = q.filter(Hazard.department_id == int(dept_f))
+    if tol_f:  q = q.filter(Risk.initial_tolerance == tol_f)
+
+    risks = q.order_by(Risk.created_at.desc()).all()
+
+    # Filter by hazard source
+    if src_f:
+        risks = [r for r in risks if r.hazard and r.hazard.source == src_f]
+
+    # Stats
+    total       = len(risks)
+    intolerable = sum(1 for r in risks if r.initial_tolerance == 'INTOLERABLE')
+    tolerable   = sum(1 for r in risks if r.initial_tolerance == 'TOLERABLE')
+    acceptable  = sum(1 for r in risks if r.initial_tolerance == 'ACCEPTABLE')
+    no_controls = sum(1 for r in risks if len(r.controls) == 0)
+    no_residual = sum(1 for r in risks if not r.residual_risk_index)
+
+    return render_template('risk_register.html',
+        risks=risks, dept_f=dept_f, tol_f=tol_f, stat_f=stat_f, src_f=src_f,
+        total=total, intolerable=intolerable, tolerable=tolerable,
+        acceptable=acceptable, no_controls=no_controls, no_residual=no_residual,
+        get_srm_status=get_srm_status, calculate_trend=calculate_trend,
+        TREND_ICONS=TREND_ICONS, TREND_COLORS=TREND_COLORS)
+
+# ─── RISK DETAIL ──────────────────────────────────────────────────────────────
+@app.route('/risk/<rid>')
+def risk_detail(rid):
+    risk    = Risk.query.get_or_404(rid)
+    hazard  = risk.hazard
+    # Linked documents via DocumentLink
+    doc_links = DocumentLink.query.filter_by(entity_type='risk', entity_id=rid).all()
+    docs    = [SMSDocument.query.get(lnk.document_id) for lnk in doc_links if SMSDocument.query.get(lnk.document_id)]
+    # Risk actions
+    r_actions = RiskAction.query.filter_by(risk_id=rid).order_by(RiskAction.created_at.desc()).all()
+    # Audit findings linked to same hazard
+    audit_findings = AuditFinding.query.filter_by(hazard_id=hazard.id).all() if hazard else []
+    return render_template('risk_detail.html',
+        risk=risk, hazard=hazard, docs=docs, r_actions=r_actions,
+        audit_findings=audit_findings)
+
+# ─── UPDATE RISK STATUS / RESIDUAL ────────────────────────────────────────────
+@app.route('/risk/<rid>/update', methods=['POST'])
+def update_risk(rid):
+    risk = Risk.query.get_or_404(rid)
+    f    = request.form
+    risk.description = f.get('description', risk.description)
+    rl = f.get('residual_likelihood','')
+    rs = f.get('residual_severity','')
+    if rl and rs:
+        risk.residual_likelihood = int(rl)
+        risk.residual_severity   = rs
+        rri = f'{rl}{rs}'
+        risk.residual_risk_index  = rri
+        risk.residual_tolerance   = get_tolerance(rri)
+    if f.get('consequence'):
+        risk.description = f.get('consequence')
+    db.session.commit()
+    flash('✓ Risk updated.', 'success')
+    return redirect(url_for('risk_detail', rid=rid))
+
+# ─── RISK → ACTION (direct risk-level action) ─────────────────────────────────
+@app.route('/risk/<rid>/add-action', methods=['POST'])
+def add_risk_action(rid):
+    risk = Risk.query.get_or_404(rid)
+    f    = request.form
+    ra   = RiskAction(
+        id=new_id('RACT'),
+        risk_id=rid,
+        hazard_id=risk.hazard_id,
+        description=f['description'],
+        owner=f['owner'],
+        due_date=f['due_date'],
+        priority=f.get('priority','Medium'),
+        status='Open'
+    )
+    db.session.add(ra)
+    # Also add to unified Action table
+    unified = Action(
+        id=new_id('ACT'),
+        source='Risk Assessment',
+        hazard_id=risk.hazard_id,
+        linked_ref_id=rid,
+        description=f['description'],
+        owner=f['owner'],
+        due_date=f['due_date'],
+        priority=f.get('priority','Medium'),
+        status='Open'
+    )
+    db.session.add(unified)
+    db.session.commit()
+    flash(f'✓ Action created for risk {rid}.', 'success')
+    return redirect(url_for('risk_detail', rid=rid))
+
+@app.route('/risk-action/<aid>/update', methods=['POST'])
+def update_risk_action(aid):
+    ra = RiskAction.query.get_or_404(aid)
+    f  = request.form
+    ra.status        = f.get('status', ra.status)
+    ra.owner         = f.get('owner', ra.owner)
+    ra.due_date      = f.get('due_date', ra.due_date)
+    ra.effectiveness = f.get('effectiveness', ra.effectiveness)
+    if ra.status == 'Closed':
+        ra.closed_date = date.today().isoformat()
+    db.session.commit()
+    flash('✓ Action updated.', 'success')
+    return redirect(url_for('risk_detail', rid=ra.risk_id))
+
+# ─── CONTROL MANAGEMENT (enhanced) ───────────────────────────────────────────
+@app.route('/control/<cid>/update', methods=['POST'])
+def update_control(cid):
+    ctrl = Control.query.get_or_404(cid)
+    f    = request.form
+    ctrl.control_type  = f.get('control_type', ctrl.control_type)
+    ctrl.description   = f.get('description', ctrl.description)
+    ctrl.owner         = f.get('owner', ctrl.owner)
+    ctrl.effectiveness = f.get('effectiveness', ctrl.effectiveness)
+    ctrl.review_date   = f.get('review_date', ctrl.review_date)
+    db.session.commit()
+    flash('✓ Control updated.', 'success')
+    return redirect(url_for('risk_detail', rid=ctrl.risk_id))
+
+@app.route('/control/<cid>/delete', methods=['POST'])
+def delete_control(cid):
+    ctrl = Control.query.get_or_404(cid)
+    rid  = ctrl.risk_id
+    db.session.delete(ctrl)
+    db.session.commit()
+    flash('✓ Control removed.', 'success')
+    return redirect(url_for('risk_detail', rid=rid))
+
+# ─── OCCURRENCE TRACKING ──────────────────────────────────────────────────────
+@app.route('/hazard-log/<hid>/occurrence', methods=['POST'])
+def add_occurrence(hid):
+    hazard = Hazard.query.get_or_404(hid)
+    f      = request.form
+    occ    = RiskOccurrence(
+        hazard_id=hid,
+        occurrence_date=f.get('occurrence_date', date.today().isoformat()),
+        description=f.get('description',''),
+        source=f.get('source','Report'),
+        linked_report_id=f.get('linked_report_id','')
+    )
+    db.session.add(occ)
+    db.session.commit()
+    flash('✓ Occurrence logged. Trend updated.', 'success')
+    return redirect(url_for('hazard_detail', hid=hid))
+
+# ─── SRM DASHBOARD ────────────────────────────────────────────────────────────
+@app.route('/srm-dashboard')
+def srm_dashboard():
+    all_risks   = Risk.query.all()
+    total_risks = len(all_risks)
+    intol_risks = [r for r in all_risks if r.initial_tolerance == 'INTOLERABLE']
+    no_ctrl     = [r for r in all_risks if len(r.controls) == 0]
+    no_resid    = [r for r in all_risks if not r.residual_risk_index]
+    reduced     = [r for r in all_risks if r.residual_risk_index and r.residual_tolerance != r.initial_tolerance]
+
+    # Trend analysis per hazard
+    all_hazards = Hazard.query.filter_by(status='Open').all()
+    trend_data  = []
+    for h in all_hazards:
+        trend, count = calculate_trend(h.id)
+        if count > 0 or h.risks:
+            trend_data.append({
+                'hazard': h,
+                'trend': trend,
+                'count': count,
+                'risks': len(h.risks),
+                'intol': sum(1 for r in h.risks if r.initial_tolerance == 'INTOLERABLE')
+            })
+    trend_data.sort(key=lambda x: (x['intol'], x['count']), reverse=True)
+
+    # Source breakdown
+    sources = {}
+    for h in Hazard.query.all():
+        sources[h.source] = sources.get(h.source, 0) + 1
+
+    # Classification breakdown
+    classifications = {}
+    for h in Hazard.query.all():
+        c = h.classification or 'Unclassified'
+        classifications[c] = classifications.get(c, 0) + 1
+
+    return render_template('srm_dashboard.html',
+        total_risks=total_risks, intol_risks=intol_risks,
+        no_ctrl=no_ctrl, no_resid=no_resid, reduced=reduced,
+        trend_data=trend_data[:10],
+        sources=sources, classifications=classifications,
+        TREND_ICONS=TREND_ICONS, TREND_COLORS=TREND_COLORS)
 
 with app.app_context():
     db.create_all()
