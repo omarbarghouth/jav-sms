@@ -480,3 +480,37 @@ class DocumentLink(db.Model):
         db.UniqueConstraint('document_id', 'entity_type', 'entity_id',
                             name='uq_doc_entity'),
     )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SAFETY RISK MANAGEMENT (SRM) — EXTENDED MODELS
+#  Extends existing Risk + Control + Hazard with SRM-grade fields
+#  ICAO Annex 19 §5 / Doc 9859 Ch.5 — Added as extension
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RiskOccurrence(db.Model):
+    """Tracks repeated occurrences of the same hazard for trend analysis."""
+    __tablename__ = 'risk_occurrences'
+    id            = db.Column(db.Integer, primary_key=True)
+    hazard_id     = db.Column(db.String(30), db.ForeignKey('hazards.id'), nullable=False)
+    occurrence_date = db.Column(db.String(20))
+    description   = db.Column(db.Text)
+    source        = db.Column(db.String(30))  # Report / ASR / Audit / Investigation
+    linked_report_id = db.Column(db.String(30))
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+class RiskAction(db.Model):
+    """Direct Risk → Action link (separate from hazard-level actions)."""
+    __tablename__ = 'risk_actions'
+    id            = db.Column(db.String(30), primary_key=True)
+    risk_id       = db.Column(db.String(30), db.ForeignKey('risks.id'), nullable=False)
+    hazard_id     = db.Column(db.String(30), db.ForeignKey('hazards.id'))
+    description   = db.Column(db.Text)
+    owner         = db.Column(db.String(100))
+    due_date      = db.Column(db.String(20))
+    priority      = db.Column(db.String(20), default='Medium')
+    status        = db.Column(db.String(20), default='Open')
+    # Open / In Progress / Closed / Overdue
+    effectiveness = db.Column(db.String(30))
+    closed_date   = db.Column(db.String(20))
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    risk          = db.relationship('Risk', backref=db.backref('risk_actions', lazy=True))
