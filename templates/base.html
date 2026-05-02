@@ -123,7 +123,7 @@
       {% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}
     </a>
 
-    <div class="sb-section">Safety Policy</div>
+    <div class="sb-section">① Safety Policy</div>
     <a href="/safety-policy" class="nav-a {% if request.path=='/safety-policy' %}active{% endif %}"><span class="nav-icon">📜</span>Safety Policy</a>
     <a href="/safety-roles" class="nav-a {% if '/safety-roles' in request.path %}active{% endif %}"><span class="nav-icon">👥</span>Accountability</a>
     <a href="/safety-personnel" class="nav-a {% if '/safety-personnel' in request.path %}active{% endif %}"><span class="nav-icon">🪪</span>Key Personnel</a>
@@ -131,20 +131,25 @@
     <a href="/documents" class="nav-a {% if '/documents' in request.path and 'trace' not in request.path %}active{% endif %}"><span class="nav-icon">📁</span>Document Control</a>
     <a href="/traceability" class="nav-a {% if request.path=='/traceability' %}active{% endif %}"><span class="nav-icon">🔗</span>Traceability</a>
 
-    <div class="sb-section">Safety Assurance</div>
+    <div class="sb-section">② Risk Management</div>
+    <a href="/hazard-report" class="nav-a {% if request.path=='/hazard-report' %}active{% endif %}"><span class="nav-icon">⚠️</span>Hazard Report</a>
+    <a href="/asr" class="nav-a {% if request.path=='/asr' %}active{% endif %}"><span class="nav-icon">✈️</span>Air Safety Report<span class="nav-tag">FO</span></a>
+    <a href="/hazard-log" class="nav-a {% if '/hazard-log' in request.path %}active{% endif %}"><span class="nav-icon">📋</span>Hazard & Risk Log</a>
+    <a href="/actions" class="nav-a {% if request.path=='/actions' %}active{% endif %}"><span class="nav-icon">✅</span>All Actions
+      {% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}
+    </a>
+
+    <div class="sb-section">③ Safety Assurance</div>
     <a href="/audit-dashboard" class="nav-a {% if request.path=='/audit-dashboard' %}active{% endif %}"><span class="nav-icon">📅</span>Audit Dashboard</a>
     <a href="/audit-plans" class="nav-a {% if '/audit-plan' in request.path %}active{% endif %}"><span class="nav-icon">📋</span>Audit Plans</a>
     <a href="/audit-schedule" class="nav-a {% if '/audit-schedule' in request.path %}active{% endif %}"><span class="nav-icon">🗓</span>Audit Schedule</a>
-    <a href="/audit-actions" class="nav-a {% if '/audit-actions' in request.path %}active{% endif %}"><span class="nav-icon">✅</span>Audit Actions</a>
     <a href="/investigations" class="nav-a {% if '/investigations' in request.path %}active{% endif %}"><span class="nav-icon">🔎</span>Investigations</a>
     <a href="/moc" class="nav-a {% if '/moc' in request.path %}active{% endif %}"><span class="nav-icon">🔄</span>Mgmt of Change</a>
-
-    <div class="sb-section">Performance</div>
     <a href="/spi" class="nav-a {% if request.path=='/spi' %}active{% endif %}"><span class="nav-icon">📈</span>SPI / SPT</a>
-    <a href="/risk-matrix" class="nav-a {% if request.path=='/risk-matrix' %}active{% endif %}"><span class="nav-icon">🎯</span>Risk Matrix</a>
 
-    <div class="sb-section">Promotion</div>
-    <a href="/safety-promotion" class="nav-a {% if request.path=='/safety-promotion' %}active{% endif %}"><span class="nav-icon">📢</span>Safety Promotion</a>
+    <div class="sb-section">④ Safety Promotion</div>
+    <a href="/safety-promotion" class="nav-a {% if request.path=='/safety-promotion' %}active{% endif %}"><span class="nav-icon">📢</span>Bulletins & Training</a>
+    <a href="/risk-matrix" class="nav-a {% if request.path=='/risk-matrix' %}active{% endif %}"><span class="nav-icon">🎯</span>Risk Matrix</a>
   </nav>
   <div class="sb-foot">ICAO Annex 19 · Doc 9859<br>IOSA Compliant<br>Jav/SMS/001 Rev 02</div>
 </aside>
