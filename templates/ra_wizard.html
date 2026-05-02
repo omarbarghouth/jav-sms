@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+{% block title %}Risk Assessment — Step {{ step }} of 6{% endblock %}
+{% block content %}
+
+<!-- Step Progress Bar -->
+<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:22px;box-shadow:var(--shadow)">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">Risk Assessment Wizard</div>
+      <div style="font-size:16px;font-weight:700;color:var(--navy)">{{ ra.control_number }}</div>
+    </div>
+    <div style="text-align:right;font-size:12px;color:var(--muted)">
+      <div>Hazard: <span class="mono" style="color:var(--navy)">{{ hazard.id }}</span></div>
+      <div>{{ hazard.department.name if hazard.department else '—' }}</div>
+    </div>
+  </div>
+
+  <!-- Step indicators -->
+  <div style="display:flex;gap:0;align-items:center">
+    {% for s_num, s_name, s_desc in steps %}
+    {% set is_active   = s_num == step %}
+    {% set is_done     = s_num <= completed_steps and not is_active %}
+    {% set is_upcoming = s_num > step %}
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;position:relative">
+      <!-- Connector line -->
+      {% if not loop.first %}
+      <div style="position:absolute;left:-50%;top:18px;width:100%;height:2px;
+        background:{% if s_num <= completed_steps + 1 %}var(--navy){% else %}var(--border){% endif %};z-index:0"></div>
+      {% endif %}
+      <!-- Circle -->
+      <div style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+        font-size:13px;font-weight:800;z-index:1;border:2px solid;
+        {% if is_active %}background:var(--navy);color:#fff;border-color:var(--navy)
+        {% elif is_done %}background:#dcfce7;color:#15803d;border-color:#15803d
+        {% else %}background:#f8f9fc;color:#9ca3af;border-color:#d1d5db{% endif %}">
+        {% if is_done %}✓{% else %}{{ s_num }}{% endif %}
+      </div>
+      <!-- Label -->
+      <div style="font-size:10px;font-weight:{% if is_active %}800{% else %}500{% endif %};
+        color:{% if is_active %}var(--navy){% elif is_done %}#15803d{% else %}#9ca3af{% endif %};
+        text-align:center;margin-top:5px;line-height:1.3;max-width:80px">{{ s_name }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Hazard Summary Banner (always visible) -->
+<div style="background:var(--navy);color:#fff;border-radius:10px;padding:14px 20px;margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+  <div>
+    <div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:700;text-transform:uppercase;margin-bottom:2px">Hazard</div>
+    <div style="font-weight:700">{{ hazard.generic_hazard or hazard.specific_components[:60] }}</div>
+  </div>
+  <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:20px">
+    <div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:700;text-transform:uppercase;margin-bottom:2px">Source</div>
+    <div>{{ hazard.source }}</div>
+  </div>
+  <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:20px">
+    <div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:700;text-transform:uppercase;margin-bottom:2px">Classification</div>
+    <div>{{ hazard.classification or '—' }}</div>
+  </div>
+  <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:20px">
+    <div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:700;text-transform:uppercase;margin-bottom:2px">Status</div>
+    <div style="color:#c9a84c;font-weight:700">{{ hazard.status }}</div>
+  </div>
+  <div style="margin-left:auto">
+    <a href="/hazard-log/{{ hazard.id }}" style="color:rgba(255,255,255,.5);font-size:12px">Exit & resume later →</a>
+  </div>
+</div>
+
+<form method="POST" action="/ra-wizard/{{ hazard.id }}/step/{{ step }}">
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- STEP 1: HAZARD REVIEW                                           -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+{% if step == 1 %}
+<div class="card" style="max-width:860px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="width:44px;height:44px;background:#1e40af10;border:2px solid #1e40af30;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px">📋</div>
+    <div><div style="font-size:18px;font-weight:700;color:var(--navy)">Step 1 — Hazard Review</div>
+    <div style="font-size:13px;color:var(--muted)">Confirm the hazard details and set assessment administrator information</div></div>
+  </div>
+
+  <!-- Hazard details (read-only display) -->
+  <div style="background:#f8f9fc;border-radius:10px;padding:16px;margin-bottom:20px;border:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Reported Hazard</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:13px">
+      <div><strong style="color:var(--muted);font-size:11px;display:block;margin-bottom:3px">HAZARD DESCRIPTION</strong>{{ hazard.specific_components or '—' }}</div>
+      <div><strong style="color:var(--muted);font-size:11px;display:block;margin-bottom:3px">CONSEQUENCES NOTED</strong>{{ hazard.consequences or 'To be assessed' }}</div>
+      <div><strong style="color:var(--muted);font-size:11px;display:block;margin-bottom:3px">DEPARTMENT</strong>{{ hazard.department.name if hazard.department else '—' }}</div>
+      <div><strong style="color:var(--muted);font-size:11px;display:block;margin-bottom:3px">SOURCE</strong>{{ hazard.source }}{% if hazard.linked_report_id %} — <span class="mono">{{ hazard.linked_report_id }}</span>{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="sec">Assessment Administration (Jav/SMS/001)</div>
+  <div class="g2">
+    <div class="fg"><label>Risk Assessment Title *</label>
+      <input type="text" name="title" required value="{{ ra.title or hazard.generic_hazard or '' }}"/></div>
+    <div class="fg"><label>Responsible Name *</label>
+      <input type="text" name="responsible_name" required value="{{ ra.responsible_name or '' }}" placeholder="Safety Manager"/></div>
+    <div class="fg"><label>Risk Assessors</label>
+      <input type="text" name="assessors_names" value="{{ ra.assessors_names or '' }}" placeholder="Names of assessment team members"/></div>
+    <div class="fg"><label>Assessment Date *</label>
+      <input type="date" name="assessment_date" required value="{{ ra.assessment_date or now.strftime('%Y-%m-%d') }}"/></div>
+    <div class="fg"><label>Next Review Date</label>
+      <input type="date" name="next_review_date" value="{{ ra.next_review_date or '' }}"/></div>
+  </div>
+  <div class="fg"><label>Reasons for Risk Assessment</label>
+    <textarea name="reasons" rows="2" placeholder="Why is this assessment being conducted?">{{ ra.reasons or '' }}</textarea></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- STEP 2: RISK IDENTIFICATION                                     -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+{% elif step == 2 %}
+<div class="card" style="max-width:900px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="width:44px;height:44px;background:#dc262610;border:2px solid #dc262630;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px">⚠️</div>
+    <div><div style="font-size:18px;font-weight:700;color:var(--navy)">Step 2 — Risk Identification</div>
+    <div style="font-size:13px;color:var(--muted)">Identify all risk scenarios arising from this hazard. Add one row per consequence.</div></div>
+  </div>
+
+  {% if ra.rows %}
+  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12.5px;color:#15803d">
+    ✓ {{ ra.rows|length }} risk scenario{{ 's' if ra.rows|length > 1 }} already identified. You can add more below.
+    {% for row in ra.rows %}<div style="margin-top:4px;padding-left:12px">→ Seq {{ row.seq_num }}: {{ row.consequences[:80] }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <div id="risk-rows">
+    <div class="risk-row" style="border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;background:#fafbfe">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Risk Scenario 1</div>
+      <div class="g2">
+        <div class="fg"><label>Type of Activity *</label>
+          <input type="text" name="type_of_activity[]" required placeholder="e.g. Flight Operations, Ground Handling…"/></div>
+        <div class="fg"><label>Generic Hazard *</label>
+          <input type="text" name="generic_hazard[]" required value="{{ hazard.generic_hazard or '' }}" placeholder="e.g. Low Visibility, FOD, Equipment Failure…"/></div>
+      </div>
+      <div class="fg"><label>Specific Components of the Hazard *</label>
+        <textarea name="specific_components[]" required rows="2" placeholder="Specific conditions, equipment, or scenario details…">{{ hazard.specific_components or '' }}</textarea></div>
+      <div class="fg"><label>Hazard-Related Consequences *</label>
+        <textarea name="consequences[]" required rows="2" placeholder="What could go wrong? What is the worst credible outcome?"></textarea></div>
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-outline btn-sm" onclick="addRow()" style="margin-bottom:16px">+ Add Another Risk Scenario</button>
+
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:12px;color:#1e40af">
+    💡 <strong>Tip:</strong> List every credible consequence separately. One hazard can have multiple risk scenarios (e.g. injury, equipment damage, delay).
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- STEP 3: INITIAL RISK RATING                                     -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+{% elif step == 3 %}
+<div class="card" style="max-width:900px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="width:44px;height:44px;background:#d9770610;border:2px solid #d9770630;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px">📊</div>
+    <div><div style="font-size:18px;font-weight:700;color:var(--navy)">Step 3 — Initial Risk Rating</div>
+    <div style="font-size:13px;color:var(--muted)">Rate each risk scenario BEFORE controls. Select Likelihood × Severity.</div></div>
+  </div>
+
+  <!-- Mini risk matrix reference -->
+  <div style="background:#f8f9fc;border-radius:8px;padding:12px;margin-bottom:20px;font-size:11px">
+    <strong style="color:var(--navy)">Quick Reference:</strong>&nbsp;
+    <span style="color:#dc2626;font-weight:700">■ INTOLERABLE</span>: 5A,5B,5C,4A,4B,3A&nbsp;·&nbsp;
+    <span style="color:#d97706;font-weight:700">■ TOLERABLE</span>: 5D,5E,4C,4D,4E,3B,3C,3D,2A,2B,2C,1A&nbsp;·&nbsp;
+    <span style="color:#15803d;font-weight:700">■ ACCEPTABLE</span>: 3E,2D,2E,1B,1C,1D,1E
+  </div>
+
+  {% for row in ra.rows %}
+  <div style="border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px">SEQ {{ row.seq_num }}</div>
+    <div style="font-size:13px;color:#374151;margin-bottom:12px"><strong>Consequence:</strong> {{ row.consequences }}</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:14px;align-items:end">
+      <div class="fg" style="margin:0"><label>Likelihood (1–5) *</label>
+        <select name="lik_{{ row.seq_num }}" id="lik{{ row.seq_num }}" required onchange="calcRI({{ row.seq_num }})">
+          <option value="">Select…</option>
+          {% for v, lbl in [(5,'5 – Frequent'),(4,'4 – Occasional'),(3,'3 – Remote'),(2,'2 – Improbable'),(1,'1 – Ext. Improbable')] %}
+          <option value="{{ v }}" {% if row.likelihood_initial==v %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+        </select></div>
+      <div class="fg" style="margin:0"><label>Severity (A–E) *</label>
+        <select name="sev_{{ row.seq_num }}" id="sev{{ row.seq_num }}" required onchange="calcRI({{ row.seq_num }})">
+          <option value="">Select…</option>
+          {% for v, lbl in [('A','A – Catastrophic'),('B','B – Hazardous'),('C','C – Major'),('D','D – Minor'),('E','E – Negligible')] %}
+          <option value="{{ v }}" {% if row.severity_initial==v %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+        </select></div>
+      <div class="fg" style="margin:0"><label>Current Defences</label>
+        <input type="text" name="def_{{ row.seq_num }}" value="{{ row.current_defenses or '' }}" placeholder="Existing controls…"/></div>
+      <div style="text-align:center;min-width:80px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Risk Index</div>
+        <div id="ri{{ row.seq_num }}" style="font-size:32px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+          {{ row.risk_index_initial or '?' }}
+        </div>
+        <div id="tol{{ row.seq_num }}" style="font-size:10px;font-weight:700;color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+          {{ row.risk_tolerance_initial or '' }}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div style="background:#fff8f8;border:1.5px solid #fca5a5;border-radius:8px;padding:16px;text-align:center;color:#dc2626">
+    ⚠ No risk scenarios found. <a href="/ra-wizard/{{ hazard.id }}/step/2" style="color:#dc2626;font-weight:700">Go back to Step 2 →</a>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- STEP 4: CURRENT CONTROLS CHECKLIST                             -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+{% elif step == 4 %}
+<div class="card" style="max-width:900px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="width:44px;height:44px;background:#06574610;border:2px solid #06574630;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px">🛡</div>
+    <div><div style="font-size:18px;font-weight:700;color:var(--navy)">Step 4 — Current Controls</div>
+    <div style="font-size:13px;color:var(--muted)">Check all existing defences and controls that currently apply. Tick everything that is IN PLACE.</div></div>
+  </div>
+
+  {% set cat_icons = {'SOP':'📄','Training':'🎓','Monitoring':'📈','Equipment':'🔧','Procedure':'📋','Reporting':'📢'} %}
+
+  {% for row in ra.rows %}
+  <div style="border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted)">SEQ {{ row.seq_num }}</span>
+      <span style="font-size:13px;color:#374151">{{ row.consequences[:80] }}</span>
+      {% if row.risk_index_initial %}<span style="font-weight:800;font-size:16px;font-family:monospace;margin-left:auto;
+        color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+        {{ row.risk_index_initial }}
+      </span>{% endif %}
+    </div>
+
+    {% set prev_cat = namespace(v='') %}
+    {% for idx, (cat, desc) in enumerate(checklist) %}
+      {% if cat != prev_cat.v %}
+        {% if not loop.first %}</div>{% endif %}
+        <div style="margin-bottom:8px">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:5px">
+          {{ cat_icons.get(cat,'📋') }} {{ cat }}
+        </div>
+        {% set prev_cat.v = cat %}
+      {% endif %}
+      {% set item_key = checklist_items.get(row.seq_num, {}).get(desc) %}
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;
+        {% if item_key and item_key.checked %}background:#f0fdf4;border:1px solid #bbf7d0{% else %}background:#f8f9fc;border:1px solid transparent{% endif %}"
+        onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='{% if item_key and item_key.checked %}#f0fdf4{% else %}#f8f9fc{% endif %}'">
+        <input type="checkbox" name="ctrl_{{ row.seq_num }}_{{ idx }}"
+          {% if item_key and item_key.checked %}checked{% endif %}
+          style="width:16px;height:16px;margin-top:2px;accent-color:var(--navy);flex-shrink:0"/>
+        <div style="flex:1">
+          <div style="font-size:13px;color:#374151">{{ desc }}</div>
+          <input type="text" name="notes_{{ row.seq_num }}_{{ idx }}"
+            value="{{ item_key.notes if item_key else '' }}"
+            placeholder="Notes (optional)…"
+            style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;width:100%;margin-top:4px;background:#fff"/>
+        </div>
+      </label>
+    {% endfor %}
+    </div>
+
+    <!-- Count checked -->
+    <div style="margin-top:10px;padding:8px 12px;background:#f8f9fc;border-radius:6px;font-size:12px;color:var(--muted)">
+      {% set checked_count = checklist_items.get(row.seq_num, {}).values() | selectattr('checked') | list | length %}
+      {{ checked_count }} of {{ checklist|length }} controls in place
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- STEP 5: FURTHER MITIGATIONS                                     -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+{% elif step == 5 %}
+<div class="card" style="max-width:900px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="width:44px;height:44px;background:#7c3aed10;border:2px solid #7c3aed30;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px">✅</div>
+    <div><div style="font-size:18px;font-weight:700;color:var(--navy)">Step 5 — Further Mitigation Measures</div>
+    <div style="font-size:13px;color:var(--muted)">Define additional actions required. Each will automatically create an Action in the system.</div></div>
+  </div>
+
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:18px;font-size:12px;color:#1e40af">
+    ⚡ <strong>Auto-action:</strong> Each mitigation entered here will automatically create a tracked Action with owner and due date. Actions appear in the main Actions Dashboard.
+  </div>
+
+  {% for row in ra.rows %}
+  {% set existing_mit = ra.mitigations | selectattr('hazard_seq', 'equalto', row.seq_num|string) | list | first %}
+  <div style="border:1.5px solid {% if row.risk_tolerance_initial=='INTOLERABLE' %}#fca5a5{% else %}var(--border){% endif %};border-radius:10px;padding:16px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted)">SEQ {{ row.seq_num }}</span>
+      <span style="font-size:13px;color:#374151">{{ row.consequences[:70] }}</span>
+      {% if row.risk_index_initial %}
+      <span style="margin-left:auto;font-weight:800;font-size:16px;font-family:monospace;
+        color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+        {{ row.risk_index_initial }}
+        <span style="font-size:10px;font-family:sans-serif">{{ row.risk_tolerance_initial }}</span>
+      </span>
+      {% endif %}
+    </div>
+
+    {% if existing_mit %}
+    <div style="background:#dcfce7;border:1px solid #bbf7d0;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#15803d">
+      ✓ Mitigation already saved: {{ existing_mit.mitigation[:80] }}
+    </div>
+    {% else %}
+    <div class="fg" style="margin-bottom:10px"><label>Further Mitigation Measures {% if row.risk_tolerance_initial=='INTOLERABLE' %}<span style="color:#dc2626">* Required (Intolerable Risk)</span>{% endif %}</label>
+      <textarea name="mitigation_{{ row.seq_num }}" rows="3"
+        {% if row.risk_tolerance_initial=='INTOLERABLE' %}required{% endif %}
+        placeholder="Describe additional control measures, actions, or safeguards to reduce this risk…"></textarea></div>
+    <div class="g2">
+      <div class="fg"><label>Responsible Manager *</label>
+        <input type="text" name="manager_{{ row.seq_num }}" {% if row.risk_tolerance_initial=='INTOLERABLE' %}required{% endif %} placeholder="Name of responsible manager"/></div>
+      <div class="fg"><label>Due Date *</label>
+        <input type="date" name="due_{{ row.seq_num }}" {% if row.risk_tolerance_initial=='INTOLERABLE' %}required{% endif %}/></div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- STEP 6: RESIDUAL RISK                                          -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+{% elif step == 6 %}
+<div class="card" style="max-width:900px">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="width:44px;height:44px;background:#15803d10;border:2px solid #15803d30;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px">📉</div>
+    <div><div style="font-size:18px;font-weight:700;color:var(--navy)">Step 6 — Residual Risk Assessment</div>
+    <div style="font-size:13px;color:var(--muted)">Re-rate likelihood and severity AFTER applying controls and mitigations.</div></div>
+  </div>
+
+  <div style="background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:18px;font-size:12px">
+    ℹ The residual risk should be <strong>lower</strong> than the initial risk. If not, more controls are needed.
+    The Risk Index must reach <strong>TOLERABLE or ACCEPTABLE</strong> for the assessment to be approved.
+  </div>
+
+  {% for row in ra.rows %}
+  <div style="border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">SEQ {{ row.seq_num }} — {{ row.consequences[:60] }}</div>
+
+    <div style="display:grid;grid-template-columns:auto auto auto 1fr;gap:20px;align-items:center">
+      <!-- Initial -->
+      <div style="text-align:center;padding:12px;background:#f8f9fc;border-radius:8px;min-width:90px">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:4px">INITIAL</div>
+        <div style="font-size:36px;font-weight:800;font-family:monospace;
+          color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+          {{ row.risk_index_initial or '?' }}
+        </div>
+        <div style="font-size:10px;font-weight:700;color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+          {{ row.risk_tolerance_initial or '' }}
+        </div>
+      </div>
+
+      <div style="font-size:24px;color:#9ca3af">→</div>
+
+      <!-- Residual selectors -->
+      <div>
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">RESIDUAL RISK</div>
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div class="fg" style="margin:0;min-width:120px"><label>Likelihood</label>
+            <select name="res_lik_{{ row.seq_num }}" id="rlik{{ row.seq_num }}" required onchange="calcResRI({{ row.seq_num }})">
+              <option value="">Select…</option>
+              {% for v, lbl in [(5,'5 – Frequent'),(4,'4 – Occasional'),(3,'3 – Remote'),(2,'2 – Improbable'),(1,'1 – Ext. Improbable')] %}
+              <option value="{{ v }}" {% if row.likelihood_residual==v %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+            </select></div>
+          <div class="fg" style="margin:0;min-width:120px"><label>Severity</label>
+            <select name="res_sev_{{ row.seq_num }}" id="rsev{{ row.seq_num }}" required onchange="calcResRI({{ row.seq_num }})">
+              <option value="">Select…</option>
+              {% for v, lbl in [('A','A – Catastrophic'),('B','B – Hazardous'),('C','C – Major'),('D','D – Minor'),('E','E – Negligible')] %}
+              <option value="{{ v }}" {% if row.severity_residual==v %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+            </select></div>
+        </div>
+      </div>
+
+      <!-- Residual result -->
+      <div style="text-align:center;padding:12px;border-radius:8px;border:2px solid var(--border);min-width:90px" id="res_box_{{ row.seq_num }}">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:4px">RESIDUAL</div>
+        <div id="rri{{ row.seq_num }}" style="font-size:36px;font-weight:800;font-family:monospace;color:{% if row.risk_tolerance_residual=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_residual=='TOLERABLE' %}#d97706{% elif row.risk_tolerance_residual=='ACCEPTABLE' %}#15803d{% else %}#9ca3af{% endif %}">
+          {{ row.risk_index_residual or '?' }}
+        </div>
+        <div id="rtol{{ row.seq_num }}" style="font-size:10px;font-weight:700">{{ row.risk_tolerance_residual or '' }}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Final sign-off -->
+  <div class="sec">Assessment Sign-Off</div>
+  <div class="g2">
+    <div class="fg"><label>Prepared By (Name) *</label><input type="text" name="prepared_by" required value="{{ ra.prepared_by_name or '' }}"/></div>
+    <div class="fg"><label>Position</label><input type="text" name="prepared_position" value="{{ ra.prepared_by_position or '' }}"/></div>
+  </div>
+  <div class="fg"><label>Management Acceptance</label>
+    <select name="acceptance">
+      <option value="">Pending management review</option>
+      <option {% if ra.management_acceptance=='Accepted' %}selected{% endif %}>Accepted</option>
+      <option {% if ra.management_acceptance=='Not Accepted' %}selected{% endif %}>Not Accepted</option>
+      <option {% if ra.management_acceptance=='Conditional' %}selected{% endif %}>Conditional</option>
+    </select></div>
+{% endif %}
+
+<!-- Navigation buttons -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;max-width:900px">
+  <div style="display:flex;gap:10px">
+    {% if step > 1 %}
+    <a href="/ra-wizard/{{ hazard.id }}/step/{{ step - 1 }}" class="btn btn-outline">← Previous</a>
+    {% endif %}
+    <a href="/hazard-log/{{ hazard.id }}" class="btn btn-outline" style="color:var(--muted)">Save & Exit</a>
+  </div>
+  <button type="submit" class="btn btn-nav" style="{% if step==6 %}background:#15803d{% endif %}">
+    {% if step == 6 %}✓ Complete Assessment{% elif step == 5 %}Save Mitigations → Step 6{% else %}Save & Continue → Step {{ step + 1 }}{% endif %}
+  </button>
+</div>
+</form>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const IT=new Set(["5A","5B","5C","4A","4B","3A"]);
+const TO=new Set(["5D","5E","4C","4D","4E","3B","3C","3D","2A","2B","2C","1A"]);
+
+function getTol(ri){
+  if(IT.has(ri)) return ['INTOLERABLE','#dc2626'];
+  if(TO.has(ri)) return ['TOLERABLE','#d97706'];
+  return ['ACCEPTABLE','#15803d'];
+}
+
+function calcRI(seq){
+  const l=document.getElementById('lik'+seq).value;
+  const s=document.getElementById('sev'+seq).value;
+  if(!l||!s) return;
+  const ri=l+s;
+  const [tol,col]=getTol(ri);
+  document.getElementById('ri'+seq).textContent=ri;
+  document.getElementById('ri'+seq).style.color=col;
+  document.getElementById('tol'+seq).textContent=tol;
+  document.getElementById('tol'+seq).style.color=col;
+}
+
+function calcResRI(seq){
+  const l=document.getElementById('rlik'+seq).value;
+  const s=document.getElementById('rsev'+seq).value;
+  if(!l||!s) return;
+  const ri=l+s;
+  const [tol,col]=getTol(ri);
+  document.getElementById('rri'+seq).textContent=ri;
+  document.getElementById('rri'+seq).style.color=col;
+  document.getElementById('rtol'+seq).textContent=tol;
+  document.getElementById('rtol'+seq).style.color=col;
+  const box=document.getElementById('res_box_'+seq);
+  if(box) box.style.borderColor=col;
+}
+
+// Step 2: add more risk rows
+let rowCount = 1;
+function addRow(){
+  rowCount++;
+  const container = document.getElementById('risk-rows');
+  const div = document.createElement('div');
+  div.className='risk-row';
+  div.style.cssText='border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;background:#fafbfe';
+  div.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted)">Risk Scenario ${rowCount}</div>
+      <button type="button" onclick="this.closest('.risk-row').remove()" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px">✕ Remove</button>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Type of Activity *</label><input type="text" name="type_of_activity[]" required placeholder="e.g. Maintenance, Ramp Operations…"/></div>
+      <div class="fg"><label>Generic Hazard *</label><input type="text" name="generic_hazard[]" required placeholder="e.g. FOD, Equipment Failure…"/></div>
+    </div>
+    <div class="fg"><label>Specific Components *</label><textarea name="specific_components[]" required rows="2" placeholder="Specific details…"></textarea></div>
+    <div class="fg"><label>Hazard-Related Consequences *</label><textarea name="consequences[]" required rows="2" placeholder="What could go wrong?"></textarea></div>`;
+  container.appendChild(div);
+}
+
+// Init existing risk index displays on step 3
+{% if step == 3 %}
+{% for row in ra.rows %}
+{% if row.risk_index_initial %}
+document.getElementById('ri{{ row.seq_num }}').style.color='{% if row.risk_tolerance_initial=="INTOLERABLE" %}#dc2626{% elif row.risk_tolerance_initial=="TOLERABLE" %}#d97706{% else %}#15803d{% endif %}';
+{% endif %}
+{% endfor %}
+{% endif %}
+</script>
+{% endblock %}
