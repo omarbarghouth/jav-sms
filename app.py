@@ -230,17 +230,31 @@ def dashboard():
     total_haz   = Hazard.query.count()
     open_haz    = Hazard.query.filter_by(status='Open').count()
     intol       = Risk.query.filter_by(initial_tolerance='INTOLERABLE').count()
+    # Unified action count — all sources
     open_act    = Action.query.filter(Action.status.in_(['Open','In Progress'])).count()
     overdue_act = Action.query.filter_by(status='Overdue').count()
+    # Audit-specific actions
+    audit_open  = AuditAction.query.filter(AuditAction.status.in_(['Open','In Progress'])).count()
+    audit_over  = AuditAction.query.filter_by(status='Overdue').count()
+    total_open_act = open_act + audit_open
+    total_over_act = overdue_act + audit_over
     asr_cnt     = ASRReport.query.count()
-    audit_cnt   = Audit.query.count()
+    audit_cnt   = AuditSchedule.query.count()
     moc_cnt     = MOC.query.count()
+    inv_cnt     = Investigation.query.count()
+    doc_cnt     = SMSDocument.query.filter_by(status='Approved').count()
+    spi_alerts  = 0
+    for ind in SPIIndicator.query.all():
+        recent = SPIData.query.filter_by(spi_id=ind.id).order_by(SPIData.year.desc(), SPIData.month.desc()).first()
+        if recent and recent.rate >= ind.alert_l1:
+            spi_alerts += 1
     recent_haz  = Hazard.query.order_by(Hazard.created_at.desc()).limit(6).all()
     recent_act  = Action.query.filter(Action.status != 'Closed').order_by(Action.created_at.desc()).limit(5).all()
     return render_template('dashboard.html',
         total_haz=total_haz, open_haz=open_haz, intol=intol,
-        open_act=open_act, overdue_act=overdue_act,
+        open_act=total_open_act, overdue_act=total_over_act,
         asr_cnt=asr_cnt, audit_cnt=audit_cnt, moc_cnt=moc_cnt,
+        inv_cnt=inv_cnt, doc_cnt=doc_cnt, spi_alerts=spi_alerts,
         recent_haz=recent_haz, recent_act=recent_act)
 
 # ─── Hazard Report ────────────────────────────────────────────────────────────
@@ -456,78 +470,26 @@ def update_action(aid):
     return redirect(url_for('actions'))
 
 # ─── Audits ───────────────────────────────────────────────────────────────────
+# ─── Legacy /audits/* routes — redirected to new audit system ────────────────
 @app.route('/audits')
 def audits():
-    all_audits = Audit.query.order_by(Audit.planned_date.desc()).all()
-    return render_template('audits.html', audits=all_audits)
+    return redirect(url_for('audit_schedule'))
 
-@app.route('/audits/new', methods=['GET','POST'])
+@app.route('/audits/new')
 def new_audit():
-    if request.method == 'POST':
-        f = request.form
-        a = Audit(id=new_id('AUD'),
-                  title=f['title'], audit_type=f['audit_type'],
-                  department_id=int(f['department_id']),
-                  planned_date=f['planned_date'],
-                  lead_auditor=f['lead_auditor'], status='Planned')
-        db.session.add(a)
-        db.session.commit()
-        flash(f'✓ Audit {a.id} created.', 'success')
-        return redirect(url_for('audits'))
-    return render_template('audit_form.html')
+    return redirect(url_for('new_audit_schedule'))
 
 @app.route('/audits/<aid>')
 def audit_detail(aid):
-    a = Audit.query.get_or_404(aid)
-    return render_template('audit_detail.html', a=a)
+    return redirect(url_for('audit_schedule'))
 
-@app.route('/audits/<aid>/add-finding', methods=['POST'])
+@app.route('/audits/<aid>/add-finding', methods=['GET','POST'])
 def add_finding(aid):
-    f   = request.form
-    fid = new_id('FND')
-    hid = None
-    # Auto-create hazard from finding
-    if f.get('create_hazard') == 'yes':
-        hid = new_id('HAZ')
-        h = Hazard(id=hid, source='Audit', linked_report_id=fid,
-                   department_id=Audit.query.get(aid).department_id,
-                   classification='Organizational',
-                   type_of_activity='Audit Finding',
-                   generic_hazard=f['description'][:100],
-                   specific_components=f['description'],
-                   consequences=f.get('root_cause',''),
-                   status='Open')
-        db.session.add(h)
-        db.session.flush()
-        act = Action(id=new_id('ACT'), source='Audit', hazard_id=hid,
-                     linked_ref_id=fid,
-                     description=f.get('corrective_action',''),
-                     owner=f.get('owner','Safety Manager'),
-                     due_date=f.get('due_date',''),
-                     priority='High', status='Open')
-        db.session.add(act)
+    return redirect(url_for('audit_schedule'))
 
-    finding = Finding(id=fid, audit_id=aid,
-                      description=f['description'],
-                      severity=f['severity'],
-                      root_cause=f.get('root_cause',''),
-                      corrective_action=f.get('corrective_action',''),
-                      status='Open', hazard_id=hid)
-    db.session.add(finding)
-    db.session.commit()
-    flash('✓ Finding added.' + (' Hazard and Action created.' if hid else ''), 'success')
-    return redirect(url_for('audit_detail', aid=aid))
-
-@app.route('/audits/<aid>/update', methods=['POST'])
+@app.route('/audits/<aid>/update', methods=['GET','POST'])
 def update_audit(aid):
-    a = Audit.query.get_or_404(aid)
-    f = request.form
-    a.status      = f.get('status', a.status)
-    a.actual_date = f.get('actual_date', a.actual_date)
-    a.summary     = f.get('summary', a.summary)
-    db.session.commit()
-    flash('✓ Audit updated.', 'success')
-    return redirect(url_for('audit_detail', aid=aid))
+    return redirect(url_for('audit_schedule'))
 
 # ─── Investigations ───────────────────────────────────────────────────────────
 @app.route('/investigations')
@@ -612,8 +574,21 @@ def new_moc():
                    status='Open')
         db.session.add(h)
         m.hazard_id = hid
+        # Auto-create Action in unified system — ICAO requirement
+        moc_action = Action(
+            id=new_id('ACT'),
+            source='MOC',
+            hazard_id=hid,
+            linked_ref_id=m.id,
+            description=f'Review and verify implementation of change: {f["title"]}',
+            owner=f['initiator'],
+            due_date=f.get('planned_date', ''),
+            priority='High',
+            status='Open'
+        )
+        db.session.add(moc_action)
         db.session.commit()
-        flash(f'✓ MOC {m.id} created. Hazard {hid} auto-generated.', 'success')
+        flash(f'✓ MOC {m.id} created. Hazard {hid} and Action auto-generated.', 'success')
         return redirect(url_for('moc_list'))
     return render_template('moc_form.html')
 
@@ -1054,21 +1029,30 @@ def new_finding(sid):
         db.session.add(risk)
         finding.hazard_id = hid
 
-    # Auto-create corrective action (mandatory per IOSA)
+    # Auto-create in BOTH tables: unified Action (visible everywhere) + AuditAction (for verification)
     act_desc = f.get('action_description', f['description'])
-    aid  = new_id('ACT')
-    action = AuditAction(
-        id=aid,
-        finding_id=fid,
-        hazard_id=hid,
-        description=act_desc,
-        action_type='Corrective',
-        owner=f.get('action_owner', ''),
-        due_date=f.get('due_date', ''),
-        priority='High' if f['severity'] == 'Major' else 'Medium',
-        status='Open'
+    act_owner = f.get('action_owner', '')
+    act_due   = f.get('due_date', '')
+    act_pri   = 'High' if f['severity'] == 'Major' else 'Medium'
+
+    # 1. Unified Action table — appears in main Actions dashboard
+    unified_id = new_id('ACT')
+    unified_action = Action(
+        id=unified_id, source='Audit',
+        hazard_id=hid, linked_ref_id=fid,
+        description=act_desc, owner=act_owner,
+        due_date=act_due, priority=act_pri, status='Open'
     )
-    db.session.add(action)
+    db.session.add(unified_action)
+
+    # 2. AuditAction table — for audit-specific effectiveness/verification tracking
+    audit_action = AuditAction(
+        id=new_id('ACT'), finding_id=fid,
+        hazard_id=hid, description=act_desc,
+        action_type='Corrective', owner=act_owner,
+        due_date=act_due, priority=act_pri, status='Open'
+    )
+    db.session.add(audit_action)
     finding.status = 'Actioned'
     db.session.commit()
 
