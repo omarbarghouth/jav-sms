@@ -53,10 +53,13 @@
           </td>
           <td style="text-align:center"><span class="badge b-gray">{{ ra.rows|length }}</span></td>
           <td>
-            {% if ra.status=='Approved' %}<span class="badge b-green">Approved</span>
-            {% elif ra.status=='Under Review' %}<span class="badge b-blue">Under Review</span>
+            {% if ra.status=='Closed' %}<span class="badge b-green">● Closed</span>
+            {% elif ra.status=='Active' %}<span class="badge b-blue">● Active</span>
+            {% elif ra.status=='Submitted' %}<span class="badge" style="background:#e0f2fe;color:#0891b2;border:1px solid #bae6fd">● Submitted</span>
+            {% elif ra.status=='Under Review' %}<span class="badge b-yellow">● Under Review</span>
             {% elif ra.status=='Archived' %}<span class="badge b-gray">Archived</span>
-            {% else %}<span class="badge b-yellow">Draft</span>{% endif %}
+            {% else %}<span class="badge b-gray">Draft</span>{% endif %}
+            {% if ra.revision %}<span class="badge b-gray" style="font-size:9px">REV{{ ra.revision }}</span>{% endif %}
           </td>
           <td><a href="/risk-assessments/{{ ra.id }}" class="btn btn-nav btn-sm">Open →</a></td>
         </tr>
