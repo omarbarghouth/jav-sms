@@ -514,3 +514,113 @@ class RiskAction(db.Model):
     closed_date   = db.Column(db.String(20))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     risk          = db.relationship('Risk', backref=db.backref('risk_actions', lazy=True))
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RISK ASSESSMENT MODULE — Jav/SMS/001 Rev 01
+#  Exact replica of Jordan Aviation Risk Assessment Form
+#  Pages 1-5 of the uploaded form → database structure
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RiskAssessment(db.Model):
+    """
+    Pages 1 & 2 of the form: Administrator + General Information.
+    One RiskAssessment per hazard (the header of the form).
+    """
+    __tablename__ = 'risk_assessments'
+    id                    = db.Column(db.String(30), primary_key=True)
+    # Page 1 — Administrator
+    control_number        = db.Column(db.String(50))    # e.g. JAV/RA/2024/001
+    responsible_name      = db.Column(db.String(100))
+    assessors_names       = db.Column(db.String(300))   # comma-separated
+    assessment_date       = db.Column(db.String(20))
+    next_review_date      = db.Column(db.String(20))
+    title                 = db.Column(db.String(200))
+    # Page 2 — General Information
+    hazard_id             = db.Column(db.String(30), db.ForeignKey('hazards.id'), unique=True)
+    department_id         = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    general_description   = db.Column(db.Text)
+    reasons               = db.Column(db.Text)   # Reasons For Risk Assessment
+    risk_level_prior      = db.Column(db.String(20))   # e.g. INTOLERABLE
+    risk_level_after      = db.Column(db.String(20))   # e.g. TOLERABLE
+    management_acceptance = db.Column(db.String(20))   # Accepted / Not Accepted
+    acceptance_date       = db.Column(db.String(20))
+    # Signatures
+    prepared_by_name      = db.Column(db.String(100))
+    prepared_by_position  = db.Column(db.String(100))
+    reviewed_by_name      = db.Column(db.String(100))
+    reviewed_by_position  = db.Column(db.String(100))
+    approved_by_name      = db.Column(db.String(100))
+    approved_by_position  = db.Column(db.String(100))
+    # Status
+    status                = db.Column(db.String(20), default='Draft')
+    # Draft / Under Review / Approved / Archived
+    created_at            = db.Column(db.DateTime, default=datetime.utcnow)
+    # Relationships
+    hazard                = db.relationship('Hazard', backref=db.backref('risk_assessment', uselist=False))
+    department            = db.relationship('Department', foreign_keys=[department_id])
+    rows                  = db.relationship('RARow', backref='assessment', lazy=True,
+                                             cascade='all, delete-orphan',
+                                             order_by='RARow.seq_num')
+    mitigations           = db.relationship('RAMitigation', backref='assessment', lazy=True,
+                                              cascade='all, delete-orphan')
+    reviews               = db.relationship('RAReview', backref='assessment', lazy=True,
+                                             cascade='all, delete-orphan')
+
+class RARow(db.Model):
+    """
+    Page 3 — Risk Table rows.
+    One row = one risk scenario within the assessment.
+    Maps directly to each row of the risk table in the form.
+    """
+    __tablename__ = 'ra_rows'
+    id                        = db.Column(db.Integer, primary_key=True)
+    assessment_id             = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'), nullable=False)
+    risk_id                   = db.Column(db.String(30), db.ForeignKey('risks.id'), nullable=True)
+    seq_num                   = db.Column(db.Integer)        # SEQ column (1, 2, 3…)
+    # Form columns — left section
+    type_of_activity          = db.Column(db.String(200))    # "Type of Activity" column
+    generic_hazard            = db.Column(db.String(200))    # "Generic Hazard" column
+    specific_components       = db.Column(db.Text)           # "Specific Components of the Hazard"
+    consequences              = db.Column(db.Text)           # "Hazard Related Consequences"
+    # Initial risk (before controls)
+    likelihood_initial        = db.Column(db.Integer)        # 1-5
+    severity_initial          = db.Column(db.String(2))      # A-E
+    risk_index_initial        = db.Column(db.String(5))      # e.g. 4B
+    risk_tolerance_initial    = db.Column(db.String(20))     # INTOLERABLE/TOLERABLE/ACCEPTABLE
+    # Controls
+    current_defenses          = db.Column(db.Text)           # "Current Defenses" column
+    further_mitigations       = db.Column(db.Text)           # "Further Mitigation Measures" column
+    # Residual risk (after controls)
+    likelihood_residual       = db.Column(db.Integer)
+    severity_residual         = db.Column(db.String(2))
+    risk_index_residual       = db.Column(db.String(5))
+    risk_tolerance_residual   = db.Column(db.String(20))
+
+class RAMitigation(db.Model):
+    """
+    Page 4 — Implementation of Mitigations Responsibilities.
+    Each row = one mitigation with a responsible manager.
+    """
+    __tablename__ = 'ra_mitigations'
+    id                 = db.Column(db.Integer, primary_key=True)
+    assessment_id      = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'), nullable=False)
+    hazard_seq         = db.Column(db.String(10))   # "Hazard Seq #" — references RARow.seq_num
+    mitigation         = db.Column(db.Text)          # "Mitigations" column
+    responsible_manager = db.Column(db.String(100)) # "Responsible Manager"
+    due_date           = db.Column(db.String(20))
+    action_id          = db.Column(db.String(30))   # linked Action in unified system
+    status             = db.Column(db.String(20), default='Open')
+
+class RAReview(db.Model):
+    """
+    Page 5 — Risk Mitigation Review.
+    Tracks effectiveness of each mitigation after implementation.
+    """
+    __tablename__ = 'ra_reviews'
+    id                       = db.Column(db.Integer, primary_key=True)
+    assessment_id            = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'), nullable=False)
+    risk_mitigation          = db.Column(db.String(200))  # "Risk Mitigation" — which mitigation
+    review_of_effectiveness  = db.Column(db.Text)         # "Review Of Mitigation Effectivity"
+    effectiveness_rating     = db.Column(db.String(30))   # Effective / Partially Effective / Ineffective
+    date_completed           = db.Column(db.String(20))   # "Date Completed"
+    actioner                 = db.Column(db.String(100))  # "Actioner"
