@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ h.id }} — Hazard Detail{% endblock %}
 {% block content %}
-<div style="margin-bottom:14px"><a href="/hazard-log" style="color:var(--muted);font-size:13px">← Hazard Log</a></div>
+<div style="margin-bottom:14px"><a href="/hazard-log" style="color:var(--muted);font-size:13px">← Hazard Log</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/documents" style="color:#1d4ed8;font-size:13px;font-weight:700">📄 Linked Documents →</a></div>
 <div class="page-title">{{ h.id }}</div>
 <div class="page-sub">Source: <strong>{{ h.source }}</strong> · Linked: <span class="mono">{{ h.linked_report_id }}</span> · Created: {{ h.created_at.strftime('%d %b %Y') }}</div>
 

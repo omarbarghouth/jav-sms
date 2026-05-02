@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ doc.id }}{% endblock %}
 {% block content %}
-<div style="margin-bottom:14px"><a href="/documents" style="color:var(--muted);font-size:13px">← Document Control</a></div>
+<div style="margin-bottom:14px"><a href="/documents" style="color:var(--muted);font-size:13px">← Document Control</a>&nbsp;·&nbsp;<a href="/documents/{{ doc.id }}/trace" style="color:#1d4ed8;font-size:13px;font-weight:700">🔗 View Full Traceability →</a></div>
 <div class="page-title">{{ doc.id }}</div>
 <div class="page-sub">{{ doc.title }} · {{ doc.version }} · {{ doc.status }}</div>
 

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ schedule.id }} — Linked Documents{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px">
+  <a href="/audit-schedule/{{ schedule.id }}" style="color:var(--muted);font-size:13px">← Back to Audit</a>
+  &nbsp;·&nbsp;
+  <a href="/traceability" style="color:var(--muted);font-size:13px">Traceability Dashboard</a>
+</div>
+<div class="page-title">{{ schedule.id }} — Linked Documents</div>
+<div class="page-sub">{{ schedule.audit_type }} · {{ schedule.department.name if schedule.department else '—' }} · All referenced documents</div>
+
+<div class="card">
+  <div class="card-title">Documents Linked to This Audit ({{ audit_docs|length }})</div>
+  {% if audit_docs %}
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Document ID</th><th>Title</th><th>Type</th><th>Version</th><th>Status</th><th>Reason</th><th></th></tr></thead>
+      <tbody>
+        {% for item in audit_docs %}
+        <tr>
+          <td class="mono">{{ item.doc.id }}</td>
+          <td style="font-size:12px;font-weight:600">{{ item.doc.title }}</td>
+          <td><span class="badge b-blue">{{ item.doc.doc_type }}</span></td>
+          <td>{{ item.doc.version }}</td>
+          <td>{% if item.doc.status=='Approved' %}<span class="badge b-green">Approved</span>{% elif item.doc.status=='Draft' %}<span class="badge b-yellow">Draft</span>{% else %}<span class="badge b-gray">{{ item.doc.status }}</span>{% endif %}</td>
+          <td style="font-size:11px;color:var(--muted)">{{ item.link.link_reason or '—' }}</td>
+          <td><a href="/documents/{{ item.doc.id }}/trace" class="btn btn-nav btn-sm">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:var(--muted);font-size:13px">No documents linked to this audit.</p>
+  {% endif %}
+
+  <details style="margin-top:14px">
+    <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">+ Link Document to This Audit</summary>
+    <form method="POST" action="/quick-link" style="margin-top:10px;padding:14px;background:#f8f9fc;border-radius:8px">
+      <input type="hidden" name="entity_type" value="audit_schedule"/>
+      <input type="hidden" name="entity_id" value="{{ schedule.id }}"/>
+      <input type="hidden" name="return_url" value="/audit-schedule/{{ schedule.id }}/documents"/>
+      <div class="g2">
+        <div class="fg"><label>Document ID *</label><input type="text" name="document_id" required placeholder="e.g. SOP-FO-2026-001-REV0"/></div>
+        <div class="fg"><label>Link Reason</label><input type="text" name="link_reason" placeholder="e.g. SOP audited against this checklist"/></div>
+      </div>
+      <button type="submit" class="btn btn-nav btn-sm">Link Document</button>
+    </form>
+  </details>
+</div>
+
+{% if finding_docs %}
+<div class="card">
+  <div class="card-title">Documents Linked to Findings ({{ finding_docs|length }})</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Document ID</th><th>Title</th><th>Finding</th><th>Finding Severity</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for item in finding_docs %}
+        <tr>
+          <td class="mono">{{ item.doc.id }}</td>
+          <td style="font-size:12px;font-weight:600">{{ item.doc.title }}</td>
+          <td class="mono" style="font-size:11px">{{ item.finding.finding_ref }}</td>
+          <td>{% if item.finding.severity=='Major' %}<span class="badge b-red">Major</span>{% elif item.finding.severity=='Minor' %}<span class="badge b-yellow">Minor</span>{% else %}<span class="badge b-gray">Obs</span>{% endif %}</td>
+          <td>{% if item.doc.status=='Approved' %}<span class="badge b-green">Approved</span>{% else %}<span class="badge b-yellow">{{ item.doc.status }}</span>{% endif %}</td>
+          <td><a href="/documents/{{ item.doc.id }}/trace" class="btn btn-nav btn-sm">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
