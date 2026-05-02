@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ h.id }} — Hazard Detail{% endblock %}
 {% block content %}
-<div style="margin-bottom:14px"><a href="/hazard-log" style="color:var(--muted);font-size:13px">← Hazard Log</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/documents" style="color:#1d4ed8;font-size:13px;font-weight:700">📄 Linked Documents →</a></div>
+<div style="margin-bottom:14px"><a href="/hazard-log" style="color:var(--muted);font-size:13px">← Hazard Log</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/documents" style="color:#1d4ed8;font-size:13px;font-weight:700">📄 Linked Documents →</a>&nbsp;·&nbsp;<a href="/srm-dashboard" style="color:#7c3aed;font-size:13px;font-weight:700">📊 SRM Dashboard →</a></div>
 <div class="page-title">{{ h.id }}</div>
 <div class="page-sub">Source: <strong>{{ h.source }}</strong> · Linked: <span class="mono">{{ h.linked_report_id }}</span> · Created: {{ h.created_at.strftime('%d %b %Y') }}</div>
 
@@ -29,6 +29,28 @@
         <div class="fg"><label>Specific Components</label><p style="font-size:13px;color:#374151;padding:6px 0">{{ h.specific_components }}</p></div>
         <button type="submit" class="btn btn-nav btn-sm">Save Changes</button>
       </form>
+
+      <!-- Occurrence tracking -->
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Log Occurrence (Trend Tracking)</div>
+        <form method="POST" action="/hazard-log/{{ h.id }}/occurrence" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div class="fg" style="margin:0;flex:1;min-width:140px">
+            <label>Date</label>
+            <input type="date" name="occurrence_date" value="{{ now.strftime('%Y-%m-%d') }}" style="font-size:12px"/>
+          </div>
+          <div class="fg" style="margin:0;flex:2;min-width:200px">
+            <label>Brief Description</label>
+            <input type="text" name="description" placeholder="What happened?" style="font-size:12px"/>
+          </div>
+          <div class="fg" style="margin:0">
+            <label>Source</label>
+            <select name="source" style="font-size:12px;padding:8px;border:1.5px solid var(--border);border-radius:7px">
+              <option>Report</option><option>ASR</option><option>Audit</option><option>Investigation</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-nav btn-sm">Log</button>
+        </form>
+      </div>
     </div>
 
     <!-- Actions for this hazard -->
