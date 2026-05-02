@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Risk Assessments{% endblock %}
+{% block content %}
+<div class="page-title">Risk Assessments</div>
+<div class="page-sub">Jav/SMS/001 Rev 01 · All risk assessments linked to hazards</div>
+
+<form method="GET" class="fbar">
+  <select name="dept" onchange="this.form.submit()">
+    <option value="">All Departments</option>
+    {% for d in all_departments %}<option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Draft','Under Review','Approved','Archived'] %}<option {% if stat_f==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <a href="/risk-assessments" class="btn btn-outline btn-sm">Clear</a>
+  <a href="/risk-assessments/new" class="btn btn-nav btn-sm" style="margin-left:auto">+ New Risk Assessment</a>
+</form>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Control No.</th><th>Title</th><th>Department</th>
+          <th>Assessor</th><th>Date</th><th>Review Date</th>
+          <th>Risk Level (Before)</th><th>Risk Level (After)</th>
+          <th>Rows</th><th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ra in ras %}
+        <tr>
+          <td class="mono" style="font-size:11px;white-space:nowrap">{{ ra.control_number }}</td>
+          <td style="max-width:180px;font-size:12px;font-weight:600">{{ ra.title }}</td>
+          <td>{{ ra.department.code if ra.department else '—' }}</td>
+          <td style="font-size:12px">{{ ra.responsible_name }}</td>
+          <td style="font-size:11px">{{ ra.assessment_date }}</td>
+          <td style="font-size:11px;{% if ra.next_review_date and ra.next_review_date < now.strftime('%Y-%m-%d') %}color:#dc2626;font-weight:700{% endif %}">
+            {{ ra.next_review_date or '—' }}
+          </td>
+          <td>
+            {% if ra.risk_level_prior == 'INTOLERABLE' %}<span class="badge b-red">INTOLERABLE</span>
+            {% elif ra.risk_level_prior == 'TOLERABLE' %}<span class="badge b-yellow">TOLERABLE</span>
+            {% elif ra.risk_level_prior == 'ACCEPTABLE' %}<span class="badge b-green">ACCEPTABLE</span>
+            {% else %}<span style="color:#9ca3af;font-size:11px">—</span>{% endif %}
+          </td>
+          <td>
+            {% if ra.risk_level_after == 'INTOLERABLE' %}<span class="badge b-red">INTOLERABLE</span>
+            {% elif ra.risk_level_after == 'TOLERABLE' %}<span class="badge b-yellow">TOLERABLE</span>
+            {% elif ra.risk_level_after == 'ACCEPTABLE' %}<span class="badge b-green">ACCEPTABLE</span>
+            {% else %}<span style="color:#9ca3af;font-size:11px">—</span>{% endif %}
+          </td>
+          <td style="text-align:center"><span class="badge b-gray">{{ ra.rows|length }}</span></td>
+          <td>
+            {% if ra.status=='Approved' %}<span class="badge b-green">Approved</span>
+            {% elif ra.status=='Under Review' %}<span class="badge b-blue">Under Review</span>
+            {% elif ra.status=='Archived' %}<span class="badge b-gray">Archived</span>
+            {% else %}<span class="badge b-yellow">Draft</span>{% endif %}
+          </td>
+          <td><a href="/risk-assessments/{{ ra.id }}" class="btn btn-nav btn-sm">Open →</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">
+          No risk assessments yet. <a href="/risk-assessments/new" style="color:var(--navy)">Create one →</a>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
