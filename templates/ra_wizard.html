@@ -48,7 +48,7 @@
 <div style="background:var(--navy);color:#fff;border-radius:10px;padding:14px 20px;margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
   <div>
     <div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:700;text-transform:uppercase;margin-bottom:2px">Hazard</div>
-    <div style="font-weight:700">{{ hazard.generic_hazard or hazard.specific_components[:60] }}</div>
+    <div style="font-weight:700">{{ hazard.generic_hazard or (hazard.specific_components or "")[:60] }}</div>
   </div>
   <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:20px">
     <div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:700;text-transform:uppercase;margin-bottom:2px">Source</div>
@@ -162,7 +162,7 @@
   {% if ra.rows %}
   <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12.5px;color:#15803d">
     ✓ {{ ra.rows|length }} risk scenario{{ 's' if ra.rows|length > 1 }} already identified. You can add more below.
-    {% for row in ra.rows %}<div style="margin-top:4px;padding-left:12px">→ Seq {{ row.seq_num }}: {{ row.consequences[:80] }}</div>{% endfor %}
+    {% for row in ra.rows %}<div style="margin-top:4px;padding-left:12px">→ Seq {{ row.seq_num }}: {{ (row.consequences or "—")[:80] }}</div>{% endfor %}
   </div>
   {% endif %}
 
@@ -259,11 +259,17 @@
 
   {% set cat_icons = {'SOP':'📄','Training':'🎓','Monitoring':'📈','Equipment':'🔧','Procedure':'📋','Reporting':'📢'} %}
 
+  {% if not ra.rows %}
+  <div style="background:#fef9c3;border:1.5px solid #fde68a;border-radius:10px;padding:20px;text-align:center;color:#b45309">
+    ⚠ No risk scenarios added yet. Please go back to Step 2 and add at least one risk.
+    <br><br><a href="/ra-wizard/{{ hazard.id }}/step/2" class="btn btn-nav btn-sm">← Go to Step 2</a>
+  </div>
+  {% else %}
   {% for row in ra.rows %}
   <div style="border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted)">SEQ {{ row.seq_num }}</span>
-      <span style="font-size:13px;color:#374151">{{ row.consequences[:80] }}</span>
+      <span style="font-size:13px;color:#374151">{{ (row.consequences or "—")[:80] }}</span>
       {% if row.risk_index_initial %}<span style="font-weight:800;font-size:16px;font-family:monospace;margin-left:auto;
         color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
         {{ row.risk_index_initial }}
@@ -305,6 +311,7 @@
     </div>
   </div>
   {% endfor %}
+  {% endif %}
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
@@ -327,7 +334,7 @@
   <div style="border:1.5px solid {% if row.risk_tolerance_initial=='INTOLERABLE' %}#fca5a5{% else %}var(--border){% endif %};border-radius:10px;padding:16px;margin-bottom:14px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
       <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted)">SEQ {{ row.seq_num }}</span>
-      <span style="font-size:13px;color:#374151">{{ row.consequences[:70] }}</span>
+      <span style="font-size:13px;color:#374151">{{ (row.consequences or "—")[:70] }}</span>
       {% if row.risk_index_initial %}
       <span style="margin-left:auto;font-weight:800;font-size:16px;font-family:monospace;
         color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
@@ -375,7 +382,7 @@
 
   {% for row in ra.rows %}
   <div style="border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px">
-    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">SEQ {{ row.seq_num }} — {{ row.consequences[:60] }}</div>
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">SEQ {{ row.seq_num }} — {{ (row.consequences or "—")[:60] }}</div>
 
     <div style="display:grid;grid-template-columns:auto auto auto 1fr;gap:20px;align-items:center">
       <!-- Initial -->
