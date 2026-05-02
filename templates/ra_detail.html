@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ ra.control_number }} — Risk Assessment{% endblock %}
 {% block content %}
-<div style="margin-bottom:14px">
+<div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
   <a href="/risk-assessments" style="color:var(--muted);font-size:13px">← Risk Assessments</a>
+  <a href="/risk-assessments/{{ ra.id }}/print" target="_blank" class="btn btn-nav" style="background:#065f46">🖨 Print / Export PDF</a>
   {% if ra.hazard %}&nbsp;·&nbsp;<a href="/hazard-log/{{ ra.hazard.id }}" style="color:var(--muted);font-size:13px">Hazard: {{ ra.hazard.id }}</a>{% endif %}
 </div>
 
