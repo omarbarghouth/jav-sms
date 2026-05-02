@@ -47,58 +47,167 @@
   </div>
 </div>
 
-<!-- PAGE 2 — General Information -->
+<!-- PAGE 2 — General Information (fully editable) -->
 <div class="card" style="margin-bottom:18px">
-  <div class="card-title">General Information</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:13px">
-    <div><strong style="color:var(--muted);font-size:11px;text-transform:uppercase">Department</strong><br>{{ ra.department.name if ra.department else '—' }}</div>
-    <div><strong style="color:var(--muted);font-size:11px;text-transform:uppercase">Responsible</strong><br>{{ ra.responsible_name }}</div>
-    <div><strong style="color:var(--muted);font-size:11px;text-transform:uppercase">Assessors</strong><br>{{ ra.assessors_names or '—' }}</div>
-    <div><strong style="color:var(--muted);font-size:11px;text-transform:uppercase">Reasons for Assessment</strong><br>{{ ra.reasons or '—' }}</div>
-    <div style="grid-column:1/-1"><strong style="color:var(--muted);font-size:11px;text-transform:uppercase">General Description</strong><br>{{ ra.general_description or '—' }}</div>
-  </div>
-  <!-- Signatories -->
-  <div style="margin-top:16px">
-    <table style="width:100%;font-size:12px;border-collapse:collapse">
-      <thead><tr>
-        <th style="background:#f8f9fc;padding:8px 12px;text-align:left;border:1px solid var(--border)"></th>
-        <th style="background:#f8f9fc;padding:8px 12px;text-align:left;border:1px solid var(--border)">Name</th>
-        <th style="background:#f8f9fc;padding:8px 12px;text-align:left;border:1px solid var(--border)">Position</th>
-      </tr></thead>
-      <tbody>
-        <tr><td style="padding:8px 12px;border:1px solid var(--border);font-weight:700;background:#f8f9fc">Prepared By</td>
-            <td style="padding:8px 12px;border:1px solid var(--border)">{{ ra.prepared_by_name or '—' }}</td>
-            <td style="padding:8px 12px;border:1px solid var(--border)">{{ ra.prepared_by_position or '—' }}</td></tr>
-        <tr><td style="padding:8px 12px;border:1px solid var(--border);font-weight:700;background:#f8f9fc">Review By</td>
-            <td style="padding:8px 12px;border:1px solid var(--border)">{{ ra.reviewed_by_name or '—' }}</td>
-            <td style="padding:8px 12px;border:1px solid var(--border)">{{ ra.reviewed_by_position or '—' }}</td></tr>
-        <tr><td style="padding:8px 12px;border:1px solid var(--border);font-weight:700;background:#f8f9fc">Approval By</td>
-            <td style="padding:8px 12px;border:1px solid var(--border)">{{ ra.approved_by_name or '—' }}</td>
-            <td style="padding:8px 12px;border:1px solid var(--border)">{{ ra.approved_by_position or '—' }}</td></tr>
-      </tbody>
-    </table>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div class="card-title" style="margin-bottom:0">General Information & Signatories</div>
+    <span style="font-size:11px;color:var(--muted)">All fields editable — click Save to update</span>
   </div>
 
-  <!-- Update status panel -->
-  <details style="margin-top:14px">
-    <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">Update Status / Approval</summary>
-    <form method="POST" action="/risk-assessments/{{ ra.id }}/update" style="margin-top:10px;padding:14px;background:#f8f9fc;border-radius:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-      <div class="fg" style="margin:0"><label>Status</label>
+  <form method="POST" action="/risk-assessments/{{ ra.id }}/update">
+
+    <!-- General Information fields -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+
+      <div class="fg" style="margin:0">
+        <label>Department</label>
+        <select name="department_id">
+          {% for d in all_departments %}
+            <option value="{{ d.id }}" {% if ra.department_id==d.id %}selected{% endif %}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>Responsible Name</label>
+        <input type="text" name="responsible_name" value="{{ ra.responsible_name or '' }}"
+               placeholder="Name of responsible manager"/>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>Risk Assessors</label>
+        <input type="text" name="assessors_names" value="{{ ra.assessors_names or '' }}"
+               placeholder="Names of assessors (comma separated)"/>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>Assessment Date</label>
+        <input type="date" name="assessment_date" value="{{ ra.assessment_date or '' }}"/>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>Next Review Date</label>
+        <input type="date" name="next_review_date" value="{{ ra.next_review_date or '' }}"/>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>RA Status</label>
         <select name="status">
-          {% for s in ['Draft','Under Review','Approved','Archived'] %}<option {% if ra.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-        </select></div>
-      <div class="fg" style="margin:0"><label>Management Acceptance</label>
+          {% for s in ['Draft','Under Review','Approved','Archived'] %}
+            <option {% if ra.status==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="fg" style="margin:0;grid-column:1/-1">
+        <label>Reasons for Risk Assessment</label>
+        <input type="text" name="reasons" value="{{ ra.reasons or '' }}"
+               placeholder="Why is this risk assessment being conducted?"/>
+      </div>
+
+      <div class="fg" style="margin:0;grid-column:1/-1">
+        <label>General Description</label>
+        <textarea name="general_description" rows="3"
+                  placeholder="General description of the activity or hazard being assessed…">{{ ra.general_description or '' }}</textarea>
+      </div>
+
+    </div>
+
+    <!-- Risk Levels -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px">
+      <div class="fg" style="margin:0">
+        <label>Risk Level Prior to Controls</label>
+        <select name="risk_level_prior">
+          <option value="">— Select —</option>
+          {% for t in ['INTOLERABLE','TOLERABLE','ACCEPTABLE'] %}
+            <option {% if ra.risk_level_prior==t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fg" style="margin:0">
+        <label>Risk Level After Controls</label>
+        <select name="risk_level_after">
+          <option value="">— Select —</option>
+          {% for t in ['INTOLERABLE','TOLERABLE','ACCEPTABLE'] %}
+            <option {% if ra.risk_level_after==t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fg" style="margin:0">
+        <label>Management Acceptance</label>
         <select name="management_acceptance">
           <option value="">Pending</option>
-          {% for s in ['Accepted','Not Accepted','Conditional'] %}<option {% if ra.management_acceptance==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-        </select></div>
-      <div class="fg" style="margin:0"><label>Acceptance Date</label><input type="date" name="acceptance_date" value="{{ ra.acceptance_date or '' }}"/></div>
-      <div class="fg" style="margin:0"><label>Approved By Name</label><input type="text" name="approved_by_name" value="{{ ra.approved_by_name or '' }}"/></div>
-      <div class="fg" style="margin:0"><label>Approved By Position</label><input type="text" name="approved_by_position" value="{{ ra.approved_by_position or '' }}"/></div>
-      <div class="fg" style="margin:0"><label>Next Review Date</label><input type="date" name="next_review_date" value="{{ ra.next_review_date or '' }}"/></div>
-      <button type="submit" class="btn btn-nav btn-sm">Save</button>
-    </form>
-  </details>
+          {% for s in ['Accepted','Not Accepted','Conditional'] %}
+            <option {% if ra.management_acceptance==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Signatories — editable table -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">Signatories</div>
+      <table style="width:100%;font-size:13px;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="background:var(--navy);color:#fff;padding:10px 14px;text-align:left;width:140px;border-radius:6px 0 0 0"></th>
+            <th style="background:var(--navy);color:#fff;padding:10px 14px;text-align:left">Name</th>
+            <th style="background:var(--navy);color:#fff;padding:10px 14px;text-align:left;border-radius:0 6px 0 0">Position / Title</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fafbfe">
+            <td style="padding:10px 14px;border:1px solid var(--border);font-weight:700;color:var(--navy)">Prepared By</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="prepared_by_name"
+                     value="{{ ra.prepared_by_name or '' }}"
+                     placeholder="Full name"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="prepared_by_position"
+                     value="{{ ra.prepared_by_position or '' }}"
+                     placeholder="e.g. Safety Officer"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px;border:1px solid var(--border);font-weight:700;color:var(--navy)">Review By</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="reviewed_by_name"
+                     value="{{ ra.reviewed_by_name or '' }}"
+                     placeholder="Full name"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="reviewed_by_position"
+                     value="{{ ra.reviewed_by_position or '' }}"
+                     placeholder="e.g. Safety Manager"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+          </tr>
+          <tr style="background:#fafbfe">
+            <td style="padding:10px 14px;border:1px solid var(--border);font-weight:700;color:var(--navy)">Approval By</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="approved_by_name"
+                     value="{{ ra.approved_by_name or '' }}"
+                     placeholder="Full name"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="approved_by_position"
+                     value="{{ ra.approved_by_position or '' }}"
+                     placeholder="e.g. Accountable Manager"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <button type="submit" class="btn btn-nav">💾 Save General Information</button>
+
+  </form>
 </div>
 
 <!-- PAGE 3 — Risk Table -->
