@@ -82,6 +82,7 @@ class Hazard(db.Model):
     department             = db.relationship('Department', foreign_keys=[department_id])
     risks                  = db.relationship('Risk', backref='hazard', lazy=True, cascade='all, delete-orphan')
     actions                = db.relationship('Action', backref='hazard', lazy=True)
+    hazard_reports         = db.relationship('HazardReport', backref='hazard_parent', lazy=True, foreign_keys='HazardReport.hazard_id')
 
 class Risk(db.Model):
     __tablename__ = 'risks'
