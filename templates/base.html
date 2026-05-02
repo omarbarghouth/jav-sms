@@ -128,7 +128,8 @@
     <a href="/safety-roles" class="nav-a {% if '/safety-roles' in request.path %}active{% endif %}"><span class="nav-icon">👥</span>Accountability</a>
     <a href="/safety-personnel" class="nav-a {% if '/safety-personnel' in request.path %}active{% endif %}"><span class="nav-icon">🪪</span>Key Personnel</a>
     <a href="/erp" class="nav-a {% if '/erp' in request.path %}active{% endif %}"><span class="nav-icon">🚨</span>Emergency Response</a>
-    <a href="/documents" class="nav-a {% if '/documents' in request.path %}active{% endif %}"><span class="nav-icon">📁</span>Document Control</a>
+    <a href="/documents" class="nav-a {% if '/documents' in request.path and 'trace' not in request.path %}active{% endif %}"><span class="nav-icon">📁</span>Document Control</a>
+    <a href="/traceability" class="nav-a {% if request.path=='/traceability' %}active{% endif %}"><span class="nav-icon">🔗</span>Traceability</a>
 
     <div class="sb-section">Safety Assurance</div>
     <a href="/audit-dashboard" class="nav-a {% if request.path=='/audit-dashboard' %}active{% endif %}"><span class="nav-icon">📅</span>Audit Dashboard</a>
