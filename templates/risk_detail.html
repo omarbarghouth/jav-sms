@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}{{ risk.id }} — Risk Detail{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px">
+  <a href="/risk-register" style="color:var(--muted);font-size:13px">← Risk Register</a>
+  {% if hazard %}&nbsp;·&nbsp;<a href="/hazard-log/{{ hazard.id }}" style="color:var(--muted);font-size:13px">Hazard: {{ hazard.id }}</a>{% endif %}
+</div>
+
+<div class="page-title">{{ risk.id }}</div>
+<div class="page-sub">
+  {{ risk.description[:100] if risk.description else '—' }} ·
+  Created: {{ risk.created_at.strftime('%d %b %Y') }}
+</div>
+
+<!-- Risk index visual -->
+<div class="card" style="padding:14px 20px;margin-bottom:20px;display:flex;align-items:center;gap:32px;flex-wrap:wrap">
+  <div style="text-align:center;min-width:120px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Initial Risk</div>
+    <div style="font-size:48px;font-weight:800;font-family:'IBM Plex Mono',monospace;
+      color:{% if risk.initial_tolerance=='INTOLERABLE' %}#dc2626{% elif risk.initial_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+      {{ risk.initial_risk_index or '?' }}
+    </div>
+    {% if risk.initial_tolerance=='INTOLERABLE' %}<span class="badge b-red">INTOLERABLE</span>
+    {% elif risk.initial_tolerance=='TOLERABLE'   %}<span class="badge b-yellow">TOLERABLE</span>
+    {% elif risk.initial_tolerance=='ACCEPTABLE'  %}<span class="badge b-green">ACCEPTABLE</span>{% endif %}
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">
+      L{{ risk.initial_likelihood }} × {{ risk.initial_severity }}
+    </div>
+  </div>
+
+  <div style="font-size:36px;color:#9ca3af">→</div>
+
+  <div style="text-align:center;min-width:120px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Residual Risk</div>
+    <div style="font-size:48px;font-weight:800;font-family:'IBM Plex Mono',monospace;
+      color:{% if risk.residual_tolerance=='INTOLERABLE' %}#dc2626{% elif risk.residual_tolerance=='TOLERABLE' %}#d97706{% elif risk.residual_tolerance=='ACCEPTABLE' %}#15803d{% else %}#9ca3af{% endif %}">
+      {{ risk.residual_risk_index or '?' }}
+    </div>
+    {% if risk.residual_tolerance=='INTOLERABLE' %}<span class="badge b-red">INTOLERABLE</span>
+    {% elif risk.residual_tolerance=='TOLERABLE'   %}<span class="badge b-yellow">TOLERABLE</span>
+    {% elif risk.residual_tolerance=='ACCEPTABLE'  %}<span class="badge b-green">ACCEPTABLE</span>
+    {% else %}<span style="color:#9ca3af;font-size:12px">Not yet assessed</span>{% endif %}
+    {% if risk.residual_likelihood %}<div style="font-size:11px;color:var(--muted);margin-top:4px">L{{ risk.residual_likelihood }} × {{ risk.residual_severity }}</div>{% endif %}
+  </div>
+
+  {% if risk.initial_risk_index and risk.residual_risk_index and risk.initial_risk_index != risk.residual_risk_index %}
+  <div style="background:#dcfce7;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 20px;text-align:center">
+    <div style="font-size:11px;font-weight:800;color:#15803d;margin-bottom:4px">RISK REDUCED</div>
+    <div style="font-size:22px;font-weight:800;color:#15803d">{{ risk.initial_risk_index }} → {{ risk.residual_risk_index }}</div>
+    <div style="font-size:11px;color:#15803d">Controls effective</div>
+  </div>
+  {% elif risk.initial_risk_index == risk.residual_risk_index and risk.residual_risk_index %}
+  <div style="background:#fef9c3;border:1.5px solid #fde68a;border-radius:10px;padding:12px 20px;text-align:center">
+    <div style="font-size:11px;font-weight:800;color:#b45309;margin-bottom:4px">RISK UNCHANGED</div>
+    <div style="font-size:22px;font-weight:800;color:#b45309">{{ risk.initial_risk_index }}</div>
+    <div style="font-size:11px;color:#b45309">Review controls</div>
+  </div>
+  {% endif %}
+
+  <!-- Update residual risk -->
+  <div style="flex:1;min-width:200px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Update Residual Assessment</div>
+    <form method="POST" action="/risk/{{ risk.id }}/update" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div class="fg" style="margin:0;min-width:80px">
+        <label>Likelihood</label>
+        <select name="residual_likelihood" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+          <option value="">—</option>
+          {% for v in [1,2,3,4,5] %}<option value="{{ v }}" {% if risk.residual_likelihood==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="fg" style="margin:0;min-width:80px">
+        <label>Severity</label>
+        <select name="residual_severity" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+          <option value="">—</option>
+          {% for v in ['A','B','C','D','E'] %}<option {% if risk.residual_severity==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-nav btn-sm">Update</button>
+    </form>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+
+  <!-- Left: Risk info + Controls -->
+  <div>
+    <!-- Risk details -->
+    <div class="card">
+      <div class="card-title">Risk Information</div>
+      <table style="font-size:13px;width:100%">
+        {% if hazard %}
+        <tr><td style="color:var(--muted);padding:5px 0;width:130px">Hazard</td>
+          <td><a href="/hazard-log/{{ hazard.id }}" style="color:#1d4ed8;font-family:monospace;font-size:12px">{{ hazard.id }}</a> — {{ hazard.generic_hazard }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0">Department</td>
+          <td>{{ hazard.department.name if hazard.department else '—' }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0">Source</td>
+          <td><span class="badge b-blue">{{ hazard.source }}</span></td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0">Classification</td>
+          <td><span class="badge b-gray">{{ hazard.classification or '—' }}</span></td></tr>
+        {% endif %}
+        <tr><td style="color:var(--muted);padding:5px 0;vertical-align:top">Description</td>
+          <td>{{ risk.description or '—' }}</td></tr>
+      </table>
+    </div>
+
+    <!-- Controls -->
+    <div class="card">
+      <div class="card-title">Control Measures ({{ risk.controls|length }})</div>
+      {% for ctrl in risk.controls %}
+      <div style="border:1.5px solid {% if ctrl.effectiveness=='Effective' %}#bbf7d0{% elif ctrl.effectiveness=='Ineffective' %}#fca5a5{% else %}var(--border){% endif %};border-radius:10px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div style="display:flex;gap:6px">
+            {% if ctrl.control_type=='Preventive' %}<span class="badge b-blue">Preventive</span>
+            {% elif ctrl.control_type=='Detective' %}<span class="badge b-purple">Detective</span>
+            {% else %}<span class="badge b-orange">Corrective</span>{% endif %}
+            {% if ctrl.effectiveness=='Effective' %}<span class="badge b-green">Effective</span>
+            {% elif ctrl.effectiveness=='Partially Effective' %}<span class="badge b-yellow">Partial</span>
+            {% elif ctrl.effectiveness=='Ineffective' %}<span class="badge b-red">Ineffective</span>{% endif %}
+          </div>
+          <span class="mono" style="font-size:10px;color:var(--muted)">{{ ctrl.id }}</span>
+        </div>
+        <p style="font-size:13px;color:#374151;margin-bottom:6px">{{ ctrl.description }}</p>
+        <p style="font-size:12px;color:var(--muted)">Owner: {{ ctrl.owner or '—' }} · Review: {{ ctrl.review_date or '—' }}</p>
+        <!-- Edit control inline -->
+        <details style="margin-top:8px">
+          <summary style="font-size:11px;cursor:pointer;color:var(--navy);font-weight:700">Edit</summary>
+          <form method="POST" action="/control/{{ ctrl.id }}/update" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+            <div class="g2">
+              <div class="fg" style="margin:0"><label>Type</label>
+                <select name="control_type" style="font-size:12px;padding:5px;border:1px solid var(--border);border-radius:5px">
+                  {% for t in ['Preventive','Detective','Corrective'] %}<option {% if ctrl.control_type==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                </select></div>
+              <div class="fg" style="margin:0"><label>Effectiveness</label>
+                <select name="effectiveness" style="font-size:12px;padding:5px;border:1px solid var(--border);border-radius:5px">
+                  <option value="">Not assessed</option>
+                  {% for e in ['Effective','Partially Effective','Ineffective'] %}<option {% if ctrl.effectiveness==e %}selected{% endif %}>{{ e }}</option>{% endfor %}
+                </select></div>
+            </div>
+            <textarea name="description" rows="2" style="font-size:12px;padding:6px;border:1px solid var(--border);border-radius:5px">{{ ctrl.description }}</textarea>
+            <div class="g2">
+              <input type="text" name="owner" value="{{ ctrl.owner or '' }}" placeholder="Owner" style="font-size:12px;padding:6px;border:1px solid var(--border);border-radius:5px"/>
+              <input type="date" name="review_date" value="{{ ctrl.review_date or '' }}" style="font-size:12px;padding:6px;border:1px solid var(--border);border-radius:5px"/>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button type="submit" class="btn btn-nav btn-sm">Save</button>
+              <form method="POST" action="/control/{{ ctrl.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this control?')">
+                <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626">Remove</button>
+              </form>
+            </div>
+          </form>
+        </details>
+      </div>
+      {% else %}
+      <div style="background:#fff8f8;border:1.5px solid #fca5a5;border-radius:8px;padding:14px;text-align:center;color:#dc2626;font-size:13px;font-weight:700">
+        ⚠ No controls defined. This risk is unmitigated.
+      </div>
+      {% endfor %}
+
+      <!-- Add control -->
+      <details style="margin-top:10px">
+        <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">+ Add Control Measure</summary>
+        <form method="POST" action="/risk/{{ risk.id }}/add-control" style="margin-top:10px;padding:14px;background:#f8f9fc;border-radius:8px">
+          <div class="g2">
+            <div class="fg"><label>Control Type *</label>
+              <select name="control_type" required>
+                <option>Preventive</option><option>Detective</option><option>Corrective</option>
+              </select></div>
+            <div class="fg"><label>Effectiveness</label>
+              <select name="effectiveness">
+                <option value="">Not yet assessed</option>
+                <option>Effective</option><option>Partially Effective</option><option>Ineffective</option>
+              </select></div>
+          </div>
+          <div class="fg"><label>Description *</label><textarea name="description" required rows="3" placeholder="Describe how this control mitigates the risk…"></textarea></div>
+          <div class="g2">
+            <div class="fg"><label>Owner</label><input type="text" name="owner" placeholder="Responsible person"/></div>
+            <div class="fg"><label>Review Date</label><input type="date" name="review_date"/></div>
+          </div>
+          <button type="submit" class="btn btn-nav btn-sm">Add Control</button>
+        </form>
+      </details>
+    </div>
+  </div>
+
+  <!-- Right: Actions + Linked docs + Audit findings -->
+  <div>
+    <!-- Risk Actions -->
+    <div class="card">
+      <div class="card-title">Risk Actions ({{ r_actions|length }})</div>
+      {% for a in r_actions %}
+      <div style="border:1.5px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12.5px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span class="mono" style="font-size:11px">{{ a.id }}</span>
+          {% if a.status=='Overdue' %}<span class="badge b-red">Overdue</span>
+          {% elif a.status=='Closed' %}<span class="badge b-green">Closed</span>
+          {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+          {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+        </div>
+        <p style="color:#374151;margin-bottom:5px">{{ a.description }}</p>
+        <p style="color:var(--muted);font-size:11px">Owner: {{ a.owner or '—' }} · Due: {{ a.due_date or '—' }} · Priority: {{ a.priority }}</p>
+        {% if a.effectiveness %}<span class="badge {% if a.effectiveness=='Effective' %}b-green{% elif a.effectiveness=='Partially Effective' %}b-yellow{% else %}b-red{% endif %}" style="font-size:10px">{{ a.effectiveness }}</span>{% endif %}
+        {% if a.status != 'Closed' %}
+        <form method="POST" action="/risk-action/{{ a.id }}/update" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select name="status" style="font-size:11px;padding:3px;border:1px solid var(--border);border-radius:5px">
+            {% for s in ['Open','In Progress','Closed'] %}<option {% if a.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+          </select>
+          <select name="effectiveness" style="font-size:11px;padding:3px;border:1px solid var(--border);border-radius:5px">
+            <option value="">No review yet</option>
+            {% for e in ['Effective','Partially Effective','Ineffective'] %}<option {% if a.effectiveness==e %}selected{% endif %}>{{ e }}</option>{% endfor %}
+          </select>
+          <button type="submit" class="btn btn-nav btn-sm" style="padding:3px 8px">✓</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:13px">No actions yet.</p>
+      {% endfor %}
+
+      <!-- Add action -->
+      <details style="margin-top:10px">
+        <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">+ Create Action for this Risk</summary>
+        <form method="POST" action="/risk/{{ risk.id }}/add-action" style="margin-top:10px;padding:14px;background:#f8f9fc;border-radius:8px">
+          <div class="fg"><label>Action Description *</label><textarea name="description" required rows="3" placeholder="What must be done to control or monitor this risk?"></textarea></div>
+          <div class="g2">
+            <div class="fg"><label>Owner *</label><input type="text" name="owner" required placeholder="Responsible manager"/></div>
+            <div class="fg"><label>Due Date *</label><input type="date" name="due_date" required/></div>
+          </div>
+          <div class="fg"><label>Priority</label>
+            <select name="priority"><option>High</option><option selected>Medium</option><option>Low</option></select></div>
+          <button type="submit" class="btn btn-nav btn-sm">Create Action</button>
+        </form>
+      </details>
+    </div>
+
+    <!-- Linked documents -->
+    {% if docs %}
+    <div class="card">
+      <div class="card-title">Linked Documents ({{ docs|length }})</div>
+      {% for doc in docs %}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div>
+          <span class="mono" style="color:#1d4ed8">{{ doc.id }}</span>
+          <span style="color:#374151;margin-left:8px">{{ doc.title[:50] }}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <span class="badge b-gray" style="font-size:10px">{{ doc.doc_type }}</span>
+          {% if doc.status=='Approved' %}<span class="badge b-green" style="font-size:10px">Approved</span>{% endif %}
+          <a href="/documents/{{ doc.id }}/trace" style="color:#1d4ed8;font-size:11px">Open →</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Link document to this risk -->
+    <div class="card">
+      <div class="card-title">Link Document to This Risk</div>
+      <form method="POST" action="/quick-link">
+        <input type="hidden" name="entity_type" value="risk"/>
+        <input type="hidden" name="entity_id" value="{{ risk.id }}"/>
+        <input type="hidden" name="return_url" value="/risk/{{ risk.id }}"/>
+        <div class="fg"><label>Document ID</label><input type="text" name="document_id" placeholder="e.g. RA-FO-2026-001-REV0"/></div>
+        <div class="fg"><label>Reason</label><input type="text" name="link_reason" placeholder="e.g. Risk Assessment document"/></div>
+        <button type="submit" class="btn btn-nav btn-sm">Link Document</button>
+      </form>
+    </div>
+
+    <!-- Audit findings for same hazard -->
+    {% if audit_findings %}
+    <div class="card">
+      <div class="card-title">Related Audit Findings ({{ audit_findings|length }})</div>
+      {% for f in audit_findings %}
+      <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div style="display:flex;justify-content:space-between">
+          <span class="mono" style="font-size:11px">{{ f.finding_ref }}</span>
+          {% if f.severity=='Major' %}<span class="badge b-red">Major</span>
+          {% elif f.severity=='Minor' %}<span class="badge b-yellow">Minor</span>
+          {% else %}<span class="badge b-gray">Obs</span>{% endif %}
+        </div>
+        <p style="color:#374151;margin-top:3px">{{ (f.description or '—')[:80] }}</p>
+        <a href="/audit-findings/{{ f.id }}" style="font-size:11px;color:#1d4ed8">View finding →</a>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const IT=new Set(["5A","5B","5C","4A","4B","3A"]),TO=new Set(["5D","5E","4C","4D","4E","3B","3C","3D","2A","2B","2C","1A"]);
+</script>
+{% endblock %}
