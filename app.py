@@ -2388,14 +2388,41 @@ def ra_add_review(ra_id):
 def ra_update(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     f  = request.form
+    # All General Information fields — now fully editable
     ra.status                = f.get('status', ra.status)
     ra.management_acceptance = f.get('management_acceptance', ra.management_acceptance)
     ra.acceptance_date       = f.get('acceptance_date', ra.acceptance_date)
-    ra.approved_by_name      = f.get('approved_by_name', ra.approved_by_name)
-    ra.approved_by_position  = f.get('approved_by_position', ra.approved_by_position)
     ra.next_review_date      = f.get('next_review_date', ra.next_review_date)
+    ra.risk_level_prior      = f.get('risk_level_prior', ra.risk_level_prior)
+    ra.risk_level_after      = f.get('risk_level_after', ra.risk_level_after)
+    # General Info
+    if f.get('responsible_name'):
+        ra.responsible_name  = f.get('responsible_name')
+    if f.get('assessors_names') is not None:
+        ra.assessors_names   = f.get('assessors_names')
+    if f.get('assessment_date'):
+        ra.assessment_date   = f.get('assessment_date')
+    if f.get('reasons') is not None:
+        ra.reasons           = f.get('reasons')
+    if f.get('general_description') is not None:
+        ra.general_description = f.get('general_description')
+    if f.get('department_id'):
+        ra.department_id     = int(f.get('department_id'))
+    # Signatories — all three rows
+    if f.get('prepared_by_name') is not None:
+        ra.prepared_by_name      = f.get('prepared_by_name')
+    if f.get('prepared_by_position') is not None:
+        ra.prepared_by_position  = f.get('prepared_by_position')
+    if f.get('reviewed_by_name') is not None:
+        ra.reviewed_by_name      = f.get('reviewed_by_name')
+    if f.get('reviewed_by_position') is not None:
+        ra.reviewed_by_position  = f.get('reviewed_by_position')
+    if f.get('approved_by_name') is not None:
+        ra.approved_by_name      = f.get('approved_by_name')
+    if f.get('approved_by_position') is not None:
+        ra.approved_by_position  = f.get('approved_by_position')
     db.session.commit()
-    flash('✓ Risk Assessment updated.', 'success')
+    flash('✓ Risk Assessment updated successfully.', 'success')
     return redirect(url_for('ra_detail', ra_id=ra_id))
 
 # ─── TRIGGER RA FROM HAZARD LOG ──────────────────────────────────────────────
@@ -2483,13 +2510,21 @@ def ra_wizard_step(hid, step):
         f = request.form
 
         if step == 1:
-            # Save admin header info
-            ra.responsible_name  = f.get('responsible_name', ra.responsible_name)
-            ra.assessors_names   = f.get('assessors_names', ra.assessors_names)
-            ra.assessment_date   = f.get('assessment_date', ra.assessment_date)
-            ra.next_review_date  = f.get('next_review_date', ra.next_review_date)
-            ra.title             = f.get('title', ra.title)
-            ra.reasons           = f.get('reasons', ra.reasons)
+            # Save ALL admin + general info + signatory fields
+            ra.responsible_name      = f.get('responsible_name', ra.responsible_name)
+            ra.assessors_names       = f.get('assessors_names', ra.assessors_names)
+            ra.assessment_date       = f.get('assessment_date', ra.assessment_date)
+            ra.next_review_date      = f.get('next_review_date', ra.next_review_date)
+            ra.title                 = f.get('title', ra.title)
+            ra.reasons               = f.get('reasons', ra.reasons)
+            ra.general_description   = f.get('general_description', ra.general_description)
+            # Signatories
+            ra.prepared_by_name      = f.get('prepared_by_name', ra.prepared_by_name)
+            ra.prepared_by_position  = f.get('prepared_by_position', ra.prepared_by_position)
+            ra.reviewed_by_name      = f.get('reviewed_by_name', ra.reviewed_by_name)
+            ra.reviewed_by_position  = f.get('reviewed_by_position', ra.reviewed_by_position)
+            ra.approved_by_name      = f.get('approved_by_name', ra.approved_by_name)
+            ra.approved_by_position  = f.get('approved_by_position', ra.approved_by_position)
             db.session.commit()
 
         elif step == 2:
