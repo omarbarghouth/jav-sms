@@ -2135,6 +2135,7 @@ def compute_ra_summary(ra):
 # ─── LIST ALL RISK ASSESSMENTS ───────────────────────────────────────────────
 @app.route('/risk-assessments')
 def ra_list():
+    check_ra_review_dates()  # Auto-set Under Review when due date reached
     dept_f  = request.args.get('dept','')
     stat_f  = request.args.get('status','')
     q = RiskAssessment.query
@@ -2969,6 +2970,209 @@ def hazard_report_print(rep_id):
 def asr_print(asr_id):
     asr = ASRReport.query.get_or_404(asr_id)
     return render_template('asr_print.html', asr=asr)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RISK ASSESSMENT LIFECYCLE — STATUS ENGINE
+#  Draft → Submitted → Active → Under Review → Closed
+#  ICAO Annex 19 §5 / Doc 9859 Ch.5 — added without changing existing routes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def ra_can_edit(ra):
+    """RA is editable in all states except Closed."""
+    return ra.status != 'Closed'
+
+def ra_closure_checks(ra):
+    """
+    Returns list of blocking reasons. Empty list = can close.
+    Rules (ICAO): residual risk assessed + all linked actions closed + effectiveness verified.
+    """
+    blocks = []
+    # 1. Every row must have residual risk assessed
+    rows_no_residual = [r for r in ra.rows if not r.risk_index_residual]
+    if rows_no_residual:
+        blocks.append(f'{len(rows_no_residual)} risk row(s) still have no residual risk assessment.')
+
+    # 2. Residual risk must not be INTOLERABLE
+    rows_intol = [r for r in ra.rows if r.risk_tolerance_residual == 'INTOLERABLE']
+    if rows_intol:
+        blocks.append(f'{len(rows_intol)} risk row(s) have INTOLERABLE residual risk — must be reduced before closing.')
+
+    # 3. All linked actions must be Closed
+    if ra.hazard:
+        open_actions = [a for a in ra.hazard.actions if a.status not in ('Closed',)]
+        if open_actions:
+            blocks.append(f'{len(open_actions)} linked action(s) are still open or in progress.')
+
+    # 4. At least one review recorded with effectiveness
+    if ra.reviews:
+        unverified = [r for r in ra.reviews if not r.effectiveness_rating]
+        if unverified:
+            blocks.append(f'{len(unverified)} review(s) have no effectiveness rating.')
+
+    return blocks
+
+def check_ra_review_dates():
+    """Auto-set status = Under Review when next_review_date is reached."""
+    today = date.today().isoformat()
+    due = RiskAssessment.query.filter(
+        RiskAssessment.status == 'Active',
+        RiskAssessment.next_review_date != None,
+        RiskAssessment.next_review_date <= today
+    ).all()
+    for ra in due:
+        ra.status = 'Under Review'
+    if due:
+        db.session.commit()
+
+# ─── SUBMIT (Draft → Submitted → Active) ────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/submit', methods=['POST'])
+def ra_submit(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    if ra.status != 'Draft':
+        flash(f'Cannot submit — current status is {ra.status}.', 'error')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+    if not ra.rows:
+        flash('Cannot submit — no risk rows added. Complete Steps 2–3 first.', 'error')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+    today = date.today().isoformat()
+    ra.status          = 'Active'
+    ra.submitted_date  = today
+    ra.activated_date  = today
+    # Update linked hazard status
+    if ra.hazard:
+        ra.hazard.status = 'Under Assessment'
+    db.session.commit()
+    flash(f'✓ Risk Assessment {ra.control_number} submitted and is now Active.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+# ─── SEND FOR REVIEW (Active → Under Review) ─────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/send-review', methods=['POST'])
+def ra_send_review(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    if ra.status not in ('Active', 'Submitted'):
+        flash(f'Cannot send for review — status is {ra.status}.', 'error')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+    ra.status = 'Under Review'
+    db.session.commit()
+    flash('✓ Risk Assessment sent for review.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+# ─── REACTIVATE (Under Review → Active) ──────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/reactivate', methods=['POST'])
+def ra_reactivate(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    if ra.status != 'Under Review':
+        flash(f'Can only reactivate from Under Review status.', 'error')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+    ra.status = 'Active'
+    db.session.commit()
+    flash('✓ Risk Assessment reactivated to Active.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+# ─── CLOSE (validated) ────────────────────────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/close', methods=['POST'])
+def ra_close(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    if ra.status == 'Closed':
+        flash('Already closed.', 'error')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+    blocks = ra_closure_checks(ra)
+    if blocks:
+        for b in blocks:
+            flash(f'✗ {b}', 'error')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+    ra.status       = 'Closed'
+    ra.closed_date  = date.today().isoformat()
+    ra.management_acceptance = request.form.get('management_acceptance', ra.management_acceptance)
+    ra.acceptance_date       = date.today().isoformat()
+    # Update hazard status
+    if ra.hazard:
+        ra.hazard.status = 'Controlled'
+    db.session.commit()
+    flash(f'✓ Risk Assessment {ra.control_number} closed successfully.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+# ─── CLOSURE CHECK (AJAX / page query) ───────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/closure-check')
+def ra_closure_check(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    blocks = ra_closure_checks(ra)
+    return render_template('ra_closure_check.html', ra=ra, blocks=blocks)
+
+# ─── REASSESS (create new revision) ──────────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/reassess', methods=['POST'])
+def ra_reassess(ra_id):
+    old_ra = RiskAssessment.query.get_or_404(ra_id)
+    if old_ra.status == 'Closed':
+        flash('Cannot reassess a closed Risk Assessment — create a new one.', 'error')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+
+    # Archive the current one
+    old_ra.status = 'Archived'
+    new_rev = (old_ra.revision or 0) + 1
+    new_ctrl = f"{old_ra.control_number}-REV{new_rev}" if old_ra.control_number else gen_control_number(
+        old_ra.department.code if old_ra.department else 'XX')
+
+    # Create new revision — copy header, fresh status
+    new_ra = RiskAssessment(
+        id=new_id('RA'),
+        control_number=new_ctrl,
+        responsible_name=old_ra.responsible_name,
+        assessors_names=old_ra.assessors_names,
+        assessment_date=date.today().isoformat(),
+        next_review_date=old_ra.next_review_date,
+        title=old_ra.title,
+        hazard_id=old_ra.hazard_id,
+        department_id=old_ra.department_id,
+        general_description=old_ra.general_description,
+        reasons=f'Reassessment of {old_ra.control_number}',
+        risk_level_prior=old_ra.risk_level_prior,
+        prepared_by_name=old_ra.prepared_by_name,
+        prepared_by_position=old_ra.prepared_by_position,
+        reviewed_by_name=old_ra.reviewed_by_name,
+        reviewed_by_position=old_ra.reviewed_by_position,
+        approved_by_name=old_ra.approved_by_name,
+        approved_by_position=old_ra.approved_by_position,
+        status='Draft',
+        revision=new_rev,
+        parent_ra_id=old_ra.id
+    )
+    db.session.add(new_ra)
+    db.session.flush()
+
+    # Copy rows from old RA into new RA (user will update them)
+    for old_row in old_ra.rows:
+        new_row = RARow(
+            assessment_id=new_ra.id,
+            seq_num=old_row.seq_num,
+            type_of_activity=old_row.type_of_activity,
+            generic_hazard=old_row.generic_hazard,
+            specific_components=old_row.specific_components,
+            consequences=old_row.consequences,
+            likelihood_initial=old_row.likelihood_initial,
+            severity_initial=old_row.severity_initial,
+            risk_index_initial=old_row.risk_index_initial,
+            risk_tolerance_initial=old_row.risk_tolerance_initial,
+            current_defenses=old_row.current_defenses,
+            further_mitigations=old_row.further_mitigations,
+            # Residual cleared — user must re-evaluate
+            likelihood_residual=None,
+            severity_residual=None,
+            risk_index_residual=None,
+            risk_tolerance_residual=None,
+        )
+        db.session.add(new_row)
+
+    # Move hazard_id from old RA to new RA (unique constraint requires clearing old first)
+    haz_id = old_ra.hazard_id
+    old_ra.hazard_id = None
+    db.session.flush()
+    new_ra.hazard_id = haz_id
+
+    db.session.commit()
+    flash(f'✓ New revision {new_ctrl} (REV{new_rev}) created. Please update controls and residual risk.', 'success')
+    return redirect(url_for('ra_wizard_step', hid=haz_id, step=4))
 
 with app.app_context():
     db.create_all()
