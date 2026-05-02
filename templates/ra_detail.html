@@ -34,17 +34,101 @@
         {% elif worst_residual=='ACCEPTABLE' %}<span style="background:#15803d;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:800">ACCEPTABLE AFTER</span>
         {% else %}<span style="background:#374151;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px">RESIDUAL PENDING</span>{% endif %}
       </div>
+      <!-- Lifecycle status indicator -->
       <div style="margin-top:8px">
-        {% if ra.status=='Approved' %}<span class="badge b-green">Approved</span>
-        {% elif ra.status=='Under Review' %}<span class="badge b-blue">Under Review</span>
-        {% elif ra.status=='Archived' %}<span class="badge b-gray">Archived</span>
-        {% else %}<span class="badge b-yellow">Draft</span>{% endif %}
-        {% if ra.management_acceptance %}
-        <span class="badge {% if ra.management_acceptance=='Accepted' %}b-green{% elif ra.management_acceptance=='Not Accepted' %}b-red{% else %}b-yellow{% endif %}" style="margin-left:6px">
-          {{ ra.management_acceptance }}
-        </span>{% endif %}
+        {% if ra.status=='Closed' %}<span style="background:#15803d;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● CLOSED</span>
+        {% elif ra.status=='Active' %}<span style="background:#1e40af;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● ACTIVE</span>
+        {% elif ra.status=='Submitted' %}<span style="background:#0891b2;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● SUBMITTED</span>
+        {% elif ra.status=='Under Review' %}<span style="background:#d97706;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● UNDER REVIEW</span>
+        {% elif ra.status=='Archived' %}<span style="background:#6b7280;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● ARCHIVED</span>
+        {% else %}<span style="background:#9ca3af;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● DRAFT</span>{% endif %}
+        {% if ra.revision %}<span style="margin-left:6px;background:rgba(255,255,255,.15);color:#fff;padding:3px 10px;border-radius:20px;font-size:11px">REV{{ ra.revision }}</span>{% endif %}
+        {% if ra.management_acceptance %}<span class="badge {% if ra.management_acceptance=='Accepted' %}b-green{% elif ra.management_acceptance=='Not Accepted' %}b-red{% else %}b-yellow{% endif %}" style="margin-left:6px">{{ ra.management_acceptance }}</span>{% endif %}
       </div>
     </div>
+  </div>
+</div>
+
+<!-- LIFECYCLE WORKFLOW BAR -->
+<div class="card" style="padding:14px 20px;margin-bottom:18px">
+  <!-- Step flow -->
+  <div style="display:flex;align-items:center;gap:4px;margin-bottom:14px;flex-wrap:wrap">
+    {% set steps = [('Draft','Draft','#9ca3af'),('Submitted','Submitted','#0891b2'),('Active','Active','#1e40af'),('Under Review','Under Review','#d97706'),('Closed','Closed','#15803d')] %}
+    {% set status_order = ['Draft','Submitted','Active','Under Review','Closed','Archived'] %}
+    {% set cur_idx = status_order.index(ra.status) if ra.status in status_order else 0 %}
+    {% for s_key, s_label, s_color in steps %}
+      {% set s_idx = status_order.index(s_key) %}
+      <span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;
+        {% if ra.status == s_key %}background:{{ s_color }};color:#fff
+        {% elif cur_idx > s_idx %}background:{{ s_color }}30;color:{{ s_color }};border:1px solid {{ s_color }}50
+        {% else %}background:#f3f4f6;color:#9ca3af{% endif %}">
+        {{ s_label }}
+      </span>
+      {% if not loop.last %}<span style="color:#d1d5db;font-size:14px">→</span>{% endif %}
+    {% endfor %}
+    {% if ra.revision %}<span style="margin-left:8px;font-size:11px;color:var(--muted);font-weight:700">REV{{ ra.revision }}</span>{% endif %}
+  </div>
+
+  <!-- Dates row -->
+  <div style="display:flex;gap:24px;font-size:12px;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
+    <span>📅 Assessed: <strong style="color:#374151">{{ ra.assessment_date or '—' }}</strong></span>
+    {% if ra.submitted_date %}<span>📤 Submitted: <strong style="color:#374151">{{ ra.submitted_date }}</strong></span>{% endif %}
+    {% if ra.activated_date %}<span>▶ Activated: <strong style="color:#374151">{{ ra.activated_date }}</strong></span>{% endif %}
+    {% if ra.next_review_date %}<span>🔁 Next Review: <strong style="color:{% if ra.next_review_date <= now.strftime('%Y-%m-%d') %}#dc2626{% else %}#374151{% endif %}">{{ ra.next_review_date }}</strong></span>{% endif %}
+    {% if ra.closed_date %}<span>✓ Closed: <strong style="color:#15803d">{{ ra.closed_date }}</strong></span>{% endif %}
+  </div>
+
+  <!-- Action buttons — only show what's valid for current status -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+
+    {% if ra.status == 'Draft' %}
+      <!-- Submit -->
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/submit">
+        <button type="submit" class="btn btn-nav" style="background:#1e40af"
+          {% if not ra.rows %}title="Add risk rows first (Step 2)" disabled style="opacity:.5"{% endif %}>
+          📤 Submit for Review
+        </button>
+      </form>
+      <!-- Continue wizard -->
+      {% if ra.hazard %}
+      <a href="/ra-wizard/{{ ra.hazard.id }}/step/1" class="btn btn-outline">✏ Continue Wizard →</a>
+      {% endif %}
+    {% endif %}
+
+    {% if ra.status in ('Submitted', 'Active') %}
+      <!-- Send for review -->
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/send-review">
+        <button type="submit" class="btn btn-outline" style="border-color:#d97706;color:#d97706">🔁 Send for Review</button>
+      </form>
+      <!-- Edit (wizard) -->
+      {% if ra.hazard %}
+      <a href="/ra-wizard/{{ ra.hazard.id }}/step/3" class="btn btn-outline">✏ Edit Risk Rows</a>
+      {% endif %}
+    {% endif %}
+
+    {% if ra.status == 'Under Review' %}
+      <!-- Reactivate -->
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/reactivate">
+        <button type="submit" class="btn btn-nav" style="background:#1e40af">▶ Reactivate</button>
+      </form>
+      <!-- Reassess (new revision) -->
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/reassess">
+        <button type="submit" class="btn btn-outline" style="border-color:#7c3aed;color:#7c3aed">🔄 Reassess (New Revision)</button>
+      </form>
+    {% endif %}
+
+    {% if ra.status in ('Active', 'Under Review') %}
+      <!-- Closure check -->
+      <a href="/risk-assessments/{{ ra.id }}/closure-check" class="btn btn-outline" style="border-color:#15803d;color:#15803d">✓ Check Closure Conditions</a>
+    {% endif %}
+
+    {% if ra.status == 'Closed' %}
+      <span style="font-size:13px;color:#15803d;font-weight:700">✓ This Risk Assessment is closed. Reassess to create a new revision.</span>
+    {% endif %}
+
+    <!-- Print always available -->
+    <a href="/risk-assessments/{{ ra.id }}/print" target="_blank" class="btn btn-outline" style="margin-left:auto">🖨 Print PDF</a>
+
   </div>
 </div>
 
@@ -52,10 +136,19 @@
 <div class="card" style="margin-bottom:18px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
     <div class="card-title" style="margin-bottom:0">General Information & Signatories</div>
+    {% if ra.status == 'Closed' %}
+    <span style="font-size:11px;color:#dc2626;font-weight:700">🔒 Closed — read only</span>
+    {% else %}
     <span style="font-size:11px;color:var(--muted)">All fields editable — click Save to update</span>
+    {% endif %}
   </div>
 
-  <form method="POST" action="/risk-assessments/{{ ra.id }}/update">
+  {% if ra.status == 'Closed' %}
+  <div style="background:#f3f4f6;border-radius:8px;padding:12px 16px;font-size:13px;color:#6b7280;margin-bottom:12px">
+    🔒 This Risk Assessment is closed. Fields are read-only. Use "Reassess" to create a new editable revision.
+  </div>
+  {% endif %}
+  <form method="POST" action="/risk-assessments/{{ ra.id }}/update" {% if ra.status == 'Closed' %}onsubmit="return false"{% endif %}>
 
     <!-- General Information fields -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
@@ -206,7 +299,11 @@
       </table>
     </div>
 
+    {% if ra.status != 'Closed' %}
     <button type="submit" class="btn btn-nav">💾 Save General Information</button>
+    {% else %}
+    <button type="button" class="btn btn-outline" disabled style="opacity:.5;cursor:not-allowed">🔒 Closed — Read Only</button>
+    {% endif %}
 
   </form>
 </div>
