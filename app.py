@@ -28,9 +28,39 @@ def get_tolerance(ri):
     return 'ACCEPTABLE'
 
 def new_id(prefix):
-    year  = datetime.now().year
+    """
+    Generate standardised control number: MODULE/SMS/NN
+    e.g.  HR/SMS/01  RA/SMS/03  AUD/SMS/02
+    Falls back to UUID-suffix if module unknown.
+    """
+    MODULE_MAP = {
+        'HR':   ('HR',  HazardReport),
+        'ASR':  ('ASR', ASRReport),
+        'HAZ':  ('HAZ', Hazard),
+        'RSK':  ('RSK', Risk),
+        'CTL':  ('CTL', Control),
+        'ACT':  ('ACT', Action),
+        'INV':  ('INV', Investigation),
+        'MOC':  ('MOC', MOC),
+        'AUD':  ('AUD', AuditSchedule),
+        'PLAN': ('PLAN', AuditPlan),
+        'FND':  ('FND', AuditFinding),
+        'POL':  ('POL', SafetyPolicy),
+        'ROLE': ('ROLE', SafetyRole),
+        'PERS': ('PERS', SafetyPersonnel),
+        'ERP':  ('ERP', ERPlan),
+        'RA':   ('RA',  RiskAssessment),
+        'RACT': ('RACT', RiskAction),
+        'BUL':  ('BUL', SafetyBulletin),
+        'DOC':  ('DOC', SMSDocument),
+    }
+    if prefix in MODULE_MAP:
+        code, model = MODULE_MAP[prefix]
+        seq = model.query.count() + 1
+        return f'{code}/SMS/{seq:02d}'
+    # fallback — should not normally be reached
     short = str(uuid.uuid4())[:6].upper()
-    return f'{prefix}-{year}-{short}'
+    return f'{prefix}/SMS/{short}' 
 
 def check_overdue_actions():
     """Auto-mark actions as Overdue when due_date passes (only Open/In Progress)."""
@@ -55,197 +85,32 @@ def inject_globals():
 
 # ─── SEED DATABASE ────────────────────────────────────────────────────────────
 def seed():
-    if Department.query.first(): return
+    """Database initialisation — creates tables only. No demo data."""
+    db.create_all()
+    # Seed departments only if they do not exist yet
+    if not Department.query.first():
+        depts = [
+            Department(id=1, code='FO', name='Flight Operations'),
+            Department(id=2, code='ME', name='Maintenance & Engineering'),
+            Department(id=3, code='GO', name='Ground Operations'),
+            Department(id=4, code='CC', name='Cabin Crew'),
+            Department(id=5, code='SD', name='Safety Department'),
+        ]
+        for d in depts:
+            db.session.add(d)
+        db.session.commit()
+        print('✅ Departments seeded.')
+    print('✅ Database ready — no demo data loaded.')
 
-    depts = [
-        Department(id=1, code='FO', name='Flight Operations',       color='#1e40af'),
-        Department(id=2, code='ME', name='Maintenance / Engineering',color='#065f46'),
-        Department(id=3, code='GO', name='Ground Operations',        color='#92400e'),
-        Department(id=4, code='CC', name='Cabin Crew',               color='#6b21a8'),
-        Department(id=5, code='SD', name='Safety Department',        color='#be123c'),
-    ]
-    db.session.add_all(depts)
 
-    spis = [
-        SPIIndicator(code='UA',      name='Unstable Approach',           department_ids='1',   unit='/1000 flights', spt_target=9.40,  alert_l1=13.51, alert_l2=17.13),
-        SPIIndicator(code='TCAS',    name='TCAS RA Encounter',           department_ids='1',   unit='/1000 flights', spt_target=3.02,  alert_l1=5.98,  alert_l2=8.78),
-        SPIIndicator(code='GA',      name='Go-Around',                   department_ids='1',   unit='/1000 flights', spt_target=14.58, alert_l1=18.83, alert_l2=22.32),
-        SPIIndicator(code='BS',      name='Bird Strike',                 department_ids='1,3', unit='/1000 flights', spt_target=2.15,  alert_l1=5.07,  alert_l2=7.87),
-        SPIIndicator(code='RED',     name='Runway Excursion/Deviation',  department_ids='1,3', unit='/1000 flights', spt_target=1.38,  alert_l1=4.07,  alert_l2=6.70),
-        SPIIndicator(code='RAMP',    name='Ramp Incidents',              department_ids='3',   unit='/1000 turns',   spt_target=5.00,  alert_l1=10.0,  alert_l2=15.0),
-        SPIIndicator(code='CAB-INC', name='Cabin Safety Incidents',      department_ids='4',   unit='/1000 flights', spt_target=3.00,  alert_l1=6.0,   alert_l2=9.0),
-        SPIIndicator(code='ME-INJ',  name='Maintenance Injury Rate',     department_ids='2',   unit='/100 staff',    spt_target=2.00,  alert_l1=4.0,   alert_l2=6.0),
-    ]
-    db.session.add_all(spis)
-
-    # Sample hazard
-    h1 = Hazard(id='HAZ-2024-DEMO1', source='ASR', linked_report_id='ASR-2024-DEMO1',
-                department_id=1, classification='Environmental',
-                type_of_activity='Flight Operations',
-                generic_hazard='Weather / Low Visibility',
-                specific_components='Bad visibility and LVP in progress during approach to AMM',
-                consequences='Diversion, crew workload, potential runway excursion',
-                status='Open', owner='Flight Operations Manager',
-                created_at=datetime(2024,4,30))
-    db.session.add(h1)
-    db.session.flush()
-
-    r1 = Risk(id='RSK-2024-DEMO1', hazard_id=h1.id,
-              description='Aircraft unable to land due to below-minima visibility leading to diversion',
-              initial_likelihood=4, initial_severity='B', initial_risk_index='4B', initial_tolerance='INTOLERABLE',
-              residual_likelihood=2, residual_severity='C', residual_risk_index='2C', residual_tolerance='TOLERABLE')
-    db.session.add(r1)
-    db.session.flush()
-
-    c1 = Control(id='CTL-2024-DEMO1', risk_id=r1.id, control_type='Preventive',
-                 description='Low Visibility Procedure (LVP) — mandatory crew briefing before dispatch',
-                 owner='Flight Operations Manager', effectiveness='Effective', review_date='2025-03-01')
-    c2 = Control(id='CTL-2024-DEMO2', risk_id=r1.id, control_type='Detective',
-                 description='Real-time ATIS monitoring and alternate aerodrome pre-planning',
-                 owner='Flight Dispatch', effectiveness='Partially Effective', review_date='2025-03-01')
-    db.session.add_all([c1, c2])
-
-    a1 = Action(id='ACT-2024-DEMO1', source='ASR', hazard_id=h1.id,
-                linked_ref_id='ASR-2024-DEMO1',
-                description='Update LVP crew briefing checklist to include alternate fuel requirements',
-                owner='Flight Operations Manager', due_date='2024-06-30',
-                priority='High', status='Closed',
-                effectiveness_review='Checklist updated and distributed. Effective.')
-    db.session.add(a1)
-
-    h2 = Hazard(id='HAZ-2024-DEMO2', source='Hazard Report', linked_report_id='HR-2024-DEMO2',
-                department_id=3, classification='Operational',
-                type_of_activity='Ground Operations',
-                generic_hazard='FOD on Taxiway',
-                specific_components='Debris found near Gate B3 after heavy rain',
-                consequences='Engine ingestion, tyre damage, aircraft damage',
-                status='Open', owner='Ground Operations Manager',
-                created_at=datetime(2024,4,15))
-    db.session.add(h2)
-    db.session.flush()
-
-    r2 = Risk(id='RSK-2024-DEMO2', hazard_id=h2.id,
-              description='FOD ingested into engine during taxi causing engine damage',
-              initial_likelihood=3, initial_severity='B', initial_risk_index='3B', initial_tolerance='INTOLERABLE',
-              residual_likelihood=2, residual_severity='D', residual_risk_index='2D', residual_tolerance='ACCEPTABLE')
-    db.session.add(r2)
-    db.session.flush()
-
-    c3 = Control(id='CTL-2024-DEMO3', risk_id=r2.id, control_type='Preventive',
-                 description='Post-rain mandatory FOD walk before aircraft movement',
-                 owner='Ramp Supervisor', effectiveness='Effective', review_date='2025-01-01')
-    db.session.add(c3)
-
-    a2 = Action(id='ACT-2024-DEMO2', source='Hazard Report', hazard_id=h2.id,
-                linked_ref_id='HR-2024-DEMO2',
-                description='Implement post-rain FOD inspection protocol with supervisor sign-off',
-                owner='Ground Operations Manager', due_date='2024-05-15',
-                priority='High', status='Closed',
-                effectiveness_review='Protocol implemented. FOD incidents reduced.')
-    db.session.add(a2)
-
-    # Sample Audit
-    aud = Audit(id='AUD-2024-DEMO1', title='Annual Flight Operations Safety Audit',
-                audit_type='Internal', department_id=1,
-                planned_date='2024-03-01', actual_date='2024-03-05',
-                lead_auditor='Safety Manager', status='Closed',
-                summary='Overall compliance satisfactory. Two minor findings identified.')
-    db.session.add(aud)
-    db.session.flush()
-
-    f1 = Finding(id='FND-2024-DEMO1', audit_id=aud.id,
-                 description='Crew briefing records for LVP operations not consistently filed',
-                 severity='Minor', root_cause='No standardized filing procedure in place',
-                 corrective_action='Implement digital briefing record system', status='Closed')
-    db.session.add(f1)
-
-    # Sample Investigation
-    inv = Investigation(id='INV-2024-DEMO1', title='Diversion to ESB due to Low Visibility',
-                        linked_report_id='ASR-2024-DEMO1', hazard_id=h1.id,
-                        department_id=1, date_of_occurrence='2024-04-30',
-                        investigator='Safety Officer',
-                        description='B737-300 JY-JAX diverted to Esenboga due to visibility below minima at AMM',
-                        why1='Aircraft could not land at destination',
-                        why2='Visibility was below CAT I minima',
-                        why3='Unexpected weather deterioration during approach',
-                        why4='Weather forecast did not predict rapid deterioration',
-                        why5='Insufficient meteorological data resolution for the area',
-                        root_cause='Inadequate weather forecast resolution leading to unexpected visibility deterioration',
-                        human_factors='Crew followed correct procedures. No human error identified.',
-                        technical_factors='None identified.',
-                        organizational_factors='Weather briefing process relies on third-party provider.',
-                        environmental_factors='Rapid weather system movement across OJAI FIR.',
-                        recommendations='Review weather data provider contract. Evaluate upgrade to higher-resolution forecast model.',
-                        status='Closed')
-    db.session.add(inv)
-
-    # Sample MOC
-    moc = MOC(id='MOC-2024-DEMO1', title='Implementation of Electronic Flight Bag (EFB)',
-              description='Replace paper charts and manuals with EFB tablets for all flight crew',
-              department_id=1, change_type='Equipment',
-              initiator='Flight Operations Manager',
-              planned_date='2024-07-01',
-              pre_change_risk='Risk of crew unfamiliarity with new system. Training required.',
-              approval_status='Approved', approved_by='Accountable Manager',
-              implementation_status='Completed',
-              post_change_review='EFB successfully implemented. No safety issues reported post-implementation.')
-    db.session.add(moc)
-
-    # Sample bulletin
-    b1 = SafetyBulletin(id='BUL-2024-DEMO1', title='Low Visibility Operations — Crew Reminder',
-                        bulletin_type='Alert', issued_by='Safety Department',
-                        department_ids='1,4',
-                        content='All crew are reminded of LVP requirements at OJAI. Ensure alternate fuel is loaded when forecast visibility is below 800m RVR.')
-    db.session.add(b1)
-
-    # Sample training
-    t1 = Training(employee_name='Khaled Al Sabbagh', department_id=1,
-                  training_type='CRM — Crew Resource Management',
-                  training_date='2024-01-15', expiry_date='2026-01-15', status='Completed')
-    t2 = Training(employee_name='Mohammad Rahall', department_id=1,
-                  training_type='SMS Awareness Training',
-                  training_date='2024-02-10', expiry_date='2026-02-10', status='Completed')
-    db.session.add_all([t1, t2])
-
-    # SPI data
-    spi_entries = [
-        SPIData(spi_id=1, year=2025, month=1, events=6,  flights=175, rate=11.43),
-        SPIData(spi_id=1, year=2025, month=2, events=3,  flights=168, rate=5.95),
-        SPIData(spi_id=1, year=2025, month=3, events=6,  flights=182, rate=10.99),
-        SPIData(spi_id=1, year=2025, month=4, events=3,  flights=179, rate=5.59),
-        SPIData(spi_id=2, year=2025, month=1, events=1,  flights=175, rate=5.71),
-        SPIData(spi_id=2, year=2025, month=2, events=1,  flights=168, rate=5.95),
-        SPIData(spi_id=2, year=2025, month=3, events=0,  flights=182, rate=0.0),
-        SPIData(spi_id=2, year=2025, month=4, events=1,  flights=179, rate=5.59),
-        SPIData(spi_id=4, year=2025, month=1, events=0,  flights=175, rate=0.0),
-        SPIData(spi_id=4, year=2025, month=2, events=1,  flights=168, rate=5.95),
-        SPIData(spi_id=4, year=2025, month=3, events=0,  flights=182, rate=0.0),
-        SPIData(spi_id=4, year=2025, month=4, events=0,  flights=179, rate=0.0),
-    ]
-    db.session.add_all(spi_entries)
-    db.session.commit()
-    print('✅ Database seeded.')
-    seed_traceability()
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  ROUTES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# ─── Dashboard ────────────────────────────────────────────────────────────────
 @app.route('/')
 def dashboard():
     check_overdue_actions()
     total_haz   = Hazard.query.count()
     open_haz    = Hazard.query.filter_by(status='Open').count()
     intol       = Risk.query.filter_by(initial_tolerance='INTOLERABLE').count()
-    # Unified action count — all sources
-    open_act    = Action.query.filter(Action.status.in_(['Open','In Progress'])).count()
+    open_act    = Action.query.filter(Action.status.in_(['Open','In Progress','Overdue'])).count()
     overdue_act = Action.query.filter_by(status='Overdue').count()
-    # Audit-specific actions
-    audit_open  = AuditAction.query.filter(AuditAction.status.in_(['Open','In Progress'])).count()
-    audit_over  = AuditAction.query.filter_by(status='Overdue').count()
-    total_open_act = open_act + audit_open
-    total_over_act = overdue_act + audit_over
     asr_cnt     = ASRReport.query.count()
     audit_cnt   = AuditSchedule.query.count()
     moc_cnt     = MOC.query.count()
@@ -253,14 +118,16 @@ def dashboard():
     doc_cnt     = SMSDocument.query.filter_by(status='Approved').count()
     spi_alerts  = 0
     for ind in SPIIndicator.query.all():
-        recent = SPIData.query.filter_by(spi_id=ind.id).order_by(SPIData.year.desc(), SPIData.month.desc()).first()
+        recent = SPIData.query.filter_by(spi_id=ind.id).order_by(
+                 SPIData.year.desc(), SPIData.month.desc()).first()
         if recent and recent.rate >= ind.alert_l1:
             spi_alerts += 1
-    recent_haz  = Hazard.query.order_by(Hazard.created_at.desc()).limit(6).all()
-    recent_act  = Action.query.filter(Action.status != 'Closed').order_by(Action.created_at.desc()).limit(5).all()
-    return render_template('dashboard.html',
+    recent_haz = Hazard.query.order_by(Hazard.created_at.desc()).limit(6).all()
+    recent_act = Action.query.filter(
+                 Action.status != 'Closed').order_by(Action.created_at.desc()).limit(5).all()
+    return render_template('dashboard/dashboard.html',
         total_haz=total_haz, open_haz=open_haz, intol=intol,
-        open_act=total_open_act, overdue_act=total_over_act,
+        open_act=open_act, overdue_act=overdue_act,
         asr_cnt=asr_cnt, audit_cnt=audit_cnt, moc_cnt=moc_cnt,
         inv_cnt=inv_cnt, doc_cnt=doc_cnt, spi_alerts=spi_alerts,
         recent_haz=recent_haz, recent_act=recent_act)
@@ -304,7 +171,7 @@ def hazard_report():
         db.session.commit()
         flash(f'✓ Hazard {hid} created (Risk: {ri}). Complete the Risk Assessment to continue.', 'success')
         return redirect(url_for('ra_wizard_start', hid=hid))
-    return render_template('hazard_report.html')
+    return render_template('reporting/hazard_report.html')
 
 # ─── ASR ─────────────────────────────────────────────────────────────────────
 @app.route('/asr', methods=['GET','POST'])
@@ -357,7 +224,7 @@ def asr():
         db.session.commit()
         flash(f'✓ ASR {aid} submitted. Complete the Risk Assessment for hazard {hid}.', 'success')
         return redirect(url_for('ra_wizard_start', hid=hid))
-    return render_template('asr.html')
+    return render_template('reporting/asr_report.html')
 
 # ─── Hazard Log ───────────────────────────────────────────────────────────────
 @app.route('/hazard-log')
@@ -370,13 +237,13 @@ def hazard_log():
     if stat_f: q = q.filter_by(status=stat_f)
     if cls_f:  q = q.filter_by(classification=cls_f)
     hazards = q.order_by(Hazard.created_at.desc()).all()
-    return render_template('hazard_log.html', hazards=hazards,
+    return render_template('hazard/hazard_log.html', hazards=hazards,
         dept_f=dept_f, stat_f=stat_f, cls_f=cls_f)
 
 @app.route('/hazard-log/<hid>')
 def hazard_detail(hid):
     h = Hazard.query.get_or_404(hid)
-    return render_template('hazard_detail.html', h=h)
+    return render_template('hazard/hazard_detail.html', h=h)
 
 @app.route('/hazard-log/<hid>/update', methods=['POST'])
 def hazard_update(hid):
@@ -450,7 +317,7 @@ def actions():
         'closed':  Action.query.filter_by(status='Closed').count(),
         'overdue': Action.query.filter_by(status='Overdue').count(),
     }
-    return render_template('actions.html',
+    return render_template('action/action_list.html',
         actions=all_actions, counts=counts,
         stat_f=stat_f, pri_f=pri_f, src_f=src_f)
 
@@ -486,7 +353,7 @@ def new_action():
         'linked_ref_id':  request.args.get('linked_ref_id', ''),
         'return_url':     request.args.get('return_url', url_for('actions')),
     }
-    return render_template('action_form.html', hazards=hazards, pre=pre)
+    return render_template('action/action_form.html', hazards=hazards, pre=pre)
 
 
 @app.route('/actions/<aid>/update', methods=['POST'])
@@ -539,7 +406,7 @@ def action_detail(aid):
     """Single action detail page — shows everything linked to this action."""
     a      = Action.query.get_or_404(aid)
     hazard = Hazard.query.get(a.hazard_id) if a.hazard_id else None
-    return render_template('action_detail.html', a=a, hazard=hazard)
+    return render_template('action/action_detail.html', a=a, hazard=hazard)
 
 
 
@@ -569,7 +436,7 @@ def update_audit(aid):
 @app.route('/investigations')
 def investigations():
     all_inv = Investigation.query.order_by(Investigation.created_at.desc()).all()
-    return render_template('investigations.html', investigations=all_inv)
+    return render_template('investigation/investigation_list.html', investigations=all_inv)
 
 @app.route('/investigations/new', methods=['GET','POST'])
 def new_investigation():
@@ -608,18 +475,18 @@ def new_investigation():
         flash(f'✓ Investigation {inv.id} created.', 'success')
         return redirect(url_for('investigations'))
     hazards = Hazard.query.order_by(Hazard.created_at.desc()).all()
-    return render_template('investigation_form.html', hazards=hazards)
+    return render_template('investigation/investigation_form.html', hazards=hazards)
 
 @app.route('/investigations/<iid>')
 def investigation_detail(iid):
     inv = Investigation.query.get_or_404(iid)
-    return render_template('investigation_detail.html', inv=inv)
+    return render_template('investigation/investigation_detail.html', inv=inv)
 
 # ─── MOC ─────────────────────────────────────────────────────────────────────
 @app.route('/moc')
 def moc_list():
     all_moc = MOC.query.order_by(MOC.created_at.desc()).all()
-    return render_template('moc.html', mocs=all_moc)
+    return render_template('investigation/moc_list.html', mocs=all_moc)
 
 @app.route('/moc/new', methods=['GET','POST'])
 def new_moc():
@@ -664,7 +531,7 @@ def new_moc():
         db.session.commit()
         flash(f'✓ MOC {m.id} created. Hazard {hid} and Action auto-generated.', 'success')
         return redirect(url_for('moc_list'))
-    return render_template('moc_form.html')
+    return render_template('investigation/moc_form.html')
 
 @app.route('/moc/<mid>/update', methods=['POST'])
 def update_moc(mid):
@@ -719,7 +586,7 @@ def spi():
         table.append(dict(ind=ind, month_rates=month_rates, ytd=ytd,
                           status=status, depts=', '.join(dept_codes)))
 
-    return render_template('spi.html', table=table, MONTHS=MONTHS,
+    return render_template('spi/spi_dashboard.html', table=table, MONTHS=MONTHS,
         indicators=SPIIndicator.query.all(), dept_f=dept_f, cur_year=cur_year,
         enumerate=enumerate)
 
@@ -730,7 +597,7 @@ def safety_promotion():
     trainings = Training.query.order_by(Training.training_date.desc()).all()
     completed = Training.query.filter_by(status='Completed').count()
     overdue_t = Training.query.filter_by(status='Overdue').count()
-    return render_template('safety_promotion.html',
+    return render_template('spi/safety_promotion.html',
         bulletins=bulletins, trainings=trainings,
         completed=completed, overdue_t=overdue_t)
 
@@ -764,7 +631,7 @@ def new_training():
 # ─── Risk Matrix Reference ────────────────────────────────────────────────────
 @app.route('/risk-matrix')
 def risk_matrix():
-    return render_template('risk_matrix.html')
+    return render_template('risk/risk_matrix.html')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -852,7 +719,7 @@ def audit_plans():
     year_f = request.args.get('year', str(datetime.now().year))
     plans  = AuditPlan.query.filter_by(year=int(year_f)).order_by(AuditPlan.created_at).all()
     years  = list(range(datetime.now().year - 1, datetime.now().year + 3))
-    return render_template('audit_plan_list.html', plans=plans,
+    return render_template('audit/audit_plan_list.html', plans=plans,
                            year_f=int(year_f), years=years)
 
 @app.route('/audit-plans/new', methods=['GET', 'POST'])
@@ -876,7 +743,7 @@ def new_audit_plan():
         flash(f'✓ Audit Plan {pid} created for {f["year"]}.', 'success')
         return redirect(url_for('audit_plans'))
     years = list(range(datetime.now().year, datetime.now().year + 3))
-    return render_template('audit_plan_form.html', years=years)
+    return render_template('audit/audit_plan_form.html', years=years)
 
 
 @app.route('/audit-plans/<pid>/schedule', methods=['POST'])
@@ -934,7 +801,7 @@ def audit_schedule():
     if changed:
         db.session.commit()
 
-    return render_template('audit_schedule.html', schedules=schedules,
+    return render_template('audit/audit_schedule.html', schedules=schedules,
                            dept_f=dept_f, status_f=status_f)
 
 @app.route('/audit-schedule/new', methods=['GET', 'POST'])
@@ -967,7 +834,7 @@ def new_audit_schedule():
         db.session.commit()
         flash(f'✓ Audit {sid} created. Checklist auto-populated.', 'success')
         return redirect(url_for('audit_schedule'))
-    return render_template('audit_schedule_form.html')
+    return render_template('audit/audit_schedule_form.html')
 
 
 # ─── AUDIT EXECUTION ─────────────────────────────────────────────────────────
@@ -991,7 +858,7 @@ def audit_execution(sid):
         for f in s.findings
     ) if s.findings else True
     can_close = all_findings_actioned and all_actions_closed and all_verified
-    return render_template('audit_execution.html',
+    return render_template('audit/audit_execution.html',
         s=s, checklist=checklist, total=total, done=done, nc=nc,
         can_close=can_close,
         all_findings_actioned=all_findings_actioned,
@@ -1140,7 +1007,7 @@ def new_finding(sid):
 @app.route('/audit-findings/<fid>')
 def finding_detail(fid):
     finding = AuditFinding.query.get_or_404(fid)
-    return render_template('finding_detail.html', finding=finding)
+    return render_template('audit/finding_detail.html', finding=finding)
 
 
 # ─── AUDIT ACTIONS ────────────────────────────────────────────────────────────
@@ -1164,7 +1031,7 @@ def audit_actions():
     inprog   = AuditAction.query.filter_by(status='In Progress').count()
     overdue  = AuditAction.query.filter_by(status='Overdue').count()
     closed   = AuditAction.query.filter_by(status='Closed').count()
-    return render_template('audit_actions.html',
+    return render_template('audit/audit_actions.html',
         actions=actions, open_c=open_c, inprog=inprog,
         overdue=overdue, closed=closed,
         status_f=status_f, pri_f=pri_f)
@@ -1221,7 +1088,7 @@ def audit_dashboard():
     recent_findings = AuditFinding.query.order_by(
         AuditFinding.created_at.desc()).limit(5).all()
 
-    return render_template('audit_dashboard.html',
+    return render_template('audit/audit_dashboard.html',
         total_plans=total_plans, total_scheduled=total_scheduled,
         in_progress=in_progress, completed=completed, planned=planned,
         total_findings=total_findings, major=major, minor=minor, obs=obs,
@@ -1252,7 +1119,7 @@ def safety_policy():
     history = SafetyPolicy.query.filter_by(status='Archived').order_by(
               SafetyPolicy.version_num.desc()).all()
     drafts  = SafetyPolicy.query.filter_by(status='Draft').all()
-    return render_template('safety_policy.html',
+    return render_template('safety_policy/policy.html',
                            active=active, history=history, drafts=drafts)
 
 @app.route('/safety-policy/new', methods=['GET','POST'])
@@ -1280,7 +1147,7 @@ def new_safety_policy():
         return redirect(url_for('safety_policy'))
     latest = SafetyPolicy.query.order_by(SafetyPolicy.version_num.desc()).first()
     next_ver = (latest.version_num + 1) if latest else 0
-    return render_template('safety_policy_form.html', next_ver=next_ver, latest=latest)
+    return render_template('safety_policy/policy_form.html', next_ver=next_ver, latest=latest)
 
 @app.route('/safety-policy/<pid>/activate', methods=['POST'])
 def activate_policy(pid):
@@ -1314,7 +1181,7 @@ def edit_policy(pid):
 @app.route('/safety-roles')
 def safety_roles():
     roles = SafetyRole.query.filter_by(active=True).order_by(SafetyRole.role_type).all()
-    return render_template('safety_roles.html', roles=roles)
+    return render_template('safety_policy/roles.html', roles=roles)
 
 @app.route('/safety-roles/new', methods=['GET','POST'])
 def new_safety_role():
@@ -1337,7 +1204,7 @@ def new_safety_role():
         db.session.commit()
         flash(f'✓ Role {r.role_name} assigned to {r.person_name}.', 'success')
         return redirect(url_for('safety_roles'))
-    return render_template('safety_role_form.html')
+    return render_template('safety_policy/role_form.html')
 
 @app.route('/safety-roles/<rid>/update', methods=['POST'])
 def update_safety_role(rid):
@@ -1358,7 +1225,7 @@ def update_safety_role(rid):
 def safety_personnel():
     personnel = SafetyPersonnel.query.filter_by(active=True).order_by(
                 SafetyPersonnel.sms_role).all()
-    return render_template('safety_personnel.html', personnel=personnel)
+    return render_template('safety_policy/personnel.html', personnel=personnel)
 
 @app.route('/safety-personnel/new', methods=['GET','POST'])
 def new_safety_personnel():
@@ -1380,7 +1247,7 @@ def new_safety_personnel():
         db.session.commit()
         flash(f'✓ Personnel record created for {p.name}.', 'success')
         return redirect(url_for('safety_personnel'))
-    return render_template('safety_personnel_form.html')
+    return render_template('safety_policy/personnel_form.html')
 
 @app.route('/safety-personnel/<pid>/update', methods=['POST'])
 def update_personnel(pid):
@@ -1403,7 +1270,7 @@ def update_personnel(pid):
 def erp_list():
     plans = ERPlan.query.filter_by(status='Active').order_by(ERPlan.scenario_type).all()
     archived = ERPlan.query.filter_by(status='Archived').all()
-    return render_template('erp.html', plans=plans, archived=archived)
+    return render_template('safety_policy/erp.html', plans=plans, archived=archived)
 
 @app.route('/erp/new', methods=['GET','POST'])
 def new_erp():
@@ -1429,12 +1296,12 @@ def new_erp():
         db.session.commit()
         flash(f'✓ ERP {e.erp_ref} created: {e.title}', 'success')
         return redirect(url_for('erp_list'))
-    return render_template('erp_form.html')
+    return render_template('safety_policy/erp_form.html')
 
 @app.route('/erp/<eid>')
 def erp_detail(eid):
     e = ERPlan.query.get_or_404(eid)
-    return render_template('erp_detail.html', e=e)
+    return render_template('safety_policy/erp_detail.html', e=e)
 
 @app.route('/erp/<eid>/update', methods=['POST'])
 def update_erp(eid):
@@ -1463,7 +1330,7 @@ def documents():
     if status_f: q = q.filter_by(status=status_f)
     docs = q.order_by(SMSDocument.created_at.desc()).all()
     doc_types = ['POL','MAN','SOP','RA','AUD','MOC','INV','TRN','NEWS']
-    return render_template('documents.html', docs=docs, doc_types=doc_types,
+    return render_template('document/document_list.html', docs=docs, doc_types=doc_types,
                            type_f=type_f, dept_f=dept_f, status_f=status_f)
 
 @app.route('/documents/new', methods=['GET','POST'])
@@ -1495,7 +1362,7 @@ def new_document():
         flash(f'✓ Document {doc_id} created as Draft.', 'success')
         return redirect(url_for('documents'))
     doc_types = ['POL','MAN','SOP','RA','AUD','MOC','INV','TRN','NEWS']
-    return render_template('document_form.html', doc_types=doc_types)
+    return render_template('document/document_form.html', doc_types=doc_types)
 
 @app.route('/documents/<did>')
 def document_detail(did):
@@ -1509,7 +1376,7 @@ def document_detail(did):
             current = SMSDocument.query.get(current.parent_doc_id)
         else:
             break
-    return render_template('document_detail.html', doc=doc, versions=versions)
+    return render_template('document/document_detail.html', doc=doc, versions=versions)
 
 @app.route('/documents/<did>/advance', methods=['POST'])
 def advance_document(did):
@@ -1700,7 +1567,7 @@ def document_trace(did):
     while current:
         versions.append(current)
         current = SMSDocument.query.get(current.parent_doc_id) if current.parent_doc_id else None
-    return render_template('document_trace.html', doc=doc, trace=trace, versions=versions)
+    return render_template('document/document_trace.html', doc=doc, trace=trace, versions=versions)
 
 # ─── ENTITY TRACEABILITY VIEWS ────────────────────────────────────────────────
 @app.route('/hazard-log/<hid>/documents')
@@ -1720,7 +1587,7 @@ def hazard_documents(hid):
         for item in get_doc_links_for_entity('action', action.id):
             item['action'] = action
             action_docs.append(item)
-    return render_template('hazard_documents.html',
+    return render_template('hazard/hazard_documents.html',
         hazard=hazard, haz_docs=haz_docs,
         risk_docs=risk_docs, action_docs=action_docs)
 
@@ -1733,7 +1600,7 @@ def audit_documents(sid):
         for item in get_doc_links_for_entity('audit_finding', finding.id):
             item['finding'] = finding
             finding_docs.append(item)
-    return render_template('audit_documents.html',
+    return render_template('audit/audit_documents.html',
         schedule=schedule, audit_docs=audit_docs, finding_docs=finding_docs)
 
 # ─── TRACEABILITY DASHBOARD ───────────────────────────────────────────────────
@@ -1771,7 +1638,7 @@ def traceability_dashboard():
         db.func.count(DocumentLink.id).label('cnt')
     ).group_by(DocumentLink.entity_type).all()
 
-    return render_template('traceability.html',
+    return render_template('document/traceability.html',
         total_docs=total_docs, total_links=total_links,
         approved=approved, draft=draft, archived=archived, review=review,
         orphan_docs=orphan_docs, unlinked_hazards=unlinked_hazards,
@@ -1823,108 +1690,8 @@ def auto_link_document(doc_id, entity_type, entity_id, reason='Auto-linked'):
 
 # ─── SEED TRACEABILITY DATA (called from seed()) ─────────────────────────────
 def seed_traceability():
-    if DocumentLink.query.first():
-        return
-    # Only run if we have demo data
-    demo_haz  = Hazard.query.get('HAZ-2024-DEMO1')
-    demo_haz2 = Hazard.query.get('HAZ-2024-DEMO2')
-    if not demo_haz:
-        return
-
-    dept_fo = Department.query.filter_by(code='FO').first()
-    dept_go = Department.query.filter_by(code='GO').first()
-    if not dept_fo:
-        return
-
-    year = 2024
-    # Create demo RA document for HAZ-2024-DEMO1
-    ra_id = f"RA-FO-{year}-001-REV0"
-    if not SMSDocument.query.get(ra_id):
-        ra = SMSDocument(
-            id=ra_id, doc_type='RA',
-            department_id=dept_fo.id if dept_fo else 1,
-            title='Low Visibility Operations — Risk Assessment',
-            description='Risk assessment for LVP operations at OJAI',
-            content='Risk: Diversion due to visibility below minima.\nLikelihood: 4 (Occasional)\nSeverity: B (Hazardous)\nRisk Index: 4B — INTOLERABLE\nControls: LVP procedures, alternate planning, real-time ATIS monitoring.',
-            version='REV0', version_num=0, seq_num=1,
-            status='Approved',
-            created_by='Safety Manager',
-            approved_by='Accountable Manager',
-            effective_date='2024-01-15',
-            review_due='2025-01-15',
-            change_summary='Initial issue'
-        )
-        db.session.add(ra)
-
-    # Create demo SOP
-    sop_id = f"SOP-FO-{year}-001-REV0"
-    if not SMSDocument.query.get(sop_id):
-        sop = SMSDocument(
-            id=sop_id, doc_type='SOP',
-            department_id=dept_fo.id if dept_fo else 1,
-            title='Low Visibility Procedures (LVP) — Standard Operating Procedure',
-            description='Crew procedures for operations in low visibility conditions',
-            content='1. Pre-flight: Check LVP NOTAM and minima.\n2. Dispatch: Load alternate fuel per LVP policy.\n3. Approach: Brief crew on LVP requirements.\n4. Decision: Apply CAT I/II/III minima per approved OpSpecs.\n5. Go-around: Execute immediately if visual reference not established.',
-            version='REV0', version_num=0, seq_num=1,
-            status='Approved',
-            created_by='Flight Operations Manager',
-            approved_by='Accountable Manager',
-            effective_date='2024-01-15',
-            review_due='2025-01-15',
-            change_summary='Initial issue'
-        )
-        db.session.add(sop)
-
-    # Create FOD SOP for Ground Ops
-    fod_id = f"SOP-GO-{year}-001-REV0"
-    if not SMSDocument.query.get(fod_id) and dept_go:
-        fod = SMSDocument(
-            id=fod_id, doc_type='SOP',
-            department_id=dept_go.id,
-            title='Foreign Object Debris (FOD) Prevention and Control',
-            description='Ramp FOD inspection and prevention procedures',
-            content='1. Pre-movement: Conduct FOD walk of ramp area.\n2. Post-rain: Mandatory FOD inspection before resuming ops.\n3. Supervisor sign-off required before aircraft movement.\n4. All FOD found must be logged and reported.',
-            version='REV0', version_num=0, seq_num=1,
-            status='Approved',
-            created_by='Ground Operations Manager',
-            approved_by='Accountable Manager',
-            effective_date='2024-03-01',
-            review_due='2025-03-01',
-            change_summary='Initial issue'
-        )
-        db.session.add(fod)
-
-    db.session.flush()
-
-    # Now create links — this is the traceability backbone
-    links_to_create = [
-        # RA linked to hazard and risk
-        (ra_id,  'hazard',  'HAZ-2024-DEMO1', 'Risk assessment for this hazard'),
-        (ra_id,  'risk',    'RSK-2024-DEMO1', 'RA covers this specific risk'),
-        # SOP linked to hazard and risk
-        (sop_id, 'hazard',  'HAZ-2024-DEMO1', 'SOP referenced as control measure'),
-        (sop_id, 'risk',    'RSK-2024-DEMO1', 'SOP is the primary Preventive Control'),
-        # FOD SOP linked to Ground Ops hazard
-        (fod_id, 'hazard',  'HAZ-2024-DEMO2', 'FOD SOP addresses this hazard'),
-    ]
-
-    # Also link to audit finding if it exists
-    demo_finding = AuditFinding.query.first()
-    if demo_finding:
-        links_to_create.append(
-            (sop_id, 'audit_finding', demo_finding.id, 'SOP referenced in finding')
-        )
-
-    for doc_id, etype, eid, reason in links_to_create:
-        existing = DocumentLink.query.filter_by(
-            document_id=doc_id, entity_type=etype, entity_id=eid).first()
-        if not existing:
-            db.session.add(DocumentLink(
-                document_id=doc_id, entity_type=etype,
-                entity_id=eid, link_reason=reason))
-
-    db.session.commit()
-    print('✅ Traceability seed data created.')
+    """Traceability seed — skipped in production (no demo data)."""
+    pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1999,7 +1766,7 @@ def risk_register():
     no_controls = sum(1 for r in risks if len(r.controls) == 0)
     no_residual = sum(1 for r in risks if not r.residual_risk_index)
 
-    return render_template('risk_register.html',
+    return render_template('risk/risk_register.html',
         risks=risks, dept_f=dept_f, tol_f=tol_f, stat_f=stat_f, src_f=src_f,
         total=total, intolerable=intolerable, tolerable=tolerable,
         acceptable=acceptable, no_controls=no_controls, no_residual=no_residual,
@@ -2018,7 +1785,7 @@ def risk_detail(rid):
     r_actions = RiskAction.query.filter_by(risk_id=rid).order_by(RiskAction.created_at.desc()).all()
     # Audit findings linked to same hazard
     audit_findings = AuditFinding.query.filter_by(hazard_id=hazard.id).all() if hazard else []
-    return render_template('risk_detail.html',
+    return render_template('risk/risk_detail.html',
         risk=risk, hazard=hazard, docs=docs, r_actions=r_actions,
         audit_findings=audit_findings)
 
@@ -2165,7 +1932,7 @@ def srm_dashboard():
         c = h.classification or 'Unclassified'
         classifications[c] = classifications.get(c, 0) + 1
 
-    return render_template('srm_dashboard.html',
+    return render_template('risk/srm_dashboard.html',
         total_risks=total_risks, intol_risks=intol_risks,
         no_ctrl=no_ctrl, no_resid=no_resid, reduced=reduced,
         trend_data=trend_data[:10],
@@ -2207,7 +1974,7 @@ def ra_list():
     if dept_f: q = q.filter_by(department_id=int(dept_f))
     if stat_f: q = q.filter_by(status=stat_f)
     ras = q.order_by(RiskAssessment.created_at.desc()).all()
-    return render_template('ra_list.html', ras=ras, dept_f=dept_f, stat_f=stat_f)
+    return render_template('risk/ra_list.html', ras=ras, dept_f=dept_f, stat_f=stat_f)
 
 # ─── CREATE NEW RA (linked to hazard or standalone) ──────────────────────────
 @app.route('/risk-assessments/new', methods=['GET','POST'])
@@ -2337,7 +2104,7 @@ def new_ra():
         return redirect(url_for('ra_detail', ra_id=ra_id))
 
     # GET — pre-populate from hazard if provided
-    return render_template('ra_form.html', hazard=hazard,
+    return render_template('risk/ra_form.html', hazard=hazard,
                            today=date.today().isoformat())
 
 # ─── RA DETAIL (all 5 pages in one view) ────────────────────────────────────
@@ -2345,7 +2112,7 @@ def new_ra():
 def ra_detail(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     worst_i, worst_r = compute_ra_summary(ra)
-    return render_template('ra_detail.html', ra=ra,
+    return render_template('risk/ra_detail.html', ra=ra,
                            worst_initial=worst_i, worst_residual=worst_r,
                            get_tolerance=get_tolerance)
 
@@ -2773,7 +2540,7 @@ def ra_wizard_step(hid, step):
     if ra.mitigations:                         completed_steps = max(completed_steps, 5)
     if ra.rows and ra.rows[0].risk_index_residual: completed_steps = max(completed_steps, 6)
 
-    return render_template('ra_wizard.html',
+    return render_template('risk/ra_wizard.html',
         hazard=hazard, ra=ra, step=step,
         steps=WIZARD_STEPS,
         completed_steps=completed_steps,
@@ -2828,7 +2595,7 @@ def tol_color(tol):
 def ra_print(ra_id):
     """Returns a print-ready HTML page that users print as PDF from the browser."""
     ra = RiskAssessment.query.get_or_404(ra_id)
-    return render_template('ra_print.html', ra=ra, get_tolerance=get_tolerance)
+    return render_template('risk/ra_print.html', ra=ra, get_tolerance=get_tolerance)
 
 # ─── 2. HAZARD LOG → EXCEL ────────────────────────────────────────────────────
 @app.route('/hazard-log/export-excel')
@@ -3027,14 +2794,14 @@ def hazard_report_print(rep_id):
     rep    = HazardReport.query.get_or_404(rep_id)
     hazard = Hazard.query.get(rep.hazard_id) if rep.hazard_id else None
     ra     = RiskAssessment.query.filter_by(hazard_id=rep.hazard_id).first() if rep.hazard_id else None
-    return render_template('hazard_report_print.html', rep=rep, hazard=hazard, ra=ra,
+    return render_template('reporting/hazard_report_print.html', rep=rep, hazard=hazard, ra=ra,
                            get_tolerance=get_tolerance)
 
 # ─── 4. ASR PRINT ─────────────────────────────────────────────────────────────
 @app.route('/asr/<asr_id>/print')
 def asr_print(asr_id):
     asr = ASRReport.query.get_or_404(asr_id)
-    return render_template('asr_print.html', asr=asr)
+    return render_template('reporting/asr_print.html', asr=asr)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3163,7 +2930,7 @@ def ra_close(ra_id):
 def ra_closure_check(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     blocks = ra_closure_checks(ra)
-    return render_template('ra_closure_check.html', ra=ra, blocks=blocks)
+    return render_template('risk/ra_closure_check.html', ra=ra, blocks=blocks)
 
 # ─── REASSESS (create new revision) ──────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/reassess', methods=['POST'])
