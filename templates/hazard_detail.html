@@ -96,9 +96,13 @@
         <div style="color:var(--muted);font-size:11px;margin-top:3px">Owner: {{ a.owner or '—' }} · Due: {{ a.due_date or '—' }}</div>
       </div>
       {% else %}<p style="color:var(--muted);font-size:13px">No actions yet.</p>{% endfor %}
-      <a href="/actions/new?source=Hazard&hazard_id={{ h.id }}&return_url=/hazard-log/{{ h.id }}"
-       class="btn btn-nav btn-sm" style="margin-top:8px">+ Create Action</a>
-    <a href="/actions?source=Hazard+Report" class="btn btn-outline btn-sm" style="margin-top:8px">View All Actions →</a>
+      <a href="/actions/new?source=Hazard+Report&hazard_id={{ h.id }}&return_url=/hazard-log/{{ h.id }}"
+       class="btn btn-nav btn-sm" style="margin-top:8px;background:#7c3aed">
+       ✅ Create Action for this Hazard
+    </a>
+    <a href="/actions?source=Hazard+Report" class="btn btn-outline btn-sm" style="margin-top:8px">
+       View All Actions →
+    </a>
     </div>
   </div>
 

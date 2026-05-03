@@ -1,214 +1,276 @@
 {% extends "base.html" %}
-{% block title %}{{ a.id }} — Action Detail{% endblock %}
+{% block title %}{{ a.id }} — Action{% endblock %}
 {% block content %}
+
 <div style="margin-bottom:14px">
   <a href="/actions" style="color:var(--muted);font-size:13px">← All Actions</a>
+  {% if hazard %}
+  &nbsp;·&nbsp;
+  <a href="/hazard-log/{{ hazard.id }}" style="color:var(--muted);font-size:13px">
+    Hazard: {{ hazard.id }}
+  </a>
+  {% endif %}
 </div>
-<div class="page-title">{{ a.id }}</div>
-<div class="page-sub">{{ a.source }} · Created: {{ a.created_at.strftime('%d %b %Y') }}</div>
 
-<!-- Lifecycle status bar -->
-<div class="card" style="padding:14px 20px;margin-bottom:18px">
-  <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:12px">
-    {% set life = ['Open','In Progress','Completed','Verified','Closed'] %}
-    {% set cur = life.index(a.status) if a.status in life else 0 %}
-    {% set cols = ['#9ca3af','#1d4ed8','#0891b2','#7c3aed','#15803d'] %}
-    {% for i, s in enumerate(life) %}
-    <span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;
-      {% if a.status == s %}background:{{ cols[i] }};color:#fff
-      {% elif cur > i %}background:{{ cols[i] }}25;color:{{ cols[i] }};border:1px solid {{ cols[i] }}50
-      {% else %}background:#f3f4f6;color:#9ca3af{% endif %}">{{ s }}</span>
-    {% if not loop.last %}<span style="color:#d1d5db">→</span>{% endif %}
+<div class="page-title">{{ a.id }}</div>
+<div class="page-sub">
+  Source: <strong>{{ a.source }}</strong> ·
+  Created: {{ a.created_at.strftime('%d %b %Y') }}
+  {% if a.closed_date %} · Closed: <strong style="color:#15803d">{{ a.closed_date }}</strong>{% endif %}
+</div>
+
+<!-- Status bar — simple 3-step -->
+<div class="card" style="padding:14px 20px;margin-bottom:20px">
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
+    {% for step, col in [('Open','#d97706'),('In Progress','#1d4ed8'),('Closed','#15803d')] %}
+    <span style="padding:6px 18px;border-radius:20px;font-size:12px;font-weight:700;
+      {% if a.status == step or (a.status=='Overdue' and step=='Open') %}
+        background:{{ col }};color:#fff;
+      {% else %}
+        background:#f3f4f6;color:#9ca3af;
+      {% endif %}">
+      {{ step }}
+    </span>
+    {% if not loop.last %}
+    <span style="color:#d1d5db;font-size:16px">→</span>
+    {% endif %}
     {% endfor %}
     {% if a.status == 'Overdue' %}
-    <span style="margin-left:8px;background:#dc2626;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● OVERDUE</span>
+    <span style="margin-left:10px;background:#dc2626;color:#fff;padding:6px 18px;border-radius:20px;font-size:12px;font-weight:800">
+      ⚠ OVERDUE
+    </span>
     {% endif %}
   </div>
+
+  <!-- Key dates -->
   <div style="display:flex;gap:20px;font-size:12px;color:var(--muted);flex-wrap:wrap">
-    <span>📅 Due: <strong style="color:{% if a.status=='Overdue' %}#dc2626{% else %}#374151{% endif %}">{{ a.due_date or '—' }}</strong></span>
-    {% if a.completed_date %}<span>✓ Completed: <strong style="color:#374151">{{ a.completed_date }}</strong></span>{% endif %}
-    {% if a.verified_date %}<span>🔍 Verified: <strong style="color:#374151">{{ a.verified_date }}</strong></span>{% endif %}
-    {% if a.closed_date %}<span>🔒 Closed: <strong style="color:#15803d">{{ a.closed_date }}</strong></span>{% endif %}
-    {% if a.reopen_count %}<span style="color:#dc2626">🔄 Reopened {{ a.reopen_count }}x</span>{% endif %}
+    <span>Due: <strong style="color:{% if a.status=='Overdue' %}#dc2626{% else %}#374151{% endif %}">
+      {{ a.due_date or '—' }}</strong></span>
+    {% if a.closed_date %}
+    <span>Closed: <strong style="color:#15803d">{{ a.closed_date }}</strong></span>
+    {% endif %}
   </div>
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
-  <!-- Left: Action details + update form -->
+
+  <!-- LEFT: What is this action about -->
   <div>
     <div class="card">
       <div class="card-title">Action Details</div>
       <table style="font-size:13px;width:100%">
-        <tr><td style="color:var(--muted);padding:5px 0;width:130px">Type</td>
-          <td><span class="badge b-blue">{{ a.action_type or 'Corrective' }}</span></td></tr>
-        <tr><td style="color:var(--muted);padding:5px 0">Source</td>
-          <td><strong>{{ a.source }}</strong></td></tr>
-        <tr><td style="color:var(--muted);padding:5px 0">Priority</td>
-          <td>{% if a.priority=='High' %}<span class="badge b-red">High</span>
-          {% elif a.priority=='Medium' %}<span class="badge b-yellow">Medium</span>
-          {% else %}<span class="badge b-gray">Low</span>{% endif %}</td></tr>
-        <tr><td style="color:var(--muted);padding:5px 0">Owner</td>
-          <td>{{ a.owner or '—' }}</td></tr>
-        <tr><td style="color:var(--muted);padding:5px 0">Department</td>
-          <td>{{ a.department.name if a.department else '—' }}</td></tr>
-        <tr><td style="color:var(--muted);padding:5px 0;vertical-align:top">Description</td>
-          <td>{{ a.description or '—' }}</td></tr>
+        <tr>
+          <td style="color:var(--muted);padding:7px 0;width:120px">Description</td>
+          <td>{{ a.description or '—' }}</td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding:7px 0">Owner</td>
+          <td><strong>{{ a.owner or '—' }}</strong></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding:7px 0">Due Date</td>
+          <td style="{% if a.status=='Overdue' %}color:#dc2626;font-weight:700{% endif %}">
+            {{ a.due_date or '—' }}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding:7px 0">Priority</td>
+          <td>
+            {% if a.priority=='High' %}<span class="badge b-red">High</span>
+            {% elif a.priority=='Medium' %}<span class="badge b-yellow">Medium</span>
+            {% else %}<span class="badge b-gray">Low</span>{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding:7px 0">Status</td>
+          <td>
+            {% if a.status=='Closed' %}<span class="badge b-green">✓ Closed</span>
+            {% elif a.status=='Overdue' %}<span class="badge b-red">⚠ Overdue</span>
+            {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+            {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+          </td>
+        </tr>
         {% if a.effectiveness %}
-        <tr><td style="color:var(--muted);padding:5px 0">Effectiveness</td>
+        <tr>
+          <td style="color:var(--muted);padding:7px 0">Effectiveness</td>
           <td>
             {% if a.effectiveness=='Effective' %}<span class="badge b-green">✓ Effective</span>
             {% elif a.effectiveness=='Partially Effective' %}<span class="badge b-yellow">~ Partially Effective</span>
             {% else %}<span class="badge b-red">✗ Ineffective</span>{% endif %}
-          </td></tr>
+          </td>
+        </tr>
         {% endif %}
-        {% if a.verified_by %}
-        <tr><td style="color:var(--muted);padding:5px 0">Verified By</td>
-          <td>{{ a.verified_by }}</td></tr>
-        {% endif %}
-        {% if a.reopen_reason %}
-        <tr><td style="color:var(--muted);padding:5px 0;vertical-align:top">Reopen Reason</td>
-          <td style="color:#dc2626">{{ a.reopen_reason }}</td></tr>
+        {% if a.effectiveness_review %}
+        <tr>
+          <td style="color:var(--muted);padding:7px 0;vertical-align:top">Review Notes</td>
+          <td>{{ a.effectiveness_review }}</td>
+        </tr>
         {% endif %}
       </table>
     </div>
 
-    <!-- Update form -->
+    <!-- Update form — only shown if not closed -->
+    {% if a.status != 'Closed' %}
     <div class="card">
-      <div class="card-title">Update Action</div>
+      <div class="card-title">Update This Action</div>
       <form method="POST" action="/actions/{{ a.id }}/update">
         <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
-        <div class="g2">
-          <div class="fg"><label>Status</label>
-            <select name="status">
-              {% for s in ['Open','In Progress','Completed','Verified','Closed'] %}
-              <option {% if a.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-            </select></div>
-          <div class="fg"><label>Priority</label>
-            <select name="priority">
-              {% for p in ['High','Medium','Low'] %}<option {% if a.priority==p %}selected{% endif %}>{{ p }}</option>{% endfor %}
-            </select></div>
-        </div>
-        <div class="g2">
-          <div class="fg"><label>Owner</label>
-            <input type="text" name="owner" value="{{ a.owner or '' }}"/></div>
-          <div class="fg"><label>Due Date</label>
-            <input type="date" name="due_date" value="{{ a.due_date or '' }}"/></div>
-        </div>
-        <div class="fg"><label>Description</label>
-          <textarea name="description" rows="3">{{ a.description or '' }}</textarea></div>
 
-        <div class="sec" style="margin-top:10px">Effectiveness Review</div>
-        <div class="g2">
-          <div class="fg"><label>Effectiveness</label>
-            <select name="effectiveness">
-              <option value="">Not yet assessed</option>
-              {% for e in ['Effective','Partially Effective','Ineffective'] %}
-              <option {% if a.effectiveness==e %}selected{% endif %}>{{ e }}</option>{% endfor %}
-            </select></div>
-          <div class="fg"><label>Verified By</label>
-            <input type="text" name="verified_by" value="{{ a.verified_by or '' }}" placeholder="Name of verifier"/></div>
+        <div class="fg">
+          <label>Status</label>
+          <select name="status" id="status-sel" onchange="toggleEffectiveness()">
+            {% for s in ['Open','In Progress','Closed'] %}
+            <option {% if a.status==s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
         </div>
-        <div class="fg"><label>Effectiveness Notes</label>
-          <textarea name="effectiveness_review" rows="2">{{ a.effectiveness_review or '' }}</textarea></div>
-        <div class="fg"><label>Reopen Reason (if Ineffective)</label>
-          <input type="text" name="reopen_reason" placeholder="Required if marking Ineffective…"/></div>
+
+        <!-- Effectiveness — only required when closing -->
+        <div class="fg" id="eff-block" style="display:none">
+          <label>
+            Was this action effective?
+            <span style="color:#dc2626">*</span>
+            <span style="font-weight:400;color:var(--muted)">(required to close)</span>
+          </label>
+          <select name="effectiveness" id="eff-sel">
+            <option value="">Select…</option>
+            <option>Effective</option>
+            <option>Partially Effective</option>
+            <option>Ineffective</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">
+            If you select <strong>Ineffective</strong> — the action will be automatically re-opened so you can try a different approach.
+          </div>
+        </div>
+
+        <div class="fg" id="review-block" style="display:none">
+          <label>Notes on what was done</label>
+          <textarea name="effectiveness_review" rows="3"
+            placeholder="Describe what was done and why it was or was not effective…"></textarea>
+        </div>
+
+        <div class="fg">
+          <label>Owner</label>
+          <input type="text" name="owner" value="{{ a.owner or '' }}"/>
+        </div>
+        <div class="fg">
+          <label>Due Date</label>
+          <input type="date" name="due_date" value="{{ a.due_date or '' }}"/>
+        </div>
+
         <button type="submit" class="btn btn-nav">Save Changes</button>
       </form>
     </div>
+    {% endif %}
   </div>
 
-  <!-- Right: Traceability -->
+  <!-- RIGHT: Where does this action come from (traceability) -->
   <div>
     <div class="card">
-      <div class="card-title">🔗 Traceability — Connected To</div>
+      <div class="card-title">🔗 Linked To</div>
 
       {% if hazard %}
-      <div style="border:1.5px solid #d97706;border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#d97706;margin-bottom:4px">⚠ HAZARD</div>
-        <div style="font-size:13px;font-weight:700">{{ hazard.generic_hazard or '—' }}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">
-          {{ hazard.id }} · {{ hazard.classification or '—' }} · {{ hazard.status }}
+      <div style="border:1.5px solid #d97706;border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#d97706;margin-bottom:5px">
+          ⚠ HAZARD
+        </div>
+        <div style="font-weight:700;font-size:14px;color:#0f1c3f">
+          {{ hazard.generic_hazard or hazard.specific_components or '—' }}
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">
+          {{ hazard.id }} ·
+          {{ hazard.classification or '—' }} ·
+          <span style="font-weight:700;
+            {% if hazard.status=='Open' %}color:#d97706
+            {% elif hazard.status=='Controlled' %}color:#15803d
+            {% else %}color:#6b7280{% endif %}">
+            {{ hazard.status }}
+          </span>
         </div>
         {% if hazard.risks %}
-        <div style="margin-top:6px;font-size:11px">
-          Risk: <strong>{{ hazard.risks[0].initial_risk_index }}</strong>
-          {% if hazard.risks[0].initial_tolerance=='INTOLERABLE' %}<span class="badge b-red" style="font-size:9px">INTOLERABLE</span>
-          {% elif hazard.risks[0].initial_tolerance=='TOLERABLE' %}<span class="badge b-yellow" style="font-size:9px">TOLERABLE</span>
-          {% else %}<span class="badge b-green" style="font-size:9px">ACCEPTABLE</span>{% endif %}
-        </div>{% endif %}
-        <a href="/hazard-log/{{ hazard.id }}" style="font-size:11px;color:#1d4ed8;display:block;margin-top:6px">Open Hazard →</a>
-      </div>
-      {% endif %}
-
-      {% if risk %}
-      <div style="border:1.5px solid #1e40af;border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#1e40af;margin-bottom:4px">📊 RISK</div>
-        <div style="font-size:13px;font-weight:700">{{ risk.id }}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">{{ (risk.description or '—')[:80] }}</div>
-        <div style="margin-top:5px">
-          <span style="font-weight:800;font-size:16px;font-family:monospace;color:{% if risk.initial_tolerance=='INTOLERABLE' %}#dc2626{% elif risk.initial_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
-            {{ risk.initial_risk_index }}</span>
-          → <span style="font-weight:800;font-size:16px;font-family:monospace;color:{% if risk.residual_tolerance=='INTOLERABLE' %}#dc2626{% elif risk.residual_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
-            {{ risk.residual_risk_index or '?' }}</span>
+        <div style="margin-top:8px;padding:8px;background:#f8f9fc;border-radius:6px;font-size:12px">
+          <strong>Risk:</strong>
+          <span style="font-size:16px;font-weight:900;font-family:monospace;
+            color:{% if hazard.risks[0].initial_tolerance=='INTOLERABLE' %}#dc2626{% elif hazard.risks[0].initial_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+            {{ hazard.risks[0].initial_risk_index }}
+          </span>
+          <span class="badge {% if hazard.risks[0].initial_tolerance=='INTOLERABLE' %}b-red{% elif hazard.risks[0].initial_tolerance=='TOLERABLE' %}b-yellow{% else %}b-green{% endif %}" style="font-size:10px">
+            {{ hazard.risks[0].initial_tolerance }}
+          </span>
+          {% if hazard.risks[0].residual_risk_index %}
+          → <span style="font-size:14px;font-weight:900;font-family:monospace;
+            color:{% if hazard.risks[0].residual_tolerance=='INTOLERABLE' %}#dc2626{% elif hazard.risks[0].residual_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+            {{ hazard.risks[0].residual_risk_index }}
+          </span>
+          {% endif %}
         </div>
-        <a href="/risk/{{ risk.id }}" style="font-size:11px;color:#1d4ed8;display:block;margin-top:6px">Open Risk →</a>
+        {% endif %}
+        <a href="/hazard-log/{{ hazard.id }}"
+           style="display:inline-block;margin-top:10px;font-size:12px;color:#1d4ed8;font-weight:700">
+          Open Hazard →
+        </a>
       </div>
       {% endif %}
 
-      {% if audit %}
-      <div style="border:1.5px solid #065f46;border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#065f46;margin-bottom:4px">🔍 AUDIT</div>
-        <div style="font-size:13px;font-weight:700">{{ audit.id }}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">{{ audit.audit_type }} · {{ audit.status }}</div>
-        <a href="/audit-schedule/{{ audit.id }}" style="font-size:11px;color:#1d4ed8;display:block;margin-top:6px">Open Audit →</a>
-      </div>
-      {% endif %}
-
-      {% if ra %}
-      <div style="border:1.5px solid #7c3aed;border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#7c3aed;margin-bottom:4px">📋 RISK ASSESSMENT</div>
-        <div style="font-size:13px;font-weight:700">{{ ra.control_number or ra.id }}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">{{ ra.title or '—' }} · REV{{ ra.revision or 0 }} · {{ ra.status }}</div>
-        <a href="/risk-assessments/{{ ra.id }}" style="font-size:11px;color:#1d4ed8;display:block;margin-top:6px">Open RA →</a>
-      </div>
-      {% endif %}
-
-      {% if not hazard and not risk and not audit and not ra %}
-      <p style="color:var(--muted);font-size:13px">No traceability links found for this action.</p>
-      {% endif %}
-
-      <!-- Linked documents -->
-      {% if docs %}
-      <div style="margin-top:12px">
-        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:6px">📁 Linked Documents</div>
-        {% for doc in docs %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
-          <span class="mono" style="color:#1d4ed8">{{ doc.id }}</span>
-          <span>{{ doc.title[:40] }}</span>
-          <a href="/documents/{{ doc.id }}/trace" style="color:#1d4ed8;font-size:11px">→</a>
+      {% if a.linked_ref_id %}
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px">
+          Reference
         </div>
+        <span class="mono">{{ a.linked_ref_id }}</span>
+      </div>
+      {% endif %}
+
+      {% if not hazard and not a.linked_ref_id %}
+      <p style="color:var(--muted);font-size:13px">
+        No linked entities. Actions should always be connected to a hazard or finding.
+      </p>
+      {% endif %}
+
+      <!-- Other actions on the same hazard -->
+      {% if hazard and hazard.actions|length > 1 %}
+      <div style="margin-top:14px">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">
+          Other Actions on This Hazard
+        </div>
+        {% for other in hazard.actions %}
+        {% if other.id != a.id %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <a href="/actions/{{ other.id }}" class="mono" style="color:#1d4ed8;font-size:11px">{{ other.id }}</a>
+          <span style="color:#374151;max-width:160px;overflow:hidden">{{ (other.description or '—')[:40] }}</span>
+          {% if other.status=='Closed' %}<span class="badge b-green" style="font-size:10px">Closed</span>
+          {% elif other.status=='Overdue' %}<span class="badge b-red" style="font-size:10px">Overdue</span>
+          {% elif other.status=='In Progress' %}<span class="badge b-blue" style="font-size:10px">In Progress</span>
+          {% else %}<span class="badge b-yellow" style="font-size:10px">Open</span>{% endif %}
+        </div>
+        {% endif %}
         {% endfor %}
       </div>
       {% endif %}
 
-      <!-- Link document -->
-      <details style="margin-top:12px">
-        <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">+ Link Document</summary>
-        <form method="POST" action="/quick-link" style="margin-top:8px;padding:12px;background:#f8f9fc;border-radius:8px">
-          <input type="hidden" name="entity_type" value="action"/>
-          <input type="hidden" name="entity_id" value="{{ a.id }}"/>
-          <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
-          <div class="fg" style="margin:0 0 8px"><label>Document ID</label><input type="text" name="document_id" placeholder="e.g. SOP-FO-2026-001-REV0"/></div>
-          <div class="fg" style="margin:0 0 8px"><label>Reason</label><input type="text" name="link_reason" placeholder="Why is this doc linked?"/></div>
-          <button type="submit" class="btn btn-nav btn-sm">Link</button>
-        </form>
-      </details>
     </div>
   </div>
+
 </div>
+
 {% endblock %}
 {% block scripts %}
 <script>
-// enumerate is injected globally via context_processor
+function toggleEffectiveness() {
+  var sel  = document.getElementById('status-sel');
+  var eff  = document.getElementById('eff-block');
+  var rev  = document.getElementById('review-block');
+  if (sel.value === 'Closed') {
+    eff.style.display = 'flex';
+    eff.style.flexDirection = 'column';
+    rev.style.display = 'flex';
+    rev.style.flexDirection = 'column';
+  } else {
+    eff.style.display = 'none';
+    rev.style.display = 'none';
+  }
+}
+// Run on page load in case status is pre-selected
+toggleEffectiveness();
 </script>
 {% endblock %}
