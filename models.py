@@ -112,19 +112,50 @@ class Control(db.Model):
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Action(db.Model):
+    """
+    Central action table — every action MUST have a source.
+    Lifecycle: Open → In Progress → Completed → Verified → Closed
+    Overdue is set automatically when due_date passes.
+    """
     __tablename__ = 'actions'
     id               = db.Column(db.String(30), primary_key=True)
-    source           = db.Column(db.String(30))   # Hazard / ASR / Audit / MOC / Investigation
+    # Source traceability — where did this action come from?
+    source           = db.Column(db.String(40))
+    # Hazard Report / ASR / Risk Assessment / Audit / MOC / Investigation
+    linked_ref_id    = db.Column(db.String(30))   # finding ID, risk ID, MOC ID etc.
+    # Direct FK links for full traceability
     hazard_id        = db.Column(db.String(30), db.ForeignKey('hazards.id'))
-    linked_ref_id    = db.Column(db.String(30))   # e.g. audit finding ID or investigation ID
+    linked_risk_id   = db.Column(db.String(30), db.ForeignKey('risks.id'), nullable=True)
+    linked_audit_id  = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'), nullable=True)
+    linked_ra_id     = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'), nullable=True)
+    department_id    = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    # Action details
     description      = db.Column(db.Text)
+    action_type      = db.Column(db.String(20), default='Corrective')
+    # Corrective / Preventive / Improvement
     owner            = db.Column(db.String(100))
     due_date         = db.Column(db.String(20))
-    priority         = db.Column(db.String(20))   # High / Medium / Low
-    status           = db.Column(db.String(20), default='Open')  # Open / In Progress / Closed / Overdue
-    effectiveness_review = db.Column(db.Text)
+    priority         = db.Column(db.String(20), default='Medium')   # High / Medium / Low
+    # Full lifecycle status
+    status           = db.Column(db.String(20), default='Open')
+    # Open → In Progress → Completed → Verified → Closed   (Overdue = auto)
+    completed_date   = db.Column(db.String(20))
     closed_date      = db.Column(db.String(20))
+    # Effectiveness (filled after completion)
+    effectiveness    = db.Column(db.String(30))
+    # Effective / Partially Effective / Ineffective
+    effectiveness_review = db.Column(db.Text)
+    verified_by      = db.Column(db.String(100))
+    verified_date    = db.Column(db.String(20))
+    # If ineffective — reopen tracking
+    reopen_count     = db.Column(db.Integer, default=0)
+    reopen_reason    = db.Column(db.Text)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    # Relationships
+    department       = db.relationship('Department', foreign_keys=[department_id])
+    linked_risk      = db.relationship('Risk', foreign_keys=[linked_risk_id], backref=db.backref('linked_actions', lazy=True))
+    linked_audit     = db.relationship('AuditSchedule', foreign_keys=[linked_audit_id], backref=db.backref('linked_actions', lazy=True))
+    linked_ra        = db.relationship('RiskAssessment', foreign_keys=[linked_ra_id], backref=db.backref('linked_actions', lazy=True))
 
 class Audit(db.Model):
     __tablename__ = 'audits'
