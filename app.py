@@ -33,12 +33,16 @@ def new_id(prefix):
     return f'{prefix}-{year}-{short}'
 
 def check_overdue_actions():
+    """Auto-mark actions as Overdue when due_date passes (only Open/In Progress)."""
     today = date.today().isoformat()
     actions = Action.query.filter(Action.status.in_(['Open','In Progress'])).all()
+    changed = False
     for a in actions:
         if a.due_date and a.due_date < today:
             a.status = 'Overdue'
-    db.session.commit()
+            changed = True
+    if changed:
+        db.session.commit()
 
 @app.context_processor
 def inject_globals():
@@ -431,52 +435,116 @@ def actions():
     stat_f = request.args.get('status','')
     pri_f  = request.args.get('priority','')
     src_f  = request.args.get('source','')
+    dept_f = request.args.get('dept','')
     q = Action.query
     if stat_f: q = q.filter_by(status=stat_f)
     if pri_f:  q = q.filter_by(priority=pri_f)
     if src_f:  q = q.filter_by(source=src_f)
+    if dept_f: q = q.filter_by(department_id=int(dept_f))
     all_actions = q.order_by(Action.created_at.desc()).all()
-    overdue = Action.query.filter_by(status='Overdue').count()
-    open_c  = Action.query.filter_by(status='Open').count()
-    inprog  = Action.query.filter_by(status='In Progress').count()
-    closed  = Action.query.filter_by(status='Closed').count()
+    overdue   = Action.query.filter_by(status='Overdue').count()
+    open_c    = Action.query.filter_by(status='Open').count()
+    inprog    = Action.query.filter_by(status='In Progress').count()
+    completed = Action.query.filter_by(status='Completed').count()
+    verified  = Action.query.filter_by(status='Verified').count()
+    closed    = Action.query.filter_by(status='Closed').count()
     return render_template('actions.html', actions=all_actions,
-        overdue=overdue, open_c=open_c, inprog=inprog, closed=closed,
-        stat_f=stat_f, pri_f=pri_f, src_f=src_f)
+        overdue=overdue, open_c=open_c, inprog=inprog,
+        completed=completed, verified=verified, closed=closed,
+        stat_f=stat_f, pri_f=pri_f, src_f=src_f, dept_f=dept_f)
 
 @app.route('/actions/new', methods=['GET','POST'])
 def new_action():
     if request.method == 'POST':
         f = request.form
-        a = Action(id=new_id('ACT'),
-                   source=f['source'],
-                   hazard_id=f.get('hazard_id') or None,
-                   linked_ref_id=f.get('linked_ref_id',''),
-                   description=f['description'],
-                   owner=f['owner'],
-                   due_date=f['due_date'],
-                   priority=f['priority'],
-                   status='Open')
+        a = Action(
+            id=new_id('ACT'),
+            source=f['source'],
+            hazard_id=f.get('hazard_id') or None,
+            linked_ref_id=f.get('linked_ref_id',''),
+            linked_risk_id=f.get('linked_risk_id') or None,
+            linked_audit_id=f.get('linked_audit_id') or None,
+            linked_ra_id=f.get('linked_ra_id') or None,
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            description=f['description'],
+            action_type=f.get('action_type','Corrective'),
+            owner=f['owner'],
+            due_date=f['due_date'],
+            priority=f['priority'],
+            status='Open'
+        )
         db.session.add(a)
         db.session.commit()
         flash(f'✓ Action {a.id} created.', 'success')
-        return redirect(url_for('actions'))
-    hazards = Hazard.query.filter_by(status='Open').all()
-    return render_template('action_form.html', hazards=hazards)
+        return_url = f.get('return_url', url_for('actions'))
+        return redirect(return_url)
+    hazards = Hazard.query.order_by(Hazard.created_at.desc()).all()
+    risks   = Risk.query.order_by(Risk.created_at.desc()).all()
+    audits  = AuditSchedule.query.order_by(AuditSchedule.scheduled_date.desc()).all()
+    # Pre-fill from query params
+    pre = {k: request.args.get(k,'') for k in
+           ['source','hazard_id','linked_risk_id','linked_audit_id','linked_ra_id','return_url']}
+    return render_template('action_form.html', hazards=hazards, risks=risks,
+                           audits=audits, pre=pre)
 
 @app.route('/actions/<aid>/update', methods=['POST'])
 def update_action(aid):
-    a = Action.query.get_or_404(aid)
-    f = request.form
-    a.status = f.get('status', a.status)
-    a.owner  = f.get('owner', a.owner)
-    a.due_date = f.get('due_date', a.due_date)
-    a.priority = f.get('priority', a.priority)
+    a   = Action.query.get_or_404(aid)
+    f   = request.form
+    old_status = a.status
+    new_status = f.get('status', a.status)
+    today = date.today().isoformat()
+
+    a.status       = new_status
+    a.owner        = f.get('owner', a.owner)
+    a.due_date     = f.get('due_date', a.due_date)
+    a.priority     = f.get('priority', a.priority)
+    a.action_type  = f.get('action_type', a.action_type or 'Corrective')
+    a.department_id = int(f['department_id']) if f.get('department_id') else a.department_id
+    a.effectiveness        = f.get('effectiveness', a.effectiveness)
     a.effectiveness_review = f.get('effectiveness_review', a.effectiveness_review)
-    if a.status == 'Closed': a.closed_date = date.today().isoformat()
+    a.verified_by   = f.get('verified_by', a.verified_by)
+    a.verified_date = f.get('verified_date', a.verified_date)
+    a.description   = f.get('description', a.description)
+
+    # Lifecycle date tracking
+    if new_status == 'Completed' and old_status != 'Completed':
+        a.completed_date = today
+    if new_status == 'Closed' and old_status != 'Closed':
+        a.closed_date = today
+    if new_status == 'Verified' and not a.verified_date:
+        a.verified_date = today
+
+    # Ineffective → reopen logic
+    if a.effectiveness == 'Ineffective' and new_status in ('Completed','Verified','Closed'):
+        a.status        = 'Open'
+        a.reopen_count  = (a.reopen_count or 0) + 1
+        a.reopen_reason = f.get('reopen_reason', 'Re-opened: effectiveness was Ineffective')
+        a.effectiveness = None
+        a.completed_date = None
+        flash('⚠ Action re-opened: effectiveness was Ineffective. Review controls and retry.', 'error')
+    else:
+        flash('✓ Action updated.', 'success')
+
     db.session.commit()
-    flash('✓ Action updated.', 'success')
-    return redirect(url_for('actions'))
+    return_url = f.get('return_url', url_for('actions'))
+    return redirect(return_url)
+
+@app.route('/actions/<aid>')
+def action_detail(aid):
+    """Full action detail page with traceability."""
+    check_overdue_actions()
+    a       = Action.query.get_or_404(aid)
+    hazard  = Hazard.query.get(a.hazard_id) if a.hazard_id else None
+    risk    = Risk.query.get(a.linked_risk_id) if a.linked_risk_id else None
+    audit   = AuditSchedule.query.get(a.linked_audit_id) if a.linked_audit_id else None
+    ra      = RiskAssessment.query.get(a.linked_ra_id) if a.linked_ra_id else None
+    # Linked docs
+    doc_links = DocumentLink.query.filter_by(entity_type='action', entity_id=aid).all()
+    docs    = [SMSDocument.query.get(lnk.document_id) for lnk in doc_links
+               if SMSDocument.query.get(lnk.document_id)]
+    return render_template('action_detail.html',
+        a=a, hazard=hazard, risk=risk, audit=audit, ra=ra, docs=docs)
 
 # ─── Audits ───────────────────────────────────────────────────────────────────
 # ─── Legacy /audits/* routes — redirected to new audit system ────────────────
