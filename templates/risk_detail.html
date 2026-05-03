@@ -217,8 +217,13 @@
       {% endfor %}
 
       <!-- Add action -->
-      <details style="margin-top:10px">
-        <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">+ Create Action for this Risk</summary>
+      <div style="display:flex;gap:8px;margin-top:10px;margin-bottom:8px">
+        <a href="/actions/new?source=Risk+Assessment&hazard_id={{ hazard.id if hazard else '' }}&linked_risk_id={{ risk.id }}&return_url=/risk/{{ risk.id }}"
+           class="btn btn-nav btn-sm">+ Create Action (Full Form)</a>
+        <a href="/actions?source=Risk+Assessment" class="btn btn-outline btn-sm">View All Risk Actions →</a>
+      </div>
+      <details style="margin-top:4px">
+        <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">+ Quick-add Action (inline)</summary>
         <form method="POST" action="/risk/{{ risk.id }}/add-action" style="margin-top:10px;padding:14px;background:#f8f9fc;border-radius:8px">
           <div class="fg"><label>Action Description *</label><textarea name="description" required rows="3" placeholder="What must be done to control or monitor this risk?"></textarea></div>
           <div class="g2">
