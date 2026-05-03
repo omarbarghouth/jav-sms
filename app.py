@@ -57,10 +57,10 @@ def new_id(prefix):
     if prefix in MODULE_MAP:
         code, model = MODULE_MAP[prefix]
         seq = model.query.count() + 1
-        return f'{code}/SMS/{seq:02d}'
-    # fallback — should not normally be reached
+        return f'{code}-SMS-{seq:02d}'
+    # fallback
     short = str(uuid.uuid4())[:6].upper()
-    return f'{prefix}/SMS/{short}' 
+    return f'{prefix}-SMS-{short}' 
 
 def check_overdue_actions():
     """Auto-mark actions as Overdue when due_date passes (only Open/In Progress)."""
@@ -1950,7 +1950,7 @@ def gen_control_number(dept_code):
     """Generate RA control number: JAV/RA/DEPT/YEAR/SEQ"""
     year = datetime.now().year
     count = RiskAssessment.query.count() + 1
-    return f"JAV/RA/{dept_code}/{year}/{count:03d}"
+    return f"JAV-RA-{dept_code}-{year}-{count:03d}"
 
 def compute_ra_summary(ra):
     """Compute overall risk level before and after controls for page 2."""
