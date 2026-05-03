@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}New Document{% endblock %}
+{% block content %}
+<div class="page-title">New Document</div>
+<div class="page-sub">Document ID will be auto-generated: TYPE-DEPT-YEAR-SEQ-REV0</div>
+<form class="form-card" method="POST">
+  <div class="sec">Document Classification</div>
+  <div class="g3">
+    <div class="fg"><label>Document Type *</label>
+      <select name="doc_type" required>
+        {% for t, label in [('POL','POL – Policy'),('MAN','MAN – Manual'),('SOP','SOP – Standard Operating Procedure'),('RA','RA – Risk Assessment'),('AUD','AUD – Audit'),('MOC','MOC – Management of Change'),('INV','INV – Investigation'),('TRN','TRN – Training'),('NEWS','NEWS – Bulletin/Newsletter')] %}
+        <option value="{{ t }}">{{ label }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Department *</label>
+      <select name="department_id" required>
+        <option value="">Select…</option>
+        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Created By *</label><input type="text" name="created_by" required placeholder="Your name"/></div>
+  </div>
+  <div class="fg"><label>Document Title *</label><input type="text" name="title" required placeholder="e.g. Low Visibility Operations Procedure"/></div>
+  <div class="fg"><label>Description</label><textarea name="description" rows="2" placeholder="Brief summary of what this document covers…"></textarea></div>
+  <div class="g2">
+    <div class="fg"><label>Effective Date</label><input type="date" name="effective_date"/></div>
+    <div class="fg"><label>Review Due</label><input type="date" name="review_due"/></div>
+  </div>
+  <div class="fg"><label>Document Content / Body</label>
+    <textarea name="content" rows="12" placeholder="Enter the full document content, procedure steps, or reference notes…"></textarea></div>
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:12px;color:#1e40af;margin-bottom:12px">
+    ⚡ Document will be created as <strong>Draft</strong>. Use the workflow buttons to advance: Draft → Under Review → Approved.
+  </div>
+  <button type="submit" class="btn btn-nav">Create Document</button>
+</form>
+{% endblock %}

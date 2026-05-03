@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ finding.id }} — Finding Detail{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/audit-schedule/{{ finding.schedule_id }}" style="color:var(--muted);font-size:13px">← Back to Audit</a></div>
+<div class="page-title">Finding {{ finding.finding_ref }}</div>
+<div class="page-sub">{{ finding.id }} · Audit: {{ finding.schedule_id }} · Created: {{ finding.created_at.strftime('%d %b %Y') }}</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+  <div>
+    <div class="card">
+      <div class="card-title">Finding Details</div>
+      <table style="font-size:13px;width:100%">
+        <tr><td style="color:var(--muted);padding:5px 0;width:130px">Category</td>
+          <td><span class="badge b-blue">{{ finding.category }}</span></td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0">Severity</td>
+          <td>{% if finding.severity=='Major' %}<span class="badge b-red">Major</span>{% elif finding.severity=='Minor' %}<span class="badge b-yellow">Minor</span>{% else %}<span class="badge b-gray">Observation</span>{% endif %}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0">Status</td>
+          <td>{% if finding.status=='Closed' %}<span class="badge b-green">Closed</span>{% elif finding.status=='Actioned' %}<span class="badge b-blue">Actioned</span>{% else %}<span class="badge b-yellow">Open</span>{% endif %}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0">Standard Ref</td><td>{{ finding.standard_ref or '—' }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;vertical-align:top">Description</td><td>{{ finding.description }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;vertical-align:top">Requirement</td><td>{{ finding.requirement or '—' }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;vertical-align:top">Root Cause</td><td>{{ finding.root_cause or '—' }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;vertical-align:top">Evidence</td><td>{{ finding.evidence or '—' }}</td></tr>
+        {% if finding.hazard_id %}
+        <tr><td style="color:var(--muted);padding:5px 0">Linked Hazard</td>
+          <td><a href="/hazard-log/{{ finding.hazard_id }}" style="color:#1d4ed8;font-family:monospace;font-size:12px">{{ finding.hazard_id }}</a></td></tr>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="card-title">Corrective Actions ({{ finding.actions|length }})</div>
+      {% for a in finding.actions %}
+      <div style="border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <span class="mono">{{ a.id }}</span>
+          {% if a.status=='Closed' %}<span class="badge b-green">Closed</span>
+          {% elif a.status=='Overdue' %}<span class="badge b-red">Overdue</span>
+          {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+          {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+        </div>
+        <p style="font-size:13px;margin-bottom:8px">{{ a.description }}</p>
+        <div style="font-size:12px;color:var(--muted)">Owner: {{ a.owner or '—' }} · Due: {{ a.due_date or '—' }} · Priority: {{ a.priority }}</div>
+        {% if a.effectiveness %}<div style="margin-top:6px"><span class="badge {% if a.effectiveness=='Effective' %}b-green{% elif a.effectiveness=='Partially Effective' %}b-yellow{% else %}b-red{% endif %}">{{ a.effectiveness }}</span></div>{% endif %}
+        {% if a.implementation_notes %}<p style="font-size:12px;color:#374151;margin-top:6px">{{ a.implementation_notes }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

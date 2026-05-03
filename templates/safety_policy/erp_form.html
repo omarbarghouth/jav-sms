@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}New Emergency Response Plan{% endblock %}
+{% block content %}
+<div class="page-title">New Emergency Response Plan</div>
+<div class="page-sub">ICAO Annex 19 §3.4 · Define response procedures for each scenario type</div>
+<form class="form-card" method="POST" style="max-width:900px">
+  <div class="sec">ERP Classification</div>
+  <div class="g2">
+    <div class="fg"><label>Scenario Type *</label>
+      <select name="scenario_type" required>
+        <option>Accident</option><option>Serious Incident</option><option>Incident</option>
+        <option>Crisis</option><option>Security</option><option>Medical</option>
+      </select></div>
+    <div class="fg"><label>ERP Title *</label>
+      <input type="text" name="title" required placeholder="e.g. Aircraft Accident Response Plan"/></div>
+  </div>
+  <div class="fg"><label>Description</label>
+    <textarea name="description" rows="2" placeholder="Brief description of this ERP and when it applies…"></textarea></div>
+  <div class="fg"><label>Activation Criteria *</label>
+    <textarea name="activation_criteria" required rows="3" placeholder="Under what conditions is this ERP activated? Who has the authority to activate it?"></textarea></div>
+
+  <div class="sec">Response Procedures</div>
+  <div class="fg"><label>Step-by-Step Response Procedures *</label>
+    <textarea name="response_procedures" required rows="10" placeholder="1. Immediate notification of Accountable Manager&#10;2. Activate Emergency Operations Centre (EOC)&#10;3. Notify regulatory authority (CARC)&#10;4. Notify next of kin (if applicable)&#10;5. Preserve evidence&#10;…"></textarea></div>
+
+  <div class="sec">Contacts & Resources</div>
+  <div class="fg"><label>Responsible Roles</label>
+    <textarea name="responsible_roles" rows="3" placeholder="Accountable Manager, Safety Manager, Director of Flight Operations, Ground Operations Manager…"></textarea></div>
+  <div class="fg"><label>Emergency Contacts</label>
+    <textarea name="emergency_contacts" rows="4" placeholder="CARC Emergency: +962-X-XXXX&#10;Accident Investigation Bureau: +962-X-XXXX&#10;Airport Authority: +962-X-XXXX&#10;Company Legal Counsel: +962-X-XXXX&#10;Insurance: +962-X-XXXX"></textarea></div>
+  <div class="fg"><label>Notification List</label>
+    <textarea name="notification_list" rows="3" placeholder="Who must be notified and in what order? Include timeframes."></textarea></div>
+  <div class="fg"><label>Resources Required</label>
+    <textarea name="resources_required" rows="3" placeholder="Emergency Operations Centre, Go-Team equipment, Communication equipment, Legal support…"></textarea></div>
+  <div class="fg"><label>Review Date</label><input type="date" name="review_date"/></div>
+  <button type="submit" class="btn btn-nav">Create ERP</button>
+</form>
+{% endblock %}

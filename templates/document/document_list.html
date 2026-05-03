@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Document Control{% endblock %}
+{% block content %}
+<div class="page-title">Document Control System</div>
+<div class="page-sub">ICAO Annex 19 §3.5 · Format: TYPE-DEPT-YEAR-SEQ-REV · Full lifecycle management</div>
+
+<!-- Doc type legend -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:11px">
+  {% for t, label in [('POL','Policy'),('MAN','Manual'),('SOP','Procedure'),('RA','Risk Assessment'),('AUD','Audit'),('MOC','Change'),('INV','Investigation'),('TRN','Training'),('NEWS','Bulletin')] %}
+  <span style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:5px;padding:3px 8px;font-weight:700;color:#374151">
+    {{ t }} <span style="font-weight:400;color:#6b7280">{{ label }}</span>
+  </span>
+  {% endfor %}
+</div>
+
+<form method="GET" class="fbar">
+  <select name="type" onchange="this.form.submit()">
+    <option value="">All Types</option>
+    {% for t in doc_types %}<option {% if type_f==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select>
+  <select name="dept" onchange="this.form.submit()">
+    <option value="">All Departments</option>
+    {% for d in all_departments %}<option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Draft','Under Review','Approved','Archived'] %}<option {% if status_f==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <a href="/documents" class="btn btn-outline btn-sm">Clear</a>
+  <a href="/documents/new" class="btn btn-nav btn-sm" style="margin-left:auto">+ New Document</a>
+</form>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Document ID</th><th>Title</th><th>Type</th><th>Dept</th><th>Version</th><th>Created By</th><th>Effective</th><th>Review Due</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for d in docs %}
+        <tr>
+          <td class="mono" style="white-space:nowrap">{{ d.id }}</td>
+          <td style="max-width:200px;font-size:12px;font-weight:600">{{ d.title }}</td>
+          <td>
+            {% set type_colors = {'POL':'b-purple','MAN':'b-blue','SOP':'b-blue','RA':'b-red','AUD':'b-orange','MOC':'b-orange','INV':'b-gray','TRN':'b-green','NEWS':'b-gray'} %}
+            <span class="badge {{ type_colors.get(d.doc_type,'b-gray') }}">{{ d.doc_type }}</span>
+          </td>
+          <td>{{ d.department.code if d.department else '—' }}</td>
+          <td><strong>{{ d.version }}</strong></td>
+          <td style="font-size:11px">{{ d.created_by or '—' }}</td>
+          <td style="font-size:11px">{{ d.effective_date or '—' }}</td>
+          <td style="font-size:11px;{% if d.review_due and d.review_due < now.strftime('%Y-%m-%d') and d.status=='Approved' %}color:#dc2626;font-weight:700{% endif %}">{{ d.review_due or '—' }}</td>
+          <td>
+            {% if d.status=='Approved' %}<span class="badge b-green">Approved</span>
+            {% elif d.status=='Under Review' %}<span class="badge b-blue">Under Review</span>
+            {% elif d.status=='Archived' %}<span class="badge b-gray">Archived</span>
+            {% else %}<span class="badge b-yellow">Draft</span>{% endif %}
+          </td>
+          <td><a href="/documents/{{ d.id }}" class="btn btn-nav btn-sm">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:28px">No documents found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>ASR — {{ asr.id }}</title>
+<style>
+  @page{size:A4 portrait;margin:18mm 15mm}
+  @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#111;background:#fff}
+  .print-btn{position:fixed;top:12px;right:12px;z-index:999;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
+  .doc-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:14px}
+  .doc-logo{font-size:24px;font-weight:900;color:#0f1c3f}
+  .doc-logo span{color:#c9a84c}
+  .doc-title h1{font-size:16pt;font-weight:900;color:#0f1c3f;text-align:center}
+  .doc-title p{font-size:9pt;color:#555;text-align:center;margin-top:3px}
+  .doc-ref{text-align:right;font-size:8.5pt;color:#555;line-height:1.7}
+  .section-title{background:#0f1c3f;color:#fff;font-weight:700;font-size:10pt;padding:6px 12px;margin:14px 0 6px;border-radius:4px}
+  .info-table{width:100%;border-collapse:collapse;margin-bottom:10px}
+  .info-table td{border:1px solid #d1d5db;padding:7px 10px;font-size:9.5pt}
+  .info-table .lbl{background:#f4f6fb;font-weight:700;color:#374151;width:180px}
+  .text-box{border:1px solid #d1d5db;padding:10px 12px;min-height:50px;font-size:10pt;line-height:1.7;margin-bottom:10px}
+  .sig-table{width:100%;border-collapse:collapse;margin-top:16px}
+  .sig-table th{background:#0f1c3f;color:#fff;padding:7px 10px;text-align:left;border:1px solid #1a2d5a}
+  .sig-table td{border:1px solid #d1d5db;padding:14px 10px}
+  .sig-table .role-cell{background:#f4f6fb;font-weight:700;width:130px}
+  .sig-line{border-bottom:1px solid #9ca3af;height:28px}
+  .footer{border-top:1px solid #d1d5db;margin-top:14px;padding-top:6px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+<div class="doc-header">
+  <div class="doc-logo">JORDAN<span>AVIATION</span></div>
+  <div class="doc-title">
+    <h1>Air Safety Report (ASR)</h1>
+    <p>Flight Operations — Safety Management System</p>
+  </div>
+  <div class="doc-ref">Report: <strong>{{ asr.id }}</strong><br>Date: {{ asr.date or '—' }}</div>
+</div>
+<div class="section-title">REPORT INFORMATION</div>
+<table class="info-table">
+  <tr><td class="lbl">Report ID</td><td><strong>{{ asr.id }}</strong></td><td class="lbl">Date</td><td>{{ asr.date or '—' }}</td></tr>
+  <tr><td class="lbl">Flight Number</td><td>{{ asr.flight_number or '—' }}</td><td class="lbl">Aircraft</td><td>{{ asr.aircraft_registration or '—' }}</td></tr>
+  <tr><td class="lbl">Route</td><td>{{ asr.route or '—' }}</td><td class="lbl">Phase</td><td>{{ asr.flight_phase or '—' }}</td></tr>
+  <tr><td class="lbl">Reporter</td><td colspan="3">{{ asr.reporter or 'Anonymous' }}</td></tr>
+</table>
+<div class="section-title">OCCURRENCE DESCRIPTION</div>
+<div class="text-box">{{ asr.description or '—' }}</div>
+<div class="section-title">IMMEDIATE ACTION TAKEN</div>
+<div class="text-box">{{ asr.immediate_action or 'No immediate action recorded.' }}</div>
+<table class="sig-table">
+  <thead><tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:100px">Date</th></tr></thead>
+  <tbody>
+    <tr><td class="role-cell">Reported By</td><td>{{ asr.reporter or '—' }}</td><td>Flight Crew</td><td><div class="sig-line"></div></td><td></td></tr>
+    <tr><td class="role-cell">Reviewed By</td><td></td><td>Safety Manager</td><td><div class="sig-line"></div></td><td></td></tr>
+  </tbody>
+</table>
+<div class="footer">
+  <span>Jav/SMS/001 · {{ asr.date or '' }}</span>
+  <span>Jordan Aviation — Safety Department</span>
+  <span>{{ asr.id }}</span>
+</div>
+</body>
+</html>

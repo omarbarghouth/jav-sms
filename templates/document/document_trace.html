@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.id }} — Traceability{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px">
+  <a href="/documents/{{ doc.id }}" style="color:var(--muted);font-size:13px">← Back to Document</a>
+  &nbsp;·&nbsp;
+  <a href="/traceability" style="color:var(--muted);font-size:13px">Traceability Dashboard</a>
+</div>
+<div class="page-title">{{ doc.id }}</div>
+<div class="page-sub">{{ doc.title }} · {{ doc.version }} · Full Traceability Map</div>
+
+<!-- Summary banner -->
+<div class="card" style="padding:14px 20px;margin-bottom:18px;background:linear-gradient(135deg,#0f1c3f08,#c9a84c08);border:1.5px solid #c9a84c40">
+  <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:center">
+    <div style="text-align:center">
+      <div style="font-size:28px;font-weight:800;font-family:monospace;color:#0f1c3f">{{ trace|length }}</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:700">LINKED ENTITIES</div>
+    </div>
+    <div style="flex:1;font-size:13px;color:#374151">
+      <strong>{{ doc.doc_type }}</strong> — {{ doc.title }}<br>
+      Status: <strong>{{ doc.status }}</strong> · Approved by: <strong>{{ doc.approved_by or '—' }}</strong><br>
+      Effective: {{ doc.effective_date or '—' }} · Review due: {{ doc.review_due or '—' }}
+    </div>
+    {% if doc.status == 'Approved' %}
+    <span class="badge b-green" style="font-size:13px;padding:6px 14px">✓ Approved</span>
+    {% elif doc.status == 'Draft' %}
+    <span class="badge b-yellow" style="font-size:13px;padding:6px 14px">Draft</span>
+    {% elif doc.status == 'Under Review' %}
+    <span class="badge b-blue" style="font-size:13px;padding:6px 14px">Under Review</span>
+    {% else %}
+    <span class="badge b-gray" style="font-size:13px;padding:6px 14px">Archived</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if trace %}
+<!-- Traceability map grouped by entity type -->
+{% set entity_groups = {} %}
+{% for item in trace %}
+  {% if item.entity_type not in entity_groups %}{% set _ = entity_groups.update({item.entity_type: []}) %}{% endif %}
+{% endfor %}
+
+{% set type_icons = {
+  'hazard':'⚠️','risk':'📊','action':'✅','audit_schedule':'🔍',
+  'audit_finding':'📋','audit_action':'✅','moc':'🔄',
+  'investigation':'🔎','training':'🎓','erp':'🚨'
+} %}
+{% set type_colors = {
+  'hazard':'b-red','risk':'b-orange','action':'b-blue',
+  'audit_schedule':'b-purple','audit_finding':'b-yellow',
+  'audit_action':'b-blue','moc':'b-orange',
+  'investigation':'b-gray','training':'b-green','erp':'b-red'
+} %}
+
+<div class="card" style="margin-bottom:18px">
+  <div class="card-title">Traceability Map — All Linked Entities</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+    {% for item in trace %}
+    <div style="border:1.5px solid var(--border);border-radius:10px;padding:14px;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">{{ type_icons.get(item.entity_type,'📄') }}</span>
+          <div>
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">{{ item.label }}</div>
+            <div class="mono" style="font-size:12px;color:#0f1c3f">{{ item.entity_id }}</div>
+          </div>
+        </div>
+        <span class="badge {{ type_colors.get(item.entity_type,'b-gray') }}" style="font-size:10px">{{ item.entity_type }}</span>
+      </div>
+
+      <!-- Entity summary -->
+      {% if item.obj %}
+        {% if item.entity_type == 'hazard' %}
+          <p style="font-size:12px;color:#374151;margin-bottom:4px"><strong>{{ item.obj.generic_hazard }}</strong></p>
+          <p style="font-size:11px;color:var(--muted)">Dept: {{ item.obj.department.code if item.obj.department else '—' }} · Status: {{ item.obj.status }}</p>
+          {% if item.obj.risks %}
+          <p style="font-size:11px;margin-top:4px">Risk: <strong>{{ item.obj.risks[0].initial_risk_index }}</strong>
+            {% if item.obj.risks[0].initial_tolerance=='INTOLERABLE' %}<span class="badge b-red" style="font-size:9px">INTOLERABLE</span>
+            {% elif item.obj.risks[0].initial_tolerance=='TOLERABLE' %}<span class="badge b-yellow" style="font-size:9px">TOLERABLE</span>
+            {% else %}<span class="badge b-green" style="font-size:9px">ACCEPTABLE</span>{% endif %}
+          </p>{% endif %}
+        {% elif item.entity_type == 'risk' %}
+          <p style="font-size:12px;color:#374151;margin-bottom:4px">{{ (item.obj.description or '—')[:80] }}</p>
+          <p style="font-size:11px;color:var(--muted)">Initial: <strong>{{ item.obj.initial_risk_index }}</strong> → Residual: <strong>{{ item.obj.residual_risk_index or '?' }}</strong></p>
+        {% elif item.entity_type == 'audit_schedule' %}
+          <p style="font-size:12px;color:#374151;margin-bottom:4px">{{ item.obj.audit_type }} — {{ item.obj.department.name if item.obj.department else '—' }}</p>
+          <p style="font-size:11px;color:var(--muted)">Date: {{ item.obj.scheduled_date }} · {{ item.obj.status }}</p>
+        {% elif item.entity_type == 'audit_finding' %}
+          <p style="font-size:12px;color:#374151;margin-bottom:4px">{{ (item.obj.description or '—')[:80] }}</p>
+          <div style="display:flex;gap:4px;margin-top:4px">
+            {% if item.obj.severity=='Major' %}<span class="badge b-red" style="font-size:10px">Major</span>
+            {% elif item.obj.severity=='Minor' %}<span class="badge b-yellow" style="font-size:10px">Minor</span>
+            {% else %}<span class="badge b-gray" style="font-size:10px">Obs</span>{% endif %}
+            <span class="badge b-gray" style="font-size:10px">{{ item.obj.category }}</span>
+          </div>
+        {% elif item.entity_type == 'action' %}
+          <p style="font-size:12px;color:#374151;margin-bottom:4px">{{ (item.obj.description or '—')[:80] }}</p>
+          <p style="font-size:11px;color:var(--muted)">Owner: {{ item.obj.owner or '—' }} · Due: {{ item.obj.due_date or '—' }}</p>
+        {% elif item.entity_type == 'moc' %}
+          <p style="font-size:12px;color:#374151;margin-bottom:4px">{{ (item.obj.title or '—')[:80] }}</p>
+          <p style="font-size:11px;color:var(--muted)">{{ item.obj.change_type }} · {{ item.obj.approval_status }}</p>
+        {% elif item.entity_type == 'investigation' %}
+          <p style="font-size:12px;color:#374151;margin-bottom:4px">{{ (item.obj.title or '—')[:80] }}</p>
+          <p style="font-size:11px;color:var(--muted)">{{ item.obj.date_of_occurrence }} · {{ item.obj.status }}</p>
+        {% elif item.entity_type == 'erp' %}
+          <p style="font-size:12px;color:#374151;margin-bottom:4px">{{ (item.obj.title or '—')[:80] }}</p>
+          <p style="font-size:11px;color:var(--muted)">{{ item.obj.scenario_type }} · {{ item.obj.version }}</p>
+        {% endif %}
+      {% else %}
+        <p style="font-size:12px;color:#9ca3af">Entity not found</p>
+      {% endif %}
+
+      {% if item.link.link_reason %}
+      <div style="margin-top:8px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:6px">
+        {{ item.link.link_reason }}
+      </div>
+      {% endif %}
+
+      <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
+        {% if item.url != '#' %}
+        <a href="{{ item.url }}" style="font-size:11px;color:#1d4ed8">Open → </a>
+        {% endif %}
+        <form method="POST" action="/documents/{{ doc.id }}/unlink/{{ item.link.id }}"
+              onsubmit="return confirm('Remove this link?')">
+          <button type="submit" style="background:none;border:none;color:#dc2626;font-size:11px;cursor:pointer">✕ Unlink</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card" style="text-align:center;color:var(--muted);padding:36px;margin-bottom:18px">
+  No linked entities yet. Use the form below to link this document to hazards, risks, audits or actions.
+</div>
+{% endif %}
+
+<!-- Add new link -->
+<div class="card" style="max-width:600px">
+  <div class="card-title">Link to Entity</div>
+  <form method="POST" action="/documents/{{ doc.id }}/link">
+    <div class="g2">
+      <div class="fg"><label>Entity Type *</label>
+        <select name="entity_type" required>
+          <option value="">Select type…</option>
+          {% for et, lbl in [('hazard','Hazard'),('risk','Risk'),('action','Action'),
+            ('audit_schedule','Audit'),('audit_finding','Audit Finding'),
+            ('audit_action','Audit Action'),('moc','MOC'),
+            ('investigation','Investigation'),('training','Training'),('erp','ERP')] %}
+          <option value="{{ et }}">{{ lbl }}</option>{% endfor %}
+        </select></div>
+      <div class="fg"><label>Entity ID *</label>
+        <input type="text" name="entity_id" required placeholder="e.g. HAZ-2024-XXXX"/></div>
+    </div>
+    <div class="fg"><label>Link Reason</label>
+      <input type="text" name="link_reason" placeholder="Why is this document linked to this entity?"/></div>
+    <button type="submit" class="btn btn-nav btn-sm">Add Link</button>
+  </form>
+</div>
+
+<!-- Version history -->
+{% if versions|length > 1 %}
+<div class="card" style="max-width:600px;margin-top:14px">
+  <div class="card-title">Version History</div>
+  {% for v in versions %}
+  <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
+    <a href="/documents/{{ v.id }}/trace" style="color:#1d4ed8;font-family:monospace;font-size:11px">{{ v.id }}</a>
+    <div>{{ v.version }}
+      {% if v.status=='Approved' %}<span class="badge b-green" style="font-size:9px">Approved</span>
+      {% elif v.status=='Archived' %}<span class="badge b-gray" style="font-size:9px">Archived</span>
+      {% else %}<span class="badge b-yellow" style="font-size:9px">{{ v.status }}</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
