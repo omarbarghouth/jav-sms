@@ -1,8 +1,35 @@
 {% extends "base.html" %}
 {% block title %}{{ h.id }} — Hazard Detail{% endblock %}
 {% block content %}
-<div style="margin-bottom:14px"><a href="/hazard-log" style="color:var(--muted);font-size:13px">← Hazard Log</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/documents" style="color:#1d4ed8;font-size:13px;font-weight:700">📄 Linked Documents →</a>&nbsp;·&nbsp;<a href="/srm-dashboard" style="color:#7c3aed;font-size:13px;font-weight:700">📊 SRM Dashboard →</a></div>
+<div style="margin-bottom:14px"><a href="/hazard-log" style="color:var(--muted);font-size:13px">← Hazard Log</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/start-ra" style="color:#d97706;font-size:13px;font-weight:700">📋 Risk Assessment →</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/documents" style="color:#1d4ed8;font-size:13px;font-weight:700">📄 Linked Documents →</a>&nbsp;·&nbsp;<a href="/srm-dashboard" style="color:#7c3aed;font-size:13px;font-weight:700">📊 SRM Dashboard →</a></div>
 <div class="page-title">{{ h.id }}</div>
+{% if h.risk_assessment %}
+<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+  <div style="display:flex;align-items:center;gap:12px">
+    <span style="font-size:20px">📋</span>
+    <div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#15803d">Risk Assessment</div>
+      <div style="font-size:13px;font-weight:700;color:#0f1c3f">{{ h.risk_assessment.control_number }}
+        <span class="badge {% if h.risk_assessment.status=='Approved' %}b-green{% elif h.risk_assessment.status=='Under Review' %}b-blue{% else %}b-yellow{% endif %}" style="margin-left:8px;font-size:10px">{{ h.risk_assessment.status }}</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    {% if h.risk_assessment.status in ['Draft','Under Review'] %}
+    <a href="/ra-wizard/{{ h.id }}/step/1" class="btn btn-nav btn-sm" style="background:#d97706">↩ Resume Assessment</a>
+    {% endif %}
+    <a href="/risk-assessments/{{ h.risk_assessment.id }}" class="btn btn-nav btn-sm">View Full RA →</a>
+  </div>
+</div>
+{% else %}
+<div style="background:#fff8f8;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+  <div style="display:flex;align-items:center;gap:12px">
+    <span style="font-size:20px">⚠️</span>
+    <div style="font-size:13px;color:#dc2626;font-weight:700">No Risk Assessment completed for this hazard</div>
+  </div>
+  <a href="/ra-wizard/{{ h.id }}" class="btn btn-nav btn-sm" style="background:#dc2626">+ Start Risk Assessment</a>
+</div>
+{% endif %}
 <div class="page-sub">Source: <strong>{{ h.source }}</strong> · Linked: <span class="mono">{{ h.linked_report_id }}</span> · Created: {{ h.created_at.strftime('%d %b %Y') }}</div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
@@ -69,7 +96,9 @@
         <div style="color:var(--muted);font-size:11px;margin-top:3px">Owner: {{ a.owner or '—' }} · Due: {{ a.due_date or '—' }}</div>
       </div>
       {% else %}<p style="color:var(--muted);font-size:13px">No actions yet.</p>{% endfor %}
-      <a href="/actions/new" class="btn btn-outline btn-sm" style="margin-top:8px">+ Add Action</a>
+      <a href="/actions/new?source=Hazard&hazard_id={{ h.id }}&return_url=/hazard-log/{{ h.id }}"
+       class="btn btn-nav btn-sm" style="margin-top:8px">+ Create Action</a>
+    <a href="/actions?source=Hazard+Report" class="btn btn-outline btn-sm" style="margin-top:8px">View All Actions →</a>
     </div>
   </div>
 
