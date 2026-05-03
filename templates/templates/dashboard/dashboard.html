@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Jordan Aviation SMS{% endblock %}
+{% block content %}
+
+<div class="page-title">Safety Management System</div>
+<div class="page-sub">Jordan Aviation · ICAO Annex 19 · IOSA Compliant</div>
+
+<!-- 4 Pillar health cards -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px">
+  <div style="background:#fff;border:1.5px solid #1e40af30;border-radius:10px;padding:16px;border-top:3px solid #1e40af">
+    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e40af;margin-bottom:8px">① Safety Policy</div>
+    <div style="font-size:26px;font-weight:800;color:var(--navy);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">{{ doc_cnt }}</div>
+    <div style="font-size:11px;color:var(--muted)">Approved documents</div>
+  </div>
+  <div style="background:#fff;border:1.5px solid #dc262630;border-radius:10px;padding:16px;border-top:3px solid #dc2626">
+    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#dc2626;margin-bottom:8px">② Risk Management</div>
+    <div style="font-size:26px;font-weight:800;color:var(--navy);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">{{ open_haz }}</div>
+    <div style="font-size:11px;color:var(--muted)">Open hazards</div>
+    {% if intol > 0 %}<div style="font-size:11px;color:#dc2626;font-weight:700;margin-top:4px">⚠ {{ intol }} intolerable</div>{% endif %}
+  </div>
+  <div style="background:#fff;border:1.5px solid #06574630;border-radius:10px;padding:16px;border-top:3px solid #065f46">
+    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#065f46;margin-bottom:8px">③ Safety Assurance</div>
+    <div style="font-size:26px;font-weight:800;color:var(--navy);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">{{ audit_cnt }}</div>
+    <div style="font-size:11px;color:var(--muted)">Audits · {{ inv_cnt }} investigations</div>
+    {% if spi_alerts > 0 %}<div style="font-size:11px;color:#d97706;font-weight:700;margin-top:4px">⚠ {{ spi_alerts }} SPI alert{{ 's' if spi_alerts != 1 }}</div>{% endif %}
+  </div>
+  <div style="background:#fff;border:1.5px solid #7c3aed30;border-radius:10px;padding:16px;border-top:3px solid #7c3aed">
+    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7c3aed;margin-bottom:8px">Actions</div>
+    <div style="font-size:26px;font-weight:800;color:var(--navy);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">{{ open_act }}</div>
+    <div style="font-size:11px;color:var(--muted)">Open actions</div>
+    {% if overdue_act > 0 %}<div style="font-size:11px;color:#dc2626;font-weight:700;margin-top:4px">🔴 {{ overdue_act }} overdue</div>{% endif %}
+  </div>
+</div>
+
+<!-- Stat row -->
+<div class="stat-grid" style="grid-template-columns:repeat(8,1fr);margin-bottom:22px">
+  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ total_haz }}</div><div class="stat-lbl">Hazards</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ intol }}</div><div class="stat-lbl">Intolerable</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_act }}</div><div class="stat-lbl">Actions</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ overdue_act }}</div><div class="stat-lbl">Overdue</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#0891b2">{{ asr_cnt }}</div><div class="stat-lbl">ASRs</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#065f46">{{ audit_cnt }}</div><div class="stat-lbl">Audits</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#92400e">{{ moc_cnt }}</div><div class="stat-lbl">MOC</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#374151">{{ doc_cnt }}</div><div class="stat-lbl">Docs</div></div>
+</div>
+
+{% if total_haz == 0 %}
+<!-- Empty state — system just started -->
+<div class="card" style="text-align:center;padding:48px;border:2px dashed var(--border)">
+  <div style="font-size:40px;margin-bottom:14px">✈</div>
+  <div style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:8px">System Ready</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:22px;max-width:400px;margin-left:auto;margin-right:auto">
+    No safety records yet. Submit your first Hazard Report or Air Safety Report to begin.
+  </div>
+  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+    <a href="/hazard-report" class="btn btn-nav">⚠️ Submit Hazard Report</a>
+    <a href="/asr" class="btn btn-gold">✈️ Submit Air Safety Report</a>
+    <a href="/safety-policy" class="btn btn-outline">📜 Set Up Safety Policy</a>
+  </div>
+</div>
+{% else %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+  <div class="card">
+    <div class="card-title">Recent Hazards</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Ref</th><th>Hazard</th><th>Risk</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for h in recent_haz %}
+          <tr>
+            <td><span class="ctrl-num">{{ h.id }}</span></td>
+            <td style="max-width:180px;font-size:12px">{{ (h.generic_hazard or '—')[:50] }}</td>
+            <td>
+              {% if h.risks %}
+              <span style="font-size:16px;font-weight:800;font-family:'IBM Plex Mono',monospace;
+                color:{% if h.risks[0].initial_tolerance=='INTOLERABLE' %}#dc2626{% elif h.risks[0].initial_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+                {{ h.risks[0].initial_risk_index }}
+              </span>
+              {% else %}<span style="color:#9ca3af">—</span>{% endif %}
+            </td>
+            <td>{% if h.status=='Open' %}<span class="badge b-yellow">Open</span>
+                {% elif h.status=='Controlled' %}<span class="badge b-green">Controlled</span>
+                {% else %}<span class="badge b-gray">{{ h.status }}</span>{% endif %}</td>
+            <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:20px">No hazards recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px"><a href="/hazard-log" class="btn btn-outline btn-sm">View All →</a></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Open Actions</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Ref</th><th>Description</th><th>Due</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for a in recent_act %}
+          <tr>
+            <td><span class="ctrl-num">{{ a.id }}</span></td>
+            <td style="max-width:180px;font-size:12px">{{ (a.description or '—')[:50] }}</td>
+            <td style="font-size:11px;{% if a.status=='Overdue' %}color:#dc2626;font-weight:700{% endif %}">{{ a.due_date or '—' }}</td>
+            <td>{% if a.status=='Overdue' %}<span class="badge b-red">Overdue</span>
+                {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+                {% else %}<span class="badge b-yellow">Open</span>{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:20px">No open actions.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px"><a href="/actions" class="btn btn-outline btn-sm">View All →</a></div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Quick actions -->
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+  <a href="/hazard-report" class="btn btn-nav">⚠️ Hazard Report</a>
+  <a href="/asr" class="btn btn-outline">✈️ ASR</a>
+  <a href="/audit-schedule/new" class="btn btn-outline">🔍 New Audit</a>
+  <a href="/moc/new" class="btn btn-outline">🔄 New MOC</a>
+  <a href="/risk-assessments/new" class="btn btn-outline">📝 New RA</a>
+</div>
+
+{% endblock %}

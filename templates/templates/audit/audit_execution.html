@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}{{ s.id }} — Audit Execution{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/audit-schedule" style="color:var(--muted);font-size:13px">← Audit Schedule</a></div>
+<div class="page-title">{{ s.id }}</div>
+<div class="page-sub">
+  {{ s.audit_type }} · {{ s.department.name if s.department else '—' }} ·
+  Lead: {{ s.lead_auditor }} · Scheduled: {{ s.scheduled_date }}
+  {% if s.status=='Completed' %}&nbsp;<span class="badge b-green">CLOSED {{ s.closure_date }}</span>{% endif %}
+</div>
+
+<!-- Progress bar -->
+<div class="card" style="padding:14px 20px;margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-size:12px;font-weight:700;color:var(--navy)">Checklist Progress: {{ done }}/{{ total }} completed · {{ nc }} Non-Compliant items</span>
+    <span style="font-size:12px;color:var(--muted)">{{ ((done/total)*100)|int if total > 0 else 0 }}%</span>
+  </div>
+  <div style="background:#f0f2f7;border-radius:99px;height:8px;overflow:hidden">
+    <div style="background:{% if nc > 0 %}#d97706{% else %}#16a34a{% endif %};height:100%;width:{{ ((done/total)*100)|int if total > 0 else 0 }}%;border-radius:99px;transition:width .3s"></div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 380px;gap:18px">
+
+  <!-- Left: Checklist + Findings -->
+  <div>
+    <!-- Start audit button -->
+    {% if s.status == 'Planned' %}
+    <div class="card" style="border:2px solid #1e40af20;background:#eff6ff">
+      <div style="font-size:13px;color:#1e40af;margin-bottom:10px">⚡ This audit has not started yet. Click below to begin.</div>
+      <form method="POST" action="/audit-schedule/{{ s.id }}/start">
+        <div class="fg"><label>Opening Meeting Date</label><input type="date" name="opening_meeting" value="{{ now.strftime('%Y-%m-%d') }}"/></div>
+        <button type="submit" class="btn btn-nav">🚀 Start Audit</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- Checklist -->
+    {% if s.status in ['In Progress','Completed'] %}
+    <div class="card">
+      <div class="card-title">Audit Checklist</div>
+      <form method="POST" action="/audit-schedule/{{ s.id }}/checklist">
+        {% for category, items in checklist.items() %}
+        <div style="margin-bottom:18px">
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--navy);padding:6px 0 8px;border-bottom:2px solid var(--gold);margin-bottom:10px">{{ category }}</div>
+          {% for item in items %}
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;{% if item.response=='No' %}background:#fff8f8;border-color:#fca5a5;{% elif item.response=='Yes' %}background:#f0fdf4;border-color:#bbf7d0;{% endif %}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px">
+              <div style="flex:1">
+                <span style="font-size:10px;color:var(--muted);font-family:monospace">{{ item.item_ref }}</span>
+                <p style="font-size:13px;margin-top:2px">{{ item.question }}</p>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0">
+                {% for opt in ['Yes','No','N/A'] %}
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:12px;font-weight:600;
+                  {% if opt=='Yes' %}color:#15803d{% elif opt=='No' %}color:#dc2626{% else %}color:#6b7280{% endif %}">
+                  <input type="radio" name="resp_{{ item.id }}" value="{{ opt }}"
+                    {% if item.response==opt %}checked{% endif %}
+                    {% if s.status=='Completed' %}disabled{% endif %}/> {{ opt }}
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="g2" style="gap:8px">
+              <input type="text" name="comment_{{ item.id }}" placeholder="Comment…"
+                value="{{ item.comment or '' }}"
+                {% if s.status=='Completed' %}disabled{% endif %}
+                style="font-size:12px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:{% if s.status=='Completed' %}#f8f9fc{% else %}#fff{% endif %}"/>
+              <input type="text" name="evidence_{{ item.id }}" placeholder="Evidence reference…"
+                value="{{ item.evidence or '' }}"
+                {% if s.status=='Completed' %}disabled{% endif %}
+                style="font-size:12px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:{% if s.status=='Completed' %}#f8f9fc{% else %}#fff{% endif %}"/>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        {% if s.status == 'In Progress' %}
+        <button type="submit" class="btn btn-nav">💾 Save Checklist</button>
+        {% endif %}
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Right: Info + Findings + Closure -->
+  <div>
+    <!-- Audit info card -->
+    <div class="card">
+      <div class="card-title">Audit Details</div>
+      <table style="font-size:12px;width:100%">
+        <tr><td style="color:var(--muted);padding:4px 0;width:110px">Status</td>
+          <td>{% if s.status=='Completed' %}<span class="badge b-green">Completed</span>{% elif s.status=='In Progress' %}<span class="badge b-blue">In Progress</span>{% else %}<span class="badge b-gray">Planned</span>{% endif %}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0">Lead Auditor</td><td>{{ s.lead_auditor }}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0">Team</td><td>{{ s.audit_team or '—' }}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0">Scope</td><td>{{ s.scope or '—' }}</td></tr>
+        {% if s.opening_meeting %}<tr><td style="color:var(--muted);padding:4px 0">Opening Mtg</td><td>{{ s.opening_meeting }}</td></tr>{% endif %}
+        {% if s.closure_date %}<tr><td style="color:var(--muted);padding:4px 0">Closed</td><td>{{ s.closure_date }} by {{ s.closed_by }}</td></tr>{% endif %}
+        {% if s.final_remarks %}<tr><td style="color:var(--muted);padding:4px 0;vertical-align:top">Remarks</td><td>{{ s.final_remarks }}</td></tr>{% endif %}
+      </table>
+    </div>
+
+    <!-- Findings -->
+    <div class="card">
+      <div class="card-title">Findings ({{ s.findings|length }})</div>
+      {% for f in s.findings %}
+      <div style="border:1.5px solid {% if f.severity=='Major' %}#fca5a5{% elif f.severity=='Minor' %}#fde68a{% else %}#d1d5db{% endif %};border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:11px;font-weight:800;color:var(--navy)">{{ f.finding_ref }}</span>
+          <div style="display:flex;gap:4px">
+            {% if f.severity=='Major' %}<span class="badge b-red" style="font-size:10px">Major</span>
+            {% elif f.severity=='Minor' %}<span class="badge b-yellow" style="font-size:10px">Minor</span>
+            {% else %}<span class="badge b-gray" style="font-size:10px">Obs</span>{% endif %}
+            {% if f.status=='Closed' %}<span class="badge b-green" style="font-size:10px">Closed</span>
+            {% elif f.status=='Actioned' %}<span class="badge b-blue" style="font-size:10px">Actioned</span>
+            {% else %}<span class="badge b-yellow" style="font-size:10px">Open</span>{% endif %}
+          </div>
+        </div>
+        <p style="font-size:12px;color:#374151;margin-bottom:4px">{{ f.description }}</p>
+        {% if f.standard_ref %}<p style="font-size:10px;color:var(--muted)">Ref: {{ f.standard_ref }}</p>{% endif %}
+        {% if f.hazard_id %}<p style="font-size:10px;margin-top:3px">→ Hazard: <a href="/hazard-log/{{ f.hazard_id }}" style="color:#1d4ed8">{{ f.hazard_id }}</a></p>{% endif %}
+        <div style="margin-top:6px">
+          {% for a in f.actions %}
+          <div style="background:#f8f9fc;border-radius:6px;padding:6px 8px;font-size:11px;margin-top:4px;display:flex;justify-content:space-between">
+            <span>{{ a.id }} — {{ (a.description or '')[:50] }}</span>
+            {% if a.status=='Closed' %}<span class="badge b-green" style="font-size:9px">Closed</span>
+            {% elif a.status=='Overdue' %}<span class="badge b-red" style="font-size:9px">Overdue</span>
+            {% else %}<span class="badge b-yellow" style="font-size:9px">{{ a.status }}</span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:12px">No findings recorded yet.</p>
+      {% endfor %}
+
+      <!-- Add finding (only if in progress) -->
+      {% if s.status == 'In Progress' %}
+      <details style="margin-top:10px">
+        <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">⚠ Record New Finding</summary>
+        <form method="POST" action="/audit-schedule/{{ s.id }}/findings/new" style="margin-top:10px;padding:14px;background:#f8f9fc;border-radius:8px">
+          <div class="fg"><label>Description *</label><textarea name="description" required rows="3" placeholder="Describe the non-conformance or observation…"></textarea></div>
+          <div class="g2">
+            <div class="fg"><label>Category</label>
+              <select name="category"><option>Operational</option><option>Technical</option><option>Human Factors</option><option>Organizational</option></select></div>
+            <div class="fg"><label>Severity</label>
+              <select name="severity"><option>Major</option><option>Minor</option><option>Observation</option></select></div>
+          </div>
+          <div class="fg"><label>Standard / Reference</label><input type="text" name="standard_ref" placeholder="e.g. IOSA ISM 1.1.1 / ICAO Annex 19"/></div>
+          <div class="fg"><label>Requirement</label><input type="text" name="requirement" placeholder="What the standard requires…"/></div>
+          <div class="fg"><label>Root Cause</label><textarea name="root_cause" rows="2"></textarea></div>
+          <div class="fg"><label>Evidence</label><input type="text" name="evidence" placeholder="Doc reference, observation, record…"/></div>
+          <div style="border-top:1px solid var(--border);margin:10px 0 10px;padding-top:10px">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Auto-generate Corrective Action</div>
+            <div class="fg"><label>Action Description *</label><textarea name="action_description" required rows="2" placeholder="What must be done to correct this finding?"></textarea></div>
+            <div class="g2">
+              <div class="fg"><label>Action Owner *</label><input type="text" name="action_owner" required placeholder="Responsible manager"/></div>
+              <div class="fg"><label>Due Date *</label><input type="date" name="due_date" required/></div>
+            </div>
+          </div>
+          <div class="fg" style="flex-direction:row;align-items:center;gap:8px">
+            <input type="checkbox" name="auto_hazard" value="yes" id="ah" style="width:auto"/>
+            <label for="ah" style="font-size:12px;text-transform:none;letter-spacing:0">
+              Auto-create Hazard in SMS Hazard Log
+            </label>
+          </div>
+          {% if auto_hazard_checked %}
+          <div class="g2">
+            <div class="fg"><label>Risk Likelihood</label>
+              <select name="risk_likelihood">{% for v in [5,4,3,2,1] %}<option value="{{ v }}" {% if v==3 %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+            <div class="fg"><label>Risk Severity</label>
+              <select name="risk_severity">{% for v in ['A','B','C','D','E'] %}<option {% if v=='C' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+          </div>
+          {% endif %}
+          <div class="g2" style="margin-top:8px">
+            <div class="fg"><label>Risk Likelihood</label>
+              <select name="risk_likelihood">{% for v in [5,4,3,2,1] %}<option value="{{ v }}" {% if v==3 %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+            <div class="fg"><label>Risk Severity</label>
+              <select name="risk_severity">{% for v in ['A','B','C','D','E'] %}<option {% if v=='C' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+          </div>
+          <button type="submit" class="btn btn-nav btn-sm">Record Finding + Create Action</button>
+        </form>
+      </details>
+      {% endif %}
+    </div>
+
+    <!-- Closure -->
+    {% if s.status == 'In Progress' %}
+    <div class="card" style="border:2px solid {% if can_close %}#bbf7d0{% else %}#fca5a5{% endif %}">
+      <div class="card-title">Audit Closure</div>
+      {% if not all_findings_actioned %}
+        <div style="background:#fee2e2;border-radius:7px;padding:10px;font-size:12px;color:#dc2626;margin-bottom:8px">✗ All findings must have at least one corrective action.</div>
+      {% endif %}
+      {% if not all_actions_closed %}
+        <div style="background:#fee2e2;border-radius:7px;padding:10px;font-size:12px;color:#dc2626;margin-bottom:8px">✗ All corrective actions must be Closed.</div>
+      {% endif %}
+      {% if not all_verified %}
+        <div style="background:#fee2e2;border-radius:7px;padding:10px;font-size:12px;color:#dc2626;margin-bottom:8px">✗ All actions must have an effectiveness review.</div>
+      {% endif %}
+      {% if can_close %}
+        <div style="background:#dcfce7;border-radius:7px;padding:10px;font-size:12px;color:#15803d;margin-bottom:10px">✓ All conditions met — audit is ready to close.</div>
+        <form method="POST" action="/audit-schedule/{{ s.id }}/close">
+          <div class="fg"><label>Closing Meeting Date</label><input type="date" name="closing_meeting" value="{{ now.strftime('%Y-%m-%d') }}"/></div>
+          <div class="fg"><label>Closed By *</label><input type="text" name="closed_by" required placeholder="Name of audit manager"/></div>
+          <div class="fg"><label>Final Remarks</label><textarea name="final_remarks" rows="3" placeholder="Summary of audit outcome, overall compliance level…"></textarea></div>
+          <button type="submit" class="btn btn-nav" style="background:#15803d">✓ Close Audit</button>
+        </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if s.status == 'Completed' %}
+    <div class="card" style="background:#f0fdf4;border:2px solid #bbf7d0">
+      <div class="card-title" style="color:#15803d">✓ Audit Closed</div>
+      <p style="font-size:13px">Closed by <strong>{{ s.closed_by }}</strong> on {{ s.closure_date }}</p>
+      {% if s.final_remarks %}<p style="font-size:13px;margin-top:8px;color:#374151">{{ s.final_remarks }}</p>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}New Action{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:14px">
+  <a href="/actions" style="color:var(--muted);font-size:13px">← All Actions</a>
+</div>
+
+<div class="page-title">Create New Action</div>
+<div class="page-sub">5 fields. That is all you need.</div>
+
+<form class="form-card" method="POST" style="max-width:600px">
+
+  <!-- Pass back where to return after saving -->
+  <input type="hidden" name="return_url" value="{{ pre.return_url or '/actions' }}"/>
+  <input type="hidden" name="source"     value="{{ pre.source or 'Manual' }}"/>
+  <input type="hidden" name="hazard_id"  value="{{ pre.hazard_id or '' }}"/>
+  <input type="hidden" name="linked_ref_id" value="{{ pre.linked_ref_id or '' }}"/>
+
+  <!-- Show context if coming from a hazard/risk/audit page -->
+  {% if pre.hazard_id %}
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+    📎 This action will be linked to:
+    <strong>{{ pre.source }}</strong>
+    {% if pre.hazard_id %} · Hazard <a href="/hazard-log/{{ pre.hazard_id }}" style="color:#1d4ed8">{{ pre.hazard_id }}</a>{% endif %}
+  </div>
+  {% endif %}
+
+  <!-- 1. What needs to be done -->
+  <div class="fg">
+    <label>What needs to be done? *</label>
+    <textarea name="description" required rows="4"
+      placeholder="Be specific. e.g. Implement post-rain FOD inspection protocol before aircraft movement at all gates."></textarea>
+  </div>
+
+  <!-- 2. Who is responsible -->
+  <div class="fg">
+    <label>Who is responsible? *</label>
+    <input type="text" name="owner" required
+      placeholder="e.g. Ground Operations Manager"/>
+  </div>
+
+  <!-- 3. When must it be done by -->
+  <div class="fg">
+    <label>Due date *</label>
+    <input type="date" name="due_date" required/>
+  </div>
+
+  <!-- 4. How urgent -->
+  <div class="fg">
+    <label>Priority</label>
+    <select name="priority">
+      <option value="High">High — must be done immediately</option>
+      <option value="Medium" selected>Medium — within due date</option>
+      <option value="Low">Low — when possible</option>
+    </select>
+  </div>
+
+  <button type="submit" class="btn btn-nav" style="margin-top:8px">
+    Create Action
+  </button>
+
+</form>
+
+{% endblock %}

@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+{% block title %}{{ ra.control_number }} — Risk Assessment{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+  <a href="/risk-assessments" style="color:var(--muted);font-size:13px">← Risk Assessments</a>
+  <a href="/risk-assessments/{{ ra.id }}/print" target="_blank" class="btn btn-nav" style="background:#065f46">🖨 Print / Export PDF</a>
+  {% if ra.hazard %}&nbsp;·&nbsp;<a href="/hazard-log/{{ ra.hazard.id }}" style="color:var(--muted);font-size:13px">Hazard: {{ ra.hazard.id }}</a>{% endif %}
+</div>
+
+<!-- Header banner -->
+<div style="background:var(--navy);color:#fff;border-radius:12px;padding:20px 28px;margin-bottom:20px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="font-size:11px;color:rgba(255,255,255,.5);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">
+        Jordan Aviation · Safety Department · Jav/SMS/001 Rev 01
+      </div>
+      <div style="font-size:22px;font-weight:800;margin-bottom:4px">{{ ra.title }}</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.7)">
+        Control No: <strong style="color:var(--gold)">{{ ra.control_number }}</strong> ·
+        Assessed: {{ ra.assessment_date }} ·
+        Review: {{ ra.next_review_date or '—' }}
+      </div>
+    </div>
+    <div style="text-align:right">
+      <div style="display:flex;gap:10px;align-items:center">
+        {% if worst_initial=='INTOLERABLE' %}<span style="background:#dc2626;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:800">INTOLERABLE BEFORE</span>
+        {% elif worst_initial=='TOLERABLE' %}<span style="background:#d97706;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:800">TOLERABLE BEFORE</span>
+        {% elif worst_initial=='ACCEPTABLE' %}<span style="background:#15803d;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:800">ACCEPTABLE BEFORE</span>{% endif %}
+
+        <span style="color:rgba(255,255,255,.5);font-size:18px">→</span>
+
+        {% if worst_residual=='INTOLERABLE' %}<span style="background:#dc2626;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:800">INTOLERABLE AFTER</span>
+        {% elif worst_residual=='TOLERABLE' %}<span style="background:#d97706;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:800">TOLERABLE AFTER</span>
+        {% elif worst_residual=='ACCEPTABLE' %}<span style="background:#15803d;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:800">ACCEPTABLE AFTER</span>
+        {% else %}<span style="background:#374151;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px">RESIDUAL PENDING</span>{% endif %}
+      </div>
+      <!-- Lifecycle status indicator -->
+      <div style="margin-top:8px">
+        {% if ra.status=='Closed' %}<span style="background:#15803d;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● CLOSED</span>
+        {% elif ra.status=='Active' %}<span style="background:#1e40af;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● ACTIVE</span>
+        {% elif ra.status=='Submitted' %}<span style="background:#0891b2;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● SUBMITTED</span>
+        {% elif ra.status=='Under Review' %}<span style="background:#d97706;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● UNDER REVIEW</span>
+        {% elif ra.status=='Archived' %}<span style="background:#6b7280;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● ARCHIVED</span>
+        {% else %}<span style="background:#9ca3af;color:#fff;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800">● DRAFT</span>{% endif %}
+        {% if ra.revision %}<span style="margin-left:6px;background:rgba(255,255,255,.15);color:#fff;padding:3px 10px;border-radius:20px;font-size:11px">REV{{ ra.revision }}</span>{% endif %}
+        {% if ra.management_acceptance %}<span class="badge {% if ra.management_acceptance=='Accepted' %}b-green{% elif ra.management_acceptance=='Not Accepted' %}b-red{% else %}b-yellow{% endif %}" style="margin-left:6px">{{ ra.management_acceptance }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LIFECYCLE WORKFLOW BAR -->
+<div class="card" style="padding:14px 20px;margin-bottom:18px">
+  <!-- Step flow -->
+  <div style="display:flex;align-items:center;gap:4px;margin-bottom:14px;flex-wrap:wrap">
+    {% set steps = [('Draft','Draft','#9ca3af'),('Submitted','Submitted','#0891b2'),('Active','Active','#1e40af'),('Under Review','Under Review','#d97706'),('Closed','Closed','#15803d')] %}
+    {% set status_order = ['Draft','Submitted','Active','Under Review','Closed','Archived'] %}
+    {% set cur_idx = status_order.index(ra.status) if ra.status in status_order else 0 %}
+    {% for s_key, s_label, s_color in steps %}
+      {% set s_idx = status_order.index(s_key) %}
+      <span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;
+        {% if ra.status == s_key %}background:{{ s_color }};color:#fff
+        {% elif cur_idx > s_idx %}background:{{ s_color }}30;color:{{ s_color }};border:1px solid {{ s_color }}50
+        {% else %}background:#f3f4f6;color:#9ca3af{% endif %}">
+        {{ s_label }}
+      </span>
+      {% if not loop.last %}<span style="color:#d1d5db;font-size:14px">→</span>{% endif %}
+    {% endfor %}
+    {% if ra.revision %}<span style="margin-left:8px;font-size:11px;color:var(--muted);font-weight:700">REV{{ ra.revision }}</span>{% endif %}
+  </div>
+
+  <!-- Dates row -->
+  <div style="display:flex;gap:24px;font-size:12px;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
+    <span>📅 Assessed: <strong style="color:#374151">{{ ra.assessment_date or '—' }}</strong></span>
+    {% if ra.submitted_date %}<span>📤 Submitted: <strong style="color:#374151">{{ ra.submitted_date }}</strong></span>{% endif %}
+    {% if ra.activated_date %}<span>▶ Activated: <strong style="color:#374151">{{ ra.activated_date }}</strong></span>{% endif %}
+    {% if ra.next_review_date %}<span>🔁 Next Review: <strong style="color:{% if ra.next_review_date <= now.strftime('%Y-%m-%d') %}#dc2626{% else %}#374151{% endif %}">{{ ra.next_review_date }}</strong></span>{% endif %}
+    {% if ra.closed_date %}<span>✓ Closed: <strong style="color:#15803d">{{ ra.closed_date }}</strong></span>{% endif %}
+  </div>
+
+  <!-- Action buttons — only show what's valid for current status -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+
+    {% if ra.status == 'Draft' %}
+      <!-- Submit -->
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/submit">
+        <button type="submit" class="btn btn-nav" style="background:#1e40af"
+          {% if not ra.rows %}title="Add risk rows first (Step 2)" disabled style="opacity:.5"{% endif %}>
+          📤 Submit for Review
+        </button>
+      </form>
+      <!-- Continue wizard -->
+      {% if ra.hazard %}
+      <a href="/ra-wizard/{{ ra.hazard.id }}/step/1" class="btn btn-outline">✏ Continue Wizard →</a>
+      {% endif %}
+    {% endif %}
+
+    {% if ra.status in ('Submitted', 'Active') %}
+      <!-- Send for review -->
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/send-review">
+        <button type="submit" class="btn btn-outline" style="border-color:#d97706;color:#d97706">🔁 Send for Review</button>
+      </form>
+      <!-- Edit (wizard) -->
+      {% if ra.hazard %}
+      <a href="/ra-wizard/{{ ra.hazard.id }}/step/3" class="btn btn-outline">✏ Edit Risk Rows</a>
+      {% endif %}
+    {% endif %}
+
+    {% if ra.status == 'Under Review' %}
+      <!-- Reactivate -->
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/reactivate">
+        <button type="submit" class="btn btn-nav" style="background:#1e40af">▶ Reactivate</button>
+      </form>
+      <!-- Reassess (new revision) -->
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/reassess">
+        <button type="submit" class="btn btn-outline" style="border-color:#7c3aed;color:#7c3aed">🔄 Reassess (New Revision)</button>
+      </form>
+    {% endif %}
+
+    {% if ra.status in ('Active', 'Under Review') %}
+      <!-- Closure check -->
+      <a href="/risk-assessments/{{ ra.id }}/closure-check" class="btn btn-outline" style="border-color:#15803d;color:#15803d">✓ Check Closure Conditions</a>
+    {% endif %}
+
+    {% if ra.status == 'Closed' %}
+      <span style="font-size:13px;color:#15803d;font-weight:700">✓ This Risk Assessment is closed. Reassess to create a new revision.</span>
+    {% endif %}
+
+    <!-- Print always available -->
+    <a href="/risk-assessments/{{ ra.id }}/print" target="_blank" class="btn btn-outline" style="margin-left:auto">🖨 Print PDF</a>
+
+  </div>
+</div>
+
+<!-- PAGE 2 — General Information (fully editable) -->
+<div class="card" style="margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div class="card-title" style="margin-bottom:0">General Information & Signatories</div>
+    {% if ra.status == 'Closed' %}
+    <span style="font-size:11px;color:#dc2626;font-weight:700">🔒 Closed — read only</span>
+    {% else %}
+    <span style="font-size:11px;color:var(--muted)">All fields editable — click Save to update</span>
+    {% endif %}
+  </div>
+
+  {% if ra.status == 'Closed' %}
+  <div style="background:#f3f4f6;border-radius:8px;padding:12px 16px;font-size:13px;color:#6b7280;margin-bottom:12px">
+    🔒 This Risk Assessment is closed. Fields are read-only. Use "Reassess" to create a new editable revision.
+  </div>
+  {% endif %}
+  <form method="POST" action="/risk-assessments/{{ ra.id }}/update" {% if ra.status == 'Closed' %}onsubmit="return false"{% endif %}>
+
+    <!-- General Information fields -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+
+      <div class="fg" style="margin:0">
+        <label>Department</label>
+        <select name="department_id">
+          {% for d in all_departments %}
+            <option value="{{ d.id }}" {% if ra.department_id==d.id %}selected{% endif %}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>Responsible Name</label>
+        <input type="text" name="responsible_name" value="{{ ra.responsible_name or '' }}"
+               placeholder="Name of responsible manager"/>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>Risk Assessors</label>
+        <input type="text" name="assessors_names" value="{{ ra.assessors_names or '' }}"
+               placeholder="Names of assessors (comma separated)"/>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>Assessment Date</label>
+        <input type="date" name="assessment_date" value="{{ ra.assessment_date or '' }}"/>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>Next Review Date</label>
+        <input type="date" name="next_review_date" value="{{ ra.next_review_date or '' }}"/>
+      </div>
+
+      <div class="fg" style="margin:0">
+        <label>RA Status</label>
+        <select name="status">
+          {% for s in ['Draft','Under Review','Approved','Archived'] %}
+            <option {% if ra.status==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="fg" style="margin:0;grid-column:1/-1">
+        <label>Reasons for Risk Assessment</label>
+        <input type="text" name="reasons" value="{{ ra.reasons or '' }}"
+               placeholder="Why is this risk assessment being conducted?"/>
+      </div>
+
+      <div class="fg" style="margin:0;grid-column:1/-1">
+        <label>General Description</label>
+        <textarea name="general_description" rows="3"
+                  placeholder="General description of the activity or hazard being assessed…">{{ ra.general_description or '' }}</textarea>
+      </div>
+
+    </div>
+
+    <!-- Risk Levels -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px">
+      <div class="fg" style="margin:0">
+        <label>Risk Level Prior to Controls</label>
+        <select name="risk_level_prior">
+          <option value="">— Select —</option>
+          {% for t in ['INTOLERABLE','TOLERABLE','ACCEPTABLE'] %}
+            <option {% if ra.risk_level_prior==t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fg" style="margin:0">
+        <label>Risk Level After Controls</label>
+        <select name="risk_level_after">
+          <option value="">— Select —</option>
+          {% for t in ['INTOLERABLE','TOLERABLE','ACCEPTABLE'] %}
+            <option {% if ra.risk_level_after==t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fg" style="margin:0">
+        <label>Management Acceptance</label>
+        <select name="management_acceptance">
+          <option value="">Pending</option>
+          {% for s in ['Accepted','Not Accepted','Conditional'] %}
+            <option {% if ra.management_acceptance==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Signatories — editable table -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">Signatories</div>
+      <table style="width:100%;font-size:13px;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="background:var(--navy);color:#fff;padding:10px 14px;text-align:left;width:140px;border-radius:6px 0 0 0"></th>
+            <th style="background:var(--navy);color:#fff;padding:10px 14px;text-align:left">Name</th>
+            <th style="background:var(--navy);color:#fff;padding:10px 14px;text-align:left;border-radius:0 6px 0 0">Position / Title</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fafbfe">
+            <td style="padding:10px 14px;border:1px solid var(--border);font-weight:700;color:var(--navy)">Prepared By</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="prepared_by_name"
+                     value="{{ ra.prepared_by_name or '' }}"
+                     placeholder="Full name"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="prepared_by_position"
+                     value="{{ ra.prepared_by_position or '' }}"
+                     placeholder="e.g. Safety Officer"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px;border:1px solid var(--border);font-weight:700;color:var(--navy)">Review By</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="reviewed_by_name"
+                     value="{{ ra.reviewed_by_name or '' }}"
+                     placeholder="Full name"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="reviewed_by_position"
+                     value="{{ ra.reviewed_by_position or '' }}"
+                     placeholder="e.g. Safety Manager"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+          </tr>
+          <tr style="background:#fafbfe">
+            <td style="padding:10px 14px;border:1px solid var(--border);font-weight:700;color:var(--navy)">Approval By</td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="approved_by_name"
+                     value="{{ ra.approved_by_name or '' }}"
+                     placeholder="Full name"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+            <td style="padding:6px 10px;border:1px solid var(--border)">
+              <input type="text" name="approved_by_position"
+                     value="{{ ra.approved_by_position or '' }}"
+                     placeholder="e.g. Accountable Manager"
+                     style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;background:#fff"/>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    {% if ra.status != 'Closed' %}
+    <button type="submit" class="btn btn-nav">💾 Save General Information</button>
+    {% else %}
+    <button type="button" class="btn btn-outline" disabled style="opacity:.5;cursor:not-allowed">🔒 Closed — Read Only</button>
+    {% endif %}
+
+  </form>
+</div>
+
+<!-- PAGE 3 — Risk Table -->
+<div class="card" style="margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div class="card-title" style="margin:0">Risk Assessment Table ({{ ra.rows|length }} row{{ 's' if ra.rows|length != 1 }})</div>
+    {% if ra.hazard %}<a href="/risk-assessments/{{ ra.id }}#add-row" style="font-size:12px;color:var(--navy);font-weight:700">+ Add Row ↓</a>{% endif %}
+  </div>
+  <div class="tbl-wrap">
+    <table style="font-size:12px">
+      <thead>
+        <tr style="background:var(--navy);color:#fff">
+          <th style="padding:8px;border:1px solid #374151">SEQ</th>
+          <th style="padding:8px;border:1px solid #374151">Type of Activity</th>
+          <th style="padding:8px;border:1px solid #374151">Generic Hazard</th>
+          <th style="padding:8px;border:1px solid #374151">Specific Components</th>
+          <th style="padding:8px;border:1px solid #374151">Consequences</th>
+          <th style="padding:8px;border:1px solid #374151;background:#92400e">L</th>
+          <th style="padding:8px;border:1px solid #374151;background:#92400e">S</th>
+          <th style="padding:8px;border:1px solid #374151;background:#92400e">Risk Index</th>
+          <th style="padding:8px;border:1px solid #374151">Current Defenses</th>
+          <th style="padding:8px;border:1px solid #374151">Further Mitigation Measures</th>
+          <th style="padding:8px;border:1px solid #374151;background:#065f46">L</th>
+          <th style="padding:8px;border:1px solid #374151;background:#065f46">S</th>
+          <th style="padding:8px;border:1px solid #374151;background:#065f46">Risk Index</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in ra.rows %}
+        <tr>
+          <td style="border:1px solid var(--border);padding:8px;text-align:center;font-weight:800;background:#f8f9fc">{{ row.seq_num }}</td>
+          <td style="border:1px solid var(--border);padding:8px">{{ row.type_of_activity or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px">{{ row.generic_hazard or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;max-width:180px">{{ row.specific_components or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;max-width:180px">{{ row.consequences or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;text-align:center;font-weight:700;background:#fef3c7">{{ row.likelihood_initial or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;text-align:center;font-weight:700;background:#fef3c7">{{ row.severity_initial or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;text-align:center;background:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#fee2e2{% elif row.risk_tolerance_initial=='TOLERABLE' %}#fef9c3{% elif row.risk_tolerance_initial=='ACCEPTABLE' %}#dcfce7{% else %}#f8f9fc{% endif %}">
+            <div style="font-weight:800;font-size:16px;color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#b45309{% elif row.risk_tolerance_initial=='ACCEPTABLE' %}#15803d{% else %}#374151{% endif %}">
+              {{ row.risk_index_initial or '—' }}
+            </div>
+            <div style="font-size:10px;color:var(--muted)">{{ row.risk_tolerance_initial or '' }}</div>
+            {% if row.risk_id %}<a href="/risk/{{ row.risk_id }}" style="font-size:10px;color:#1d4ed8">Risk →</a>{% endif %}
+          </td>
+          <td style="border:1px solid var(--border);padding:8px;max-width:160px">{{ row.current_defenses or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;max-width:160px">{{ row.further_mitigations or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;text-align:center;font-weight:700;background:#f0fdf4">{{ row.likelihood_residual or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;text-align:center;font-weight:700;background:#f0fdf4">{{ row.severity_residual or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;text-align:center;background:{% if row.risk_tolerance_residual=='INTOLERABLE' %}#fee2e2{% elif row.risk_tolerance_residual=='TOLERABLE' %}#fef9c3{% elif row.risk_tolerance_residual=='ACCEPTABLE' %}#dcfce7{% else %}#f8f9fc{% endif %}">
+            {% if row.risk_index_residual %}
+            <div style="font-weight:800;font-size:16px;color:{% if row.risk_tolerance_residual=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_residual=='TOLERABLE' %}#b45309{% else %}#15803d{% endif %}">
+              {{ row.risk_index_residual }}
+            </div>
+            <div style="font-size:10px;color:var(--muted)">{{ row.risk_tolerance_residual or '' }}</div>
+            {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="13" style="text-align:center;color:var(--muted);padding:28px;border:1px solid var(--border)">No risk rows yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add row form -->
+  {% if ra.status != 'Archived' %}
+  <div id="add-row" style="margin-top:18px;padding:16px;background:#f8f9fc;border-radius:10px;border:1.5px solid var(--border)">
+    <div class="card-title">+ Add Risk Row</div>
+    <form method="POST" action="/risk-assessments/{{ ra.id }}/add-row">
+      <div class="g3">
+        <div class="fg"><label>Type of Activity *</label><input type="text" name="type_of_activity" required/></div>
+        <div class="fg"><label>Generic Hazard *</label><input type="text" name="generic_hazard" required/></div>
+        <div class="fg"><label>Specific Components</label><textarea name="specific_components" rows="2"></textarea></div>
+        <div class="fg"><label>Consequences *</label><textarea name="consequences" required rows="2"></textarea></div>
+        <div class="fg"><label>Current Defenses</label><textarea name="current_defenses" rows="2"></textarea></div>
+        <div class="fg"><label>Further Mitigation Measures</label><textarea name="further_mitigations" rows="2"></textarea></div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="fg" style="margin:0"><label>Initial Likelihood</label>
+          <select name="likelihood_initial">{% for v in [5,4,3,2,1] %}<option value="{{ v }}" {% if v==3 %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+        <div class="fg" style="margin:0"><label>Initial Severity</label>
+          <select name="severity_initial">{% for v in ['A','B','C','D','E'] %}<option {% if v=='C' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+        <div class="fg" style="margin:0"><label>Residual Likelihood</label>
+          <select name="likelihood_residual"><option value="">—</option>{% for v in [5,4,3,2,1] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select></div>
+        <div class="fg" style="margin:0"><label>Residual Severity</label>
+          <select name="severity_residual"><option value="">—</option>{% for v in ['A','B','C','D','E'] %}<option>{{ v }}</option>{% endfor %}</select></div>
+        <div class="fg" style="margin:0"><label>Responsible Manager</label><input type="text" name="responsible_manager"/></div>
+        <div class="fg" style="margin:0"><label>Due Date</label><input type="date" name="due_date"/></div>
+      </div>
+      <button type="submit" class="btn btn-nav btn-sm">Add Row</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+<!-- PAGE 4 — Mitigation Implementation -->
+{% if ra.mitigations %}
+<div class="card" style="margin-bottom:18px">
+  <div class="card-title">Implementation of Mitigations Responsibilities</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th>Hazard Seq #</th><th>Mitigation</th><th>Responsible Manager</th><th>Due Date</th><th>Action ID</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        {% for m in ra.mitigations %}
+        <tr>
+          <td style="text-align:center;font-weight:800">{{ m.hazard_seq }}</td>
+          <td style="max-width:280px">{{ m.mitigation }}</td>
+          <td>{{ m.responsible_manager or '—' }}</td>
+          <td style="font-size:12px">{{ m.due_date or '—' }}</td>
+          <td>{% if m.action_id %}<a href="/actions" class="mono" style="font-size:11px;color:#1d4ed8">{{ m.action_id }}</a>{% else %}—{% endif %}</td>
+          <td>
+            {% if m.status=='Completed' %}<span class="badge b-green">Completed</span>
+            {% elif m.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+            {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- PAGE 5 — Risk Mitigation Review -->
+<div class="card" style="margin-bottom:18px">
+  <div class="card-title">Risk Mitigation Review</div>
+  {% if ra.reviews %}
+  <div class="tbl-wrap" style="margin-bottom:16px">
+    <table>
+      <thead><tr>
+        <th>Risk Mitigation</th><th>Review of Mitigation Effectivity</th><th>Effectiveness</th><th>Date Completed</th><th>Actioner</th>
+      </tr></thead>
+      <tbody>
+        {% for rev in ra.reviews %}
+        <tr>
+          <td style="font-size:12px">{{ rev.risk_mitigation }}</td>
+          <td style="max-width:250px;font-size:12px">{{ rev.review_of_effectiveness }}</td>
+          <td>
+            {% if rev.effectiveness_rating=='Effective' %}<span class="badge b-green">Effective</span>
+            {% elif rev.effectiveness_rating=='Partially Effective' %}<span class="badge b-yellow">Partial</span>
+            {% elif rev.effectiveness_rating=='Ineffective' %}<span class="badge b-red">Ineffective</span>{% endif %}
+          </td>
+          <td style="font-size:12px">{{ rev.date_completed or '—' }}</td>
+          <td style="font-size:12px">{{ rev.actioner or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <!-- Add review -->
+  {% if ra.status != 'Archived' %}
+  <details>
+    <summary style="font-size:12px;font-weight:700;cursor:pointer;color:var(--navy)">+ Add Mitigation Review</summary>
+    <form method="POST" action="/risk-assessments/{{ ra.id }}/add-review" style="margin-top:12px;padding:14px;background:#f8f9fc;border-radius:8px">
+      <div class="g2">
+        <div class="fg"><label>Risk Mitigation (reference)</label>
+          <input type="text" name="risk_mitigation" placeholder="e.g. Seq 1: LVP procedure implementation"/></div>
+        <div class="fg"><label>Hazard Seq # (for status update)</label>
+          <input type="text" name="hazard_seq" placeholder="e.g. 1"/></div>
+        <div class="fg"><label>Effectiveness Rating</label>
+          <select name="effectiveness_rating">
+            <option value="">Not yet assessed</option>
+            <option>Effective</option><option>Partially Effective</option><option>Ineffective</option>
+          </select></div>
+        <div class="fg"><label>Date Completed</label>
+          <input type="date" name="date_completed"/></div>
+      </div>
+      <div class="fg"><label>Review of Mitigation Effectivity</label>
+        <textarea name="review_of_effectiveness" rows="3" placeholder="Describe how the mitigation was reviewed and whether it was effective…"></textarea></div>
+      <div class="fg"><label>Actioner</label>
+        <input type="text" name="actioner" placeholder="Name of person who completed the review"/></div>
+      <button type="submit" class="btn btn-nav btn-sm">Add Review</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+
+<!-- Observations & Recommendations (from form) -->
+<div class="card">
+  <div class="card-title">Observations and Recommendations</div>
+  {% if ra.hazard %}
+  <p style="font-size:13px;color:#374151;margin-bottom:12px">{{ ra.hazard.consequences or '—' }}</p>
+  {% endif %}
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    {% if ra.hazard %}
+    <a href="/hazard-log/{{ ra.hazard.id }}" class="btn btn-outline btn-sm">View Hazard →</a>
+    <a href="/risk-register" class="btn btn-outline btn-sm">Risk Register →</a>
+    {% endif %}
+    <a href="/actions?source=Risk+Assessment" class="btn btn-outline btn-sm">View Actions →</a>
+  </div>
+</div>
+{% endblock %}

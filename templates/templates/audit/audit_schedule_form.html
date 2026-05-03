@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}New Scheduled Audit{% endblock %}
+{% block content %}
+<div class="page-title">Schedule New Audit</div>
+<div class="page-sub">Ad-hoc audit — checklist auto-populated based on department</div>
+<form class="form-card" method="POST">
+  <div class="sec">Audit Information</div>
+  <div class="g2">
+    <div class="fg"><label>Department *</label>
+      <select name="department_id" required>
+        <option value="">Select…</option>
+        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Audit Type *</label>
+      <select name="audit_type" required>
+        <option>Internal Audit</option><option>Compliance Audit</option>
+        <option>IOSA-style Audit</option><option>Regulatory Audit</option><option>Safety Audit</option>
+      </select></div>
+    <div class="fg"><label>Scheduled Date *</label><input type="date" name="scheduled_date" required/></div>
+    <div class="fg"><label>Lead Auditor *</label><input type="text" name="lead_auditor" required placeholder="Name"/></div>
+  </div>
+  <div class="fg"><label>Audit Team</label><input type="text" name="audit_team" placeholder="Additional auditors (comma separated)"/></div>
+  <div class="fg"><label>Scope</label><textarea name="scope" rows="3" placeholder="Areas, processes, standards to be audited…"></textarea></div>
+  <div class="fg"><label>Objectives</label><textarea name="objectives" rows="2" placeholder="What this audit aims to verify…"></textarea></div>
+  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:#15803d">
+    ✓ Checklist will be <strong>auto-populated</strong> with ICAO/IOSA standard items for the selected department.
+  </div>
+  <button type="submit" class="btn btn-nav">Create & Schedule Audit</button>
+</form>
+{% endblock %}

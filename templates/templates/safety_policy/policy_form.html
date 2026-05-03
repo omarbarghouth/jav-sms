@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}New Safety Policy Version{% endblock %}
+{% block content %}
+<div class="page-title">New Safety Policy — REV{{ next_ver }}</div>
+<div class="page-sub">ICAO Annex 19 §3.1 · Must be signed by Accountable Manager</div>
+<form class="form-card" method="POST" style="max-width:860px">
+  <div class="sec">Policy Header</div>
+  <div class="fg"><label>Policy Title *</label>
+    <input type="text" name="title" required value="Jordan Aviation Safety Policy Statement"/></div>
+  <div class="g3">
+    <div class="fg"><label>Approved By *</label>
+      <input type="text" name="approved_by" required placeholder="Accountable Manager name"/></div>
+    <div class="fg"><label>Title / Position</label>
+      <input type="text" name="approved_by_title" placeholder="Accountable Manager" value="Accountable Manager"/></div>
+    <div class="fg"><label>Effective Date *</label>
+      <input type="date" name="effective_date" required value="{{ now.strftime('%Y-%m-%d') }}"/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Review Date</label><input type="date" name="review_date"/></div>
+    <div class="fg"><label>Change Summary {% if next_ver > 0 %}*{% endif %}</label>
+      <input type="text" name="change_summary" placeholder="{% if next_ver == 0 %}Initial issue{% else %}What changed in this revision?{% endif %}"/></div>
+  </div>
+  <div class="sec">Policy Statement</div>
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:#1e40af">
+    💡 The safety policy must express management's commitment to safety, define objectives, and be communicated to all staff. (ICAO Doc 9859 §3.2)
+  </div>
+  {% if latest %}
+  <div class="fg">
+    <label>Policy Content * <span style="font-weight:400;color:var(--muted)">(based on {{ latest.version }})</span></label>
+    <textarea name="content" required rows="16" style="font-family:inherit;line-height:1.7">{{ latest.content }}</textarea>
+  </div>
+  {% else %}
+  <div class="fg"><label>Policy Content *</label>
+    <textarea name="content" required rows="16" style="font-family:inherit;line-height:1.7">Jordan Aviation is committed to developing and maintaining the highest standards of aviation safety in all its operations.
+
+Management commits to:
+1. Provide the necessary resources for the effective implementation of the Safety Management System (SMS).
+2. Ensure that safety is the primary consideration in all operational decisions.
+3. Establish and maintain a positive safety culture where all personnel are encouraged to report hazards and safety concerns without fear of reprisal.
+4. Comply with all applicable regulations and standards, including ICAO Annex 19 and IOSA requirements.
+5. Set measurable safety objectives and regularly review safety performance.
+6. Continuously improve the effectiveness of the SMS.
+
+All personnel are responsible for safety within their area of authority and are expected to actively participate in the SMS.
+
+This policy is reviewed annually or following any significant change in operations.</textarea>
+  </div>
+  {% endif %}
+  <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:12px;font-size:12px;color:#b45309">
+    ⚡ After creating, the policy will be in <strong>Draft</strong> status. Activate it from the Safety Policy page to make it official.
+  </div>
+  <button type="submit" class="btn btn-nav">Create Policy REV{{ next_ver }}</button>
+</form>
+{% endblock %}

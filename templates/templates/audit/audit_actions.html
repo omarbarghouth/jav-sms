@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Audit Actions Dashboard{% endblock %}
+{% block content %}
+<div class="page-title">Audit Actions Dashboard</div>
+<div class="page-sub">Corrective actions from all audit findings · Track, verify, and close</div>
+
+<div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_c }}</div><div class="stat-lbl">Open</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#1d4ed8">{{ inprog }}</div><div class="stat-lbl">In Progress</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ overdue }}</div><div class="stat-lbl">Overdue</div><div class="stat-sub">Immediate attention required</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ closed }}</div><div class="stat-lbl">Closed</div></div>
+</div>
+
+<form method="GET" class="fbar">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Open','In Progress','Overdue','Closed'] %}<option {% if status_f==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="priority" onchange="this.form.submit()">
+    <option value="">All Priorities</option>
+    {% for p in ['High','Medium','Low'] %}<option {% if pri_f==p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+  </select>
+  <a href="/audit-actions" class="btn btn-outline btn-sm">Clear</a>
+  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ actions|length }} action(s)</span>
+</form>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Action ID</th><th>Finding</th><th>Description</th><th>Owner</th>
+          <th>Due Date</th><th>Priority</th><th>Status</th><th>Effectiveness</th><th>Update</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in actions %}
+        <tr style="{% if a.status=='Overdue' %}background:#fff5f5{% endif %}">
+          <td class="mono">{{ a.id }}</td>
+          <td>
+            {% if a.finding %}
+              <a href="/audit-findings/{{ a.finding_id }}" style="color:#1d4ed8;font-size:11px;font-family:monospace">{{ a.finding.finding_ref }}</a><br>
+              {% if a.finding.severity=='Major' %}<span class="badge b-red" style="font-size:9px">Major</span>
+              {% elif a.finding.severity=='Minor' %}<span class="badge b-yellow" style="font-size:9px">Minor</span>
+              {% else %}<span class="badge b-gray" style="font-size:9px">Obs</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td style="max-width:200px;font-size:12px">{{ (a.description or '—')[:80] }}</td>
+          <td style="font-size:12px">{{ a.owner or '—' }}</td>
+          <td style="font-size:12px;{% if a.status=='Overdue' %}color:#dc2626;font-weight:700{% endif %}">{{ a.due_date or '—' }}</td>
+          <td>{% if a.priority=='High' %}<span class="badge b-red">High</span>{% elif a.priority=='Medium' %}<span class="badge b-yellow">Medium</span>{% else %}<span class="badge b-gray">Low</span>{% endif %}</td>
+          <td>
+            {% if a.status=='Overdue' %}<span class="badge b-red">Overdue</span>
+            {% elif a.status=='Closed' %}<span class="badge b-green">Closed</span>
+            {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+            {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+          </td>
+          <td>
+            {% if a.effectiveness %}
+              {% if a.effectiveness=='Effective' %}<span class="badge b-green">Effective</span>
+              {% elif a.effectiveness=='Partially Effective' %}<span class="badge b-yellow">Partial</span>
+              {% else %}<span class="badge b-red">Ineffective</span>{% endif %}
+            {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
+          </td>
+          <td>
+            {% if a.status != 'Closed' %}
+            <button class="btn btn-nav btn-sm" onclick="document.getElementById('modal-{{ a.id }}').style.display='flex'">Update</button>
+            <!-- Update Modal -->
+            <div id="modal-{{ a.id }}" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center;padding:20px">
+              <div style="background:#fff;border-radius:12px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#fff">
+                  <strong style="color:var(--navy)">Update Action {{ a.id }}</strong>
+                  <button onclick="document.getElementById('modal-{{ a.id }}').style.display='none'" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer">✕</button>
+                </div>
+                <form method="POST" action="/audit-actions/{{ a.id }}/update" style="padding:20px;display:flex;flex-direction:column;gap:12px">
+                  <div class="g2">
+                    <div class="fg"><label>Status</label>
+                      <select name="status">
+                        {% for st in ['Open','In Progress','Closed'] %}<option {% if a.status==st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                      </select></div>
+                    <div class="fg"><label>Priority</label>
+                      <select name="priority">
+                        {% for p in ['High','Medium','Low'] %}<option {% if a.priority==p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+                      </select></div>
+                  </div>
+                  <div class="g2">
+                    <div class="fg"><label>Owner</label><input type="text" name="owner" value="{{ a.owner or '' }}"/></div>
+                    <div class="fg"><label>Due Date</label><input type="date" name="due_date" value="{{ a.due_date or '' }}"/></div>
+                  </div>
+                  <div class="fg"><label>Implementation Notes</label><textarea name="implementation_notes" rows="3">{{ a.implementation_notes or '' }}</textarea></div>
+                  <div style="border-top:1px solid var(--border);padding-top:10px">
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Follow-up / Verification</div>
+                    <div class="g2">
+                      <div class="fg"><label>Effectiveness</label>
+                        <select name="effectiveness">
+                          <option value="">Not yet assessed</option>
+                          <option {% if a.effectiveness=='Effective' %}selected{% endif %}>Effective</option>
+                          <option {% if a.effectiveness=='Partially Effective' %}selected{% endif %}>Partially Effective</option>
+                          <option {% if a.effectiveness=='Ineffective' %}selected{% endif %}>Ineffective</option>
+                        </select></div>
+                      <div class="fg"><label>Verified By</label><input type="text" name="verified_by" value="{{ a.verified_by or '' }}"/></div>
+                    </div>
+                    <div class="fg"><label>Verification Date</label><input type="date" name="verification_date" value="{{ a.verification_date or '' }}"/></div>
+                    <div class="fg"><label>Effectiveness Notes</label><textarea name="effectiveness_notes" rows="2">{{ a.effectiveness_notes or '' }}</textarea></div>
+                    <div class="fg"><label>Re-open Reason (if Ineffective)</label><input type="text" name="reopen_reason" placeholder="Required if effectiveness is Ineffective"/></div>
+                  </div>
+                  <button type="submit" class="btn btn-nav">Save Update</button>
+                </form>
+              </div>
+            </div>
+            {% else %}
+            <span style="color:#9ca3af;font-size:11px">Closed {{ a.closed_date or '' }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:28px">No audit actions found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

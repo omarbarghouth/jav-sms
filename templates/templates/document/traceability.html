@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Traceability Dashboard{% endblock %}
+{% block content %}
+<div class="page-title">Traceability Dashboard</div>
+<div class="page-sub">Documents ↔ Hazards ↔ Risks ↔ Audits ↔ Actions ↔ MOC ↔ Training · ICAO Annex 19 §3.5</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ total_docs }}</div><div class="stat-lbl">Total Documents</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ approved }}</div><div class="stat-lbl">Approved</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ draft }}</div><div class="stat-lbl">Draft</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#0891b2">{{ review }}</div><div class="stat-lbl">Under Review</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#6b7280">{{ archived }}</div><div class="stat-lbl">Archived</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#7c3aed">{{ total_links }}</div><div class="stat-lbl">Total Links</div></div>
+</div>
+
+<!-- Link stats by type -->
+{% if link_stats %}
+<div class="card" style="margin-bottom:18px">
+  <div class="card-title">Document Links by Entity Type</div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    {% set type_icons = {'hazard':'⚠️','risk':'📊','action':'✅','audit_schedule':'🔍','audit_finding':'📋','audit_action':'✅','moc':'🔄','investigation':'🔎','training':'🎓','erp':'🚨'} %}
+    {% for stat in link_stats %}
+    <div style="background:#f8f9fc;border:1.5px solid var(--border);border-radius:10px;padding:14px 20px;text-align:center;min-width:120px">
+      <div style="font-size:20px;margin-bottom:4px">{{ type_icons.get(stat[0],'📄') }}</div>
+      <div style="font-size:24px;font-weight:800;font-family:monospace;color:#0f1c3f">{{ stat[1] }}</div>
+      <div style="font-size:11px;color:var(--muted);text-transform:capitalize">{{ stat[0].replace('_',' ') }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+
+  <!-- Compliance alerts -->
+  <div>
+    {% if unlinked_hazards %}
+    <div class="card" style="border:1.5px solid #fca5a5">
+      <div class="card-title" style="color:#dc2626">⚠ Open Hazards Without Linked RA Document ({{ unlinked_hazards|length }})</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">ICAO requires each hazard to have a corresponding Risk Assessment document.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Hazard ID</th><th>Generic Hazard</th><th>Dept</th><th>Risk</th><th>Action</th></tr></thead>
+          <tbody>
+            {% for h in unlinked_hazards %}
+            <tr>
+              <td class="mono">{{ h.id }}</td>
+              <td style="font-size:12px">{{ (h.generic_hazard or '—')[:50] }}</td>
+              <td>{{ h.department.code if h.department else '—' }}</td>
+              <td>{% if h.risks %}<strong>{{ h.risks[0].initial_risk_index }}</strong>{% else %}<span style="color:#9ca3af">—</span>{% endif %}</td>
+              <td><a href="/hazard-log/{{ h.id }}/documents" class="btn btn-nav btn-sm">Link RA →</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="card" style="border:1.5px solid #bbf7d0">
+      <div class="card-title" style="color:#15803d">✓ All Open Hazards Have Linked RA Documents</div>
+      <p style="font-size:13px;color:#374151">Full compliance with ICAO Annex 19 document traceability requirements.</p>
+    </div>
+    {% endif %}
+
+    {% if orphan_docs %}
+    <div class="card" style="margin-top:14px;border:1.5px solid #fde68a">
+      <div class="card-title" style="color:#b45309">Unlinked Documents ({{ orphan_docs|length }})</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">These documents are not yet linked to any SMS entity.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Document ID</th><th>Title</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for d in orphan_docs[:8] %}
+            <tr>
+              <td class="mono" style="font-size:11px">{{ d.id }}</td>
+              <td style="font-size:12px">{{ d.title[:50] }}</td>
+              <td>{% if d.status=='Approved' %}<span class="badge b-green">Approved</span>{% elif d.status=='Draft' %}<span class="badge b-yellow">Draft</span>{% else %}<span class="badge b-gray">{{ d.status }}</span>{% endif %}</td>
+              <td><a href="/documents/{{ d.id }}/trace" class="btn btn-nav btn-sm">Link →</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Recent links -->
+  <div>
+    <div class="card">
+      <div class="card-title">Recent Links Created</div>
+      {% for lnk in recent_links %}
+      {% set label, url = resolve_entity_label(lnk.entity_type, lnk.entity_id) %}
+      <div style="border-bottom:1px solid var(--border);padding:9px 0;font-size:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <span class="mono" style="color:#1d4ed8">{{ lnk.document_id }}</span>
+            <span style="color:var(--muted);margin:0 6px">→</span>
+            <span class="badge b-gray" style="font-size:10px">{{ lnk.entity_type }}</span>
+            <span style="margin-left:4px">{{ lnk.entity_id }}</span>
+          </div>
+          <span style="color:var(--muted);font-size:10px">{{ lnk.created_at.strftime('%d %b') }}</span>
+        </div>
+        {% if lnk.link_reason %}<div style="color:var(--muted);font-size:11px;margin-top:3px">{{ lnk.link_reason }}</div>{% endif %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted);font-size:13px">No links created yet.</p>
+      {% endfor %}
+    </div>
+
+    <!-- Quick link panel -->
+    <div class="card" style="margin-top:14px">
+      <div class="card-title">Quick Link Document to Entity</div>
+      <form method="POST" action="/quick-link">
+        <input type="hidden" name="return_url" value="/traceability"/>
+        <div class="fg"><label>Document ID *</label>
+          <input type="text" name="document_id" required placeholder="e.g. RA-FO-2026-001-REV0"/></div>
+        <div class="g2">
+          <div class="fg"><label>Entity Type *</label>
+            <select name="entity_type" required>
+              <option value="">Select…</option>
+              {% for et, lbl in [('hazard','Hazard'),('risk','Risk'),('action','Action'),('audit_schedule','Audit'),('audit_finding','Audit Finding'),('moc','MOC'),('investigation','Investigation'),('training','Training'),('erp','ERP')] %}
+              <option value="{{ et }}">{{ lbl }}</option>{% endfor %}
+            </select></div>
+          <div class="fg"><label>Entity ID *</label>
+            <input type="text" name="entity_id" required placeholder="ID of the entity"/></div>
+        </div>
+        <div class="fg"><label>Reason</label>
+          <input type="text" name="link_reason" placeholder="Why is this document linked?"/></div>
+        <button type="submit" class="btn btn-nav btn-sm">Create Link</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
