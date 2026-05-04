@@ -125,12 +125,24 @@ def dashboard():
     recent_haz = Hazard.query.order_by(Hazard.created_at.desc()).limit(6).all()
     recent_act = Action.query.filter(
                  Action.status != 'Closed').order_by(Action.created_at.desc()).limit(5).all()
+    # Audit plan alerts for dashboard
+    now_month = datetime.now().month
+    now_year  = datetime.now().year
+    plan_this_month = AuditPlan.query.filter_by(
+        year=now_year, month=now_month).filter(
+        AuditPlan.status != 'Completed').all()
+    plan_overdue = AuditPlan.query.filter(
+        AuditPlan.year == now_year,
+        AuditPlan.month < now_month,
+        AuditPlan.month != None,
+        AuditPlan.status != 'Completed').all()
     return render_template('dashboard/dashboard.html',
         total_haz=total_haz, open_haz=open_haz, intol=intol,
         open_act=open_act, overdue_act=overdue_act,
         asr_cnt=asr_cnt, audit_cnt=audit_cnt, moc_cnt=moc_cnt,
         inv_cnt=inv_cnt, doc_cnt=doc_cnt, spi_alerts=spi_alerts,
-        recent_haz=recent_haz, recent_act=recent_act)
+        recent_haz=recent_haz, recent_act=recent_act,
+        plan_this_month=plan_this_month, plan_overdue=plan_overdue)
 
 # ─── Hazard Report ────────────────────────────────────────────────────────────
 @app.route('/hazard-report', methods=['GET','POST'])
@@ -716,24 +728,63 @@ def get_checklist_template(dept_code):
 # ─── AUDIT PLAN ───────────────────────────────────────────────────────────────
 @app.route('/audit-plans')
 def audit_plans():
-    year_f  = request.args.get('year', datetime.now().year, type=int)
-    all_plans = AuditPlan.query.order_by(AuditPlan.year.desc(), AuditPlan.month).all()
-    years   = list(range(datetime.now().year - 1, datetime.now().year + 3))
-    # Monthly grid for selected year: {1: [plan,...], 2: [...], ...}
-    grid    = {m: [] for m in range(1, 13)}
+    year_f     = request.args.get('year', datetime.now().year, type=int)
+    dept_f     = request.args.get('dept', '', type=str)
+    month_f    = request.args.get('month', 0, type=int)
+    all_plans  = AuditPlan.query.order_by(AuditPlan.year.desc(), AuditPlan.month).all()
+    years      = list(range(datetime.now().year - 1, datetime.now().year + 3))
+    this_month = datetime.now().month
+    this_year  = datetime.now().year
+
+    # Build monthly grid
+    grid = {m: [] for m in range(1, 13)}
     year_plans = []
     for p in all_plans:
         if p.year == year_f:
+            # Apply dept filter
+            if dept_f and str(p.department_id) != dept_f:
+                continue
+            # Apply month filter
+            if month_f and p.month != month_f:
+                continue
             year_plans.append(p)
             if p.month:
                 grid[p.month].append(p)
+
     total_p     = len(year_plans)
     completed_p = sum(1 for p in year_plans if p.status == 'Completed')
     active_p    = sum(1 for p in year_plans if p.status == 'Active')
+
+    # Alert data — audits THIS month
+    alerts_this_month = [
+        p for p in all_plans
+        if p.year == this_year and p.month == this_month and p.status != 'Completed'
+    ]
+    # Upcoming — next 2 months
+    upcoming = [
+        p for p in all_plans
+        if p.year == this_year
+        and p.month in [this_month + 1, this_month + 2]
+        and p.status != 'Completed'
+    ]
+    # Overdue — past months this year, not completed
+    overdue_plans = [
+        p for p in all_plans
+        if p.year == this_year
+        and p.month is not None
+        and p.month < this_month
+        and p.status != 'Completed'
+    ]
+
     return render_template('audit/audit_plan_list.html',
                            plans=year_plans, grid=grid,
                            year_f=year_f, years=years,
-                           total_p=total_p, completed_p=completed_p, active_p=active_p)
+                           dept_f=dept_f, month_f=month_f,
+                           total_p=total_p, completed_p=completed_p, active_p=active_p,
+                           alerts_this_month=alerts_this_month,
+                           upcoming=upcoming,
+                           overdue_plans=overdue_plans,
+                           this_month=this_month)
 
 @app.route('/audit-plans/new', methods=['GET', 'POST'])
 def new_audit_plan():
@@ -760,6 +811,15 @@ def new_audit_plan():
     years = list(range(datetime.now().year, datetime.now().year + 3))
     return render_template('audit/audit_plan_form.html', years=years)
 
+
+@app.route('/audit-plans/<pid>/complete', methods=['POST'])
+def complete_audit_plan(pid):
+    """Mark an audit plan entry as Completed."""
+    p = AuditPlan.query.get_or_404(pid)
+    p.status = 'Completed'
+    db.session.commit()
+    flash(f'✓ Audit plan {p.id} marked as Completed.', 'success')
+    return redirect(url_for('audit_plans'))
 
 @app.route('/audit-plans/<pid>/schedule', methods=['POST'])
 def schedule_from_plan(pid):
