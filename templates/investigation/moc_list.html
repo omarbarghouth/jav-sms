@@ -2,37 +2,80 @@
 {% block title %}Management of Change{% endblock %}
 {% block content %}
 <div class="page-title">Management of Change (MOC)</div>
-<div class="page-sub">Track and assess changes that may impact safety</div>
-<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><a href="/moc/new" class="btn btn-nav">+ New MOC</a></div>
+<div class="page-sub">ICAO Doc 9859 §7 · Controlled change process with pre-change risk assessment</div>
+
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+  <a href="/moc/new" class="btn btn-nav">+ New MOC</a>
+</div>
+
 <div class="card" style="padding:0">
   <div class="tbl-wrap">
     <table>
-      <thead><tr><th>MOC ID</th><th>Title</th><th>Type</th><th>Department</th><th>Initiator</th><th>Planned</th><th>Approval</th><th>Implementation</th><th>Update</th></tr></thead>
+      <thead>
+        <tr>
+          <th>MOC Ref</th>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Department</th>
+          <th>Initiator</th>
+          <th>Planned Date</th>
+          <th>Approval</th>
+          <th>Implementation</th>
+          <th>Linked Hazard</th>
+          <th></th>
+        </tr>
+      </thead>
       <tbody>
         {% for m in mocs %}
         <tr>
-          <td class="mono">{{ m.id }}</td>
-          <td style="max-width:180px;font-size:12px">{{ m.title }}</td>
-          <td><span class="badge b-blue">{{ m.change_type }}</span></td>
-          <td>{{ m.department.code if m.department else '—' }}</td>
-          <td style="font-size:12px">{{ m.initiator }}</td>
-          <td style="font-size:12px">{{ m.planned_date }}</td>
-          <td>{% if m.approval_status=='Approved' %}<span class="badge b-green">Approved</span>{% elif m.approval_status=='Rejected' %}<span class="badge b-red">Rejected</span>{% else %}<span class="badge b-yellow">Pending</span>{% endif %}</td>
-          <td>{% if m.implementation_status=='Completed' %}<span class="badge b-green">Completed</span>{% elif m.implementation_status=='In Progress' %}<span class="badge b-blue">In Progress</span>{% else %}<span class="badge b-gray">Not Started</span>{% endif %}</td>
+          <td><span class="ctrl-num">{{ m.id }}</span></td>
+          <td style="font-size:13px;font-weight:600;max-width:160px">{{ m.title or '—' }}</td>
+          <td><span class="badge b-orange" style="font-size:10px">{{ m.change_type or '—' }}</span></td>
+          <td style="font-size:12px">{{ m.department.code if m.department else '—' }}</td>
+          <td style="font-size:12px">{{ m.initiator or '—' }}</td>
+          <td style="font-size:12px">{{ m.planned_date or '—' }}</td>
           <td>
-            <form method="POST" action="/moc/{{ m.id }}/update" style="display:flex;flex-direction:column;gap:4px">
-              <select name="approval_status" style="font-size:11px;padding:3px;border:1px solid var(--border);border-radius:5px">
-                {% for s in ['Pending','Approved','Rejected'] %}<option {% if m.approval_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-              </select>
-              <select name="implementation_status" style="font-size:11px;padding:3px;border:1px solid var(--border);border-radius:5px">
-                {% for s in ['Not Started','In Progress','Completed'] %}<option {% if m.implementation_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-              </select>
-              <button type="submit" class="btn btn-nav btn-sm" style="padding:3px 8px">✓</button>
-            </form>
+            {% if m.approval_status=='Approved' %}<span class="badge b-green">Approved</span>
+            {% elif m.approval_status=='Rejected' %}<span class="badge b-red">Rejected</span>
+            {% elif m.approval_status=='Pending' %}<span class="badge b-yellow">Pending</span>
+            {% else %}<span class="badge b-gray">{{ m.approval_status or '—' }}</span>{% endif %}
+          </td>
+          <td>
+            {% if m.implementation_status=='Completed' %}<span class="badge b-green">Done</span>
+            {% elif m.implementation_status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+            {% else %}<span class="badge b-gray">{{ m.implementation_status or 'Pending' }}</span>{% endif %}
+          </td>
+          <td>
+            {% if m.hazard_id %}
+            <a href="/hazard-log/{{ m.hazard_id }}" class="mono" style="color:#1d4ed8;font-size:11px">{{ m.hazard_id }}</a>
+            {% else %}<span style="color:#d1d5db">—</span>{% endif %}
+          </td>
+          <td>
+            <details>
+              <summary style="font-size:11px;cursor:pointer;color:var(--navy);font-weight:700">Update</summary>
+              <form method="POST" action="/moc/{{ m.id }}/update"
+                    style="padding:10px 0;display:flex;flex-direction:column;gap:7px;min-width:200px">
+                <select name="approval_status" style="font-size:11px;padding:4px;border:1px solid var(--border);border-radius:5px">
+                  {% for s in ['Pending','Approved','Rejected','Conditional'] %}
+                  <option {% if m.approval_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                </select>
+                <select name="implementation_status" style="font-size:11px;padding:4px;border:1px solid var(--border);border-radius:5px">
+                  {% for s in ['Pending','In Progress','Completed','Cancelled'] %}
+                  <option {% if m.implementation_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                </select>
+                <input type="text" name="approved_by" value="{{ m.approved_by or '' }}"
+                       placeholder="Approved by" style="font-size:11px;padding:4px;border:1px solid var(--border);border-radius:5px"/>
+                <button type="submit" class="btn btn-nav btn-sm">Save</button>
+              </form>
+            </details>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">No MOC records yet.</td></tr>
+        <tr>
+          <td colspan="10" style="text-align:center;color:var(--muted);padding:36px">
+            No MOC records. <a href="/moc/new" style="color:var(--navy);font-weight:700">Create one →</a>
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
