@@ -716,11 +716,24 @@ def get_checklist_template(dept_code):
 # ─── AUDIT PLAN ───────────────────────────────────────────────────────────────
 @app.route('/audit-plans')
 def audit_plans():
-    year_f = request.args.get('year', str(datetime.now().year))
-    plans  = AuditPlan.query.filter_by(year=int(year_f)).order_by(AuditPlan.created_at).all()
-    years  = list(range(datetime.now().year - 1, datetime.now().year + 3))
-    return render_template('audit/audit_plan_list.html', plans=plans,
-                           year_f=int(year_f), years=years)
+    year_f  = request.args.get('year', datetime.now().year, type=int)
+    all_plans = AuditPlan.query.order_by(AuditPlan.year.desc(), AuditPlan.month).all()
+    years   = list(range(datetime.now().year - 1, datetime.now().year + 3))
+    # Monthly grid for selected year: {1: [plan,...], 2: [...], ...}
+    grid    = {m: [] for m in range(1, 13)}
+    year_plans = []
+    for p in all_plans:
+        if p.year == year_f:
+            year_plans.append(p)
+            if p.month:
+                grid[p.month].append(p)
+    total_p     = len(year_plans)
+    completed_p = sum(1 for p in year_plans if p.status == 'Completed')
+    active_p    = sum(1 for p in year_plans if p.status == 'Active')
+    return render_template('audit/audit_plan_list.html',
+                           plans=year_plans, grid=grid,
+                           year_f=year_f, years=years,
+                           total_p=total_p, completed_p=completed_p, active_p=active_p)
 
 @app.route('/audit-plans/new', methods=['GET', 'POST'])
 def new_audit_plan():
@@ -730,12 +743,14 @@ def new_audit_plan():
         p   = AuditPlan(
             id=pid,
             year=int(f['year']),
+            month=int(f['month']) if f.get('month') else None,
             department_id=int(f['department_id']),
             audit_type=f['audit_type'],
             frequency=f['frequency'],
             responsible_manager=f['responsible_manager'],
             scope=f.get('scope', ''),
             objectives=f.get('objectives', ''),
+            iosa_reference=f.get('iosa_reference', ''),
             status='Active'
         )
         db.session.add(p)
