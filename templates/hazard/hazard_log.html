@@ -1,74 +1,120 @@
 {% extends "base.html" %}
 {% block title %}Hazard & Risk Log{% endblock %}
 {% block content %}
-<div class="page-title">Hazard & Risk Log</div>
-<div class="page-sub">All hazards from reports, ASRs, audits, investigations and MOC entries</div>
+<div class="page-title">Hazard &amp; Risk Log</div>
+<div class="page-sub">All hazards from all sources · ICAO Annex 19 §5</div>
+
 <form method="GET" class="fbar">
   <select name="dept" onchange="this.form.submit()">
     <option value="">All Departments</option>
-    {% for d in all_departments %}<option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+    {% for d in all_departments %}
+    <option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>
+    {% endfor %}
   </select>
   <select name="status" onchange="this.form.submit()">
     <option value="">All Statuses</option>
-    <option value="Open" {% if stat_f=='Open' %}selected{% endif %}>Open</option>
-    <option value="Closed" {% if stat_f=='Closed' %}selected{% endif %}>Closed</option>
+    {% for s in ['Open','Under Assessment','Controlled','Closed'] %}
+    <option {% if stat_f==s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
   </select>
   <select name="classification" onchange="this.form.submit()">
     <option value="">All Classifications</option>
     {% for c in ['Operational','Technical','Human Factors','Environmental','Organizational'] %}
-    <option {% if cls_f==c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    <option {% if cls_f==c %}selected{% endif %}>{{ c }}</option>
+    {% endfor %}
   </select>
   <a href="/hazard-log" class="btn btn-outline btn-sm">Clear</a>
-  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ hazards|length }} record(s)</span>
-  <a href="/hazard-report" class="btn btn-nav btn-sm">+ New Hazard</a>
-  <a href="/hazard-log/export-excel{% if dept_f or stat_f or cls_f %}?dept={{ dept_f }}&status={{ stat_f }}&classification={{ cls_f }}{% endif %}" class="btn btn-nav btn-sm" style="background:#065f46">📥 Export Excel</a>
+  <span style="color:var(--muted);font-size:12px">{{ hazards|length }} hazard(s)</span>
+  <a href="/hazard-log/export-excel" class="btn btn-nav btn-sm" style="background:#065f46;margin-left:auto">📥 Export Excel</a>
+  <a href="/hazard-report" class="btn btn-nav btn-sm">+ New Hazard Report</a>
 </form>
+
 <div class="card" style="padding:0">
   <div class="tbl-wrap">
     <table>
-      <thead><tr><th>Hazard ID</th><th>Source</th><th>Dept</th><th>Classification</th><th>Hazard</th><th>Risks</th><th>Controls</th><th>Actions</th><th>RA</th><th>Status</th><th></th></tr></thead>
+      <thead>
+        <tr>
+          <th>Hazard Ref</th>
+          <th>Source</th>
+          <th>Department</th>
+          <th>Generic Hazard</th>
+          <th>Initial Risk</th>
+          <th>Residual Risk</th>
+          <th>Open Actions</th>
+          <th>Status</th>
+          <th>Export</th>
+          <th></th>
+        </tr>
+      </thead>
       <tbody>
         {% for h in hazards %}
-        <tr>
-          <td class="mono">{{ h.id }}</td>
-          <td><span class="badge b-blue">{{ h.source }}</span></td>
-          <td><strong>{{ h.department.code if h.department else '—' }}</strong></td>
+        {% set open_act = h.actions|selectattr('status','ne','Closed')|list|length %}
+        <tr style="{% if h.risks and h.risks[0].initial_tolerance=='INTOLERABLE' and h.status=='Open' %}background:#fff8f8{% endif %}">
+          <td><span class="ctrl-num">{{ h.id }}</span></td>
           <td>
-            {% set cls_colors = {'Operational':'b-blue','Technical':'b-purple','Human Factors':'b-orange','Environmental':'b-green','Organizational':'b-gray'} %}
-            <span class="badge {{ cls_colors.get(h.classification,'b-gray') }}">{{ h.classification }}</span>
+            <span class="badge b-blue" style="font-size:10px">{{ h.source }}</span>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">{{ h.created_at.strftime('%d %b %Y') }}</div>
           </td>
-          <td style="max-width:180px;font-size:12px">{{ h.generic_hazard[:60] }}</td>
+          <td style="font-size:12px">{{ h.department.code if h.department else '—' }}</td>
+          <td style="max-width:180px;font-size:12.5px;font-weight:500">
+            {{ (h.generic_hazard or h.specific_components or '—')[:60] }}
+          </td>
           <td>
-            {% for r in h.risks %}
-              <a href="/risk/{{ r.id }}" style="font-weight:700;font-size:12px;color:#0f1c3f;text-decoration:underline dotted">{{ r.initial_risk_index }}</a>
-              {% if r.initial_tolerance=='INTOLERABLE' %}<span class="badge b-red" style="font-size:9px">!</span>
-              {% elif r.initial_tolerance=='TOLERABLE' %}<span class="badge b-yellow" style="font-size:9px">~</span>
-              {% else %}<span class="badge b-green" style="font-size:9px">✓</span>{% endif %}
-              {% if not loop.last %}<br>{% endif %}
-            {% else %}<span style="color:#9ca3af;font-size:11px">None</span>{% endfor %}
-          </td>
-          <td style="text-align:center">
-            {% set ctrl_count = namespace(n=0) %}
-            {% for r in h.risks %}{% set ctrl_count.n = ctrl_count.n + r.controls|length %}{% endfor %}
-            <span class="badge b-gray">{{ ctrl_count.n }}</span>
-          </td>
-          <td style="text-align:center"><span class="badge {% if h.actions|length > 0 %}b-blue{% else %}b-gray{% endif %}">{{ h.actions|length }}</span></td>
-          <td style="text-align:center">
-            {% if h.risk_assessment %}
-              <a href="/risk-assessments/{{ h.risk_assessment.id }}" class="badge b-green" style="font-size:10px;text-decoration:none">{{ h.risk_assessment.control_number }}</a>
+            {% if h.risks %}
+            {% set r = h.risks[0] %}
+            <a href="/risk/{{ r.id }}" style="text-decoration:none">
+              <span style="font-size:17px;font-weight:800;font-family:'IBM Plex Mono',monospace;
+                color:{% if r.initial_tolerance=='INTOLERABLE' %}#dc2626{% elif r.initial_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+                {{ r.initial_risk_index }}
+              </span>
+            </a>
+            <span class="badge {% if r.initial_tolerance=='INTOLERABLE' %}b-red{% elif r.initial_tolerance=='TOLERABLE' %}b-yellow{% else %}b-green{% endif %}" style="font-size:9px;display:block;margin-top:2px">
+              {% if r.initial_tolerance=='INTOLERABLE' %}INTOL{% elif r.initial_tolerance=='TOLERABLE' %}TOL{% else %}ACC{% endif %}
+            </span>
             {% else %}
-              <a href="/hazard-log/{{ h.id }}/start-ra" class="badge b-yellow" style="font-size:10px;text-decoration:none">+ Start RA</a>
+            <span style="color:#9ca3af;font-size:12px">No risk yet</span>
             {% endif %}
           </td>
-          <td>{% if h.status=='Open' %}<span class="badge b-yellow">Open</span>{% else %}<span class="badge b-green">Closed</span>{% endif %}</td>
+          <td>
+            {% if h.risks and h.risks[0].residual_risk_index %}
+            {% set r = h.risks[0] %}
+            <span style="font-size:15px;font-weight:800;font-family:'IBM Plex Mono',monospace;
+              color:{% if r.residual_tolerance=='INTOLERABLE' %}#dc2626{% elif r.residual_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+              {{ r.residual_risk_index }}
+            </span>
+            {% else %}
+            <span style="color:#d1d5db;font-size:11px">Pending</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center">
+            {% if open_act > 0 %}
+            <span class="badge b-yellow">{{ open_act }}</span>
+            {% else %}
+            <span style="color:#d1d5db">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if h.status=='Open' %}<span class="badge b-yellow">Open</span>
+            {% elif h.status=='Under Assessment' %}<span class="badge b-blue">Under Assessment</span>
+            {% elif h.status=='Controlled' %}<span class="badge b-green">Controlled</span>
+            {% else %}<span class="badge b-gray">{{ h.status }}</span>{% endif %}
+          </td>
           <td>
             {% set hr = h.hazard_reports[0] if h.hazard_reports else none %}
-            {% if hr %}<a href="/hazard-reports/{{ hr.id }}/print" target="_blank" class="btn btn-sm" style="background:#065f46;color:#fff;margin-right:4px">🖨</a>{% endif %}
-            <a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a>
+            {% if hr %}
+            <a href="/hazard-reports/{{ hr.id }}/print" target="_blank"
+               class="btn btn-sm" style="background:#065f46;color:#fff;padding:3px 8px;font-size:11px">🖨</a>
+            {% endif %}
           </td>
+          <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">Open →</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:28px">No hazards found.</td></tr>
+        <tr>
+          <td colspan="10" style="text-align:center;color:var(--muted);padding:36px">
+            No hazards recorded.
+            <a href="/hazard-report" style="color:var(--navy);font-weight:700">Submit a report →</a>
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
