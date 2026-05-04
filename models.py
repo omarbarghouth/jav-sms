@@ -266,13 +266,15 @@ class AuditPlan(db.Model):
     __tablename__ = 'audit_plans'
     id                 = db.Column(db.String(30), primary_key=True)
     year               = db.Column(db.Integer, nullable=False)
+    month              = db.Column(db.Integer)          # 1-12, planned month of execution
     department_id      = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    audit_type         = db.Column(db.String(50))   # Internal / Compliance / IOSA-style
-    frequency          = db.Column(db.String(30))   # Quarterly / Semi-Annual / Annual
+    audit_type         = db.Column(db.String(50))   # Internal / Compliance / IOSA / RAMP
+    frequency          = db.Column(db.String(30))   # Quarterly / Semi-Annual / Annual / Ad-hoc
     responsible_manager = db.Column(db.String(100))
-    scope              = db.Column(db.Text)          # What will be audited
+    scope              = db.Column(db.Text)
     objectives         = db.Column(db.Text)
-    status             = db.Column(db.String(20), default='Active')  # Active / Completed / Cancelled
+    iosa_reference     = db.Column(db.String(100))  # e.g. ISM 1.1.1 / FLT 1.1.2
+    status             = db.Column(db.String(20), default='Active')
     created_at         = db.Column(db.DateTime, default=datetime.utcnow)
     department         = db.relationship('Department', foreign_keys=[department_id])
     schedules          = db.relationship('AuditSchedule', backref='plan', lazy=True,
