@@ -4,88 +4,306 @@
 <div class="page-title">Annual Audit Plan</div>
 <div class="page-sub">ICAO Annex 19 §5 · IOSA ISM 1.1 · Planned audits by month and department</div>
 
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
-  <div style="display:flex;gap:6px">
-    {% for y in years %}
-    <a href="/audit-plans?year={{ y }}" class="btn {% if y==year_f %}btn-nav{% else %}btn-outline{% endif %} btn-sm">{{ y }}</a>
+<!-- ═══ ALERT BANNERS ════════════════════════════════════════════════════════ -->
+{% if alerts_this_month %}
+<div style="background:#fef9c3;border:2px solid #f59e0b;border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
+  <span style="font-size:22px;flex-shrink:0">🔔</span>
+  <div>
+    <div style="font-weight:800;font-size:13.5px;color:#92400e;margin-bottom:4px">
+      {{ alerts_this_month|length }} audit{{ 's' if alerts_this_month|length > 1 }} planned for THIS MONTH
+    </div>
+    {% for p in alerts_this_month %}
+    <div style="font-size:12.5px;color:#374151;margin-top:3px">
+      → <strong>{{ p.audit_type }}</strong> ·
+        {{ p.department.name if p.department else '—' }} ·
+        Responsible: {{ p.responsible_manager or '—' }}
+      &nbsp;
+      {% if not p.schedules %}
+      <a href="/audit-plans?schedule_pid={{ p.id }}"
+         style="color:#1d4ed8;font-size:11px;font-weight:700">Schedule now →</a>
+      {% else %}
+      <span class="badge b-green" style="font-size:10px">✓ Scheduled</span>
+      {% endif %}
+    </div>
     {% endfor %}
   </div>
-  <a href="/audit-plans/new" class="btn btn-nav">+ Add to Plan</a>
 </div>
+{% endif %}
 
-<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ total_p }}</div><div class="stat-lbl">Planned — {{ year_f }}</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ completed_p }}</div><div class="stat-lbl">Completed</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ active_p }}</div><div class="stat-lbl">Active</div></div>
-</div>
-
-{% set MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
-{% set TC = {'Internal':'b-blue','Compliance':'b-yellow','IOSA':'b-purple','RAMP':'b-orange','External':'b-red'} %}
-
-<div class="card" style="padding:0;overflow:hidden">
-  <div style="background:var(--navy);color:#fff;padding:12px 20px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;display:flex;justify-content:space-between">
-    <span>Annual Audit Programme — {{ year_f }}</span>
-    <span style="color:var(--gold2)">ICAO Annex 19 · Jav/SMS/001</span>
+{% if overdue_plans %}
+<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
+  <span style="font-size:22px;flex-shrink:0">⚠️</span>
+  <div>
+    <div style="font-weight:800;font-size:13.5px;color:#991b1b;margin-bottom:4px">
+      {{ overdue_plans|length }} overdue audit{{ 's' if overdue_plans|length > 1 }} — planned month has passed
+    </div>
+    {% for p in overdue_plans %}
+    {% set MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+    <div style="font-size:12.5px;color:#374151;margin-top:3px">
+      → <strong>{{ MONTHS[p.month-1] if p.month else '?' }}</strong> ·
+        <strong>{{ p.audit_type }}</strong> ·
+        {{ p.department.name if p.department else '—' }}
+    </div>
+    {% endfor %}
   </div>
+</div>
+{% endif %}
+
+{% if upcoming %}
+<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 18px;margin-bottom:14px">
+  <span style="font-weight:700;font-size:12.5px;color:#1e40af">📅 Upcoming in next 2 months: </span>
+  {% for p in upcoming %}
+  {% set MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+  <span style="font-size:12px;color:#374151;margin-left:6px">
+    {{ MONTHS[p.month-1] if p.month else '?' }} — {{ p.audit_type }} ({{ p.department.name if p.department else '—' }})
+  </span>
+  {% if not loop.last %} · {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ═══ CONTROLS ═════════════════════════════════════════════════════════════ -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+
+  <!-- Year tabs -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    {% for y in years %}
+    <a href="/audit-plans?year={{ y }}"
+       class="btn {% if y==year_f %}btn-nav{% else %}btn-outline{% endif %} btn-sm">
+      {{ y }}
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Filters + Add button -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <form method="GET" style="display:flex;gap:6px;align-items:center">
+      <input type="hidden" name="year" value="{{ year_f }}"/>
+      <select name="dept" onchange="this.form.submit()"
+              style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;background:#fff">
+        <option value="">All Departments</option>
+        {% for d in all_departments %}
+        <option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="month" onchange="this.form.submit()"
+              style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;background:#fff">
+        <option value="0">All Months</option>
+        {% for mn, mlbl in [(1,'January'),(2,'February'),(3,'March'),(4,'April'),
+                            (5,'May'),(6,'June'),(7,'July'),(8,'August'),
+                            (9,'September'),(10,'October'),(11,'November'),(12,'December')] %}
+        <option value="{{ mn }}" {% if month_f==mn %}selected{% endif %}>{{ mlbl }}</option>
+        {% endfor %}
+      </select>
+      {% if dept_f or month_f %}
+      <a href="/audit-plans?year={{ year_f }}" class="btn btn-outline btn-sm">Clear</a>
+      {% endif %}
+    </form>
+    <a href="/audit-plans/new" class="btn btn-nav">+ Add to Plan</a>
+  </div>
+</div>
+
+<!-- ═══ STAT CARDS ════════════════════════════════════════════════════════════ -->
+<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-val" style="color:#1e40af">{{ total_p }}</div>
+    <div class="stat-lbl">Total — {{ year_f }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#15803d">{{ completed_p }}</div>
+    <div class="stat-lbl">Completed</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#d97706">{{ active_p }}</div>
+    <div class="stat-lbl">Active / Planned</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#dc2626">{{ overdue_plans|length }}</div>
+    <div class="stat-lbl">Overdue</div>
+  </div>
+</div>
+
+<!-- ═══ MAIN PLAN TABLE ═══════════════════════════════════════════════════════ -->
+{% if plans %}
+
+{% set MONTHS = ['January','February','March','April','May','June',
+                 'July','August','September','October','November','December'] %}
+{% set TC = {'Internal':'b-blue','Compliance':'b-yellow','IOSA':'b-purple',
+             'RAMP':'b-orange','External':'b-red','Management Review':'b-gray',
+             'Follow-up Audit':'b-gray','Internal Safety Audit':'b-blue'} %}
+
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
+  <!-- Table header bar -->
+  <div style="background:var(--navy);color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px">
+      Annual Audit Programme — {{ year_f }}
+    </span>
+    <span style="color:var(--gold2);font-size:11px">ICAO Annex 19 · Jav/SMS/001</span>
+  </div>
+
   <div style="overflow-x:auto">
-    <table style="min-width:860px">
+    <table style="min-width:780px">
       <thead>
         <tr>
-          <th style="width:100px">Month</th>
+          <th style="width:110px">Month</th>
           <th>Department</th>
           <th>Audit Type</th>
-          <th>Scope / Area</th>
+          <th>Scope</th>
           <th>Frequency</th>
           <th>IOSA Ref</th>
           <th>Responsible</th>
           <th>Status</th>
-          <th></th>
+          <th style="width:120px">Actions</th>
         </tr>
       </thead>
       <tbody>
-        {% for m in range(1,13) %}
-        {% set mp = grid[m] %}
-        {% if mp %}
-          {% for i, p in enumerate(mp) %}
-          <tr style="{% if i==0 %}border-top:2px solid #e5e7eb{% endif %}{% if p.status=='Completed' %}background:#f0fdf4{% endif %}">
-            {% if i==0 %}
-            <td rowspan="{{ mp|length }}" style="font-weight:700;color:var(--navy);font-size:12px;vertical-align:top;padding-top:12px;border-right:2px solid var(--border);background:#f8f9fc">
-              <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted)">{{ '%02d'|format(m) }}</div>
-              {{ MONTHS[m-1] }}
-            </td>
+        {% for p in plans %}
+        {% set is_this_month = (p.month == this_month and p.year == now.year) %}
+        {% set is_overdue = (p.month and p.month < this_month and p.year == now.year and p.status != 'Completed') %}
+        <tr style="
+          {% if is_overdue %}background:#fff8f8;{% endif %}
+          {% if is_this_month and p.status != 'Completed' %}background:#fffbeb;{% endif %}
+        ">
+          <!-- Month -->
+          <td style="font-weight:700;font-size:12.5px;white-space:nowrap">
+            <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted)">
+              {{ '%02d'|format(p.month) if p.month else '—' }}
+            </div>
+            {{ MONTHS[p.month-1] if p.month else 'No month set' }}
+            {% if is_this_month and p.status != 'Completed' %}
+            <div style="font-size:9px;font-weight:800;color:#d97706;margin-top:2px">🔔 THIS MONTH</div>
+            {% elif is_overdue %}
+            <div style="font-size:9px;font-weight:800;color:#dc2626;margin-top:2px">⚠ OVERDUE</div>
             {% endif %}
-            <td><span class="badge b-blue" style="font-size:10px">{{ p.department.code if p.department else '—' }}</span><div style="font-size:10px;color:var(--muted);margin-top:2px">{{ p.department.name if p.department else '' }}</div></td>
-            <td><span class="badge {{ TC.get(p.audit_type,'b-gray') }}" style="font-size:10px">{{ p.audit_type }}</span></td>
-            <td style="max-width:180px;font-size:12px">{{ p.scope or '—' }}</td>
-            <td style="font-size:11px;color:var(--muted)">{{ p.frequency }}</td>
-            <td class="mono" style="font-size:10px;color:var(--muted)">{{ p.iosa_reference or '—' }}</td>
-            <td style="font-size:12px">{{ p.responsible_manager or '—' }}</td>
-            <td>{% if p.status=='Completed' %}<span class="badge b-green">✓ Done</span>{% elif p.status=='Cancelled' %}<span class="badge b-gray">Cancelled</span>{% else %}<span class="badge b-yellow">Planned</span>{% endif %}</td>
-            <td><form method="POST" action="/audit-plans/{{ p.id }}/schedule"><button type="submit" class="btn btn-nav btn-sm">▶</button></form></td>
-          </tr>
-          {% endfor %}
-        {% else %}
-        <tr style="{% if m==1 %}border-top:2px solid #e5e7eb{% endif %}">
-          <td style="font-weight:600;font-size:12px;color:var(--muted);border-right:2px solid var(--border);background:#f8f9fc">
-            <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#d1d5db">{{ '%02d'|format(m) }}</div>{{ MONTHS[m-1] }}
           </td>
-          <td colspan="8" style="color:#d1d5db;font-size:12px;font-style:italic">
-            No audits planned &nbsp;<a href="/audit-plans/new" style="color:var(--muted);font-size:11px">+ Add</a>
+
+          <!-- Department -->
+          <td>
+            <span class="badge b-blue" style="font-size:10px;display:block;width:fit-content">
+              {{ p.department.code if p.department else '—' }}
+            </span>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">
+              {{ p.department.name if p.department else '—' }}
+            </div>
+          </td>
+
+          <!-- Audit Type -->
+          <td>
+            <span class="badge {{ TC.get(p.audit_type, 'b-gray') }}" style="font-size:10px">
+              {{ p.audit_type }}
+            </span>
+          </td>
+
+          <!-- Scope -->
+          <td style="max-width:200px;font-size:12px;color:#374151">
+            {{ p.scope or '—' }}
+          </td>
+
+          <!-- Frequency -->
+          <td style="font-size:11px;color:var(--muted);white-space:nowrap">
+            {{ p.frequency or '—' }}
+          </td>
+
+          <!-- IOSA Ref -->
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">
+            {{ p.iosa_reference or '—' }}
+          </td>
+
+          <!-- Responsible -->
+          <td style="font-size:12px">{{ p.responsible_manager or '—' }}</td>
+
+          <!-- Status -->
+          <td>
+            {% if p.status == 'Completed' %}
+            <span class="badge b-green">✓ Done</span>
+            {% elif is_overdue %}
+            <span class="badge b-red">Overdue</span>
+            {% elif is_this_month %}
+            <span class="badge b-yellow">⚡ This Month</span>
+            {% else %}
+            <span class="badge b-gray">Planned</span>
+            {% endif %}
+            <!-- Show if already scheduled -->
+            {% if p.schedules %}
+            <div style="font-size:10px;color:#15803d;margin-top:3px;font-weight:700">
+              ✓ {{ p.schedules|length }} scheduled
+            </div>
+            {% endif %}
+          </td>
+
+          <!-- Actions -->
+          <td>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <!-- Schedule button — opens mini form -->
+              {% if p.status != 'Completed' %}
+              <details>
+                <summary class="btn btn-nav btn-sm"
+                         style="cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:4px">
+                  ▶ Schedule
+                </summary>
+                <div style="position:absolute;background:#fff;border:1.5px solid var(--border);
+                            border-radius:8px;padding:14px;box-shadow:0 4px 20px rgba(0,0,0,.12);
+                            z-index:100;min-width:260px;margin-top:4px">
+                  <form method="POST" action="/audit-plans/{{ p.id }}/schedule">
+                    <div class="fg" style="margin-bottom:8px">
+                      <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted)">Date *</label>
+                      <input type="date" name="scheduled_date" required
+                             style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px 9px;font-size:12px;font-family:inherit"/>
+                    </div>
+                    <div class="fg" style="margin-bottom:10px">
+                      <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted)">Lead Auditor *</label>
+                      <input type="text" name="lead_auditor" required
+                             placeholder="Name"
+                             style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:6px 9px;font-size:12px;font-family:inherit"/>
+                    </div>
+                    <button type="submit" class="btn btn-nav btn-sm" style="width:100%">Create Audit →</button>
+                  </form>
+                </div>
+              </details>
+              {% endif %}
+
+              <!-- Mark complete -->
+              {% if p.status != 'Completed' %}
+              <form method="POST" action="/audit-plans/{{ p.id }}/complete">
+                <button type="submit" class="btn btn-outline btn-sm"
+                        style="font-size:10px;padding:3px 8px;color:#15803d;border-color:#bbf7d0"
+                        onclick="return confirm('Mark this audit plan as Completed?')">
+                  ✓ Complete
+                </button>
+              </form>
+              {% endif %}
+            </div>
           </td>
         </tr>
-        {% endif %}
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
 
-{% if not plans %}
-<div class="card" style="text-align:center;padding:40px;border:2px dashed var(--border);margin-top:14px">
-  <div style="font-size:32px;margin-bottom:12px">📋</div>
-  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No Audit Plan for {{ year_f }}</div>
-  <div style="color:var(--muted);font-size:13px;margin-bottom:18px">Build the annual audit programme by adding one entry per planned audit.</div>
-  <a href="/audit-plans/new" class="btn btn-nav">+ Create First Entry</a>
+{% else %}
+<!-- Empty state -->
+<div class="card" style="text-align:center;padding:48px;border:2px dashed var(--border)">
+  <div style="font-size:36px;margin-bottom:14px">📋</div>
+  <div style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:8px">
+    No Audit Plan Entries for {{ year_f }}
+  </div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:22px;max-width:400px;margin-left:auto;margin-right:auto">
+    Build your annual audit programme by adding one entry per planned audit.
+    Each entry defines which department gets audited and in which month.
+  </div>
+  <a href="/audit-plans/new" class="btn btn-nav" style="font-size:14px;padding:10px 24px">
+    + Add First Audit Plan Entry
+  </a>
 </div>
 {% endif %}
+
+<!-- Legend -->
+<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:4px">
+  <span>🔔 = Audit due this month</span>
+  <span>⚠ = Overdue (month has passed)</span>
+  <span>▶ Schedule = convert plan into a live audit</span>
+  <span>✓ Complete = mark plan entry as done</span>
+</div>
+
 {% endblock %}
