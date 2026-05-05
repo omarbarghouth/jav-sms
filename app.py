@@ -148,42 +148,104 @@ def dashboard():
 @app.route('/hazard-report', methods=['GET','POST'])
 def hazard_report():
     if request.method == 'POST':
-        f  = request.form
-        li = int(f['likelihood'])
-        se = f['severity']
-        ri = f'{li}{se}'
-        hid = new_id('HAZ')
+        f   = request.form
         rid = new_id('HR')
-        h = Hazard(id=hid, source='Hazard Report', linked_report_id=rid,
-                   department_id=int(f['department_id']),
-                   classification=f.get('classification','Operational'),
-                   type_of_activity=Department.query.get(int(f['department_id'])).name,
-                   generic_hazard=f.get('generic_hazard','To Be Classified'),
-                   specific_components=f['hazard_description'],
-                   consequences=f.get('consequences','To Be Assessed'),
-                   status='Open', owner=None)
-        db.session.add(h)
-        db.session.flush()
-        r = Risk(id=new_id('RSK'), hazard_id=hid, description=f['hazard_description'],
-                 initial_likelihood=li, initial_severity=se,
-                 initial_risk_index=ri, initial_tolerance=get_tolerance(ri))
-        db.session.add(r)
-        rep = HazardReport(id=rid, department_id=int(f['department_id']),
-                           location=f['location'], date=f['date'],
-                           description=f['hazard_description'],
-                           immediate_action=f.get('immediate_action',''),
-                           suggested_mitigation=f.get('suggested_mitigation',''),
-                           severity=se, likelihood=li, risk_index=ri,
-                           reporter=f.get('reporter','Anonymous') or 'Anonymous',
-                           hazard_id=hid)
+        hid = new_id('HAZ')
+        dept_id = int(f['department_id'])
+
+        # 1. Save the Hazard Report (always, regardless of risk assessment)
+        rep = HazardReport(
+            id=rid,
+            department_id=dept_id,
+            location=f.get('location',''),
+            date=f.get('date', date.today().isoformat()),
+            description=f.get('hazard_description',''),
+            classification=f.get('classification','Operational'),
+            generic_hazard=f.get('generic_hazard',''),
+            consequences=f.get('consequences',''),
+            immediate_action=f.get('immediate_action',''),
+            suggested_mitigation=f.get('suggested_mitigation',''),
+            reporter_severity=f.get('reporter_severity',''),
+            reporter=f.get('reporter','Anonymous') or 'Anonymous',
+            status='Submitted',
+            hazard_id=hid
+        )
         db.session.add(rep)
+
+        # 2. Create linked Hazard record in Hazard Log
+        h = Hazard(
+            id=hid,
+            source='Hazard Report',
+            linked_report_id=rid,
+            department_id=dept_id,
+            classification=f.get('classification','Operational'),
+            type_of_activity=Department.query.get(dept_id).name if Department.query.get(dept_id) else '',
+            generic_hazard=f.get('generic_hazard') or f.get('hazard_description','')[:100],
+            specific_components=f.get('hazard_description',''),
+            consequences=f.get('consequences','To Be Assessed'),
+            status='Open',
+            owner=None
+        )
+        db.session.add(h)
         db.session.commit()
-        # Set status to Under Assessment and redirect to guided RA wizard
-        h.status = 'Under Assessment'
+
+        # 3. Update report status and redirect to report detail (not RA wizard)
+        rep.status = 'Submitted'
+        h.status   = 'Under Assessment'
         db.session.commit()
-        flash(f'✓ Hazard {hid} created (Risk: {ri}). Complete the Risk Assessment to continue.', 'success')
-        return redirect(url_for('ra_wizard_start', hid=hid))
+
+        flash(f'✓ Hazard Report {rid} submitted successfully. Hazard {hid} created for assessment.', 'success')
+        return redirect(url_for('hazard_report_detail', rid=rid))
     return render_template('reporting/hazard_report.html')
+
+@app.route('/hazard-reports')
+def hazard_report_list():
+    """All submitted hazard reports — searchable and filterable."""
+    dept_f  = request.args.get('dept', '')
+    cat_f   = request.args.get('category', '')
+    stat_f  = request.args.get('status', '')
+    q_f     = request.args.get('q', '').strip()
+
+    q = HazardReport.query
+    if dept_f:  q = q.filter_by(department_id=int(dept_f))
+    if cat_f:   q = q.filter_by(classification=cat_f)
+    if stat_f:  q = q.filter_by(status=stat_f)
+    if q_f:
+        q = q.filter(
+            HazardReport.description.ilike(f'%{q_f}%') |
+            HazardReport.location.ilike(f'%{q_f}%') |
+            HazardReport.generic_hazard.ilike(f'%{q_f}%')
+        )
+
+    reports = q.order_by(HazardReport.created_at.desc()).all()
+    total            = HazardReport.query.count()
+    submitted        = HazardReport.query.filter_by(status='Submitted').count()
+    under_assessment = HazardReport.query.filter_by(status='Under Assessment').count()
+    actioned         = HazardReport.query.filter_by(status='Actioned').count()
+    closed           = HazardReport.query.filter_by(status='Closed').count()
+    return render_template('reporting/hazard_report_list.html',
+        reports=reports, total=total,
+        submitted=submitted, under_assessment=under_assessment,
+        actioned=actioned, closed=closed,
+        dept_f=dept_f, cat_f=cat_f, stat_f=stat_f, q_f=q_f)
+
+@app.route('/hazard-reports/<rid>')
+def hazard_report_detail(rid):
+    """Full detail view for a single hazard report."""
+    rep    = HazardReport.query.get_or_404(rid)
+    hazard = Hazard.query.get(rep.hazard_id) if rep.hazard_id else None
+    ra     = RiskAssessment.query.filter_by(hazard_id=rep.hazard_id).first() if rep.hazard_id else None
+    actions = Action.query.filter_by(hazard_id=rep.hazard_id).all() if rep.hazard_id else []
+    return render_template('reporting/hazard_report_detail.html',
+        rep=rep, hazard=hazard, ra=ra, actions=actions)
+
+@app.route('/hazard-reports/<rid>/update-status', methods=['POST'])
+def hazard_report_update_status(rid):
+    rep = HazardReport.query.get_or_404(rid)
+    rep.status = request.form.get('status', rep.status)
+    db.session.commit()
+    flash(f'✓ Report {rid} status updated to {rep.status}.', 'success')
+    return redirect(url_for('hazard_report_detail', rid=rid))
 
 # ─── ASR ─────────────────────────────────────────────────────────────────────
 @app.route('/asr', methods=['GET','POST'])
@@ -3120,6 +3182,170 @@ def ra_reassess(ra_id):
 
 with app.app_context():
     db.create_all()
+
+    # ── Safe column migration ─────────────────────────────────────────────────
+    # SQLite does not add new columns automatically when models change.
+    # This block safely adds any missing columns to existing databases on Render.
+    import sqlite3, os
+    db_path = os.path.join(os.path.dirname(__file__), 'sms.db')
+    if os.path.exists(db_path):
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+
+        # Map: table_name -> [(column_name, column_definition)]
+        migrations = {
+            'departments': [
+                ('color',                  'VARCHAR(20) DEFAULT "#1e40af"'),
+            ],
+            'hazard_reports': [
+                ('classification',         'VARCHAR(50) DEFAULT "Operational"'),
+                ('created_at',             'DATETIME'),
+                ('status',                 'VARCHAR(30) DEFAULT "Submitted"'),
+                ('generic_hazard',         'VARCHAR(200)'),
+                ('consequences',           'TEXT'),
+                ('immediate_action',       'TEXT'),
+                ('suggested_mitigation',   'TEXT'),
+                ('reporter_severity',      'VARCHAR(20)'),
+                ('reporter',               'VARCHAR(100) DEFAULT "Anonymous"'),
+                ('hazard_id',              'VARCHAR(30)'),
+                ('severity',               'VARCHAR(2)'),
+                ('likelihood',             'INTEGER'),
+                ('risk_index',             'VARCHAR(5)'),
+            ],
+            'hazards': [
+                ('classification',         'VARCHAR(50)'),
+                ('type_of_activity',       'VARCHAR(100)'),
+                ('generic_hazard',         'VARCHAR(200)'),
+                ('specific_components',    'TEXT'),
+                ('consequences',           'TEXT'),
+                ('status',                 'VARCHAR(30) DEFAULT "Open"'),
+                ('owner',                  'VARCHAR(100)'),
+                ('linked_report_id',       'VARCHAR(30)'),
+                ('department_id',          'INTEGER'),
+                ('created_at',             'DATETIME'),
+            ],
+            'actions': [
+                ('hazard_id',              'VARCHAR(30)'),
+                ('linked_ref_id',          'VARCHAR(30)'),
+                ('linked_risk_id',         'VARCHAR(30)'),
+                ('linked_audit_id',        'VARCHAR(30)'),
+                ('linked_ra_id',           'VARCHAR(30)'),
+                ('department_id',          'INTEGER'),
+                ('action_type',            'VARCHAR(20) DEFAULT "Corrective"'),
+                ('owner',                  'VARCHAR(100)'),
+                ('due_date',               'VARCHAR(20)'),
+                ('priority',               'VARCHAR(20) DEFAULT "Medium"'),
+                ('completed_date',         'VARCHAR(20)'),
+                ('closed_date',            'VARCHAR(20)'),
+                ('effectiveness',          'VARCHAR(30)'),
+                ('effectiveness_review',   'TEXT'),
+                ('verified_by',            'VARCHAR(100)'),
+                ('verified_date',          'VARCHAR(20)'),
+                ('reopen_count',           'INTEGER DEFAULT 0'),
+                ('reopen_reason',          'TEXT'),
+                ('created_at',             'DATETIME'),
+            ],
+            'audit_plans': [
+                ('month',                  'INTEGER'),
+                ('created_at',             'DATETIME'),
+                ('objectives',             'TEXT'),
+                ('iosa_reference',         'VARCHAR(100)'),
+                ('auditor_name',           'VARCHAR(100)'),
+                ('planned_week',           'INTEGER'),
+                ('responsible_manager',    'VARCHAR(100)'),
+                ('frequency',              'VARCHAR(30)'),
+                ('scope',                  'TEXT'),
+            ],
+            'audit_schedules': [
+                ('plan_id',                'VARCHAR(30)'),
+                ('audit_team',             'VARCHAR(200)'),
+                ('scope',                  'TEXT'),
+                ('objectives',             'TEXT'),
+                ('actual_date',            'VARCHAR(20)'),
+                ('opening_meeting',        'TEXT'),
+                ('closing_meeting',        'TEXT'),
+                ('summary',                'TEXT'),
+                ('final_remarks',          'TEXT'),
+                ('closure_date',           'VARCHAR(20)'),
+                ('closed_by',              'VARCHAR(100)'),
+                ('created_at',             'DATETIME'),
+            ],
+            'audit_findings': [
+                ('finding_ref',            'VARCHAR(30)'),
+                ('created_at',             'DATETIME'),
+                ('category',               'VARCHAR(50)'),
+                ('severity',               'VARCHAR(20)'),
+                ('requirement',            'TEXT'),
+                ('root_cause',             'TEXT'),
+                ('evidence',               'TEXT'),
+                ('standard_ref',           'VARCHAR(100)'),
+                ('status',                 'VARCHAR(20) DEFAULT "Open"'),
+                ('hazard_id',              'VARCHAR(30)'),
+            ],
+            'risks': [
+                ('description',            'TEXT'),
+                ('initial_likelihood',      'INTEGER'),
+                ('initial_severity',        'VARCHAR(2)'),
+                ('initial_risk_index',      'VARCHAR(5)'),
+                ('initial_tolerance',       'VARCHAR(20)'),
+                ('residual_likelihood',     'INTEGER'),
+                ('residual_severity',       'VARCHAR(2)'),
+                ('residual_risk_index',     'VARCHAR(5)'),
+                ('residual_tolerance',      'VARCHAR(20)'),
+                ('created_at',             'DATETIME'),
+            ],
+            'controls': [
+                ('hazard_id',              'VARCHAR(30)'),
+                ('risk_id',               'VARCHAR(30)'),
+                ('description',           'TEXT'),
+                ('control_type',          'VARCHAR(50)'),
+                ('effectiveness',         'VARCHAR(30)'),
+                ('status',               'VARCHAR(20)'),
+                ('created_at',           'DATETIME'),
+            ],
+            'risk_assessments': [
+                ('control_number',         'VARCHAR(50)'),
+                ('responsible_name',       'VARCHAR(100)'),
+                ('assessors_names',        'VARCHAR(200)'),
+                ('created_at',             'DATETIME'),
+                ('title',                  'VARCHAR(200)'),
+                ('general_description',    'TEXT'),
+                ('reasons',                'TEXT'),
+                ('risk_level_prior',       'VARCHAR(20)'),
+                ('risk_level_after',       'VARCHAR(20)'),
+                ('management_acceptance',  'VARCHAR(30)'),
+                ('acceptance_date',        'VARCHAR(20)'),
+                ('prepared_by_name',       'VARCHAR(100)'),
+                ('prepared_by_position',   'VARCHAR(100)'),
+                ('reviewed_by_name',       'VARCHAR(100)'),
+                ('reviewed_by_position',   'VARCHAR(100)'),
+                ('approved_by_name',       'VARCHAR(100)'),
+                ('approved_by_position',   'VARCHAR(100)'),
+                ('submitted_date',         'VARCHAR(20)'),
+                ('activated_date',         'VARCHAR(20)'),
+                ('closed_date',            'VARCHAR(20)'),
+                ('revision',               'INTEGER DEFAULT 0'),
+                ('parent_ra_id',           'VARCHAR(30)'),
+                ('next_review_date',       'VARCHAR(20)'),
+                ('assessment_date',        'VARCHAR(20)'),
+            ],
+        }
+
+        for table, columns in migrations.items():
+            # Get existing columns
+            try:
+                cur.execute(f'PRAGMA table_info({table})')
+                existing = {row[1] for row in cur.fetchall()}
+                for col_name, col_def in columns:
+                    if col_name not in existing:
+                        cur.execute(f'ALTER TABLE {table} ADD COLUMN {col_name} {col_def}')
+                        print(f'✅ Migration: added {table}.{col_name}')
+            except Exception as e:
+                print(f'Migration warning for {table}: {e}')
+
+        con.commit()
+        con.close()
+
     seed()
 
 if __name__ == '__main__':
