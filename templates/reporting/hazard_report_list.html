@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Hazard Reports{% endblock %}
+{% block content %}
+
+<div class="page-title">Hazard Reports</div>
+<div class="page-sub">All submitted hazard reports · Persistent records · Never deleted</div>
+
+<!-- Stats -->
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
+  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ total }}</div><div class="stat-lbl">Total Reports</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ submitted }}</div><div class="stat-lbl">Submitted</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#1d4ed8">{{ under_assessment }}</div><div class="stat-lbl">Under Assessment</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#7c3aed">{{ actioned }}</div><div class="stat-lbl">Actioned</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ closed }}</div><div class="stat-lbl">Closed</div></div>
+</div>
+
+<!-- Filter bar -->
+<form method="GET" class="fbar">
+  <!-- Keyword search -->
+  <input type="text" name="q" value="{{ q_f }}"
+         placeholder="🔍 Search description, location…"
+         style="flex:1;min-width:180px"/>
+
+  <select name="dept" onchange="this.form.submit()">
+    <option value="">All Departments</option>
+    {% for d in all_departments %}
+    <option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="category" onchange="this.form.submit()">
+    <option value="">All Categories</option>
+    {% for c in ['Operational','Technical','Human Factors','Environmental','Organizational'] %}
+    <option {% if cat_f==c %}selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Submitted','Under Assessment','Actioned','Closed'] %}
+    <option {% if stat_f==s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <button type="submit" class="btn btn-nav btn-sm">Search</button>
+  {% if q_f or dept_f or cat_f or stat_f %}
+  <a href="/hazard-reports" class="btn btn-outline btn-sm">Clear</a>
+  {% endif %}
+
+  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ reports|length }} report(s)</span>
+  <a href="/hazard-report" class="btn btn-nav btn-sm">+ New Report</a>
+</form>
+
+<!-- Reports table -->
+{% if reports %}
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Report Ref</th>
+          <th>Date</th>
+          <th>Department</th>
+          <th>Location</th>
+          <th>Category</th>
+          <th>Hazard / Description</th>
+          <th>Reporter Severity</th>
+          <th>Linked Hazard</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reports %}
+        {% set cat_colors = {
+          'Operational':'b-blue','Technical':'b-purple',
+          'Human Factors':'b-orange','Environmental':'b-green','Organizational':'b-gray'} %}
+        <tr>
+          <!-- Report ID -->
+          <td>
+            <span class="ctrl-num">{{ r.id }}</span>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">
+              {{ r.created_at.strftime('%d %b %Y') }}
+            </div>
+          </td>
+
+          <!-- Date of occurrence -->
+          <td style="font-size:12px;white-space:nowrap">{{ r.date or '—' }}</td>
+
+          <!-- Department -->
+          <td>
+            <span class="badge b-blue" style="font-size:10px">
+              {{ r.department.code if r.department else '—' }}
+            </span>
+          </td>
+
+          <!-- Location -->
+          <td style="font-size:12px;max-width:120px">{{ r.location or '—' }}</td>
+
+          <!-- Category -->
+          <td>
+            <span class="badge {{ cat_colors.get(r.classification,'b-gray') }}" style="font-size:10px">
+              {{ r.classification or '—' }}
+            </span>
+          </td>
+
+          <!-- Description -->
+          <td style="max-width:200px;font-size:12px">
+            <strong style="color:var(--navy);display:block">{{ (r.generic_hazard or '')[:50] }}</strong>
+            <span style="color:var(--muted)">{{ (r.description or '')[:60] }}{% if (r.description or '')|length > 60 %}…{% endif %}</span>
+          </td>
+
+          <!-- Reporter severity perception -->
+          <td>
+            {% if r.reporter_severity == 'Critical' %}
+              <span class="badge b-red">🔴 Critical</span>
+            {% elif r.reporter_severity == 'High' %}
+              <span class="badge b-red">High</span>
+            {% elif r.reporter_severity == 'Medium' %}
+              <span class="badge b-yellow">Medium</span>
+            {% elif r.reporter_severity == 'Low' %}
+              <span class="badge b-green">Low</span>
+            {% else %}
+              <span style="color:#d1d5db;font-size:11px">—</span>
+            {% endif %}
+          </td>
+
+          <!-- Linked Hazard (if assessed) -->
+          <td>
+            {% if r.hazard_id %}
+            <a href="/hazard-log/{{ r.hazard_id }}"
+               class="mono" style="color:#1d4ed8;font-size:11px">{{ r.hazard_id }}</a>
+            {% else %}
+            <span style="color:#d1d5db;font-size:11px">Not yet</span>
+            {% endif %}
+          </td>
+
+          <!-- Status -->
+          <td>
+            {% if r.status == 'Closed' %}<span class="badge b-green">Closed</span>
+            {% elif r.status == 'Actioned' %}<span class="badge b-purple">Actioned</span>
+            {% elif r.status == 'Under Assessment' %}<span class="badge b-blue">Under Assessment</span>
+            {% else %}<span class="badge b-yellow">Submitted</span>{% endif %}
+          </td>
+
+          <!-- Actions -->
+          <td style="white-space:nowrap">
+            <a href="/hazard-reports/{{ r.id }}" class="btn btn-nav btn-sm">View</a>
+            <a href="/hazard-reports/{{ r.id }}/print" target="_blank"
+               class="btn btn-sm" style="background:#065f46;color:#fff;margin-left:4px">🖨</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="card" style="text-align:center;padding:48px;border:2px dashed var(--border)">
+  {% if q_f or dept_f or cat_f or stat_f %}
+  <div style="font-size:32px;margin-bottom:12px">🔍</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No reports match your filters</div>
+  <a href="/hazard-reports" class="btn btn-outline">Clear filters →</a>
+  {% else %}
+  <div style="font-size:32px;margin-bottom:12px">📋</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No Hazard Reports yet</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:20px">
+    All submitted hazard reports will appear here and are permanently stored.
+  </div>
+  <a href="/hazard-report" class="btn btn-nav">+ Submit First Hazard Report</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
