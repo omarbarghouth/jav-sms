@@ -865,28 +865,155 @@ def _spi_trend(values_list):
 
 def _spi_trigger_check(values_chronological, l1, l2, l3, is_pct=False):
     """
-    ICAO alert trigger rules — detects abnormal safety trends:
-      Rule A: 1 point  >= L3
-      Rule B: 2 consecutive points >= L2
-      Rule C: 3 consecutive points >= L1
+    ICAO alert trigger rules — detects abnormal safety trends.
     Returns triggered rule or None.
+    (Thin wrapper — use _spi_trigger_detail for full month/value info.)
     """
-    vals = [v for v in values_chronological if v is not None]
-    if not vals:
+    detail = _spi_trigger_detail(values_chronological, l1, l2, l3, is_pct)
+    return detail['rule'] if detail else None
+
+
+def _spi_trigger_detail(values_with_months, l1_current, l2_current, l3_current,
+                        is_pct=False, spt=None):
+    """
+    ICAO alert trigger rules with EXACT MONTH identification.
+
+    CORRECT ICAO LOGIC: For each month i, compute thresholds from
+    months [0..i-1] (prior data only), then test month i against those
+    prior thresholds. This prevents the spike itself from inflating the
+    mean/SD and hiding the trigger.
+
+    Requires a minimum of 2 prior points to compute meaningful statistics.
+    Falls back to the passed-in l1/l2/l3 thresholds for the full dataset
+    when insufficient prior data exists.
+
+    values_with_months : list of (month_number, value) tuples, sorted asc.
+    l1/l2/l3_current   : pre-calculated thresholds from full dataset
+                         (used as fallback for the latest point).
+
+    Returns dict or None:
+      { 'rule', 'trigger_month', 'trigger_value', 'level', 'description' }
+    Priority: A > B > C. Returns MOST RECENT trigger.
+    """
+    if not values_with_months:
         return None
 
-    def above(v, threshold):
-        return (v <= threshold) if is_pct else (v >= threshold)
+    # Normalise
+    if isinstance(values_with_months[0], (list, tuple)):
+        pairs = [(int(x[0]), float(x[1]))
+                 for x in values_with_months if x[1] is not None]
+    else:
+        pairs = [(i + 1, float(v))
+                 for i, v in enumerate(values_with_months) if v is not None]
 
-    # Rule A
-    if above(vals[-1], l3):
-        return 'A'
-    # Rule B — last 2 consecutive >= L2
-    if len(vals) >= 2 and all(above(v, l2) for v in vals[-2:]):
-        return 'B'
-    # Rule C — last 3 consecutive >= L1
-    if len(vals) >= 3 and all(above(v, l1) for v in vals[-3:]):
-        return 'C'
+    if not pairs:
+        return None
+
+    months = [p[0] for p in pairs]
+    vals   = [p[1] for p in pairs]
+    n      = len(pairs)
+
+    def above(v, thr):
+        if thr is None:
+            return False
+        return (v <= thr) if is_pct else (v >= thr)
+
+    def thresholds_for_prior(prior_vals, spt_fallback=None):
+        """
+        Compute L1/L2/L3 from prior values.
+        - Needs >= 2 values with non-zero SD for statistical mode
+        - If SD=0 or insufficient data, use SPT-based fallback:
+            L1=SPT×1.2, L2=SPT×1.4, L3=SPT×1.6
+        Returns (l1, l2, l3) — never None (always returns something usable)
+        """
+        if len(prior_vals) >= 2:
+            m, s = _spi_statistics(prior_vals)
+            if s > 0:
+                if is_pct:
+                    return (round(m - s, 4), round(m - 2*s, 4), round(m - 3*s, 4))
+                return (round(m + s, 4), round(m + 2*s, 4), round(m + 3*s, 4))
+        # Fall back to SPT-based thresholds
+        if spt_fallback and spt_fallback > 0:
+            if is_pct:
+                return (spt_fallback*0.90, spt_fallback*0.80, spt_fallback*0.70)
+            return (spt_fallback*1.20, spt_fallback*1.40, spt_fallback*1.60)
+        # Last resort: use passed-in full-dataset thresholds
+        return l1_current, l2_current, l3_current
+
+    # For each month i, build its effective thresholds from prior data
+    # Store per-month (l1, l2, l3)
+    effective = []
+    for i in range(n):
+        prior = vals[:i]                    # everything BEFORE this month
+        tl1, tl2, tl3 = thresholds_for_prior(prior, spt_fallback=spt)
+        effective.append((tl1, tl2, tl3))
+
+    # ── Rule A: any single point >= its own L3 ────────────────────────────
+    rule_a_month = rule_a_val = None
+    for i in range(n - 1, -1, -1):
+        tl1, tl2, tl3 = effective[i]
+        if tl3 is not None and above(vals[i], tl3):
+            rule_a_month, rule_a_val = months[i], vals[i]
+            break
+
+    # ── Rule B: 2 consecutive >= their respective L2 ─────────────────────
+    rule_b_month = rule_b_val = None
+    for i in range(n - 1, 0, -1):
+        _, tl2_i,  _ = effective[i]
+        _, tl2_i1, _ = effective[i-1]
+        if (tl2_i is not None and tl2_i1 is not None and
+                above(vals[i], tl2_i) and above(vals[i-1], tl2_i1)):
+            rule_b_month = months[i-1]
+            rule_b_val   = vals[i-1]
+            break
+
+    # ── Rule C: 3 consecutive >= their respective L1 ─────────────────────
+    rule_c_month = rule_c_val = None
+    for i in range(n - 1, 1, -1):
+        tl1_i,  _, _ = effective[i]
+        tl1_i1, _, _ = effective[i-1]
+        tl1_i2, _, _ = effective[i-2]
+        if (tl1_i is not None and tl1_i1 is not None and tl1_i2 is not None and
+                above(vals[i], tl1_i) and
+                above(vals[i-1], tl1_i1) and
+                above(vals[i-2], tl1_i2)):
+            rule_c_month = months[i-2]
+            rule_c_val   = vals[i-2]
+            break
+
+    # Return highest-priority result
+    if rule_a_month is not None:
+        _, _, tl3 = effective[months.index(rule_a_month)]
+        return {
+            'rule':          'A',
+            'trigger_month': rule_a_month,
+            'trigger_value': rule_a_val,
+            'level':         'L3',
+            'description':   (f'Rule A: One point ({rule_a_val:.3f}) exceeded '
+                               f'L3 (Mean+3SD = {tl3:.3f})')
+        }
+    if rule_b_month is not None:
+        idx = months.index(rule_b_month)
+        _, tl2, _ = effective[idx]
+        return {
+            'rule':          'B',
+            'trigger_month': rule_b_month,
+            'trigger_value': rule_b_val,
+            'level':         'L2',
+            'description':   (f'Rule B: Two consecutive points exceeded '
+                               f'L2 (Mean+2SD = {tl2:.3f})')
+        }
+    if rule_c_month is not None:
+        idx = months.index(rule_c_month)
+        tl1, _, _ = effective[idx]
+        return {
+            'rule':          'C',
+            'trigger_month': rule_c_month,
+            'trigger_value': rule_c_val,
+            'level':         'L1',
+            'description':   (f'Rule C: Three consecutive points exceeded '
+                               f'L1 (Mean+1SD = {tl1:.3f})')
+        }
     return None
 
 
@@ -911,7 +1038,8 @@ def _spi_build_table(indicators, cur_year):
         target   = _spi_target(ind, all_values)
 
         # YTD + 3M avg
-        vals_yr  = [month_vals[m] for m in sorted(month_vals)]
+        sorted_months = sorted(month_vals)
+        vals_yr  = [month_vals[m] for m in sorted_months]
         ytd      = round(sum(vals_yr) / len(vals_yr), 2) if vals_yr else 0.0
         recent   = vals_yr[-3:]
         avg3     = round(sum(recent) / len(recent), 2) if recent else 0.0
@@ -924,10 +1052,37 @@ def _spi_build_table(indicators, cur_year):
         impr_target = _spi_improvement_target(ind, all_values)
 
         # Status
-        status   = _spi_status(latest, ind, all_values)
+        status = _spi_status(latest, ind, all_values)
 
         # ICAO trigger check
-        trigger  = _spi_trigger_check(vals_yr, l1, l2, l3, ind.calc_type == 'PERCENT')
+        # Use all historical data (not just current year) to find real trigger month
+        # Thresholds (l1,l2,l3) are already computed from all_values above
+        all_history_pairs = [(m, v) for _, m, v in _spi_history(ind)]
+        # Also include current-year data not in all_history (e.g. just logged)
+        for sm in sorted_months:
+            if not any(p[0] == sm for p in all_history_pairs):
+                all_history_pairs.append((sm, month_vals[sm]))
+        all_history_pairs.sort(key=lambda x: x[0])
+
+        month_val_tuples = [(m, month_vals[m]) for m in sorted_months]
+        trigger_detail = _spi_trigger_detail(
+            month_val_tuples, l1, l2, l3, ind.calc_type == 'PERCENT',
+            spt=ind.spt_target)
+        trigger = trigger_detail['rule'] if trigger_detail else None
+
+        # Extract exact escalation info
+        if trigger_detail:
+            escalation_month = trigger_detail['trigger_month']
+            escalation_year  = cur_year
+            escalation_value = trigger_detail['trigger_value']
+            escalation_level = trigger_detail['level']
+            escalation_desc  = trigger_detail['description']
+        else:
+            escalation_month = None
+            escalation_year  = cur_year
+            escalation_value = None
+            escalation_level = None
+            escalation_desc  = None
 
         # Baseline progress
         months_collected = len(all_values)
@@ -956,12 +1111,19 @@ def _spi_build_table(indicators, cur_year):
             month_vals=month_vals,
             ytd=ytd, avg3=avg3, trend=trend,
             status=status, trigger=trigger,
+            trigger_detail=trigger_detail,
+            # Exact escalation — the REAL month the threshold was crossed
+            escalation_month=escalation_month,
+            escalation_year=escalation_year,
+            escalation_value=escalation_value,
+            escalation_level=escalation_level,
+            escalation_desc=escalation_desc,
             latest_val=latest,
             l1=l1, l2=l2, l3=l3,
             mean=mean, sd=round(sd, 4),
-            spt=spt_fixed,        # Fixed SPT — never changes
-            impr_target=impr_target,  # Improvement target from avg
-            target=spt_fixed,     # alias used in templates
+            spt=spt_fixed,
+            impr_target=impr_target,
+            target=spt_fixed,
             is_stat=is_stat,
             all_values=all_values,
             months_collected=months_collected,
