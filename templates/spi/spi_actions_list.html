@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}SPI Action Reports{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:14px">
+  <a href="/spi" style="color:var(--muted);font-size:13px">← SPI Dashboard</a>
+</div>
+<div class="page-title">SPI Action Reports List</div>
+<div class="page-sub">All corrective actions linked to SPI alerts · Full lifecycle tracking</div>
+
+<!-- Stats -->
+{% set closed_c  = actions|selectattr('status','eq','Closed')|list|length %}
+{% set open_c    = actions|rejectattr('status','eq','Closed')|list|length %}
+{% set l3_c      = actions|selectattr('spi_alert_level','eq','L3')|list|length %}
+{% set verified_c = actions|selectattr('verified_by')|list|length %}
+
+<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+  <div class="stat-card"><div class="stat-val" style="color:#374151">{{ actions|length }}</div><div class="stat-lbl">Total SPI Actions</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_c }}</div><div class="stat-lbl">Open / In Progress</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ closed_c }}</div><div class="stat-lbl">Closed</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#7c3aed">{{ verified_c }}</div><div class="stat-lbl">Effectiveness Verified</div></div>
+</div>
+
+<!-- Filters -->
+<form method="GET" class="fbar">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Open','In Progress','Closed','Overdue'] %}
+    <option {% if status_f==s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="level" onchange="this.form.submit()">
+    <option value="">All Alert Levels</option>
+    {% for l in ['L1','L2','L3'] %}
+    <option {% if level_f==l %}selected{% endif %}>{{ l }}</option>
+    {% endfor %}
+  </select>
+  {% if status_f or level_f %}
+  <a href="/spi/actions" class="btn btn-outline btn-sm">Clear</a>
+  {% endif %}
+  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ actions|length }} action(s)</span>
+</form>
+
+{% set MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+
+{% if actions %}
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Action ID</th>
+          <th>SPI Indicator</th>
+          <th>Department</th>
+          <th>Alert Level</th>
+          <th>Alert Month</th>
+          <th>Description</th>
+          <th>Owner</th>
+          <th>Mitigation</th>
+          <th>Status</th>
+          <th>Effectiveness</th>
+          <th>Closed</th>
+          <th>Evidence</th>
+          <th>Report</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in actions %}
+        {% set ind = a.spi_indicator %}
+        <tr style="{% if a.status=='Overdue' %}background:#fff8f8{% elif a.status=='Closed' %}background:#f0fdf4{% endif %}">
+
+          <td><span class="ctrl-num">{{ a.id }}</span></td>
+
+          <!-- SPI Indicator -->
+          <td style="font-size:12px">
+            {% if ind %}
+            <strong class="mono" style="color:var(--navy)">{{ ind.code }}</strong>
+            <div style="font-size:10px;color:var(--muted)">{{ ind.name[:40] }}</div>
+            {% else %}—{% endif %}
+          </td>
+
+          <!-- Department (from SPI indicator) -->
+          <td style="font-size:11px;color:var(--muted)">
+            {% if ind %}{{ ind.department_ids }}{% else %}—{% endif %}
+          </td>
+
+          <!-- Alert Level -->
+          <td>
+            {% if a.spi_alert_level == 'L3' %}<span class="badge b-red">🔴 L3</span>
+            {% elif a.spi_alert_level == 'L2' %}<span class="badge b-orange">🟠 L2</span>
+            {% elif a.spi_alert_level == 'L1' %}<span class="badge b-yellow">🟡 L1</span>
+            {% else %}<span class="badge b-gray">{{ a.spi_alert_level or '—' }}</span>{% endif %}
+            {% if a.spi_trigger_rule %}
+            <div style="font-size:9px;color:var(--muted);margin-top:2px">Rule {{ a.spi_trigger_rule }}</div>
+            {% endif %}
+          </td>
+
+          <!-- Alert Month (when alert was triggered) -->
+          <td style="font-size:12px;font-weight:700;color:#374151;white-space:nowrap">
+            {% if a.spi_alert_month and a.spi_alert_year %}
+            {{ MONTHS[a.spi_alert_month-1] }} {{ a.spi_alert_year }}
+            {% else %}—{% endif %}
+          </td>
+
+          <!-- Description -->
+          <td style="max-width:180px;font-size:12px">{{ (a.description or '—')[:60] }}</td>
+
+          <!-- Owner -->
+          <td style="font-size:12px">
+            {{ a.owner or '—' }}
+            {% if a.assigned_by %}<div style="font-size:10px;color:var(--muted)">Assigned by: {{ a.assigned_by }}</div>{% endif %}
+          </td>
+
+          <!-- Mitigation Status -->
+          <td>
+            {% if a.mitigation_status == 'Completed' %}<span class="badge b-green" style="font-size:10px">✓ Completed</span>
+            {% elif a.mitigation_status == 'Active' %}<span class="badge b-blue" style="font-size:10px">Active</span>
+            {% elif a.mitigation_status == 'Under Review' %}<span class="badge b-yellow" style="font-size:10px">Review</span>
+            {% else %}<span class="badge b-gray" style="font-size:10px">Pending</span>{% endif %}
+          </td>
+
+          <!-- Action Status -->
+          <td>
+            {% if a.status=='Closed' %}<span class="badge b-green">✓ Closed</span>
+            {% elif a.status=='Overdue' %}<span class="badge b-red">⚠ Overdue</span>
+            {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+            {% else %}<span class="badge b-yellow">Open</span>{% endif %}
+          </td>
+
+          <!-- Effectiveness -->
+          <td>
+            {% if a.effectiveness == 'Effective' %}<span class="badge b-green" style="font-size:10px">✓ Effective</span>
+            {% elif a.effectiveness == 'Partially Effective' %}<span class="badge b-yellow" style="font-size:10px">~ Partial</span>
+            {% elif a.effectiveness == 'Ineffective' %}<span class="badge b-red" style="font-size:10px">✗ Ineffective</span>
+            {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
+            {% if a.verified_by %}<div style="font-size:9px;color:#15803d;margin-top:2px">✓ {{ a.verified_by }}</div>{% endif %}
+          </td>
+
+          <!-- Closure Date -->
+          <td style="font-size:11px;color:#15803d;white-space:nowrap">
+            {{ a.closed_date or '—' }}
+            {% if a.closure_by %}<div style="font-size:9px;color:var(--muted)">{{ a.closure_by }}</div>{% endif %}
+          </td>
+
+          <!-- Evidence attachment -->
+          <td style="text-align:center">
+            {% if a.evidence_filename %}
+            <a href="/spi/evidence/{{ a.evidence_filename }}" target="_blank"
+               class="btn btn-sm" style="background:#065f46;color:#fff;padding:3px 8px;font-size:10px">
+              📎 View
+            </a>
+            {% else %}
+            <span style="color:#d1d5db;font-size:10px">—</span>
+            {% endif %}
+          </td>
+
+          <!-- PDF Report -->
+          <td style="white-space:nowrap">
+            <a href="/actions/{{ a.id }}" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px">Detail</a>
+            <a href="/spi/action-report/{{ a.id }}" target="_blank"
+               class="btn btn-nav btn-sm" style="font-size:11px;padding:3px 8px;margin-left:3px">🖨 PDF</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="card" style="text-align:center;padding:40px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:12px">📋</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No SPI Actions Yet</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:18px">
+    SPI actions are created when alert triggers (Rules A, B, or C) are detected on the SPI Dashboard.
+  </div>
+  <a href="/spi" class="btn btn-nav">← Go to SPI Dashboard</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -37,7 +37,7 @@
       </div>
     </div>
     <!-- CREATE ACTION BUTTON -->
-    <a href="/actions/new?source=SPI&description={{ (action_type + ' required: ' + row.ind.name + ' exceeded ' + 'L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') | urlencode }}&priority={{ priority }}&return_url=/spi"
+    <a href="/actions/new?source=SPI&spi_id={{ row.ind.id }}&spi_alert_level={{ ('L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') }}&spi_trigger_rule={{ row.trigger }}&description={{ (action_type + ' required: ' + row.ind.name) | urlencode }}&priority={{ priority }}&spi_alert_month={{ now.month }}&spi_alert_year={{ now.year }}&return_url=/spi"
        class="btn btn-sm"
        style="background:{{ color }};color:#fff;white-space:nowrap;flex-shrink:0;align-self:flex-start">
       ✅ Create Action — {{ action_type }}
@@ -89,6 +89,7 @@
   </div>
   <div style="display:flex;gap:8px">
     <a href="/spi/indicators" class="btn btn-outline btn-sm">⚙ Manage Indicators</a>
+    <a href="/spi/actions" class="btn btn-outline btn-sm">📋 Actions Report List</a>
     <button class="btn btn-nav btn-sm" onclick="document.getElementById('spi-modal').style.display='flex'">
       + Log Exposure Data
     </button>
@@ -304,10 +305,13 @@
     <span style="color:#d97706;font-weight:600">Baseline — {{ row.baseline_needed - row.months_collected }} months until statistical mode</span>
     {% endif %}
     {% if row.trigger %}
-    <a href="/actions/new?source=SPI&spi_id={{ ind.id }}&spi_alert_level={{ ('L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') }}&spi_trigger_rule={{ row.trigger }}&priority={{ ('High' if row.trigger=='A' else 'Medium' if row.trigger=='B' else 'Low') }}&return_url=/spi%23spi-{{ ind.id }}"
+    <a href="/actions/new?source=SPI&spi_id={{ ind.id }}&spi_alert_level={{ ('L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') }}&spi_trigger_rule={{ row.trigger }}&priority={{ ('High' if row.trigger=='A' else 'Medium' if row.trigger=='B' else 'Low') }}&spi_alert_month={{ now.month }}&spi_alert_year={{ now.year }}&return_url=/spi%23spi-{{ ind.id }}"
        class="btn btn-sm" style="background:{{ row.status[1] }};color:#fff;font-size:11px;padding:4px 10px">
       ✅ Create Action
     </a>
+    {% endif %}
+    {% if row.spi_actions %}
+    <a href="/spi/actions" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px">📋 Actions List</a>
     {% endif %}
   </div>
 </div>

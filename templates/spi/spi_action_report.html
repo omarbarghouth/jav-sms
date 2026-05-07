@@ -106,8 +106,13 @@
     </td>
   </tr>
   <tr>
+    <td class="lbl">Alert Month</td>
+    <td><strong>{% if a.spi_alert_month and a.spi_alert_year %}{{ MONTHS[a.spi_alert_month-1] }} {{ a.spi_alert_year }}{% else %}{{ a.created_at.strftime('%B %Y') }}{% endif %}</strong></td>
     <td class="lbl">Priority</td><td>{{ a.priority }}</td>
+  </tr>
+  <tr>
     <td class="lbl">Action Created</td><td>{{ a.created_at.strftime('%d %b %Y') }}</td>
+    <td class="lbl">Assigned By</td><td>{{ a.assigned_by or '—' }}</td>
   </tr>
 </table>
 
@@ -130,9 +135,30 @@
 <div style="font-size:9pt;font-weight:700;color:#374151;margin:6px 0 3px">Action Description:</div>
 <div class="text-box">{{ a.description or '—' }}</div>
 
+{% if a.mitigation_description %}
+<div class="sec-title sec-navy">MITIGATION DESCRIPTION</div>
+<div class="text-box">{{ a.mitigation_description }}</div>
+{% endif %}
+
+{% if a.corrective_description %}
+<div class="sec-title sec-navy">CORRECTIVE ACTION DESCRIPTION</div>
+<div class="text-box">{{ a.corrective_description }}</div>
+{% endif %}
+
+{% if a.safety_notes %}
+<div class="sec-title sec-navy">SAFETY IMPROVEMENT NOTES</div>
+<div class="text-box">{{ a.safety_notes }}</div>
+{% endif %}
+
 <!-- Section 4: Evidence -->
 <div class="sec-title sec-navy">EVIDENCE OF IMPLEMENTATION</div>
 <div class="text-box">{{ a.evidence or 'No evidence recorded yet.' }}</div>
+{% if a.evidence_filename %}
+<div style="border:1px solid #d1d5db;padding:8px 12px;background:#f0fdf4;font-size:9.5pt;margin-bottom:10px">
+  📎 Attached evidence file: <strong>{{ a.evidence_filename }}</strong>
+  (Available at: /spi/evidence/{{ a.evidence_filename }})
+</div>
+{% endif %}
 
 <!-- Section 5: Follow-up -->
 {% if a.follow_up_notes %}
@@ -156,6 +182,10 @@
   <tr>
     <td class="lbl">Verification Date</td><td>{{ a.verified_date or '—' }}</td>
     <td class="lbl">Closed Date</td><td>{{ a.closed_date or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Closed / Confirmed By</td><td>{{ a.closure_by or '—' }}</td>
+    <td class="lbl">Mitigation Status</td><td>{{ a.mitigation_status or '—' }}</td>
   </tr>
 </table>
 {% if a.effectiveness_review %}
