@@ -248,10 +248,14 @@ class SPIIndicator(db.Model):
     alert_l1       = db.Column(db.Float)   # Yellow — Level 1
     alert_l2       = db.Column(db.Float)   # Orange — Level 2
     alert_l3       = db.Column(db.Float)   # Red    — Level 3 Critical
-    auto_source    = db.Column(db.String(50))   # 'hazard_report' / 'asr' / 'audit' / 'manual'
-    auto_category  = db.Column(db.String(50))   # e.g. 'FOD' — auto-match on this category
-    active         = db.Column(db.Boolean, default=True)
-    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    auto_source      = db.Column(db.String(50))
+    auto_category    = db.Column(db.String(50))
+    # Statistical monitoring
+    baseline_months  = db.Column(db.Integer, default=3)   # months needed before stat mode
+    improvement_pct  = db.Column(db.Float, default=5.0)   # target = avg * (1 - improvement/100)
+    stat_mode        = db.Column(db.Boolean, default=False) # True once baseline complete
+    active           = db.Column(db.Boolean, default=True)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
     data_entries   = db.relationship('SPIData', backref='indicator', lazy=True,
                                      cascade='all, delete-orphan')
 
@@ -271,6 +275,9 @@ class SPIData(db.Model):
     # legacy compat
     flights      = db.Column(db.Integer)
     rate         = db.Column(db.Float)
+    # Statistical metadata (auto-computed, stored for performance)
+    mean_at_time = db.Column(db.Float)   # historical mean when this point was recorded
+    sd_at_time   = db.Column(db.Float)   # historical SD when recorded
 
 class SafetyBulletin(db.Model):
     __tablename__ = 'safety_bulletins'
