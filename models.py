@@ -148,12 +148,22 @@ class Action(db.Model):
     closed_date          = db.Column(db.String(20))
     # SPI lifecycle fields
     spi_id               = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'), nullable=True)
-    spi_alert_level      = db.Column(db.String(5))   # L1 / L2 / L3
-    spi_trigger_rule     = db.Column(db.String(2))   # A / B / C
-    evidence             = db.Column(db.Text)         # evidence of corrective action
-    follow_up_notes      = db.Column(db.Text)         # monitoring notes post-closure
-    mitigation_status    = db.Column(db.String(30))   # Active / Completed / Pending
-    verified_by          = db.Column(db.String(100))  # who verified effectiveness
+    spi_alert_level      = db.Column(db.String(5))    # L1 / L2 / L3
+    spi_trigger_rule     = db.Column(db.String(2))    # A / B / C
+    spi_alert_month      = db.Column(db.Integer)      # month alert was triggered (1-12)
+    spi_alert_year       = db.Column(db.Integer)      # year alert was triggered
+    # Evidence & mitigation
+    evidence             = db.Column(db.Text)          # evidence text
+    evidence_filename    = db.Column(db.String(200))   # uploaded evidence file
+    mitigation_description = db.Column(db.Text)        # what mitigation was done
+    corrective_description = db.Column(db.Text)        # corrective action details
+    safety_notes         = db.Column(db.Text)          # safety improvement notes
+    follow_up_notes      = db.Column(db.Text)          # monitoring notes post-closure
+    mitigation_status    = db.Column(db.String(30))    # Active / Completed / Pending
+    # People
+    assigned_by          = db.Column(db.String(100))   # who assigned the action
+    closure_by           = db.Column(db.String(100))   # who confirmed closure
+    verified_by          = db.Column(db.String(100))   # who verified effectiveness
     verified_date        = db.Column(db.String(20))
     created_at           = db.Column(db.DateTime, default=datetime.utcnow)
     # Relationship to SPI indicator
