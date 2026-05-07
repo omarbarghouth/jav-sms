@@ -8,6 +8,14 @@ from openpyxl.utils import get_column_letter
 from flask import send_file, make_response
 
 app = Flask(__name__)
+# Evidence file uploads
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'evidence')
+ALLOWED_EXT   = {'pdf','docx','xlsx','png','jpg','jpeg','gif'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXT
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -418,6 +426,15 @@ def new_action():
     """Create a new action. Can be called from any page with pre-filled fields."""
     if request.method == 'POST':
         f = request.form
+        # Handle evidence file upload
+        evidence_filename = None
+        if 'evidence_file' in request.files:
+            ef = request.files['evidence_file']
+            if ef and ef.filename and allowed_file(ef.filename):
+                from werkzeug.utils import secure_filename
+                evidence_filename = f"{new_id('EV')}_{secure_filename(ef.filename)}"
+                ef.save(os.path.join(app.config['UPLOAD_FOLDER'], evidence_filename))
+
         a = Action(
             id=new_id('ACT'),
             source=f.get('source', 'Manual'),
@@ -429,10 +446,18 @@ def new_action():
             priority=f.get('priority', 'Medium'),
             status='Open',
             # SPI lifecycle fields
-            spi_id          = int(f['spi_id']) if f.get('spi_id') else None,
-            spi_alert_level = f.get('spi_alert_level', ''),
-            spi_trigger_rule= f.get('spi_trigger_rule', ''),
-            mitigation_status = 'Pending'
+            spi_id               = int(f['spi_id']) if f.get('spi_id') else None,
+            spi_alert_level      = f.get('spi_alert_level', ''),
+            spi_trigger_rule     = f.get('spi_trigger_rule', ''),
+            spi_alert_month      = int(f['spi_alert_month']) if f.get('spi_alert_month') else datetime.now().month,
+            spi_alert_year       = int(f['spi_alert_year'])  if f.get('spi_alert_year')  else datetime.now().year,
+            mitigation_description = f.get('mitigation_description', ''),
+            corrective_description = f.get('corrective_description', ''),
+            safety_notes           = f.get('safety_notes', ''),
+            assigned_by            = f.get('assigned_by', ''),
+            evidence               = f.get('evidence', ''),
+            evidence_filename      = evidence_filename,
+            mitigation_status      = 'Pending'
         )
         db.session.add(a)
         db.session.commit()
@@ -486,12 +511,29 @@ def update_action(aid):
         return redirect(return_url)
 
     # Normal update
-    a.status              = new_status
-    a.evidence            = f.get('evidence', a.evidence)
-    a.follow_up_notes     = f.get('follow_up_notes', a.follow_up_notes)
-    a.mitigation_status   = f.get('mitigation_status', a.mitigation_status)
-    a.verified_by         = f.get('verified_by', a.verified_by)
-    a.verified_date       = f.get('verified_date', a.verified_date)
+    a.status                 = new_status
+    a.evidence               = f.get('evidence', a.evidence)
+    a.mitigation_description = f.get('mitigation_description', a.mitigation_description)
+    a.corrective_description = f.get('corrective_description', a.corrective_description)
+    a.safety_notes           = f.get('safety_notes', a.safety_notes)
+    a.follow_up_notes        = f.get('follow_up_notes', a.follow_up_notes)
+    a.mitigation_status      = f.get('mitigation_status', a.mitigation_status)
+    a.assigned_by            = f.get('assigned_by', a.assigned_by)
+    a.closure_by             = f.get('closure_by', a.closure_by)
+    a.verified_by            = f.get('verified_by', a.verified_by)
+    a.verified_date          = f.get('verified_date', a.verified_date)
+    if new_status == 'Closed' and not a.closed_date:
+        a.closed_date = datetime.now().strftime('%Y-%m-%d')
+        if not a.closure_by:
+            a.closure_by = f.get('closure_by', '')
+    # Handle new evidence file upload on update
+    if 'evidence_file' in request.files:
+        ef = request.files['evidence_file']
+        if ef and ef.filename and allowed_file(ef.filename):
+            from werkzeug.utils import secure_filename
+            fn = f"{a.id}_{secure_filename(ef.filename)}"
+            ef.save(os.path.join(app.config['UPLOAD_FOLDER'], fn))
+            a.evidence_filename = fn
     a.owner        = f.get('owner', a.owner)
     a.due_date     = f.get('due_date', a.due_date)
     a.priority     = f.get('priority', a.priority)
@@ -1069,13 +1111,31 @@ def spi():
         enumerate=enumerate)
 
 
+@app.route('/spi/actions')
+def spi_actions_list():
+    """List of all SPI-linked actions — closed and open."""
+    status_f = request.args.get('status', '')
+    dept_f   = request.args.get('dept', '')
+    level_f  = request.args.get('level', '')
+
+    q = Action.query.filter(Action.spi_id.isnot(None))
+    if status_f: q = q.filter_by(status=status_f)
+    if level_f:  q = q.filter_by(spi_alert_level=level_f)
+    actions = q.order_by(Action.spi_alert_year.desc(),
+                         Action.spi_alert_month.desc()).all()
+    return render_template('spi/spi_actions_list.html',
+                           actions=actions, status_f=status_f,
+                           dept_f=dept_f, level_f=level_f)
+
 @app.route('/spi/action-report/<action_id>')
 def spi_action_report(action_id):
     """Print-ready SPI Alert Mitigation Report."""
     a   = Action.query.get_or_404(action_id)
     ind = SPIIndicator.query.get(a.spi_id) if a.spi_id else None
+    MONTHS = ['January','February','March','April','May','June',
+              'July','August','September','October','November','December']
     return render_template('spi/spi_action_report.html', a=a, ind=ind,
-                           now=datetime.utcnow())
+                           now=datetime.utcnow(), MONTHS=MONTHS)
 
 @app.route('/spi/indicators', methods=['GET','POST'])
 def spi_indicators():
@@ -1118,6 +1178,12 @@ def spi_delete_indicator(iid):
     flash(f'✓ Indicator {ind.code} deleted.', 'success')
     return redirect(url_for('spi_indicators'))
 
+
+@app.route('/spi/evidence/<filename>')
+def spi_evidence_file(filename):
+    """Serve uploaded evidence files."""
+    from flask import send_from_directory
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/spi/indicators/<int:iid>/toggle', methods=['POST'])
 def spi_toggle_indicator(iid):
@@ -3698,6 +3764,14 @@ with app.app_context():
                 ('mitigation_status',      'VARCHAR(30) DEFAULT "Pending"'),
                 ('verified_by',            'VARCHAR(100)'),
                 ('verified_date',          'VARCHAR(20)'),
+                ('spi_alert_month',        'INTEGER'),
+                ('spi_alert_year',         'INTEGER'),
+                ('evidence_filename',      'VARCHAR(200)'),
+                ('mitigation_description', 'TEXT'),
+                ('corrective_description', 'TEXT'),
+                ('safety_notes',           'TEXT'),
+                ('assigned_by',            'VARCHAR(100)'),
+                ('closure_by',             'VARCHAR(100)'),
                 ('linked_ref_id',          'VARCHAR(30)'),
                 ('linked_risk_id',         'VARCHAR(30)'),
                 ('linked_audit_id',        'VARCHAR(30)'),
@@ -3713,6 +3787,14 @@ with app.app_context():
                 ('effectiveness_review',   'TEXT'),
                 ('verified_by',            'VARCHAR(100)'),
                 ('verified_date',          'VARCHAR(20)'),
+                ('spi_alert_month',        'INTEGER'),
+                ('spi_alert_year',         'INTEGER'),
+                ('evidence_filename',      'VARCHAR(200)'),
+                ('mitigation_description', 'TEXT'),
+                ('corrective_description', 'TEXT'),
+                ('safety_notes',           'TEXT'),
+                ('assigned_by',            'VARCHAR(100)'),
+                ('closure_by',             'VARCHAR(100)'),
                 ('reopen_count',           'INTEGER DEFAULT 0'),
                 ('reopen_reason',          'TEXT'),
                 ('created_at',             'DATETIME'),
