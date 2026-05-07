@@ -113,7 +113,7 @@
     {% if a.status != 'Closed' %}
     <div class="card">
       <div class="card-title">Update This Action</div>
-      <form method="POST" action="/actions/{{ a.id }}/update">
+      <form method="POST" action="/actions/{{ a.id }}/update" enctype="multipart/form-data">
         <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
 
         <div class="fg">
@@ -160,43 +160,48 @@
 
         {% if a.spi_id %}
         <div class="sec" style="margin-top:14px">SPI Lifecycle Tracking</div>
-        <div class="fg">
-          <label>Mitigation Status</label>
-          <select name="mitigation_status">
-            {% for ms in ['Pending','Active','Under Review','Completed'] %}
-            <option {% if a.mitigation_status==ms %}selected{% endif %}>{{ ms }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="fg">
-          <label>Evidence of Action Taken</label>
-          <textarea name="evidence" rows="3"
-            placeholder="Describe evidence that this action was implemented…">{{ a.evidence or '' }}</textarea>
-        </div>
-        <div class="fg">
-          <label>Follow-up / Monitoring Notes</label>
-          <textarea name="follow_up_notes" rows="2"
-            placeholder="Monitoring notes after implementation…">{{ a.follow_up_notes or '' }}</textarea>
-        </div>
-        {% if a.status == 'Closed' or a.effectiveness %}
         <div class="g2">
-          <div class="fg">
-            <label>Verified By</label>
-            <input type="text" name="verified_by" value="{{ a.verified_by or '' }}"
-              placeholder="Who verified effectiveness?"/>
-          </div>
-          <div class="fg">
-            <label>Verification Date</label>
-            <input type="date" name="verified_date" value="{{ a.verified_date or '' }}"/>
-          </div>
+          <div class="fg"><label>Mitigation Status</label>
+            <select name="mitigation_status">
+              {% for ms in ['Pending','Active','Under Review','Completed'] %}
+              <option {% if a.mitigation_status==ms %}selected{% endif %}>{{ ms }}</option>
+              {% endfor %}
+            </select></div>
+          <div class="fg"><label>Assigned By</label>
+            <input type="text" name="assigned_by" value="{{ a.assigned_by or '' }}" placeholder="Who assigned?"/></div>
+        </div>
+        <div class="fg"><label>Mitigation Description</label>
+          <textarea name="mitigation_description" rows="2">{{ a.mitigation_description or '' }}</textarea></div>
+        <div class="fg"><label>Corrective Action Description</label>
+          <textarea name="corrective_description" rows="2">{{ a.corrective_description or '' }}</textarea></div>
+        <div class="fg"><label>Safety Improvement Notes</label>
+          <textarea name="safety_notes" rows="2">{{ a.safety_notes or '' }}</textarea></div>
+        <div class="fg"><label>Evidence Text</label>
+          <textarea name="evidence" rows="2">{{ a.evidence or '' }}</textarea></div>
+        {% if a.evidence_filename %}
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:9px 13px;margin-bottom:10px;font-size:12px">
+          📎 <a href="/spi/evidence/{{ a.evidence_filename }}" target="_blank" style="color:#1d4ed8;font-weight:700">{{ a.evidence_filename }}</a>
         </div>
         {% endif %}
+        <div class="fg"><label>Upload / Replace Evidence File (PDF, DOCX, XLSX, Image)</label>
+          <input type="file" name="evidence_file" accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg,.gif"
+                 style="border:1.5px solid var(--border);border-radius:7px;padding:7px;font-size:12px;font-family:inherit;background:#fafbfe"/></div>
+        <div class="fg"><label>Follow-up / Monitoring Notes</label>
+          <textarea name="follow_up_notes" rows="2">{{ a.follow_up_notes or '' }}</textarea></div>
+        <div class="g2">
+          <div class="fg"><label>Verified By</label>
+            <input type="text" name="verified_by" value="{{ a.verified_by or '' }}" placeholder="Verifier name"/></div>
+          <div class="fg"><label>Verification Date</label>
+            <input type="date" name="verified_date" value="{{ a.verified_date or '' }}"/></div>
+        </div>
+        <div class="fg"><label>Confirmed / Closed By</label>
+          <input type="text" name="closure_by" value="{{ a.closure_by or '' }}" placeholder="Who confirmed closure?"/></div>
         {% endif %}
 
         <button type="submit" class="btn btn-nav">Save Changes</button>
         {% if a.spi_id %}
         <a href="/spi/action-report/{{ a.id }}" target="_blank"
-           class="btn btn-outline btn-sm" style="margin-left:8px">🖨 Print Mitigation Report</a>
+           class="btn btn-outline btn-sm" style="margin-left:8px">🖨 Print Report</a>
         {% endif %}
       </form>
     </div>
