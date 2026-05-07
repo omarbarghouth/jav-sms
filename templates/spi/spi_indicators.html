@@ -1,36 +1,34 @@
 {% extends "base.html" %}
 {% block title %}SPI Indicator Management{% endblock %}
 {% block content %}
-
 <div style="margin-bottom:14px">
   <a href="/spi" style="color:var(--muted);font-size:13px">← SPI Dashboard</a>
 </div>
 <div class="page-title">SPI Indicator Management</div>
-<div class="page-sub">Define Safety Performance Indicators · Thresholds auto-calculated from SPT</div>
+<div class="page-sub">ICAO statistical monitoring · Mean + SD thresholds · Automatic baseline collection</div>
 
-<!-- Auto-threshold explanation -->
-<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:14px 18px;margin-bottom:22px">
-  <div style="font-weight:800;font-size:13px;color:#1e40af;margin-bottom:8px">
-    ⚡ Automatic ICAO-Style Alert Thresholds
+<!-- ICAO methodology card -->
+<div style="background:var(--navy);border-radius:10px;padding:16px 20px;margin-bottom:22px;color:#fff">
+  <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--gold2);margin-bottom:12px">
+    ICAO Statistical Monitoring Methodology (Doc 9859 Ch.7)
   </div>
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;font-size:12px">
-    {% for color, label, formula in [
-      ('#d97706','🟡 Level 1 (Yellow)','SPT × 1.20 (SPT + 20%)'),
-      ('#ea580c','🟠 Level 2 (Orange)','SPT × 1.40 (SPT + 40%)'),
-      ('#dc2626','🔴 Level 3 (Red)',   'SPT × 1.60 (SPT + 60%)'),
-    ] %}
-    <div style="background:#fff;border-radius:7px;padding:10px;border:1px solid #e0e7ff">
-      <div style="font-weight:800;color:{{ color }};margin-bottom:3px">{{ label }}</div>
-      <div style="font-family:monospace;font-size:11px;color:#374151">{{ formula }}</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;font-size:12px">
+    <div style="background:rgba(255,255,255,.08);border-radius:8px;padding:12px">
+      <div style="color:var(--gold2);font-weight:700;margin-bottom:5px">📋 Baseline Phase</div>
+      <div style="color:rgba(255,255,255,.75)">Collect monthly data. Minimum 3 months (configurable). System uses SPT-based thresholds.</div>
     </div>
-    {% endfor %}
-    <div style="background:#fff;border-radius:7px;padding:10px;border:1px solid #e0e7ff">
-      <div style="font-weight:800;color:#374151;margin-bottom:3px">Manual Override</div>
-      <div style="font-size:11px;color:var(--muted)">Enter custom thresholds below if needed</div>
+    <div style="background:rgba(255,255,255,.08);border-radius:8px;padding:12px">
+      <div style="color:#a78bfa;font-weight:700;margin-bottom:5px">📊 Statistical Mode</div>
+      <div style="color:rgba(255,255,255,.75)">Auto-activates after baseline. Thresholds = Mean ± SD.</div>
     </div>
-  </div>
-  <div style="font-size:11px;color:#1e40af;margin-top:8px">
-    Example: If SPT = 5.0 → L1 = 6.0 · L2 = 7.0 · L3 = 8.0 (auto-calculated, no manual entry needed)
+    <div style="background:rgba(255,255,255,.08);border-radius:8px;padding:12px">
+      <div style="color:#f9a8d4;font-weight:700;margin-bottom:5px">🎯 Target Formula</div>
+      <div style="font-family:monospace;color:rgba(255,255,255,.9);font-size:11px">Target = Avg × (1 − Improvement%)</div>
+    </div>
+    <div style="background:rgba(255,255,255,.08);border-radius:8px;padding:12px">
+      <div style="color:#fca5a5;font-weight:700;margin-bottom:5px">⚠ ICAO Trigger Rules</div>
+      <div style="color:rgba(255,255,255,.75);font-size:11px">A: 1 pt ≥ L3 · B: 2 consec ≥ L2 · C: 3 consec ≥ L1</div>
+    </div>
   </div>
 </div>
 
@@ -46,18 +44,17 @@
           <div class="fg"><label>Code *</label>
             <input type="text" name="code" required placeholder="e.g. FO-001" style="text-transform:uppercase"/></div>
           <div class="fg"><label>Calculation Type *</label>
-            <select name="calc_type" required id="ctype-sel" onchange="toggleFields()">
-              <option value="RATE">Rate (per 1,000)</option>
-              <option value="COUNT">Count (raw number)</option>
-              <option value="PERCENT">Percentage (%)</option>
+            <select name="calc_type" required id="ctype" onchange="toggleExp()">
+              <option value="RATE">Rate (Events ÷ Exposure × 1,000)</option>
+              <option value="COUNT">Count (Raw occurrences)</option>
+              <option value="PERCENT">Percentage (Compliant ÷ Total × 100)</option>
             </select></div>
         </div>
 
         <div class="fg"><label>Indicator Name *</label>
           <input type="text" name="name" required placeholder="e.g. FOD Reports per 1,000 Movements"/></div>
-
         <div class="fg"><label>Description</label>
-          <textarea name="description" rows="2" placeholder="What does this indicator measure?"></textarea></div>
+          <textarea name="description" rows="2" placeholder="What does this measure?"></textarea></div>
 
         <div class="g2">
           <div class="fg"><label>Category</label>
@@ -85,37 +82,28 @@
             {% endfor %}
           </div></div>
 
-        <div class="sec">Safety Performance Target (SPT)</div>
-
-        <div class="fg">
-          <label>SPT Target * <span style="font-weight:400;color:var(--muted)">(thresholds auto-calculated)</span></label>
-          <input type="number" name="spt_target" step="0.01" required
-                 placeholder="e.g. 5.0" id="spt-input" oninput="previewThresholds()"/>
+        <div class="sec">SPT &amp; Improvement Target</div>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:10px 13px;margin-bottom:12px;font-size:12px;color:#15803d">
+          <strong>Target formula:</strong> Previous Average × (1 − Improvement%) <br>
+          Example: Avg=0.16, Improvement=5% → Target = 0.152
+        </div>
+        <div class="g2">
+          <div class="fg"><label>SPT Target (initial) *</label>
+            <input type="number" name="spt_target" step="0.01" required placeholder="e.g. 5.0"/></div>
+          <div class="fg"><label>Improvement % per period</label>
+            <input type="number" name="improvement_pct" step="0.1" value="5" placeholder="5"/></div>
         </div>
 
-        <!-- Live threshold preview -->
-        <div id="threshold-preview" style="background:#f8f9fc;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:none">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Auto-calculated thresholds:</div>
-          <div style="display:flex;gap:16px;font-size:12px">
-            <span style="color:#d97706">🟡 L1: <strong id="prev-l1">—</strong></span>
-            <span style="color:#ea580c">🟠 L2: <strong id="prev-l2">—</strong></span>
-            <span style="color:#dc2626">🔴 L3: <strong id="prev-l3">—</strong></span>
-          </div>
+        <div class="sec">Statistical Monitoring Setup</div>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:10px 13px;margin-bottom:12px;font-size:12px;color:#1e40af">
+          <strong>Note:</strong> Thresholds are auto-calculated. During baseline, the system
+          uses SPT-based thresholds. Once enough data is collected, it switches automatically
+          to ICAO statistical mode (Mean ± SD).
         </div>
-
-        <details style="margin-bottom:12px">
-          <summary style="font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer">
-            Override thresholds manually (optional)
-          </summary>
-          <div class="g3" style="margin-top:10px">
-            <div class="fg"><label>L1 🟡 (Yellow)</label>
-              <input type="number" name="alert_l1" step="0.01" placeholder="Auto"/></div>
-            <div class="fg"><label>L2 🟠 (Orange)</label>
-              <input type="number" name="alert_l2" step="0.01" placeholder="Auto"/></div>
-            <div class="fg"><label>L3 🔴 (Red)</label>
-              <input type="number" name="alert_l3" step="0.01" placeholder="Auto"/></div>
-          </div>
-        </details>
+        <div class="fg"><label>Baseline months required (before stat mode)</label>
+          <input type="number" name="baseline_months" value="3" min="2" max="24"/>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:3px">Minimum: 3 months · ICAO standard: 3–6 months</div>
+        </div>
 
         <div class="sec">Auto-Update from Reports</div>
         <div class="g2">
@@ -128,83 +116,77 @@
             </select></div>
           <div class="fg"><label>Match Category</label>
             <input type="text" name="auto_category" placeholder="e.g. FOD"/>
-            <div style="font-size:10px;color:var(--muted);margin-top:3px">Must match report category exactly</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px">Leave empty = match all reports from source</div>
           </div>
         </div>
 
-        <button type="submit" class="btn btn-nav" style="width:100%;margin-top:8px">
-          ✓ Create SPI Indicator
-        </button>
+        <button type="submit" class="btn btn-nav" style="width:100%;margin-top:8px">✓ Create SPI Indicator</button>
       </form>
     </div>
   </div>
 
-  <!-- EXISTING INDICATORS TABLE -->
+  <!-- INDICATORS TABLE -->
   <div>
     <div class="card" style="padding:0">
       <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:13px;font-weight:700;color:var(--navy)">Active Indicators ({{ indicators|length }})</div>
+        <div style="font-size:13px;font-weight:700;color:var(--navy)">Defined Indicators ({{ indicators|length }})</div>
         <a href="/spi" class="btn btn-outline btn-sm">← Dashboard</a>
       </div>
-
       {% if indicators %}
       <div class="tbl-wrap">
         <table>
           <thead>
             <tr>
-              <th>Code</th>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Dept</th>
-              <th>SPT</th>
-              <th>🟡 L1</th>
-              <th>🟠 L2</th>
-              <th>🔴 L3</th>
-              <th>Auto</th>
-              <th>Status</th>
-              <th></th>
+              <th>Code</th><th>Name</th><th>Type</th><th>Dept</th>
+              <th>SPT</th><th>Baseline</th><th>Mode</th>
+              <th>Auto</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
             {% for ind in indicators %}
             {% set spt = ind.spt_target or 0 %}
-            {% set l1 = ind.alert_l1 or (spt * 1.2) %}
-            {% set l2 = ind.alert_l2 or (spt * 1.4) %}
-            {% set l3 = ind.alert_l3 or (spt * 1.6) %}
-            <tr style="{% if not ind.active %}opacity:.45;background:#f9fafb{% endif %}">
+            <tr style="{% if not ind.active %}opacity:.4;background:#f9fafb{% endif %}">
               <td><span class="ctrl-num" style="font-size:10px">{{ ind.code }}</span></td>
               <td style="max-width:180px">
                 <div style="font-size:12px;font-weight:600">{{ ind.name[:55] }}</div>
-                {% if ind.description %}<div style="font-size:10px;color:var(--muted)">{{ ind.description[:45] }}</div>{% endif %}
+                {% if ind.description %}<div style="font-size:10px;color:var(--muted)">{{ ind.description[:40] }}</div>{% endif %}
               </td>
               <td>
                 {% if ind.calc_type=='COUNT' %}<span class="badge b-gray" style="font-size:10px">Count</span>
                 {% elif ind.calc_type=='PERCENT' %}<span class="badge b-blue" style="font-size:10px">%</span>
                 {% else %}<span class="badge b-purple" style="font-size:10px">Rate/1K</span>{% endif %}
               </td>
-              <td style="font-size:11px">{{ ind.department_ids }}</td>
-              <td style="font-size:12px;font-weight:700;text-align:center">{{ spt }}</td>
-              <td style="font-size:11px;text-align:center;color:#d97706;font-weight:700">{{ '%.1f'|format(l1) }}</td>
-              <td style="font-size:11px;text-align:center;color:#ea580c;font-weight:700">{{ '%.1f'|format(l2) }}</td>
-              <td style="font-size:11px;text-align:center;color:#dc2626;font-weight:700">{{ '%.1f'|format(l3) }}</td>
+              <td style="font-size:11px;color:var(--muted)">{{ ind.department_ids }}</td>
+              <td style="font-size:12px;font-weight:700;text-align:center;color:var(--navy)">{{ spt }}</td>
+              <td style="text-align:center;font-size:11px">
+                {{ ind.baseline_months or 3 }}M
+                <div style="font-size:9px;color:var(--muted)">{{ (ind.improvement_pct or 5)|int }}% impr.</div>
+              </td>
+              <td>
+                {% if ind.stat_mode %}
+                <span class="badge b-purple" style="font-size:9px">📊 Stat</span>
+                {% else %}
+                <span class="badge b-yellow" style="font-size:9px">🔄 Base</span>
+                {% endif %}
+              </td>
               <td style="font-size:10px">
                 {% if ind.auto_source and ind.auto_source != 'manual' %}
                 <span class="badge b-green" style="font-size:9px">{{ ind.auto_source[:8] }}</span>
                 {% if ind.auto_category %}<div style="color:var(--muted);font-size:9px">{{ ind.auto_category }}</div>{% endif %}
-                {% else %}<span style="color:#d1d5db;font-size:11px">Manual</span>{% endif %}
+                {% else %}<span style="color:#d1d5db;font-size:10px">Manual</span>{% endif %}
               </td>
               <td>
                 <form method="POST" action="/spi/indicators/{{ ind.id }}/toggle" style="display:inline">
                   <button type="submit"
                           class="badge {% if ind.active %}b-green{% else %}b-gray{% endif %}"
                           style="border:none;cursor:pointer;font-family:inherit;font-size:10px">
-                    {{ '✓ Active' if ind.active else '✗ Off' }}
+                    {{ '✓ On' if ind.active else '✗ Off' }}
                   </button>
                 </form>
               </td>
               <td>
                 <form method="POST" action="/spi/indicators/{{ ind.id }}/delete"
-                      onsubmit="return confirm('Delete {{ ind.code }}? All data will be lost.')">
+                      onsubmit="return confirm('Delete {{ ind.code }}?')">
                   <button type="submit" class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px">🗑</button>
                 </form>
               </td>
@@ -214,59 +196,38 @@
         </table>
       </div>
       {% else %}
-      <div style="text-align:center;padding:36px;color:var(--muted);font-size:13px">
-        No indicators yet. Create your first SPI using the form on the left.
+      <div style="text-align:center;padding:36px;color:var(--muted)">
+        No indicators yet. Create your first SPI.
       </div>
       {% endif %}
     </div>
 
-    <!-- ICAO reference card -->
+    <!-- ICAO Trigger Rules reference -->
     <div class="card" style="margin-top:14px">
-      <div class="card-title">ICAO Calculation Methods</div>
+      <div class="card-title">ICAO Alert Trigger Rules</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px">
-        {% for title, formula, desc in [
-          ('COUNT', 'SPI = Events', 'FOD reports, bird strikes, cabin injuries'),
-          ('RATE', 'SPI = (Events ÷ Exposure) × 1,000', 'TCAS RA per 1,000 hrs, unstable approaches per 1,000 flights'),
-          ('PERCENT', 'SPI = (Events ÷ Total) × 100', '% reports on time, % checklist compliance')
+        {% for rule, color, desc in [
+          ('Rule A','#dc2626','1 single point ≥ Level 3 (Mean + 3 SD)'),
+          ('Rule B','#ea580c','2 consecutive points ≥ Level 2 (Mean + 2 SD)'),
+          ('Rule C','#d97706','3 consecutive points ≥ Level 1 (Mean + 1 SD)')
         ] %}
-        <div style="background:#f8f9fc;border-radius:8px;padding:12px;border:1px solid var(--border)">
-          <div style="font-weight:800;color:var(--navy);margin-bottom:5px">{{ title }}</div>
-          <div style="font-family:monospace;font-size:10.5px;background:#fff;padding:5px 8px;border-radius:4px;border:1px solid var(--border);margin-bottom:5px">{{ formula }}</div>
-          <div style="font-size:10.5px;color:var(--muted)">{{ desc }}</div>
+        <div style="background:#f8f9fc;border-radius:8px;padding:12px;border-left:3px solid {{ color }}">
+          <div style="font-weight:800;color:{{ color }};margin-bottom:5px">{{ rule }}</div>
+          <div style="font-size:11px;color:#374151">{{ desc }}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">→ Auto-triggers dashboard alert</div>
         </div>
         {% endfor %}
       </div>
     </div>
   </div>
-
 </div>
-
 {% endblock %}
 {% block scripts %}
 <script>
-function toggleFields() {
-  var ct  = document.getElementById('ctype-sel').value;
-  var blk = document.getElementById('exp-block');
-  blk.style.display = (ct === 'RATE') ? 'flex' : 'none';
-  previewThresholds();
+function toggleExp() {
+  var ct = document.getElementById('ctype').value;
+  document.getElementById('exp-block').style.display = (ct === 'RATE') ? 'flex' : 'none';
 }
-
-function previewThresholds() {
-  var spt = parseFloat(document.getElementById('spt-input').value);
-  var ct  = document.getElementById('ctype-sel').value;
-  var prev = document.getElementById('threshold-preview');
-  if (!spt || spt <= 0) { prev.style.display='none'; return; }
-  prev.style.display = 'block';
-  if (ct === 'PERCENT') {
-    document.getElementById('prev-l1').textContent = (spt * 0.90).toFixed(2);
-    document.getElementById('prev-l2').textContent = (spt * 0.80).toFixed(2);
-    document.getElementById('prev-l3').textContent = (spt * 0.70).toFixed(2);
-  } else {
-    document.getElementById('prev-l1').textContent = (spt * 1.20).toFixed(2);
-    document.getElementById('prev-l2').textContent = (spt * 1.40).toFixed(2);
-    document.getElementById('prev-l3').textContent = (spt * 1.60).toFixed(2);
-  }
-}
-toggleFields();
+toggleExp();
 </script>
 {% endblock %}
