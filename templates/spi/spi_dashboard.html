@@ -249,17 +249,62 @@
     </table>
   </div>
 
+  <!-- Linked Actions Panel -->
+  {% if row.spi_actions %}
+  <div style="border-top:1px solid var(--border);padding:10px 18px;background:#fff">
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:.5px">
+      ✅ Linked Actions ({{ row.spi_actions|length }})
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      {% for sa in row.spi_actions %}
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f8f9fc;border-radius:7px;border:1px solid var(--border);flex-wrap:wrap">
+        <span class="mono" style="font-size:11px;color:var(--navy)">{{ sa.id }}</span>
+        {% if sa.spi_alert_level %}
+        <span class="badge {% if sa.spi_alert_level=='L3' %}b-red{% elif sa.spi_alert_level=='L2' %}b-orange{% else %}b-yellow{% endif %}" style="font-size:9px">{{ sa.spi_alert_level }}</span>
+        {% endif %}
+        <span style="font-size:12px;color:#374151;flex:1">{{ (sa.description or '—')[:60] }}</span>
+        <span style="font-size:11px;color:var(--muted)">{{ sa.owner or '—' }}</span>
+        <!-- Status badge -->
+        {% if sa.status=='Closed' %}<span class="badge b-green" style="font-size:10px">✓ Closed</span>
+        {% elif sa.status=='Overdue' %}<span class="badge b-red" style="font-size:10px">Overdue</span>
+        {% elif sa.status=='In Progress' %}<span class="badge b-blue" style="font-size:10px">In Progress</span>
+        {% else %}<span class="badge b-yellow" style="font-size:10px">Open</span>{% endif %}
+        <!-- Mitigation status -->
+        {% if sa.mitigation_status and sa.mitigation_status != 'Pending' %}
+        <span class="badge {% if sa.mitigation_status=='Completed' %}b-green{% elif sa.mitigation_status=='Active' %}b-blue{% elif sa.mitigation_status=='Under Review' %}b-yellow{% else %}b-gray{% endif %}" style="font-size:10px">
+          Mitigation: {{ sa.mitigation_status }}
+        </span>
+        {% endif %}
+        <!-- Effectiveness -->
+        {% if sa.effectiveness %}
+        <span class="badge {% if sa.effectiveness=='Effective' %}b-green{% elif sa.effectiveness=='Partially Effective' %}b-yellow{% else %}b-red{% endif %}" style="font-size:10px">
+          {{ sa.effectiveness[:7] }}
+        </span>
+        {% endif %}
+        <!-- Verified -->
+        {% if sa.verified_by %}
+        <span style="font-size:10px;color:#15803d;font-weight:700">✓ Verified by {{ sa.verified_by }}</span>
+        {% endif %}
+        <a href="/actions/{{ sa.id }}" style="font-size:11px;color:#1d4ed8;font-weight:700;white-space:nowrap">Detail →</a>
+        {% if sa.spi_id %}
+        <a href="/spi/action-report/{{ sa.id }}" target="_blank" style="font-size:11px;color:#6b7280;white-space:nowrap">🖨 Report</a>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Card footer -->
   <div style="padding:7px 18px;background:#f8f9fc;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);flex-wrap:wrap;gap:6px">
     <span>{{ row.dept_names or '—' }}{% if row.last_month %} · Last: <strong>{{ MONTHS[row.last_month-1] }} {{ cur_year }}</strong>{% endif %}</span>
     {% if row.is_stat %}
     <span style="color:#7c3aed;font-weight:600">Statistical Mode · Mean={{ '%.3f'|format(row.mean) }} · SD={{ '%.4f'|format(row.sd) }}</span>
     {% else %}
-    <span style="color:#d97706;font-weight:600">Baseline collection — statistical alerts activate after {{ row.baseline_needed }} months</span>
+    <span style="color:#d97706;font-weight:600">Baseline — {{ row.baseline_needed - row.months_collected }} months until statistical mode</span>
     {% endif %}
-    <!-- Alert-level action buttons shown in footer when triggered -->
     {% if row.trigger %}
-    <a href="/actions/new?source=SPI&priority={% if row.trigger=='A' %}High{% elif row.trigger=='B' %}Medium{% else %}Low{% endif %}&return_url=/spi"
+    <a href="/actions/new?source=SPI&spi_id={{ ind.id }}&spi_alert_level={{ ('L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') }}&spi_trigger_rule={{ row.trigger }}&priority={{ ('High' if row.trigger=='A' else 'Medium' if row.trigger=='B' else 'Low') }}&return_url=/spi%23spi-{{ ind.id }}"
        class="btn btn-sm" style="background:{{ row.status[1] }};color:#fff;font-size:11px;padding:4px 10px">
       ✅ Create Action
     </a>
