@@ -120,7 +120,7 @@ def dashboard():
     for ind in SPIIndicator.query.all():
         recent = SPIData.query.filter_by(spi_id=ind.id).order_by(
                  SPIData.year.desc(), SPIData.month.desc()).first()
-        if recent and recent.rate >= ind.alert_l1:
+        if recent and ind.alert_l1 and recent.rate and recent.rate >= ind.alert_l1:
             spi_alerts += 1
     recent_haz = Hazard.query.order_by(Hazard.created_at.desc()).limit(6).all()
     recent_act = Action.query.filter(
@@ -639,88 +639,146 @@ def update_moc(mid):
 #  SPI — Safety Performance Indicators  (ICAO Annex 19 / Doc 9859)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SPI ENGINE — ICAO Annex 19 §6.3 / Doc 9859 Chapter 7
+#  Statistical monitoring: Mean + Standard Deviation alert thresholds
+#  Baseline collection mode → automatic transition to stat mode
+#  Three ICAO calculation methods: COUNT / RATE / PERCENT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import math
+
 def _spi_calc(ind, events, exposure, total_events):
     """
-    Calculate SPI value based on calc_type.
-    COUNT   : value = events
-    RATE    : value = (events / exposure) * 1000
-    PERCENT : value = (events / total_events) * 100
+    ICAO three calculation methods:
+      COUNT   : SPI = events
+      RATE    : SPI = (events / exposure) × 1000
+      PERCENT : SPI = (events / total_events) × 100
     """
     try:
         if ind.calc_type == 'COUNT':
             return float(events)
         elif ind.calc_type == 'PERCENT':
-            return round((events / total_events * 100), 2) if total_events else 0.0
+            return round(events / total_events * 100, 2) if total_events else 0.0
         else:  # RATE (default)
-            return round((events / exposure * 1000), 4) if exposure else 0.0
+            return round(events / exposure * 1000, 4) if exposure else 0.0
     except Exception:
         return 0.0
 
-def _spi_thresholds(ind):
+
+def _spi_history(ind):
+    """Return list of (year, month, value) sorted chronologically for all data."""
+    rows = SPIData.query.filter_by(spi_id=ind.id).filter(
+        SPIData.value.isnot(None)).order_by(
+        SPIData.year, SPIData.month).all()
+    return [(r.year, r.month, r.value) for r in rows]
+
+
+def _spi_statistics(values):
+    """Calculate mean and population standard deviation."""
+    if not values:
+        return 0.0, 0.0
+    n    = len(values)
+    mean = sum(values) / n
+    if n < 2:
+        return mean, 0.0
+    variance = sum((v - mean) ** 2 for v in values) / n
+    sd = math.sqrt(variance)
+    return round(mean, 4), round(sd, 4)
+
+
+def _spi_thresholds(ind, all_values=None):
     """
-    ICAO-style auto-calculate alert thresholds from SPT.
-    If user entered manual thresholds, use those.
-    Otherwise: L1 = SPT+20%, L2 = SPT+40%, L3 = SPT+60%
-    For PERCENT type: thresholds go BELOW SPT (lower % = worse)
+    ICAO Statistical Monitoring thresholds.
+    Statistical mode (≥ baseline_months data points):
+      L1 = Mean + 1 SD
+      L2 = Mean + 2 SD
+      L3 = Mean + 3 SD
+    Baseline mode (insufficient data):
+      Fall back to SPT +20% / +40% / +60%
+    For PERCENT type: direction is reversed (lower = worse)
     """
-    spt = ind.spt_target or 0
+    if all_values is None:
+        history = _spi_history(ind)
+        all_values = [v for _, _, v in history]
+
+    baseline_needed = ind.baseline_months or 3
     is_pct = ind.calc_type == 'PERCENT'
+    spt    = ind.spt_target or 0
 
-    if ind.alert_l1:
-        l1 = ind.alert_l1
-        l2 = ind.alert_l2 or (spt * 1.4 if not is_pct else spt * 0.7)
-        l3 = ind.alert_l3 or (spt * 1.6 if not is_pct else spt * 0.6)
-    else:
+    if len(all_values) >= baseline_needed:
+        # Statistical mode — ICAO Mean ± SD
+        mean, sd = _spi_statistics(all_values)
         if is_pct:
-            # For percentage: lower is worse
-            l1 = spt * 0.9   # 10% below target
-            l2 = spt * 0.8   # 20% below target
-            l3 = spt * 0.7   # 30% below target
+            l1 = max(0, round(mean - sd,     2))
+            l2 = max(0, round(mean - 2 * sd, 2))
+            l3 = max(0, round(mean - 3 * sd, 2))
         else:
-            l1 = spt * 1.20  # SPT + 20%
-            l2 = spt * 1.40  # SPT + 40%
-            l3 = spt * 1.60  # SPT + 60%
-    return l1, l2, l3
+            l1 = round(mean + sd,     2)
+            l2 = round(mean + 2 * sd, 2)
+            l3 = round(mean + 3 * sd, 2)
+        return l1, l2, l3, mean, sd, True   # last two: mean, sd, is_stat_mode
+    else:
+        # Baseline mode — SPT-based fallback
+        mean, sd = _spi_statistics(all_values) if all_values else (0.0, 0.0)
+        if is_pct:
+            l1 = round(spt * 0.90, 2)
+            l2 = round(spt * 0.80, 2)
+            l3 = round(spt * 0.70, 2)
+        else:
+            l1 = round(spt * 1.20, 2)
+            l2 = round(spt * 1.40, 2)
+            l3 = round(spt * 1.60, 2)
+        return l1, l2, l3, mean, sd, False
 
-def _spi_status(value, ind):
+
+def _spi_target(ind, all_values=None):
     """
-    Return (label, color, level) based on ICAO alert thresholds.
-    Levels: 0=OK/Blue, 1=Yellow, 2=Orange, 3=Red
-    Thresholds auto-calculated from SPT if not manually set.
+    ICAO Target = Previous Average × (1 - improvement_pct / 100)
+    For PERCENT type: target = previous avg × (1 + improvement / 100)
+    Falls back to spt_target if insufficient data.
     """
-    l1, l2, l3 = _spi_thresholds(ind)
-    spt = ind.spt_target or 0
+    if all_values is None:
+        history = _spi_history(ind)
+        all_values = [v for _, _, v in history]
+
+    improvement = (ind.improvement_pct or 5.0) / 100.0
+    if len(all_values) >= 3:
+        prev_avg = sum(all_values) / len(all_values)
+        if ind.calc_type == 'PERCENT':
+            return round(prev_avg * (1 + improvement), 2)
+        else:
+            return round(prev_avg * (1 - improvement), 2)
+    return ind.spt_target or 0.0
+
+
+def _spi_status(value, ind, all_values=None):
+    """
+    ICAO alert levels based on statistical thresholds.
+    Returns (label, color, level 0-3)
+    """
+    l1, l2, l3, mean, sd, is_stat = _spi_thresholds(ind, all_values)
+    spt    = ind.spt_target or 0
     is_pct = ind.calc_type == 'PERCENT'
 
     if is_pct:
-        # For percentage: LOWER value = WORSE
-        if value <= l3:
-            return ('🔴 CRITICAL',   '#dc2626', 3)
-        elif value <= l2:
-            return ('🟠 WARNING L2', '#ea580c', 2)
-        elif value <= l1:
-            return ('🟡 WATCH L1',   '#d97706', 1)
-        elif value < spt:
-            return ('🔵 BELOW SPT',  '#1d4ed8', 0)
-        else:
-            return ('🟢 OK',         '#15803d', 0)
+        if value <= l3:   return ('🔴 CRITICAL',   '#dc2626', 3)
+        elif value <= l2: return ('🟠 WARNING L2', '#ea580c', 2)
+        elif value <= l1: return ('🟡 WATCH L1',   '#d97706', 1)
+        elif value < spt: return ('🔵 BELOW SPT',  '#1d4ed8', 0)
+        else:             return ('🟢 OK',          '#15803d', 0)
     else:
-        # For count/rate: HIGHER value = WORSE
-        if value >= l3:
-            return ('🔴 CRITICAL',   '#dc2626', 3)
-        elif value >= l2:
-            return ('🟠 WARNING L2', '#ea580c', 2)
-        elif value >= l1:
-            return ('🟡 WATCH L1',   '#d97706', 1)
-        elif value > spt:
-            return ('🔵 EXCEEDS SPT','#1d4ed8', 0)
-        else:
-            return ('🟢 OK',         '#15803d', 0)
+        if value >= l3:   return ('🔴 CRITICAL',   '#dc2626', 3)
+        elif value >= l2: return ('🟠 WARNING L2', '#ea580c', 2)
+        elif value >= l1: return ('🟡 WATCH L1',   '#d97706', 1)
+        elif value > spt: return ('🔵 EXCEEDS SPT','#1d4ed8', 0)
+        else:             return ('🟢 OK',          '#15803d', 0)
+
 
 def _spi_trend(values_list):
     """
-    Calculate trend from last 3 months.
-    Returns: '↑ Increasing' / '↓ Decreasing' / '→ Stable'
+    3-point trend analysis.
+    ↑ Increasing / ↓ Decreasing / → Stable
     """
     vals = [v for v in values_list if v is not None]
     if len(vals) < 2:
@@ -731,36 +789,74 @@ def _spi_trend(values_list):
         return '↓ Decreasing'
     return '→ Stable'
 
+
+def _spi_trigger_check(values_chronological, l1, l2, l3, is_pct=False):
+    """
+    ICAO alert trigger rules — detects abnormal safety trends:
+      Rule A: 1 point  >= L3
+      Rule B: 2 consecutive points >= L2
+      Rule C: 3 consecutive points >= L1
+    Returns triggered rule or None.
+    """
+    vals = [v for v in values_chronological if v is not None]
+    if not vals:
+        return None
+
+    def above(v, threshold):
+        return (v <= threshold) if is_pct else (v >= threshold)
+
+    # Rule A
+    if above(vals[-1], l3):
+        return 'A'
+    # Rule B — last 2 consecutive >= L2
+    if len(vals) >= 2 and all(above(v, l2) for v in vals[-2:]):
+        return 'B'
+    # Rule C — last 3 consecutive >= L1
+    if len(vals) >= 3 and all(above(v, l1) for v in vals[-3:]):
+        return 'C'
+    return None
+
+
 def _spi_build_table(indicators, cur_year):
-    """Build the full SPI table data for the dashboard."""
-    MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    """Build complete SPI table data for dashboard."""
+    MONTHS = ['Jan','Feb','Mar','Apr','May','Jun',
+              'Jul','Aug','Sep','Oct','Nov','Dec']
     table = []
     for ind in indicators:
-        month_vals = {}  # month_num -> value
+        # Current year data
+        month_vals = {}
         for d in SPIData.query.filter_by(spi_id=ind.id, year=cur_year).all():
-            month_vals[d.month] = d.value if d.value is not None else d.rate or 0.0
+            month_vals[d.month] = d.value if d.value is not None else (d.rate or 0.0)
 
-        # YTD average
-        vals_so_far = [month_vals[m] for m in sorted(month_vals)]
-        ytd = round(sum(vals_so_far) / len(vals_so_far), 2) if vals_so_far else 0.0
+        # All historical values (for statistics)
+        all_history = _spi_history(ind)
+        all_values  = [v for _, _, v in all_history]
+        baseline_needed = ind.baseline_months or 3
 
-        # 3-month moving average (last 3 months with data)
-        recent = vals_so_far[-3:] if len(vals_so_far) >= 3 else vals_so_far
-        avg3   = round(sum(recent) / len(recent), 2) if recent else 0.0
+        # Statistics
+        l1, l2, l3, mean, sd, is_stat = _spi_thresholds(ind, all_values)
+        target   = _spi_target(ind, all_values)
 
-        # Trend
-        trend = _spi_trend(vals_so_far[-3:] if vals_so_far else [])
+        # YTD + 3M avg
+        vals_yr  = [month_vals[m] for m in sorted(month_vals)]
+        ytd      = round(sum(vals_yr) / len(vals_yr), 2) if vals_yr else 0.0
+        recent   = vals_yr[-3:]
+        avg3     = round(sum(recent) / len(recent), 2) if recent else 0.0
+        trend    = _spi_trend(vals_yr[-3:])
+        latest   = vals_yr[-1] if vals_yr else 0.0
 
-        # Status based on latest value
-        latest_val = vals_so_far[-1] if vals_so_far else 0.0
-        status = _spi_status(latest_val, ind)
+        # Status
+        status   = _spi_status(latest, ind, all_values)
 
-        # Auto-calculated thresholds
-        l1, l2, l3 = _spi_thresholds(ind)
+        # ICAO trigger check
+        trigger  = _spi_trigger_check(vals_yr, l1, l2, l3, ind.calc_type == 'PERCENT')
 
-        # Department codes + names
-        dept_codes = []
-        dept_names = []
+        # Baseline progress
+        months_collected = len(all_values)
+        baseline_pct     = min(100, int(months_collected / baseline_needed * 100))
+
+        # Dept info
+        dept_codes, dept_names = [], []
         for did in (ind.department_ids or '').split(','):
             try:
                 d = Department.query.get(int(did.strip()))
@@ -770,61 +866,71 @@ def _spi_build_table(indicators, cur_year):
             except Exception:
                 pass
 
-        # Last updated month
         last_month = max(month_vals.keys()) if month_vals else None
 
         table.append(dict(
             ind=ind,
             month_vals=month_vals,
-            ytd=ytd,
-            avg3=avg3,
-            trend=trend,
-            status=status,
+            ytd=ytd, avg3=avg3, trend=trend,
+            status=status, trigger=trigger,
+            latest_val=latest,
+            l1=l1, l2=l2, l3=l3,
+            mean=mean, sd=round(sd, 4),
+            target=target,
+            is_stat=is_stat,
+            all_values=all_values,
+            months_collected=months_collected,
+            baseline_needed=baseline_needed,
+            baseline_pct=baseline_pct,
             depts=', '.join(dept_codes),
             dept_names=', '.join(dept_names),
-            latest_val=latest_val,
-            l1=round(l1, 2),
-            l2=round(l2, 2),
-            l3=round(l3, 2),
             last_month=last_month,
         ))
     return table, MONTHS
 
+
 def spi_auto_update(source_type, department_id, category, year, month):
     """
-    Auto-match a new report/finding to an SPI and increment its event count.
-    Called when a Hazard Report or ASR is submitted.
-    source_type: 'hazard_report' | 'asr' | 'audit'
+    Auto-match a submitted report to SPIs and increment event count.
+    Called from hazard_report and ASR submission handlers.
+    Avoids duplicate updates within same month via source='auto' check.
     """
     matched = SPIIndicator.query.filter_by(
-        auto_source=source_type,
-        auto_category=category,
-        active=True
-    ).all()
+        auto_source=source_type, active=True).all()
+
     for ind in matched:
-        # Check department match
-        dept_ids = [x.strip() for x in (ind.department_ids or '').split(',')]
-        if str(department_id) not in dept_ids and dept_ids != ['']:
+        # Category match (empty auto_category = match all)
+        if ind.auto_category and ind.auto_category.lower() not in category.lower():
             continue
-        # Find or create this month's data entry
+        # Department match
+        dept_ids = [x.strip() for x in (ind.department_ids or '').split(',')]
+        if str(department_id) not in dept_ids and '' not in dept_ids:
+            continue
+
         entry = SPIData.query.filter_by(
-            spi_id=ind.id, year=year, month=month
-        ).first()
+            spi_id=ind.id, year=year, month=month).first()
         if entry:
             entry.events = (entry.events or 0) + 1
         else:
-            entry = SPIData(
-                spi_id=ind.id, year=year, month=month,
-                events=1, exposure=1, total_events=1,
-                source='auto'
-            )
+            entry = SPIData(spi_id=ind.id, year=year, month=month,
+                            events=1, exposure=1, total_events=1,
+                            source='auto')
             db.session.add(entry)
-        # Recalculate value
-        exposure     = entry.exposure or 1
-        total_events = entry.total_events or 1
-        entry.value  = _spi_calc(ind, entry.events, exposure, total_events)
-        entry.rate   = entry.value  # legacy compat
+
+        # Recalculate
+        entry.value  = _spi_calc(ind, entry.events,
+                                  entry.exposure or 1,
+                                  entry.total_events or entry.events)
+        entry.rate   = entry.value
+
+        # Auto-transition to stat mode if enough data
+        all_vals = [r.value for r in SPIData.query.filter_by(spi_id=ind.id).all()
+                    if r.value is not None]
+        if len(all_vals) >= (ind.baseline_months or 3) and not ind.stat_mode:
+            ind.stat_mode = True
+
     db.session.commit()
+
 
 @app.route('/spi', methods=['GET','POST'])
 def spi():
@@ -841,27 +947,33 @@ def spi():
         exposure = float(f.get('exposure', 1) or 1)
         total_ev = int(f.get('total_events', events) or events)
 
-        # Find or update existing entry
-        entry = SPIData.query.filter_by(spi_id=ind.id, year=year, month=month).first()
+        entry = SPIData.query.filter_by(
+            spi_id=ind.id, year=year, month=month).first()
         if entry:
             entry.events      = events
             entry.exposure    = exposure
             entry.total_events = total_ev
         else:
             entry = SPIData(spi_id=ind.id, year=year, month=month,
-                           events=events, exposure=exposure,
-                           total_events=total_ev, source='manual')
+                            events=events, exposure=exposure,
+                            total_events=total_ev, source='manual')
             db.session.add(entry)
 
-        # Calculate SPI value
-        entry.value  = _spi_calc(ind, events, exposure, total_ev)
-        entry.rate   = entry.value  # legacy compat
-        entry.flights = int(exposure)  # legacy compat
+        entry.value   = _spi_calc(ind, events, exposure, total_ev)
+        entry.rate    = entry.value
+        entry.flights = int(exposure)
+        db.session.flush()
+
+        # Auto stat-mode transition
+        all_vals = [r.value for r in SPIData.query.filter_by(spi_id=ind.id).all()
+                    if r.value is not None]
+        if len(all_vals) >= (ind.baseline_months or 3) and not ind.stat_mode:
+            ind.stat_mode = True
+
         db.session.commit()
-        flash(f'✓ SPI data logged: {ind.code} {month}/{year} = {entry.value}', 'success')
+        flash(f'✓ {ind.code} logged: {month}/{year} = {entry.value:.3f}', 'success')
         return redirect(url_for('spi', dept=dept_f))
 
-    # Build dashboard
     indicators = SPIIndicator.query.filter_by(active=True).all()
     if dept_f:
         indicators = [i for i in indicators
@@ -869,49 +981,56 @@ def spi():
 
     table, MONTHS = _spi_build_table(indicators, cur_year)
 
-    # Summary stats
     critical = sum(1 for r in table if r['status'][2] >= 3)
     warning  = sum(1 for r in table if r['status'][2] == 2)
     watch    = sum(1 for r in table if r['status'][2] == 1)
-    ok_count = sum(1 for r in table if r['status'][2] == 0 and r['latest_val'] <= (r['ind'].spt_target or 999))
+    ok_count = sum(1 for r in table
+                   if r['status'][2] == 0 and r['latest_val'] <= (r['ind'].spt_target or 999))
+
+    # Any triggered ICAO rules?
+    triggered = [r for r in table if r['trigger']]
 
     return render_template('spi/spi_dashboard.html',
-        table=table, MONTHS=MONTHS, indicators=SPIIndicator.query.filter_by(active=True).all(),
+        table=table, MONTHS=MONTHS,
+        indicators=SPIIndicator.query.filter_by(active=True).all(),
         dept_f=dept_f, cur_year=cur_year,
         critical=critical, warning=warning, watch=watch, ok_count=ok_count,
+        triggered=triggered,
         enumerate=enumerate)
+
 
 @app.route('/spi/indicators', methods=['GET','POST'])
 def spi_indicators():
     """Manage SPI indicator definitions."""
     if request.method == 'POST':
-        f = request.form
+        f        = request.form
         dept_ids = ','.join(request.form.getlist('department_ids'))
         ind = SPIIndicator(
-            code           = f['code'].upper().strip(),
-            name           = f['name'],
-            department_ids = dept_ids,
-            category       = f.get('category',''),
-            description    = f.get('description',''),
-            calc_type      = f.get('calc_type','RATE'),
-            exposure_type  = f.get('exposure_type','Flights'),
-            unit           = f.get('unit',''),
-            frequency      = f.get('frequency','Monthly'),
-            spt_target     = float(f['spt_target']) if f.get('spt_target') else None,
-            alert_l1       = float(f['alert_l1']) if f.get('alert_l1') else None,
-            alert_l2       = float(f['alert_l2']) if f.get('alert_l2') else None,
-            alert_l3       = float(f['alert_l3']) if f.get('alert_l3') else None,
-            auto_source    = f.get('auto_source','manual'),
-            auto_category  = f.get('auto_category',''),
-            active         = True
+            code            = f['code'].upper().strip(),
+            name            = f['name'],
+            department_ids  = dept_ids,
+            category        = f.get('category',''),
+            description     = f.get('description',''),
+            calc_type       = f.get('calc_type','RATE'),
+            exposure_type   = f.get('exposure_type','Flights'),
+            unit            = f.get('unit',''),
+            frequency       = f.get('frequency','Monthly'),
+            spt_target      = float(f['spt_target']) if f.get('spt_target') else None,
+            improvement_pct = float(f['improvement_pct']) if f.get('improvement_pct') else 5.0,
+            baseline_months = int(f['baseline_months']) if f.get('baseline_months') else 3,
+            auto_source     = f.get('auto_source','manual'),
+            auto_category   = f.get('auto_category',''),
+            active          = True,
+            stat_mode       = False
         )
         db.session.add(ind)
         db.session.commit()
-        flash(f'✓ SPI Indicator {ind.code} created.', 'success')
+        flash(f'✓ SPI Indicator {ind.code} created. Collecting baseline ({ind.baseline_months} months needed).', 'success')
         return redirect(url_for('spi_indicators'))
 
     indicators = SPIIndicator.query.order_by(SPIIndicator.code).all()
     return render_template('spi/spi_indicators.html', indicators=indicators)
+
 
 @app.route('/spi/indicators/<int:iid>/delete', methods=['POST'])
 def spi_delete_indicator(iid):
@@ -921,6 +1040,7 @@ def spi_delete_indicator(iid):
     flash(f'✓ Indicator {ind.code} deleted.', 'success')
     return redirect(url_for('spi_indicators'))
 
+
 @app.route('/spi/indicators/<int:iid>/toggle', methods=['POST'])
 def spi_toggle_indicator(iid):
     ind = SPIIndicator.query.get_or_404(iid)
@@ -928,6 +1048,7 @@ def spi_toggle_indicator(iid):
     db.session.commit()
     flash(f'✓ {ind.code} {"activated" if ind.active else "deactivated"}.', 'success')
     return redirect(url_for('spi_indicators'))
+
 
 # ─── Safety Promotion ─────────────────────────────────────────────────────────
 @app.route('/safety-promotion')
@@ -3570,6 +3691,9 @@ with app.app_context():
             ],
             'spi_indicators': [
                 ('category',        'VARCHAR(50)'),
+                ('baseline_months', 'INTEGER DEFAULT 3'),
+                ('improvement_pct', 'FLOAT DEFAULT 5.0'),
+                ('stat_mode',       'BOOLEAN DEFAULT 0'),
                 ('description',     'TEXT'),
                 ('calc_type',       'VARCHAR(10) DEFAULT "RATE"'),
                 ('exposure_type',   'VARCHAR(30) DEFAULT "Flights"'),
@@ -3582,6 +3706,8 @@ with app.app_context():
             ],
             'spi_data': [
                 ('exposure',        'FLOAT DEFAULT 1'),
+                ('mean_at_time',    'FLOAT'),
+                ('sd_at_time',      'FLOAT'),
                 ('total_events',    'INTEGER DEFAULT 0'),
                 ('value',           'FLOAT'),
                 ('source',          'VARCHAR(20) DEFAULT "manual"'),
