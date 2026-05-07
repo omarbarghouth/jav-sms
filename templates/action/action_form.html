@@ -12,25 +12,40 @@
 <form class="form-card" method="POST" style="max-width:600px">
 
   <!-- Pass back where to return after saving -->
-  <input type="hidden" name="return_url" value="{{ pre.return_url or '/actions' }}"/>
-  <input type="hidden" name="source"     value="{{ pre.source or 'Manual' }}"/>
-  <input type="hidden" name="hazard_id"  value="{{ pre.hazard_id or '' }}"/>
-  <input type="hidden" name="linked_ref_id" value="{{ pre.linked_ref_id or '' }}"/>
+  <input type="hidden" name="return_url"       value="{{ pre.return_url or '/actions' }}"/>
+  <input type="hidden" name="source"           value="{{ pre.source or 'Manual' }}"/>
+  <input type="hidden" name="hazard_id"        value="{{ pre.hazard_id or '' }}"/>
+  <input type="hidden" name="linked_ref_id"    value="{{ pre.linked_ref_id or '' }}"/>
+  <input type="hidden" name="spi_id"           value="{{ pre.spi_id or '' }}"/>
+  <input type="hidden" name="spi_alert_level"  value="{{ pre.spi_alert_level or '' }}"/>
+  <input type="hidden" name="spi_trigger_rule" value="{{ pre.spi_trigger_rule or '' }}"/>
 
-  <!-- Show context if coming from a hazard/risk/audit page -->
-  {% if pre.hazard_id %}
+  <!-- SPI Alert context banner -->
+  {% if pre.spi_id %}
+  {% set level_colors = {'L1':'#d97706','L2':'#ea580c','L3':'#dc2626'} %}
+  {% set rule_labels = {'A':'Rule A — One point exceeded L3','B':'Rule B — Two consecutive exceeded L2','C':'Rule C — Three consecutive exceeded L1'} %}
+  <div style="background:#fee2e2;border:2px solid {% if pre.spi_alert_level=='L3' %}#dc2626{% elif pre.spi_alert_level=='L2' %}#ea580c{% else %}#d97706{% endif %};border-radius:8px;padding:14px 16px;margin-bottom:16px">
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:{% if pre.spi_alert_level=='L3' %}#dc2626{% elif pre.spi_alert_level=='L2' %}#ea580c{% else %}#d97706{% endif %};margin-bottom:6px">
+      ⚠ SPI Alert — {{ pre.spi_alert_level }} Triggered
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#374151">{{ rule_labels.get(pre.spi_trigger_rule,'') }}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">
+      This action is linked to SPI Indicator ID {{ pre.spi_id }}.
+      It will appear on the SPI dashboard with lifecycle tracking.
+    </div>
+  </div>
+  {% elif pre.hazard_id %}
   <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px">
-    📎 This action will be linked to:
-    <strong>{{ pre.source }}</strong>
+    📎 Linked to: <strong>{{ pre.source }}</strong>
     {% if pre.hazard_id %} · Hazard <a href="/hazard-log/{{ pre.hazard_id }}" style="color:#1d4ed8">{{ pre.hazard_id }}</a>{% endif %}
   </div>
   {% endif %}
 
   <!-- 1. What needs to be done -->
   <div class="fg">
-    <label>What needs to be done? *</label>
+    <label>Corrective / Mitigation Action *</label>
     <textarea name="description" required rows="4"
-      placeholder="Be specific. e.g. Implement post-rain FOD inspection protocol before aircraft movement at all gates."></textarea>
+      placeholder="Be specific. e.g. Implement post-rain FOD inspection protocol before aircraft movement at all gates.">{{ pre.description or '' }}</textarea>
   </div>
 
   <!-- 2. Who is responsible -->
@@ -50,11 +65,20 @@
   <div class="fg">
     <label>Priority</label>
     <select name="priority">
-      <option value="High">High — must be done immediately</option>
-      <option value="Medium" selected>Medium — within due date</option>
-      <option value="Low">Low — when possible</option>
+      <option value="High" {% if pre.priority=='High' %}selected{% endif %}>High — must be done immediately</option>
+      <option value="Medium" {% if pre.priority=='Medium' or not pre.priority %}selected{% endif %}>Medium — within due date</option>
+      <option value="Low" {% if pre.priority=='Low' %}selected{% endif %}>Low — when possible</option>
     </select>
   </div>
+
+  <!-- 5. Evidence (shown for SPI actions) -->
+  {% if pre.spi_id %}
+  <div class="fg">
+    <label>Initial Evidence / Supporting Information</label>
+    <textarea name="evidence" rows="2"
+      placeholder="Any supporting evidence, data, or observations that justify this action…"></textarea>
+  </div>
+  {% endif %}
 
   <button type="submit" class="btn btn-nav" style="margin-top:8px">
     Create Action
