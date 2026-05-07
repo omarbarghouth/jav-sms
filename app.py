@@ -194,13 +194,14 @@ def hazard_report():
         h.status   = 'Under Assessment'
         db.session.commit()
 
-        # Auto-update any matching SPI indicators
+        # Auto-update matching SPI indicators (with deduplication)
         spi_auto_update(
             source_type   = 'hazard_report',
             department_id = dept_id,
             category      = f.get('classification',''),
             year          = datetime.now().year,
-            month         = datetime.now().month
+            month         = datetime.now().month,
+            report_id     = rid
         )
         flash(f'✓ Hazard Report {rid} submitted successfully. Hazard {hid} created for assessment.', 'success')
         return redirect(url_for('hazard_report_detail', rid=rid))
@@ -309,7 +310,8 @@ def asr():
             department_id = int(f.get('department_id', 1)),
             category      = 'ASR',
             year          = datetime.now().year,
-            month         = datetime.now().month
+            month         = datetime.now().month,
+            report_id     = aid
         )
         flash(f'✓ ASR {aid} submitted. Complete the Risk Assessment for hazard {hid}.', 'success')
         return redirect(url_for('ra_wizard_start', hid=hid))
@@ -734,9 +736,23 @@ def _spi_thresholds(ind, all_values=None):
 
 def _spi_target(ind, all_values=None):
     """
-    ICAO Target = Previous Average × (1 - improvement_pct / 100)
-    For PERCENT type: target = previous avg × (1 + improvement / 100)
-    Falls back to spt_target if insufficient data.
+    SPT = Safety Performance Target.
+    ALWAYS returns ind.spt_target unchanged.
+    SPT is fixed — defined by Safety Management, never auto-modified.
+    
+    improvement_target (shown separately on dashboard) =
+      Avg × (1 − improvement_pct/100) for COUNT/RATE
+      Avg × (1 + improvement_pct/100) for PERCENT
+    """
+    return ind.spt_target or 0.0
+
+
+def _spi_improvement_target(ind, all_values=None):
+    """
+    ICAO improvement target — calculated from historical average.
+    Shown as a separate line on the dashboard (not the SPT).
+    Formula: Avg × (1 − improvement%) or Avg × (1 + improvement%) for %
+    Falls back to SPT if insufficient data.
     """
     if all_values is None:
         history = _spi_history(ind)
@@ -845,6 +861,11 @@ def _spi_build_table(indicators, cur_year):
         trend    = _spi_trend(vals_yr[-3:])
         latest   = vals_yr[-1] if vals_yr else 0.0
 
+        # SPT is FIXED — never auto-modified
+        spt_fixed = ind.spt_target or 0.0
+        # Improvement target — separate from SPT
+        impr_target = _spi_improvement_target(ind, all_values)
+
         # Status
         status   = _spi_status(latest, ind, all_values)
 
@@ -876,7 +897,9 @@ def _spi_build_table(indicators, cur_year):
             latest_val=latest,
             l1=l1, l2=l2, l3=l3,
             mean=mean, sd=round(sd, 4),
-            target=target,
+            spt=spt_fixed,        # Fixed SPT — never changes
+            impr_target=impr_target,  # Improvement target from avg
+            target=spt_fixed,     # alias used in templates
             is_stat=is_stat,
             all_values=all_values,
             months_collected=months_collected,
@@ -889,19 +912,26 @@ def _spi_build_table(indicators, cur_year):
     return table, MONTHS
 
 
-def spi_auto_update(source_type, department_id, category, year, month):
+def spi_auto_update(source_type, department_id, category, year, month,
+                    report_id=None):
     """
     Auto-match a submitted report to SPIs and increment event count.
-    Called from hazard_report and ASR submission handlers.
-    Avoids duplicate updates within same month via source='auto' check.
+    
+    DEDUPLICATION: Uses report_id to track which reports have already
+    been counted. If report_id is provided and already in entry.notes
+    (as a comma-separated log), the report is NOT counted again.
+    
+    source_type : 'hazard_report' | 'asr' | 'audit'
+    report_id   : unique ID of the source record (e.g. 'HR-SMS-01')
     """
     matched = SPIIndicator.query.filter_by(
         auto_source=source_type, active=True).all()
 
     for ind in matched:
-        # Category match (empty auto_category = match all)
-        if ind.auto_category and ind.auto_category.lower() not in category.lower():
-            continue
+        # Category match (empty auto_category matches all)
+        if ind.auto_category:
+            if ind.auto_category.lower() not in (category or '').lower():
+                continue
         # Department match
         dept_ids = [x.strip() for x in (ind.department_ids or '').split(',')]
         if str(department_id) not in dept_ids and '' not in dept_ids:
@@ -909,21 +939,41 @@ def spi_auto_update(source_type, department_id, category, year, month):
 
         entry = SPIData.query.filter_by(
             spi_id=ind.id, year=year, month=month).first()
+
         if entry:
+            # DEDUPLICATION: check if this report was already counted
+            already_counted = (
+                report_id and
+                entry.notes and
+                report_id in entry.notes.split(',')
+            )
+            if already_counted:
+                continue  # skip — already counted this report
             entry.events = (entry.events or 0) + 1
+            # Log report_id to prevent future duplicate
+            if report_id:
+                existing = entry.notes or ''
+                ids = [x for x in existing.split(',') if x]
+                ids.append(report_id)
+                entry.notes = ','.join(ids[-50:])  # keep last 50 IDs max
         else:
-            entry = SPIData(spi_id=ind.id, year=year, month=month,
-                            events=1, exposure=1, total_events=1,
-                            source='auto')
+            entry = SPIData(
+                spi_id=ind.id, year=year, month=month,
+                events=1, exposure=1, total_events=1,
+                source='auto',
+                notes=report_id or ''
+            )
             db.session.add(entry)
 
-        # Recalculate
-        entry.value  = _spi_calc(ind, entry.events,
-                                  entry.exposure or 1,
-                                  entry.total_events or entry.events)
-        entry.rate   = entry.value
+        # Recalculate SPI value
+        entry.value = _spi_calc(
+            ind, entry.events,
+            entry.exposure or 1,
+            entry.total_events or entry.events
+        )
+        entry.rate = entry.value  # legacy compat
 
-        # Auto-transition to stat mode if enough data
+        # Auto-transition to stat mode when baseline complete
         all_vals = [r.value for r in SPIData.query.filter_by(spi_id=ind.id).all()
                     if r.value is not None]
         if len(all_vals) >= (ind.baseline_months or 3) and not ind.stat_mode:
