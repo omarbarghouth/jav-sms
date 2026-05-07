@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}SPI Indicator Management{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:14px">
+  <a href="/spi" style="color:var(--muted);font-size:13px">← SPI Dashboard</a>
+</div>
+<div class="page-title">SPI Indicator Management</div>
+<div class="page-sub">Define Safety Performance Indicators · ICAO Count / Rate / Percentage methods</div>
+
+<div style="display:grid;grid-template-columns:1fr 1.6fr;gap:20px">
+
+  <!-- LEFT: Create form -->
+  <div>
+    <div class="card">
+      <div class="card-title">Create New SPI Indicator</div>
+      <form method="POST">
+        <div class="g2">
+          <div class="fg"><label>Code *</label>
+            <input type="text" name="code" required placeholder="e.g. FO-001" style="text-transform:uppercase"/></div>
+          <div class="fg"><label>Calculation Type *</label>
+            <select name="calc_type" required id="ctype-sel" onchange="toggleExposure()">
+              <option value="RATE">Rate (per 1,000)</option>
+              <option value="COUNT">Count (raw number)</option>
+              <option value="PERCENT">Percentage (%)</option>
+            </select></div>
+        </div>
+
+        <div class="fg"><label>Indicator Name *</label>
+          <input type="text" name="name" required placeholder="e.g. FOD Reports per 1,000 Movements"/></div>
+
+        <div class="fg"><label>Description</label>
+          <textarea name="description" rows="2" placeholder="What does this indicator measure?"></textarea></div>
+
+        <div class="g2">
+          <div class="fg"><label>Category</label>
+            <select name="category">
+              <option value="">General</option>
+              {% for cat in ['FOD','ASR','Turbulence','TCAS','GPWS','Bird Strike',
+                             'Unstable Approach','Ground Incident','Cargo','Cabin','Training','Audit'] %}
+              <option>{{ cat }}</option>{% endfor %}
+            </select></div>
+          <div class="fg" id="exp-type-block"><label>Exposure Type</label>
+            <select name="exposure_type">
+              {% for e in ['Flights','Flight Hours','Sectors','Departures','Reports','Operations'] %}
+              <option>{{ e }}</option>{% endfor %}
+            </select></div>
+        </div>
+
+        <div class="fg"><label>Department(s) *</label>
+          <div style="display:flex;flex-direction:column;gap:5px;padding:8px;border:1.5px solid var(--border);border-radius:7px;background:#fafbfe">
+            {% for d in all_departments %}
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:400">
+              <input type="checkbox" name="department_ids" value="{{ d.id }}" style="width:auto"/>
+              {{ d.name }}
+            </label>
+            {% endfor %}
+          </div></div>
+
+        <div class="sec">Thresholds (SPT &amp; Alerts)</div>
+        <div style="background:#f8f9fc;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:#374151">
+          <strong>How to set thresholds:</strong><br>
+          SPT = your ideal target value<br>
+          L1 (Yellow) = first warning, slight concern<br>
+          L2 (Orange) = action required<br>
+          L3 (Red) = critical, escalate immediately
+        </div>
+        <div class="g2">
+          <div class="fg"><label>SPT Target</label>
+            <input type="number" name="spt_target" step="0.01" placeholder="e.g. 2.0"/></div>
+          <div class="fg"><label>Alert L1 (🟡 Yellow)</label>
+            <input type="number" name="alert_l1" step="0.01" placeholder="e.g. 3.0"/></div>
+          <div class="fg"><label>Alert L2 (🟠 Orange)</label>
+            <input type="number" name="alert_l2" step="0.01" placeholder="e.g. 4.0"/></div>
+          <div class="fg"><label>Alert L3 (🔴 Red)</label>
+            <input type="number" name="alert_l3" step="0.01" placeholder="e.g. 5.0"/></div>
+        </div>
+
+        <div class="sec">Auto-Update from Reports</div>
+        <div class="g2">
+          <div class="fg"><label>Auto Source</label>
+            <select name="auto_source">
+              <option value="manual">Manual only</option>
+              <option value="hazard_report">Hazard Report</option>
+              <option value="asr">Air Safety Report (ASR)</option>
+              <option value="audit">Audit Finding</option>
+            </select></div>
+          <div class="fg"><label>Match Category</label>
+            <input type="text" name="auto_category" placeholder="e.g. FOD or Operational"/>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px">Must match report category exactly</div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-nav">Create SPI Indicator</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- RIGHT: Existing indicators -->
+  <div>
+    <div class="card" style="padding:0">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title" style="margin:0">Defined Indicators ({{ indicators|length }})</div>
+      </div>
+      {% if indicators %}
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th><th>Name</th><th>Type</th><th>Dept</th>
+              <th>SPT</th><th>L1</th><th>L2</th><th>L3</th>
+              <th>Auto</th><th>Active</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ind in indicators %}
+            <tr style="{% if not ind.active %}opacity:.5{% endif %}">
+              <td><span class="ctrl-num" style="font-size:10px">{{ ind.code }}</span></td>
+              <td style="font-size:12px;max-width:160px">
+                <strong>{{ ind.name[:50] }}</strong>
+                {% if ind.description %}<div style="font-size:10px;color:var(--muted)">{{ ind.description[:50] }}</div>{% endif %}
+              </td>
+              <td>
+                {% if ind.calc_type == 'COUNT' %}<span class="badge b-gray">Count</span>
+                {% elif ind.calc_type == 'PERCENT' %}<span class="badge b-blue">%</span>
+                {% else %}<span class="badge b-purple">Rate/1K</span>{% endif %}
+              </td>
+              <td style="font-size:11px">{{ ind.department_ids }}</td>
+              <td style="font-size:11px;text-align:center">{{ ind.spt_target or '—' }}</td>
+              <td style="font-size:11px;text-align:center;color:#d97706">{{ ind.alert_l1 or '—' }}</td>
+              <td style="font-size:11px;text-align:center;color:#ea580c">{{ ind.alert_l2 or '—' }}</td>
+              <td style="font-size:11px;text-align:center;color:#dc2626">{{ ind.alert_l3 or '—' }}</td>
+              <td style="font-size:10px">
+                {% if ind.auto_source and ind.auto_source != 'manual' %}
+                <span class="badge b-green" style="font-size:9px">{{ ind.auto_source[:8] }}</span>
+                <div style="color:var(--muted)">{{ ind.auto_category or '' }}</div>
+                {% else %}<span style="color:#d1d5db">Manual</span>{% endif %}
+              </td>
+              <td>
+                <form method="POST" action="/spi/indicators/{{ ind.id }}/toggle" style="display:inline">
+                  <button type="submit" class="badge {% if ind.active %}b-green{% else %}b-gray{% endif %}"
+                          style="border:none;cursor:pointer;font-family:inherit">
+                    {{ '✓ Active' if ind.active else '✗ Off' }}
+                  </button>
+                </form>
+              </td>
+              <td>
+                <form method="POST" action="/spi/indicators/{{ ind.id }}/delete"
+                      onsubmit="return confirm('Delete {{ ind.code }}? All data will be lost.')">
+                  <button type="submit" class="btn btn-danger btn-sm"
+                          style="padding:3px 8px;font-size:11px">🗑</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align:center;padding:32px;color:var(--muted);font-size:13px">
+        No indicators defined yet. Create your first SPI using the form.
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Formula reference card -->
+    <div class="card" style="margin-top:14px">
+      <div class="card-title">ICAO Calculation Reference</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px">
+        <div style="background:#f8f9fc;border-radius:8px;padding:12px">
+          <div style="font-weight:800;color:var(--navy);margin-bottom:6px">COUNT</div>
+          <div style="font-family:monospace;font-size:11px;background:#fff;padding:6px;border-radius:4px;border:1px solid var(--border)">
+            SPI = events
+          </div>
+          <div style="color:var(--muted);margin-top:6px;font-size:11px">FOD reports, bird strikes, cabin injuries</div>
+        </div>
+        <div style="background:#f8f9fc;border-radius:8px;padding:12px">
+          <div style="font-weight:800;color:var(--navy);margin-bottom:6px">RATE</div>
+          <div style="font-family:monospace;font-size:11px;background:#fff;padding:6px;border-radius:4px;border:1px solid var(--border)">
+            SPI = (events /</br>exposure) × 1000
+          </div>
+          <div style="color:var(--muted);margin-top:6px;font-size:11px">TCAS RA per 1,000 hours, unstable approaches</div>
+        </div>
+        <div style="background:#f8f9fc;border-radius:8px;padding:12px">
+          <div style="font-weight:800;color:var(--navy);margin-bottom:6px">PERCENT</div>
+          <div style="font-family:monospace;font-size:11px;background:#fff;padding:6px;border-radius:4px;border:1px solid var(--border)">
+            SPI = (events /</br>total) × 100
+          </div>
+          <div style="color:var(--muted);margin-top:6px;font-size:11px">% reports on time, % checklist compliance</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function toggleExposure() {
+  var ct  = document.getElementById('ctype-sel').value;
+  var blk = document.getElementById('exp-type-block');
+  blk.style.display = (ct === 'RATE') ? 'flex' : 'none';
+}
+toggleExposure();
+</script>
+{% endblock %}
