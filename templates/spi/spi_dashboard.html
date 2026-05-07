@@ -37,7 +37,7 @@
       </div>
     </div>
     <!-- CREATE ACTION BUTTON -->
-    <a href="/actions/new?source=SPI&spi_id={{ row.ind.id }}&spi_alert_level={{ ('L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') }}&spi_trigger_rule={{ row.trigger }}&description={{ (action_type + ' required: ' + row.ind.name) | urlencode }}&priority={{ priority }}&spi_alert_month={{ now.month }}&spi_alert_year={{ now.year }}&return_url=/spi"
+    <a href="/actions/new?source=SPI&spi_id={{ row.ind.id }}&spi_alert_level={{ row.escalation_level or ('L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') }}&spi_trigger_rule={{ row.trigger }}&description={{ (action_type + ' required: ' + row.ind.name) | urlencode }}&priority={{ priority }}&spi_alert_month={{ row.escalation_month or now.month }}&spi_alert_year={{ row.escalation_year or now.year }}&return_url=/spi"
        class="btn btn-sm"
        style="background:{{ color }};color:#fff;white-space:nowrap;flex-shrink:0;align-self:flex-start">
       ✅ Create Action — {{ action_type }}
@@ -161,6 +161,28 @@
   </div>
   {% endif %}
 
+  <!-- Escalation info box (only when trigger fired) -->
+  {% if row.trigger and row.escalation_month %}
+  {% set MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
+  {% set esc_color = {'L3':'#dc2626','L2':'#ea580c','L1':'#d97706'}.get(row.escalation_level,'#d97706') %}
+  <div style="padding:10px 18px;background:{{ esc_color }}12;border-bottom:2px solid {{ esc_color }}40;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div>
+      <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:{{ esc_color }};letter-spacing:.5px">
+        ⚠ ESCALATION DETECTED
+      </span>
+      <div style="font-size:13px;font-weight:700;color:#374151;margin-top:3px">
+        {{ row.escalation_level }} Triggered in
+        <strong style="color:{{ esc_color }}">{{ MNAMES[row.escalation_month-1] }} {{ row.escalation_year }}</strong>
+        &nbsp;·&nbsp; Value: <strong style="font-family:monospace">{{ '%.3f'|format(row.escalation_value) }}</strong>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ row.escalation_desc }}</div>
+    </div>
+    <div style="margin-left:auto;font-size:11px;color:var(--muted)">
+      Action creation date ≠ trigger month · The trigger month is: {{ MNAMES[row.escalation_month-1] }} {{ row.escalation_year }}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Statistics row: SPT fixed + statistical values separate -->
   <div style="display:grid;grid-template-columns:repeat(8,1fr);border-bottom:1px solid var(--border)">
     {% set stat_cols = [
@@ -189,7 +211,15 @@
       <thead>
         <tr>
           <th style="width:120px">Line</th>
-          {% for m in MONTHS %}<th style="text-align:center;min-width:48px;font-size:10px">{{ m }}</th>{% endfor %}
+          {% for idx in range(1,13) %}
+          {% if row.escalation_month and idx == row.escalation_month %}
+          <th style="text-align:center;min-width:48px;font-size:10px;background:{{ row.status[1] }}25;color:{{ row.status[1] }};border-bottom:2px solid {{ row.status[1] }}">
+            {{ MONTHS[idx-1] }}<div style="font-size:8px;font-weight:800">⚠ TRIGGER</div>
+          </th>
+          {% else %}
+          <th style="text-align:center;min-width:48px;font-size:10px">{{ MONTHS[idx-1] }}</th>
+          {% endif %}
+          {% endfor %}
           <th style="text-align:center">YTD</th>
           <th style="text-align:center">3M Avg</th>
           <th style="text-align:center">Trend</th>
@@ -305,7 +335,7 @@
     <span style="color:#d97706;font-weight:600">Baseline — {{ row.baseline_needed - row.months_collected }} months until statistical mode</span>
     {% endif %}
     {% if row.trigger %}
-    <a href="/actions/new?source=SPI&spi_id={{ ind.id }}&spi_alert_level={{ ('L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') }}&spi_trigger_rule={{ row.trigger }}&priority={{ ('High' if row.trigger=='A' else 'Medium' if row.trigger=='B' else 'Low') }}&spi_alert_month={{ now.month }}&spi_alert_year={{ now.year }}&return_url=/spi%23spi-{{ ind.id }}"
+    <a href="/actions/new?source=SPI&spi_id={{ ind.id }}&spi_alert_level={{ row.escalation_level or ('L3' if row.trigger=='A' else 'L2' if row.trigger=='B' else 'L1') }}&spi_trigger_rule={{ row.trigger }}&priority={{ ('High' if row.trigger=='A' else 'Medium' if row.trigger=='B' else 'Low') }}&spi_alert_month={{ row.escalation_month or now.month }}&spi_alert_year={{ row.escalation_year or now.year }}&return_url=/spi%23spi-{{ ind.id }}"
        class="btn btn-sm" style="background:{{ row.status[1] }};color:#fff;font-size:11px;padding:4px 10px">
       ✅ Create Action
     </a>
