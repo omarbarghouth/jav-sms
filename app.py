@@ -427,7 +427,12 @@ def new_action():
             owner=f['owner'],
             due_date=f['due_date'],
             priority=f.get('priority', 'Medium'),
-            status='Open'
+            status='Open',
+            # SPI lifecycle fields
+            spi_id          = int(f['spi_id']) if f.get('spi_id') else None,
+            spi_alert_level = f.get('spi_alert_level', ''),
+            spi_trigger_rule= f.get('spi_trigger_rule', ''),
+            mitigation_status = 'Pending'
         )
         db.session.add(a)
         db.session.commit()
@@ -439,10 +444,15 @@ def new_action():
     # GET — show the form, pre-fill from URL params if provided
     hazards = Hazard.query.filter_by(status='Open').order_by(Hazard.created_at.desc()).all()
     pre = {
-        'source':         request.args.get('source', ''),
-        'hazard_id':      request.args.get('hazard_id', ''),
-        'linked_ref_id':  request.args.get('linked_ref_id', ''),
-        'return_url':     request.args.get('return_url', url_for('actions')),
+        'source':           request.args.get('source', ''),
+        'hazard_id':        request.args.get('hazard_id', ''),
+        'linked_ref_id':    request.args.get('linked_ref_id', ''),
+        'return_url':       request.args.get('return_url', url_for('actions')),
+        'spi_id':           request.args.get('spi_id', ''),
+        'spi_alert_level':  request.args.get('spi_alert_level', ''),
+        'spi_trigger_rule': request.args.get('spi_trigger_rule', ''),
+        'description':      request.args.get('description', ''),
+        'priority':         request.args.get('priority', 'Medium'),
     }
     return render_template('action/action_form.html', hazards=hazards, pre=pre)
 
@@ -476,7 +486,12 @@ def update_action(aid):
         return redirect(return_url)
 
     # Normal update
-    a.status       = new_status
+    a.status              = new_status
+    a.evidence            = f.get('evidence', a.evidence)
+    a.follow_up_notes     = f.get('follow_up_notes', a.follow_up_notes)
+    a.mitigation_status   = f.get('mitigation_status', a.mitigation_status)
+    a.verified_by         = f.get('verified_by', a.verified_by)
+    a.verified_date       = f.get('verified_date', a.verified_date)
     a.owner        = f.get('owner', a.owner)
     a.due_date     = f.get('due_date', a.due_date)
     a.priority     = f.get('priority', a.priority)
@@ -889,7 +904,12 @@ def _spi_build_table(indicators, cur_year):
 
         last_month = max(month_vals.keys()) if month_vals else None
 
+        # Linked actions for this SPI indicator
+        spi_actions = Action.query.filter_by(spi_id=ind.id).order_by(
+            Action.created_at.desc()).all()
+
         table.append(dict(
+            spi_actions=spi_actions,
             ind=ind,
             month_vals=month_vals,
             ytd=ytd, avg3=avg3, trend=trend,
@@ -1048,6 +1068,14 @@ def spi():
         triggered=triggered,
         enumerate=enumerate)
 
+
+@app.route('/spi/action-report/<action_id>')
+def spi_action_report(action_id):
+    """Print-ready SPI Alert Mitigation Report."""
+    a   = Action.query.get_or_404(action_id)
+    ind = SPIIndicator.query.get(a.spi_id) if a.spi_id else None
+    return render_template('spi/spi_action_report.html', a=a, ind=ind,
+                           now=datetime.utcnow())
 
 @app.route('/spi/indicators', methods=['GET','POST'])
 def spi_indicators():
@@ -3662,6 +3690,14 @@ with app.app_context():
             ],
             'actions': [
                 ('hazard_id',              'VARCHAR(30)'),
+                ('spi_id',                 'INTEGER'),
+                ('spi_alert_level',        'VARCHAR(5)'),
+                ('spi_trigger_rule',       'VARCHAR(2)'),
+                ('evidence',               'TEXT'),
+                ('follow_up_notes',        'TEXT'),
+                ('mitigation_status',      'VARCHAR(30) DEFAULT "Pending"'),
+                ('verified_by',            'VARCHAR(100)'),
+                ('verified_date',          'VARCHAR(20)'),
                 ('linked_ref_id',          'VARCHAR(30)'),
                 ('linked_risk_id',         'VARCHAR(30)'),
                 ('linked_audit_id',        'VARCHAR(30)'),
