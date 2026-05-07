@@ -142,11 +142,23 @@ class Action(db.Model):
     status           = db.Column(db.String(20), default='Open')
     # Open / In Progress / Closed / Overdue
     # Effectiveness — only filled when closing
-    effectiveness    = db.Column(db.String(30))
+    effectiveness        = db.Column(db.String(30))
     # Effective / Partially Effective / Ineffective
     effectiveness_review = db.Column(db.Text)
-    closed_date      = db.Column(db.String(20))
-    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    closed_date          = db.Column(db.String(20))
+    # SPI lifecycle fields
+    spi_id               = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'), nullable=True)
+    spi_alert_level      = db.Column(db.String(5))   # L1 / L2 / L3
+    spi_trigger_rule     = db.Column(db.String(2))   # A / B / C
+    evidence             = db.Column(db.Text)         # evidence of corrective action
+    follow_up_notes      = db.Column(db.Text)         # monitoring notes post-closure
+    mitigation_status    = db.Column(db.String(30))   # Active / Completed / Pending
+    verified_by          = db.Column(db.String(100))  # who verified effectiveness
+    verified_date        = db.Column(db.String(20))
+    created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+    # Relationship to SPI indicator
+    spi_indicator        = db.relationship('SPIIndicator', foreign_keys=[spi_id],
+                               backref=db.backref('linked_actions', lazy=True))
 
 class Audit(db.Model):
     __tablename__ = 'audits'
