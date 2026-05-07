@@ -194,6 +194,14 @@ def hazard_report():
         h.status   = 'Under Assessment'
         db.session.commit()
 
+        # Auto-update any matching SPI indicators
+        spi_auto_update(
+            source_type   = 'hazard_report',
+            department_id = dept_id,
+            category      = f.get('classification',''),
+            year          = datetime.now().year,
+            month         = datetime.now().month
+        )
         flash(f'✓ Hazard Report {rid} submitted successfully. Hazard {hid} created for assessment.', 'success')
         return redirect(url_for('hazard_report_detail', rid=rid))
     return render_template('reporting/hazard_report.html')
@@ -296,6 +304,13 @@ def asr():
         db.session.commit()
         h.status = 'Under Assessment'
         db.session.commit()
+        spi_auto_update(
+            source_type   = 'asr',
+            department_id = int(f.get('department_id', 1)),
+            category      = 'ASR',
+            year          = datetime.now().year,
+            month         = datetime.now().month
+        )
         flash(f'✓ ASR {aid} submitted. Complete the Risk Assessment for hazard {hid}.', 'success')
         return redirect(url_for('ra_wizard_start', hid=hid))
     return render_template('reporting/asr_report.html')
@@ -620,49 +635,241 @@ def update_moc(mid):
     return redirect(url_for('moc_list'))
 
 # ─── SPI ─────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SPI — Safety Performance Indicators  (ICAO Annex 19 / Doc 9859)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _spi_calc(ind, events, exposure, total_events):
+    """
+    Calculate SPI value based on calc_type.
+    COUNT   : value = events
+    RATE    : value = (events / exposure) * 1000
+    PERCENT : value = (events / total_events) * 100
+    """
+    try:
+        if ind.calc_type == 'COUNT':
+            return float(events)
+        elif ind.calc_type == 'PERCENT':
+            return round((events / total_events * 100), 2) if total_events else 0.0
+        else:  # RATE (default)
+            return round((events / exposure * 1000), 4) if exposure else 0.0
+    except Exception:
+        return 0.0
+
+def _spi_status(value, ind):
+    """
+    Return (label, color, level) based on thresholds.
+    Levels: 0=OK, 1=Yellow, 2=Orange, 3=Red
+    """
+    l3 = getattr(ind, 'alert_l3', None)
+    if l3 and value >= l3:
+        return ('🔴 CRITICAL',  '#dc2626', 3)
+    elif value >= (ind.alert_l2 or 999):
+        return ('🟠 WARNING L2', '#ea580c', 2)
+    elif value >= (ind.alert_l1 or 999):
+        return ('🟡 WATCH L1',   '#d97706', 1)
+    elif value > (ind.spt_target or 0):
+        return ('🔵 EXCEEDS SPT','#1d4ed8', 0)
+    else:
+        return ('🟢 OK',         '#15803d', 0)
+
+def _spi_trend(values_list):
+    """
+    Calculate trend from last 3 months.
+    Returns: '↑ Increasing' / '↓ Decreasing' / '→ Stable'
+    """
+    vals = [v for v in values_list if v is not None]
+    if len(vals) < 2:
+        return '— No trend'
+    if vals[-1] > vals[-2] * 1.05:
+        return '↑ Increasing'
+    elif vals[-1] < vals[-2] * 0.95:
+        return '↓ Decreasing'
+    return '→ Stable'
+
+def _spi_build_table(indicators, cur_year):
+    """Build the full SPI table data for the dashboard."""
+    MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    table = []
+    for ind in indicators:
+        month_vals = {}  # month_num -> value
+        for d in SPIData.query.filter_by(spi_id=ind.id, year=cur_year).all():
+            month_vals[d.month] = d.value if d.value is not None else d.rate or 0.0
+
+        # YTD average
+        vals_so_far = [month_vals[m] for m in sorted(month_vals)]
+        ytd = round(sum(vals_so_far) / len(vals_so_far), 2) if vals_so_far else 0.0
+
+        # 3-month moving average (last 3 months with data)
+        recent = vals_so_far[-3:] if len(vals_so_far) >= 3 else vals_so_far
+        avg3   = round(sum(recent) / len(recent), 2) if recent else 0.0
+
+        # Trend
+        trend = _spi_trend(vals_so_far[-3:] if vals_so_far else [])
+
+        # Status based on latest value or YTD
+        latest_val = vals_so_far[-1] if vals_so_far else 0.0
+        status = _spi_status(latest_val, ind)
+
+        # Department codes
+        dept_codes = []
+        for did in (ind.department_ids or '').split(','):
+            try:
+                d = Department.query.get(int(did.strip()))
+                if d: dept_codes.append(d.code)
+            except Exception:
+                pass
+
+        table.append(dict(
+            ind=ind,
+            month_vals=month_vals,
+            ytd=ytd,
+            avg3=avg3,
+            trend=trend,
+            status=status,
+            depts=', '.join(dept_codes),
+            latest_val=latest_val,
+        ))
+    return table, MONTHS
+
+def spi_auto_update(source_type, department_id, category, year, month):
+    """
+    Auto-match a new report/finding to an SPI and increment its event count.
+    Called when a Hazard Report or ASR is submitted.
+    source_type: 'hazard_report' | 'asr' | 'audit'
+    """
+    matched = SPIIndicator.query.filter_by(
+        auto_source=source_type,
+        auto_category=category,
+        active=True
+    ).all()
+    for ind in matched:
+        # Check department match
+        dept_ids = [x.strip() for x in (ind.department_ids or '').split(',')]
+        if str(department_id) not in dept_ids and dept_ids != ['']:
+            continue
+        # Find or create this month's data entry
+        entry = SPIData.query.filter_by(
+            spi_id=ind.id, year=year, month=month
+        ).first()
+        if entry:
+            entry.events = (entry.events or 0) + 1
+        else:
+            entry = SPIData(
+                spi_id=ind.id, year=year, month=month,
+                events=1, exposure=1, total_events=1,
+                source='auto'
+            )
+            db.session.add(entry)
+        # Recalculate value
+        exposure     = entry.exposure or 1
+        total_events = entry.total_events or 1
+        entry.value  = _spi_calc(ind, entry.events, exposure, total_events)
+        entry.rate   = entry.value  # legacy compat
+    db.session.commit()
+
 @app.route('/spi', methods=['GET','POST'])
 def spi():
+    """SPI Dashboard — ICAO Annex 19 §6.3 / Doc 9859 Chapter 7."""
+    cur_year = datetime.now().year
+    dept_f   = request.args.get('dept', '')
+
+    if request.method == 'POST':
+        f        = request.form
+        ind      = SPIIndicator.query.get_or_404(int(f['spi_id']))
+        year     = int(f.get('year', cur_year))
+        month    = int(f['month'])
+        events   = int(f.get('events', 0))
+        exposure = float(f.get('exposure', 1) or 1)
+        total_ev = int(f.get('total_events', events) or events)
+
+        # Find or update existing entry
+        entry = SPIData.query.filter_by(spi_id=ind.id, year=year, month=month).first()
+        if entry:
+            entry.events      = events
+            entry.exposure    = exposure
+            entry.total_events = total_ev
+        else:
+            entry = SPIData(spi_id=ind.id, year=year, month=month,
+                           events=events, exposure=exposure,
+                           total_events=total_ev, source='manual')
+            db.session.add(entry)
+
+        # Calculate SPI value
+        entry.value  = _spi_calc(ind, events, exposure, total_ev)
+        entry.rate   = entry.value  # legacy compat
+        entry.flights = int(exposure)  # legacy compat
+        db.session.commit()
+        flash(f'✓ SPI data logged: {ind.code} {month}/{year} = {entry.value}', 'success')
+        return redirect(url_for('spi', dept=dept_f))
+
+    # Build dashboard
+    indicators = SPIIndicator.query.filter_by(active=True).all()
+    if dept_f:
+        indicators = [i for i in indicators
+                      if dept_f in (i.department_ids or '').split(',')]
+
+    table, MONTHS = _spi_build_table(indicators, cur_year)
+
+    # Summary stats
+    critical = sum(1 for r in table if r['status'][2] >= 3)
+    warning  = sum(1 for r in table if r['status'][2] == 2)
+    watch    = sum(1 for r in table if r['status'][2] == 1)
+    ok_count = sum(1 for r in table if r['status'][2] == 0 and r['latest_val'] <= (r['ind'].spt_target or 999))
+
+    return render_template('spi/spi_dashboard.html',
+        table=table, MONTHS=MONTHS, indicators=SPIIndicator.query.filter_by(active=True).all(),
+        dept_f=dept_f, cur_year=cur_year,
+        critical=critical, warning=warning, watch=watch, ok_count=ok_count,
+        enumerate=enumerate)
+
+@app.route('/spi/indicators', methods=['GET','POST'])
+def spi_indicators():
+    """Manage SPI indicator definitions."""
     if request.method == 'POST':
         f = request.form
-        spi_id  = int(f['spi_id'])
-        events  = int(f['events'])
-        flights = int(f['flights'])
-        rate    = round(events / flights * 1000, 4) if flights > 0 else 0
-        entry   = SPIData(spi_id=spi_id, year=int(f['year']),
-                          month=int(f['month']), events=events,
-                          flights=flights, rate=rate)
-        db.session.add(entry)
+        dept_ids = ','.join(request.form.getlist('department_ids'))
+        ind = SPIIndicator(
+            code           = f['code'].upper().strip(),
+            name           = f['name'],
+            department_ids = dept_ids,
+            category       = f.get('category',''),
+            description    = f.get('description',''),
+            calc_type      = f.get('calc_type','RATE'),
+            exposure_type  = f.get('exposure_type','Flights'),
+            unit           = f.get('unit',''),
+            frequency      = f.get('frequency','Monthly'),
+            spt_target     = float(f['spt_target']) if f.get('spt_target') else None,
+            alert_l1       = float(f['alert_l1']) if f.get('alert_l1') else None,
+            alert_l2       = float(f['alert_l2']) if f.get('alert_l2') else None,
+            alert_l3       = float(f['alert_l3']) if f.get('alert_l3') else None,
+            auto_source    = f.get('auto_source','manual'),
+            auto_category  = f.get('auto_category',''),
+            active         = True
+        )
+        db.session.add(ind)
         db.session.commit()
-        flash('✓ SPI data logged.', 'success')
-        return redirect(url_for('spi'))
+        flash(f'✓ SPI Indicator {ind.code} created.', 'success')
+        return redirect(url_for('spi_indicators'))
 
-    dept_f     = request.args.get('dept','')
-    cur_year   = datetime.now().year
-    indicators = SPIIndicator.query.all()
-    if dept_f:
-        indicators = [i for i in indicators if dept_f in i.department_ids.split(',')]
+    indicators = SPIIndicator.query.order_by(SPIIndicator.code).all()
+    return render_template('spi/spi_indicators.html', indicators=indicators)
 
-    MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-    table  = []
-    for ind in indicators:
-        month_rates = {}
-        for d in SPIData.query.filter_by(spi_id=ind.id, year=cur_year).all():
-            month_rates[d.month] = d.rate
-        ytd = round(sum(month_rates.values()) / len(month_rates), 2) if month_rates else 0
-        if   ytd >= ind.alert_l2:   status = ('🔴 CRITICAL', '#dc2626')
-        elif ytd >= ind.alert_l1:   status = ('🟡 WARNING',  '#d97706')
-        elif ytd > ind.spt_target:  status = ('🟠 WATCH',    '#ea580c')
-        else:                       status = ('🟢 OK',       '#16a34a')
-        dept_codes = []
-        for did in ind.department_ids.split(','):
-            d = Department.query.get(int(did))
-            if d: dept_codes.append(d.code)
-        table.append(dict(ind=ind, month_rates=month_rates, ytd=ytd,
-                          status=status, depts=', '.join(dept_codes)))
+@app.route('/spi/indicators/<int:iid>/delete', methods=['POST'])
+def spi_delete_indicator(iid):
+    ind = SPIIndicator.query.get_or_404(iid)
+    db.session.delete(ind)
+    db.session.commit()
+    flash(f'✓ Indicator {ind.code} deleted.', 'success')
+    return redirect(url_for('spi_indicators'))
 
-    return render_template('spi/spi_dashboard.html', table=table, MONTHS=MONTHS,
-        indicators=SPIIndicator.query.all(), dept_f=dept_f, cur_year=cur_year,
-        enumerate=enumerate)
+@app.route('/spi/indicators/<int:iid>/toggle', methods=['POST'])
+def spi_toggle_indicator(iid):
+    ind = SPIIndicator.query.get_or_404(iid)
+    ind.active = not ind.active
+    db.session.commit()
+    flash(f'✓ {ind.code} {"activated" if ind.active else "deactivated"}.', 'success')
+    return redirect(url_for('spi_indicators'))
 
 # ─── Safety Promotion ─────────────────────────────────────────────────────────
 @app.route('/safety-promotion')
@@ -3302,6 +3509,25 @@ with app.app_context():
                 ('effectiveness',         'VARCHAR(30)'),
                 ('status',               'VARCHAR(20)'),
                 ('created_at',           'DATETIME'),
+            ],
+            'spi_indicators': [
+                ('category',        'VARCHAR(50)'),
+                ('description',     'TEXT'),
+                ('calc_type',       'VARCHAR(10) DEFAULT "RATE"'),
+                ('exposure_type',   'VARCHAR(30) DEFAULT "Flights"'),
+                ('frequency',       'VARCHAR(20) DEFAULT "Monthly"'),
+                ('alert_l3',        'FLOAT'),
+                ('auto_source',     'VARCHAR(50) DEFAULT "manual"'),
+                ('auto_category',   'VARCHAR(50)'),
+                ('active',          'BOOLEAN DEFAULT 1'),
+                ('created_at',      'DATETIME'),
+            ],
+            'spi_data': [
+                ('exposure',        'FLOAT DEFAULT 1'),
+                ('total_events',    'INTEGER DEFAULT 0'),
+                ('value',           'FLOAT'),
+                ('source',          'VARCHAR(20) DEFAULT "manual"'),
+                ('notes',           'TEXT'),
             ],
             'risk_assessments': [
                 ('control_number',         'VARCHAR(50)'),
