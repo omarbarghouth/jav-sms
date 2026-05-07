@@ -656,22 +656,66 @@ def _spi_calc(ind, events, exposure, total_events):
     except Exception:
         return 0.0
 
+def _spi_thresholds(ind):
+    """
+    ICAO-style auto-calculate alert thresholds from SPT.
+    If user entered manual thresholds, use those.
+    Otherwise: L1 = SPT+20%, L2 = SPT+40%, L3 = SPT+60%
+    For PERCENT type: thresholds go BELOW SPT (lower % = worse)
+    """
+    spt = ind.spt_target or 0
+    is_pct = ind.calc_type == 'PERCENT'
+
+    if ind.alert_l1:
+        l1 = ind.alert_l1
+        l2 = ind.alert_l2 or (spt * 1.4 if not is_pct else spt * 0.7)
+        l3 = ind.alert_l3 or (spt * 1.6 if not is_pct else spt * 0.6)
+    else:
+        if is_pct:
+            # For percentage: lower is worse
+            l1 = spt * 0.9   # 10% below target
+            l2 = spt * 0.8   # 20% below target
+            l3 = spt * 0.7   # 30% below target
+        else:
+            l1 = spt * 1.20  # SPT + 20%
+            l2 = spt * 1.40  # SPT + 40%
+            l3 = spt * 1.60  # SPT + 60%
+    return l1, l2, l3
+
 def _spi_status(value, ind):
     """
-    Return (label, color, level) based on thresholds.
-    Levels: 0=OK, 1=Yellow, 2=Orange, 3=Red
+    Return (label, color, level) based on ICAO alert thresholds.
+    Levels: 0=OK/Blue, 1=Yellow, 2=Orange, 3=Red
+    Thresholds auto-calculated from SPT if not manually set.
     """
-    l3 = getattr(ind, 'alert_l3', None)
-    if l3 and value >= l3:
-        return ('🔴 CRITICAL',  '#dc2626', 3)
-    elif value >= (ind.alert_l2 or 999):
-        return ('🟠 WARNING L2', '#ea580c', 2)
-    elif value >= (ind.alert_l1 or 999):
-        return ('🟡 WATCH L1',   '#d97706', 1)
-    elif value > (ind.spt_target or 0):
-        return ('🔵 EXCEEDS SPT','#1d4ed8', 0)
+    l1, l2, l3 = _spi_thresholds(ind)
+    spt = ind.spt_target or 0
+    is_pct = ind.calc_type == 'PERCENT'
+
+    if is_pct:
+        # For percentage: LOWER value = WORSE
+        if value <= l3:
+            return ('🔴 CRITICAL',   '#dc2626', 3)
+        elif value <= l2:
+            return ('🟠 WARNING L2', '#ea580c', 2)
+        elif value <= l1:
+            return ('🟡 WATCH L1',   '#d97706', 1)
+        elif value < spt:
+            return ('🔵 BELOW SPT',  '#1d4ed8', 0)
+        else:
+            return ('🟢 OK',         '#15803d', 0)
     else:
-        return ('🟢 OK',         '#15803d', 0)
+        # For count/rate: HIGHER value = WORSE
+        if value >= l3:
+            return ('🔴 CRITICAL',   '#dc2626', 3)
+        elif value >= l2:
+            return ('🟠 WARNING L2', '#ea580c', 2)
+        elif value >= l1:
+            return ('🟡 WATCH L1',   '#d97706', 1)
+        elif value > spt:
+            return ('🔵 EXCEEDS SPT','#1d4ed8', 0)
+        else:
+            return ('🟢 OK',         '#15803d', 0)
 
 def _spi_trend(values_list):
     """
@@ -707,18 +751,27 @@ def _spi_build_table(indicators, cur_year):
         # Trend
         trend = _spi_trend(vals_so_far[-3:] if vals_so_far else [])
 
-        # Status based on latest value or YTD
+        # Status based on latest value
         latest_val = vals_so_far[-1] if vals_so_far else 0.0
         status = _spi_status(latest_val, ind)
 
-        # Department codes
+        # Auto-calculated thresholds
+        l1, l2, l3 = _spi_thresholds(ind)
+
+        # Department codes + names
         dept_codes = []
+        dept_names = []
         for did in (ind.department_ids or '').split(','):
             try:
                 d = Department.query.get(int(did.strip()))
-                if d: dept_codes.append(d.code)
+                if d:
+                    dept_codes.append(d.code)
+                    dept_names.append(d.name)
             except Exception:
                 pass
+
+        # Last updated month
+        last_month = max(month_vals.keys()) if month_vals else None
 
         table.append(dict(
             ind=ind,
@@ -728,7 +781,12 @@ def _spi_build_table(indicators, cur_year):
             trend=trend,
             status=status,
             depts=', '.join(dept_codes),
+            dept_names=', '.join(dept_names),
             latest_val=latest_val,
+            l1=round(l1, 2),
+            l2=round(l2, 2),
+            l3=round(l3, 2),
+            last_month=last_month,
         ))
     return table, MONTHS
 
