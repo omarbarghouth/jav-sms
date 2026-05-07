@@ -220,26 +220,57 @@ class MOC(db.Model):
     department          = db.relationship('Department', foreign_keys=[department_id])
 
 class SPIIndicator(db.Model):
+    """
+    Safety Performance Indicator definition.
+    Calc types:
+      COUNT  : SPI = events (raw count)
+      RATE   : SPI = (events / exposure) * 1000
+      PERCENT: SPI = (events / total_events) * 100
+    Alert logic:
+      value >= alert_l3 → RED (Level 3 Critical)
+      value >= alert_l2 → ORANGE (Level 2 Warning)
+      value >= alert_l1 → YELLOW (Level 1 Watch)
+      value > spt_target → BLUE (Exceeds target)
+      else              → GREEN (Within target)
+    """
     __tablename__ = 'spi_indicators'
     id             = db.Column(db.Integer, primary_key=True)
     code           = db.Column(db.String(20))
     name           = db.Column(db.String(200))
-    department_ids = db.Column(db.String(50))   # comma-separated: "1,2"
+    department_ids = db.Column(db.String(50))   # comma-separated dept ids: "1,2"
+    category       = db.Column(db.String(50))   # FOD / ASR / Audit / Training / etc.
+    description    = db.Column(db.Text)
+    calc_type      = db.Column(db.String(10), default='RATE')  # COUNT / RATE / PERCENT
+    exposure_type  = db.Column(db.String(30), default='Flights')  # Flights/Hours/Sectors/Reports
     unit           = db.Column(db.String(50))
-    spt_target     = db.Column(db.Float)
-    alert_l1       = db.Column(db.Float)
-    alert_l2       = db.Column(db.Float)
-    data_entries   = db.relationship('SPIData', backref='indicator', lazy=True)
+    frequency      = db.Column(db.String(20), default='Monthly')
+    spt_target     = db.Column(db.Float)   # Safety Performance Target
+    alert_l1       = db.Column(db.Float)   # Yellow — Level 1
+    alert_l2       = db.Column(db.Float)   # Orange — Level 2
+    alert_l3       = db.Column(db.Float)   # Red    — Level 3 Critical
+    auto_source    = db.Column(db.String(50))   # 'hazard_report' / 'asr' / 'audit' / 'manual'
+    auto_category  = db.Column(db.String(50))   # e.g. 'FOD' — auto-match on this category
+    active         = db.Column(db.Boolean, default=True)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    data_entries   = db.relationship('SPIData', backref='indicator', lazy=True,
+                                     cascade='all, delete-orphan')
 
 class SPIData(db.Model):
+    """Monthly SPI data point."""
     __tablename__ = 'spi_data'
-    id       = db.Column(db.Integer, primary_key=True)
-    spi_id   = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'))
-    year     = db.Column(db.Integer)
-    month    = db.Column(db.Integer)
-    events   = db.Column(db.Integer)
-    flights  = db.Column(db.Integer)
-    rate     = db.Column(db.Float)
+    id           = db.Column(db.Integer, primary_key=True)
+    spi_id       = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'))
+    year         = db.Column(db.Integer)
+    month        = db.Column(db.Integer)   # 1-12
+    events       = db.Column(db.Integer, default=0)    # numerator
+    exposure     = db.Column(db.Float, default=1)      # denominator (flights/hours/reports)
+    total_events = db.Column(db.Integer, default=0)    # for PERCENT calc
+    value        = db.Column(db.Float)     # calculated SPI value
+    source       = db.Column(db.String(20), default='manual')  # manual / auto
+    notes        = db.Column(db.Text)
+    # legacy compat
+    flights      = db.Column(db.Integer)
+    rate         = db.Column(db.Float)
 
 class SafetyBulletin(db.Model):
     __tablename__ = 'safety_bulletins'
