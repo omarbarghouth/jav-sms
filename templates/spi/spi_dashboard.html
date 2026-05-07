@@ -1,81 +1,285 @@
 {% extends "base.html" %}
-{% block title %}SPI / SPT{% endblock %}
+{% block title %}SPI / SPT Dashboard{% endblock %}
 {% block content %}
+
 <div class="page-title">Safety Performance Indicators</div>
-<div class="page-sub">ICAO Annex 19 · Doc 9859 · Rate per 1,000 Flights / Operations · Year {{ cur_year }}</div>
-<div class="fbar">
-  <form method="GET" style="display:flex;gap:8px">
-    <select name="dept" onchange="this.form.submit()" style="border:1.5px solid var(--border);border-radius:7px;padding:7px 11px;background:#fff;font-size:12px;font-family:inherit">
+<div class="page-sub">ICAO Annex 19 §6.3 · Doc 9859 Ch.7 · Automatic calculation · Year {{ cur_year }}</div>
+
+<!-- Alert summary banners -->
+{% if critical > 0 %}
+<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:10px;padding:12px 18px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+  <span style="font-size:22px">🔴</span>
+  <div><strong style="color:#991b1b;font-size:13.5px">{{ critical }} CRITICAL indicator{{ 's' if critical > 1 }} — Immediate action required</strong>
+  <div style="font-size:12px;color:#374151;margin-top:2px">SPI has reached Level 3 threshold. Escalate to Accountable Manager.</div></div>
+</div>
+{% endif %}
+{% if warning > 0 %}
+<div style="background:#ffedd5;border:2px solid #ea580c;border-radius:10px;padding:12px 18px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+  <span style="font-size:22px">🟠</span>
+  <div><strong style="color:#9a3412;font-size:13.5px">{{ warning }} indicator{{ 's' if warning > 1 }} at Level 2 — Corrective action needed</strong></div>
+</div>
+{% endif %}
+
+<!-- Stat summary -->
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ critical }}</div><div class="stat-lbl">🔴 Critical</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#ea580c">{{ warning }}</div><div class="stat-lbl">🟠 Warning L2</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ watch }}</div><div class="stat-lbl">🟡 Watch L1</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ ok_count }}</div><div class="stat-lbl">🟢 Within SPT</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ table|length }}</div><div class="stat-lbl">Total SPIs</div></div>
+</div>
+
+<!-- Controls -->
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+  <form method="GET" style="display:flex;gap:8px;align-items:center">
+    <select name="dept" onchange="this.form.submit()"
+            style="border:1.5px solid var(--border);border-radius:7px;padding:7px 11px;background:#fff;font-size:12px;font-family:inherit">
       <option value="">All Departments</option>
-      {% for d in all_departments %}<option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      {% for d in all_departments %}
+      <option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>
+      {% endfor %}
     </select>
+    {% if dept_f %}<a href="/spi" class="btn btn-outline btn-sm">Clear</a>{% endif %}
   </form>
-  <button class="btn btn-nav btn-sm" onclick="document.getElementById('spi-modal').style.display='flex'">+ Log Data</button>
+  <div style="display:flex;gap:8px">
+    <a href="/spi/indicators" class="btn btn-outline btn-sm">⚙ Manage SPIs</a>
+    <button class="btn btn-nav btn-sm"
+            onclick="document.getElementById('spi-modal').style.display='flex'">+ Log Data</button>
+  </div>
 </div>
+
 <!-- Legend -->
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;font-size:11px">
-  <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:#dcfce7;border-radius:3px;display:inline-block"></span>Within Target</span>
-  <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:#ffedd5;border-radius:3px;display:inline-block"></span>Watch</span>
-  <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:#fef9c3;border-radius:3px;display:inline-block"></span>Warning (L1)</span>
-  <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:#fee2e2;border-radius:3px;display:inline-block"></span>Critical (L2)</span>
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;font-size:11.5px">
+  {% for color, label in [('#dcfce7','🟢 Within SPT'),('#dbeafe','🔵 Exceeds SPT'),
+      ('#fef9c3','🟡 Level 1 Watch'),('#ffedd5','🟠 Level 2 Warning'),('#fee2e2','🔴 Level 3 Critical')] %}
+  <span style="display:flex;align-items:center;gap:5px">
+    <span style="width:14px;height:14px;background:{{ color }};border-radius:3px;border:1px solid #e5e7eb;display:inline-block"></span>
+    {{ label }}
+  </span>
+  {% endfor %}
 </div>
-<div class="card" style="padding:0">
-  <div class="tbl-wrap">
-    <table>
+
+<!-- ═══ MAIN SPI TABLE ═══ -->
+{% if table %}
+{% set MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
+
+{% set cur_dept = namespace(id=-1, name='') %}
+
+{% for row in table %}
+{% set ind = row.ind %}
+
+<!-- Department header — group by first dept -->
+{% set dept_key = ind.department_ids.split(',')[0] if ind.department_ids else '' %}
+
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
+
+  <!-- SPI info header -->
+  <div style="background:var(--navy);color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="mono" style="color:var(--gold2);font-size:12px;font-weight:800">{{ ind.code }}</span>
+      <span style="font-size:13px;font-weight:700">{{ ind.name }}</span>
+      <span style="font-size:10px;background:rgba(255,255,255,.15);padding:2px 8px;border-radius:99px">
+        {% if ind.calc_type == 'COUNT' %}Count
+        {% elif ind.calc_type == 'PERCENT' %}Percentage
+        {% else %}Rate per 1,000 {{ ind.exposure_type or 'Flights' }}{% endif %}
+      </span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;font-size:11px">
+      <span style="color:rgba(255,255,255,.6)">Dept: <strong style="color:#fff">{{ row.depts }}</strong></span>
+      <span style="color:rgba(255,255,255,.6)">SPT: <strong style="color:var(--gold2)">{{ ind.spt_target }}</strong></span>
+      {% if ind.auto_source and ind.auto_source != 'manual' %}
+      <span style="background:#15803d;color:#fff;padding:2px 8px;border-radius:99px;font-size:10px">
+        ⚡ Auto: {{ ind.auto_source }}
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Monthly data table -->
+  <div style="overflow-x:auto">
+    <table style="min-width:900px">
       <thead>
         <tr>
-          <th>Code</th><th>Indicator</th><th>Dept</th><th>Target</th><th>L1</th><th>L2</th>
-          {% for m in MONTHS %}<th>{{ m }}</th>{% endfor %}
-          <th>YTD</th><th>Status</th>
+          <th>Thresholds</th>
+          {% for m in MONTHS %}<th style="text-align:center;min-width:52px">{{ m }}</th>{% endfor %}
+          <th style="text-align:center">YTD Avg</th>
+          <th style="text-align:center">3M Avg</th>
+          <th style="text-align:center">Trend</th>
+          <th>Status</th>
+        </tr>
+        <tr style="background:#f8f9fc;font-size:10px">
+          <td style="padding:4px 12px;color:var(--muted)">
+            SPT: <strong>{{ ind.spt_target }}</strong> ·
+            L1: {{ ind.alert_l1 }} ·
+            L2: {{ ind.alert_l2 }} ·
+            L3: {{ ind.alert_l3 or '—' }}
+          </td>
+          {% for i in range(1,13) %}
+          {% set val = row.month_vals.get(i) %}
+          {% if val is not none %}
+            {% if ind.alert_l3 and val >= ind.alert_l3 %}
+            <td style="background:#dc262620;text-align:center;font-size:10px;color:#dc2626;font-weight:800;padding:4px">🔴</td>
+            {% elif val >= (ind.alert_l2 or 9999) %}
+            <td style="background:#ea580c20;text-align:center;font-size:10px;color:#ea580c;font-weight:800;padding:4px">🟠</td>
+            {% elif val >= (ind.alert_l1 or 9999) %}
+            <td style="background:#d9770620;text-align:center;font-size:10px;color:#d97706;font-weight:800;padding:4px">🟡</td>
+            {% elif val > (ind.spt_target or 0) %}
+            <td style="background:#1d4ed820;text-align:center;font-size:10px;color:#1d4ed8;font-weight:800;padding:4px">🔵</td>
+            {% else %}
+            <td style="background:#15803d20;text-align:center;font-size:10px;color:#15803d;font-weight:800;padding:4px">🟢</td>
+            {% endif %}
+          {% else %}
+            <td style="text-align:center;font-size:10px;color:#d1d5db;padding:4px">—</td>
+          {% endif %}
+          {% endfor %}
+          <td></td><td></td><td></td><td></td>
         </tr>
       </thead>
       <tbody>
-        {% for row in table %}{% set ind = row.ind %}
         <tr>
-          <td><strong class="mono">{{ ind.code }}</strong></td>
-          <td style="font-size:11px;max-width:140px">{{ ind.name }}</td>
-          <td style="font-size:11px">{{ row.depts }}</td>
-          <td style="font-size:12px">{{ ind.spt_target }}</td>
-          <td style="font-size:12px">{{ ind.alert_l1 }}</td>
-          <td style="font-size:12px">{{ ind.alert_l2 }}</td>
-          {% for i in range(1,13) %}{% set rate = row.month_rates.get(i) %}
-            {% if rate is not none %}
-              {% if rate >= ind.alert_l2 %}<td style="background:#fee2e2;text-align:center;font-size:11px;font-weight:700;color:#dc2626">{{ "%.2f"|format(rate) }}</td>
-              {% elif rate >= ind.alert_l1 %}<td style="background:#fef9c3;text-align:center;font-size:11px;font-weight:700;color:#b45309">{{ "%.2f"|format(rate) }}</td>
-              {% elif rate > ind.spt_target %}<td style="background:#ffedd5;text-align:center;font-size:11px;font-weight:700;color:#c2410c">{{ "%.2f"|format(rate) }}</td>
-              {% else %}<td style="background:#dcfce7;text-align:center;font-size:11px;font-weight:700;color:#15803d">{{ "%.2f"|format(rate) }}</td>{% endif %}
-            {% else %}<td style="text-align:center;color:#d1d5db;font-size:11px">—</td>{% endif %}
+          <td style="font-size:11px;color:var(--muted);padding:8px 12px">
+            {{ ind.description or ind.unit or '' }}
+          </td>
+          {% for i in range(1,13) %}
+          {% set val = row.month_vals.get(i) %}
+          {% if val is not none %}
+            {% if ind.alert_l3 and val >= ind.alert_l3 %}
+              <td style="background:#fee2e2;text-align:center;font-size:12px;font-weight:800;color:#dc2626">{{ '%.2f'|format(val) }}</td>
+            {% elif val >= (ind.alert_l2 or 9999) %}
+              <td style="background:#ffedd5;text-align:center;font-size:12px;font-weight:800;color:#ea580c">{{ '%.2f'|format(val) }}</td>
+            {% elif val >= (ind.alert_l1 or 9999) %}
+              <td style="background:#fef9c3;text-align:center;font-size:12px;font-weight:700;color:#b45309">{{ '%.2f'|format(val) }}</td>
+            {% elif val > (ind.spt_target or 0) %}
+              <td style="background:#dbeafe;text-align:center;font-size:12px;font-weight:700;color:#1d4ed8">{{ '%.2f'|format(val) }}</td>
+            {% else %}
+              <td style="background:#dcfce7;text-align:center;font-size:12px;font-weight:700;color:#15803d">{{ '%.2f'|format(val) }}</td>
+            {% endif %}
+          {% else %}
+            <td style="text-align:center;color:#d1d5db;font-size:11px">—</td>
+          {% endif %}
           {% endfor %}
-          <td style="text-align:center;font-weight:800;font-size:12px">{{ "%.2f"|format(row.ytd) }}</td>
-          <td style="font-weight:700;font-size:12px;color:{{ row.status[1] }}">{{ row.status[0] }}</td>
+          <td style="text-align:center;font-weight:800;font-size:13px;color:var(--navy)">{{ '%.2f'|format(row.ytd) }}</td>
+          <td style="text-align:center;font-size:12px;color:var(--muted)">{{ '%.2f'|format(row.avg3) }}</td>
+          <td style="text-align:center;font-size:12px;font-weight:700;
+            color:{% if '↑' in row.trend %}#dc2626{% elif '↓' in row.trend %}#15803d{% else %}#6b7280{% endif %}">
+            {{ row.trend }}
+          </td>
+          <td style="font-weight:700;font-size:12px;white-space:nowrap;color:{{ row.status[1] }}">
+            {{ row.status[0] }}
+          </td>
         </tr>
-        {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
-<!-- Modal -->
-<div id="spi-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center;padding:20px">
-  <div style="background:#fff;border-radius:12px;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+{% endfor %}
+
+{% else %}
+<div class="card" style="text-align:center;padding:48px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:12px">📈</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No SPI Indicators Defined</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:20px;max-width:400px;margin-left:auto;margin-right:auto">
+    Create your Safety Performance Indicators first, then log monthly data.
+  </div>
+  <a href="/spi/indicators" class="btn btn-nav">⚙ Create SPI Indicators</a>
+</div>
+{% endif %}
+
+<!-- ═══ LOG DATA MODAL ═══ -->
+<div id="spi-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)">
-      <strong style="color:var(--navy)">Log SPI Data</strong>
-      <button onclick="document.getElementById('spi-modal').style.display='none'" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer">✕</button>
+      <strong style="color:var(--navy);font-size:14px">Log SPI Data</strong>
+      <button onclick="document.getElementById('spi-modal').style.display='none'"
+              style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1">✕</button>
     </div>
     <form method="POST" style="padding:20px;display:flex;flex-direction:column;gap:12px">
-      <div class="fg"><label>SPI Indicator *</label>
-        <select name="spi_id" required><option value="">Select…</option>
-          {% for i in indicators %}<option value="{{ i.id }}">{{ i.code }} – {{ i.name }}</option>{% endfor %}
-        </select></div>
-      <div class="g2">
-        <div class="fg"><label>Year</label><input type="number" name="year" value="{{ cur_year }}" required/></div>
-        <div class="fg"><label>Month</label>
-          <select name="month" required>{% for idx, m in enumerate(MONTHS) %}<option value="{{ idx+1 }}" {% if idx+1==now.month %}selected{% endif %}>{{ m }}</option>{% endfor %}</select>
-        </div>
-        <div class="fg"><label>Events</label><input type="number" name="events" required min="0"/></div>
-        <div class="fg"><label>Flights / Ops</label><input type="number" name="flights" required min="1"/></div>
+
+      <div class="fg">
+        <label>SPI Indicator *</label>
+        <select name="spi_id" required id="spi-select" onchange="updateCalcHint(this)">
+          <option value="">Select…</option>
+          {% for i in indicators %}
+          <option value="{{ i.id }}" data-type="{{ i.calc_type }}" data-exp="{{ i.exposure_type }}">
+            {{ i.code }} — {{ i.name }} ({{ i.calc_type }})
+          </option>
+          {% endfor %}
+        </select>
       </div>
-      <button type="submit" class="btn btn-nav">Submit</button>
+
+      <div id="calc-hint" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 12px;font-size:12px;color:#1e40af;display:none">
+        Formula will be shown here
+      </div>
+
+      <div class="g2">
+        <div class="fg">
+          <label>Year</label>
+          <input type="number" name="year" value="{{ cur_year }}" required/>
+        </div>
+        <div class="fg">
+          <label>Month *</label>
+          <select name="month" required>
+            {% for idx, m in enumerate(MONTHS) %}
+            <option value="{{ idx+1 }}" {% if idx+1==now.month %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="fg">
+        <label>Number of Events (occurrences) *</label>
+        <input type="number" name="events" required min="0" placeholder="e.g. 3"/>
+      </div>
+
+      <div id="exposure-block" class="fg">
+        <label id="exposure-label">Exposure (Flights / Hours / Sectors)</label>
+        <input type="number" name="exposure" min="1" step="0.1" placeholder="e.g. 1250"/>
+      </div>
+
+      <div id="total-block" class="fg" style="display:none">
+        <label>Total Events (denominator for %)</label>
+        <input type="number" name="total_events" min="1" placeholder="e.g. 50"/>
+      </div>
+
+      <div class="fg">
+        <label>Notes</label>
+        <input type="text" name="notes" placeholder="Optional comment…"/>
+      </div>
+
+      <button type="submit" class="btn btn-nav">✓ Log SPI Data</button>
     </form>
   </div>
 </div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function updateCalcHint(sel) {
+  var opt   = sel.options[sel.selectedIndex];
+  var ctype = opt.dataset.type;
+  var exp   = opt.dataset.exp || 'Flights';
+  var hint  = document.getElementById('calc-hint');
+  var expBlk= document.getElementById('exposure-block');
+  var totBlk= document.getElementById('total-block');
+  var expLbl= document.getElementById('exposure-label');
+
+  if (!ctype) { hint.style.display='none'; return; }
+  hint.style.display = 'block';
+
+  if (ctype === 'COUNT') {
+    hint.innerHTML = '<strong>Formula:</strong> SPI = Number of Events (raw count)';
+    expBlk.style.display = 'none';
+    totBlk.style.display = 'none';
+  } else if (ctype === 'PERCENT') {
+    hint.innerHTML = '<strong>Formula:</strong> SPI = (Events / Total Events) × 100';
+    expBlk.style.display = 'none';
+    totBlk.style.display = 'flex';
+  } else {
+    hint.innerHTML = '<strong>Formula:</strong> SPI = (Events / ' + exp + ') × 1,000';
+    expBlk.style.display = 'flex';
+    expLbl.textContent = 'Exposure — Number of ' + exp;
+    totBlk.style.display = 'none';
+  }
+}
+</script>
 {% endblock %}
