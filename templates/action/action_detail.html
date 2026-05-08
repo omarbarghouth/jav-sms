@@ -267,19 +267,45 @@
 
       {% if a.spi_id %}
       {% set spi_ind = a.spi_indicator %}
-      <div style="border:1.5px solid {% if a.spi_alert_level=='L3' %}#dc2626{% elif a.spi_alert_level=='L2' %}#ea580c{% else %}#d97706{% endif %};border-radius:8px;padding:14px;margin-bottom:12px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:{% if a.spi_alert_level=='L3' %}#dc2626{% elif a.spi_alert_level=='L2' %}#ea580c{% else %}#d97706{% endif %};margin-bottom:5px">
+      {% set lc = {'L3':'#dc2626','L2':'#ea580c','L1':'#d97706'}.get(a.spi_alert_level,'#d97706') %}
+      {% set MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
+      <div style="border:1.5px solid {{ lc }};border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:{{ lc }};margin-bottom:6px">
           📈 SPI ALERT — {{ a.spi_alert_level or 'Linked' }}
         </div>
         {% if spi_ind %}
-        <div style="font-weight:700;font-size:14px">{{ spi_ind.code }} — {{ spi_ind.name }}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:3px">{{ spi_ind.description or '' }}</div>
+        <div style="font-weight:700;font-size:13px;color:var(--navy)">{{ spi_ind.code }} — {{ spi_ind.name }}</div>
         {% endif %}
-        {% if a.spi_trigger_rule %}
-        {% set rule_map = {'A':'One point exceeded L3 (Mean+3SD)','B':'Two consecutive exceeded L2','C':'Three consecutive exceeded L1'} %}
-        <div style="font-size:12px;color:#374151;margin-top:5px;font-weight:600">
-          Rule {{ a.spi_trigger_rule }}: {{ rule_map.get(a.spi_trigger_rule,'') }}
+        <!-- Trigger month box — prominently separated from creation date -->
+        <div style="background:{{ lc }}12;border:1px solid {{ lc }}40;border-radius:6px;
+                    padding:9px 12px;margin:8px 0">
+          <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12px">
+            <div>
+              <span style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted)">
+                SPI Alert Trigger Month
+              </span>
+              <div style="font-weight:800;font-size:14px;color:{{ lc }}">
+                {% if a.spi_alert_month and a.spi_alert_year %}
+                {{ MNAMES[a.spi_alert_month - 1] }} {{ a.spi_alert_year }}
+                {% else %}—{% endif %}
+              </div>
+            </div>
+            <div>
+              <span style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted)">
+                Action Created
+              </span>
+              <div style="font-size:12px;color:#374151;font-weight:600">
+                {{ a.created_at.strftime('%d %b %Y') if a.created_at else '—' }}
+              </div>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:5px;font-style:italic">
+            ↑ These dates are intentionally different — trigger month is when the SPI threshold was crossed
+          </div>
         </div>
+        {% if a.spi_trigger_rule %}
+        {% set rule_map = {'A':'Rule A: One point ≥ L3 (Mean+3SD)','B':'Rule B: Two consecutive ≥ L2 (Mean+2SD)','C':'Rule C: Three consecutive ≥ L1 (Mean+1SD)'} %}
+        <div style="font-size:12px;color:#374151;font-weight:600">{{ rule_map.get(a.spi_trigger_rule,'') }}</div>
         {% endif %}
         {% if a.mitigation_status %}
         <div style="margin-top:8px">
@@ -288,7 +314,11 @@
           </span>
         </div>
         {% endif %}
-        <a href="/spi" style="font-size:12px;color:#1d4ed8;display:block;margin-top:8px">← Return to SPI Dashboard</a>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <a href="/spi" style="font-size:12px;color:#1d4ed8;font-weight:600">← SPI Dashboard</a>
+          <a href="/spi/action-report/{{ a.id }}" target="_blank"
+             style="font-size:12px;color:#065f46;font-weight:600">🖨 Print Report</a>
+        </div>
       </div>
       {% endif %}
 
