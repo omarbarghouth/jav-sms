@@ -422,23 +422,65 @@ class AuditChecklist(db.Model):
     sequence       = db.Column(db.Integer, default=0)
 
 class AuditFinding(db.Model):
-    """Finding raised during an audit — linked to actions and hazards."""
+    """
+    Finding raised during an audit.
+    Full lifecycle: Open → Assigned → Root Cause Submitted → CAP Submitted
+                    → Under Safety Review → Accepted → Closed
+    Auditee submits: root cause, corrective action, CAP, evidence.
+    Safety reviews and accepts or returns for revision.
+    """
     __tablename__ = 'audit_findings'
     id             = db.Column(db.String(30), primary_key=True)
     schedule_id    = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'))
-    finding_ref    = db.Column(db.String(30))    # e.g. F-001 within the audit
+    finding_ref    = db.Column(db.String(30))    # e.g. F-001
     description    = db.Column(db.Text)
-    category       = db.Column(db.String(50))    # Operational / Technical / Human Factors / Organizational
+    category       = db.Column(db.String(50))
     severity       = db.Column(db.String(20))    # Major / Minor / Observation
-    standard_ref   = db.Column(db.String(100))   # e.g. IOSA ISM 1.2.3 / ICAO Annex 19
-    root_cause     = db.Column(db.Text)
-    evidence       = db.Column(db.Text)
-    requirement    = db.Column(db.Text)          # What the standard requires
-    status         = db.Column(db.String(20), default='Open')  # Open / Actioned / Closed / Verified
-    # Auto-linked to SMS modules
+    standard_ref   = db.Column(db.String(100))
+    requirement    = db.Column(db.Text)
+    evidence       = db.Column(db.Text)          # Auditor evidence notes
+    # Full lifecycle status
+    status = db.Column(db.String(40), default='Open')
+    # Open / Assigned / Root Cause Submitted / CAP Submitted /
+    # Under Safety Review / Accepted / Closed / Returned for Revision / Overdue
+    assigned_to    = db.Column(db.String(100))   # auditee responsible person
+    assigned_dept  = db.Column(db.String(100))
+    assigned_date  = db.Column(db.String(20))
+    # ── A. Root Cause (completed by Auditee) ─────────────────────────────
+    root_cause          = db.Column(db.Text)
+    investigation_notes = db.Column(db.Text)
+    contributing_factors= db.Column(db.Text)
+    root_cause_submitted_at = db.Column(db.DateTime)
+    # ── B. Corrective Action (completed by Auditee) ──────────────────────
+    immediate_action    = db.Column(db.Text)
+    longterm_action     = db.Column(db.Text)
+    # ── C. CAP (Corrective Action Plan) ──────────────────────────────────
+    cap_responsible     = db.Column(db.String(100))
+    cap_due_date        = db.Column(db.String(20))
+    cap_status          = db.Column(db.String(30), default='Pending')
+    # Pending / In Progress / Completed / Overdue
+    cap_completion_pct  = db.Column(db.Integer, default=0)
+    cap_submitted_at    = db.Column(db.DateTime)
+    # ── D. Evidence files (filenames, comma-separated) ───────────────────
+    evidence_files      = db.Column(db.Text)   # comma-separated filenames
+    # ── E. Safety Review ─────────────────────────────────────────────────
+    review_notes        = db.Column(db.Text)
+    reviewed_by         = db.Column(db.String(100))
+    review_date         = db.Column(db.String(20))
+    revision_reason     = db.Column(db.Text)   # reason for returning for revision
+    # ── F. Closure Verification ──────────────────────────────────────────
+    closure_verified_by = db.Column(db.String(100))
+    closure_date        = db.Column(db.String(20))
+    closure_notes       = db.Column(db.Text)
+    # ── G. Signatures ────────────────────────────────────────────────────
+    sig_dept_manager    = db.Column(db.String(100))
+    sig_auditor         = db.Column(db.String(100))
+    sig_safety_manager  = db.Column(db.String(100))
+    sig_date            = db.Column(db.String(20))
+    # ── Links ─────────────────────────────────────────────────────────────
     hazard_id      = db.Column(db.String(30), db.ForeignKey('hazards.id'), nullable=True)
+    linked_action_id = db.Column(db.String(30))   # Action module action
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
-    # Actions linked via Action.linked_ref_id = finding.id
     actions        = db.relationship('AuditAction', backref='finding', lazy=True,
                                       cascade='all, delete-orphan')
 
