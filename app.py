@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid, io
 from openpyxl import Workbook
@@ -435,6 +435,22 @@ def new_action():
                 evidence_filename = f"{new_id('EV')}_{secure_filename(ef.filename)}"
                 ef.save(os.path.join(app.config['UPLOAD_FOLDER'], evidence_filename))
 
+        alert_month = int(f['spi_alert_month']) if f.get('spi_alert_month') else datetime.now().month
+        alert_year  = int(f['spi_alert_year'])  if f.get('spi_alert_year')  else datetime.now().year
+        spi_id_val  = int(f['spi_id']) if f.get('spi_id') else None
+
+        # Link to the persisted escalation record for accurate trigger data
+        esc_id = None
+        if spi_id_val and f.get('spi_trigger_rule'):
+            esc = SPIEscalation.query.filter_by(
+                spi_id=spi_id_val,
+                trigger_month=alert_month,
+                trigger_rule=f.get('spi_trigger_rule', '')
+            ).first()
+            if esc:
+                esc_id = esc.id
+                esc.status = 'Actioned'
+
         a = Action(
             id=new_id('ACT'),
             source=f.get('source', 'Manual'),
@@ -446,11 +462,12 @@ def new_action():
             priority=f.get('priority', 'Medium'),
             status='Open',
             # SPI lifecycle fields
-            spi_id               = int(f['spi_id']) if f.get('spi_id') else None,
+            spi_id               = spi_id_val,
             spi_alert_level      = f.get('spi_alert_level', ''),
             spi_trigger_rule     = f.get('spi_trigger_rule', ''),
-            spi_alert_month      = int(f['spi_alert_month']) if f.get('spi_alert_month') else datetime.now().month,
-            spi_alert_year       = int(f['spi_alert_year'])  if f.get('spi_alert_year')  else datetime.now().year,
+            spi_alert_month      = alert_month,
+            spi_alert_year       = alert_year,
+            spi_escalation_id    = esc_id,
             mitigation_description = f.get('mitigation_description', ''),
             corrective_description = f.get('corrective_description', ''),
             safety_notes           = f.get('safety_notes', ''),
@@ -1070,19 +1087,32 @@ def _spi_build_table(indicators, cur_year):
             spt=ind.spt_target)
         trigger = trigger_detail['rule'] if trigger_detail else None
 
-        # Extract exact escalation info
+        # Extract exact escalation info AND persist a record
         if trigger_detail:
-            escalation_month = trigger_detail['trigger_month']
-            escalation_year  = cur_year
-            escalation_value = trigger_detail['trigger_value']
-            escalation_level = trigger_detail['level']
-            escalation_desc  = trigger_detail['description']
+            escalation_month  = trigger_detail['trigger_month']
+            escalation_year   = cur_year
+            escalation_value  = trigger_detail['trigger_value']
+            escalation_level  = trigger_detail['level']
+            escalation_desc   = trigger_detail['description']
+            # Compute threshold that was crossed
+            esc_thr_map       = {'L3': l3, 'L2': l2, 'L1': l1}
+            escalation_threshold = esc_thr_map.get(escalation_level, l1)
+            escalation_diff   = (round(escalation_value - escalation_threshold, 4)
+                                 if escalation_threshold else None)
+            # Persist escalation record (idempotent)
+            try:
+                _spi_record_escalation(ind, trigger_detail, l1, l2, l3, mean, sd)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
         else:
-            escalation_month = None
-            escalation_year  = cur_year
-            escalation_value = None
-            escalation_level = None
-            escalation_desc  = None
+            escalation_month     = None
+            escalation_year      = cur_year
+            escalation_value     = None
+            escalation_level     = None
+            escalation_desc      = None
+            escalation_threshold = None
+            escalation_diff      = None
 
         # Baseline progress
         months_collected = len(all_values)
@@ -1118,6 +1148,8 @@ def _spi_build_table(indicators, cur_year):
             escalation_value=escalation_value,
             escalation_level=escalation_level,
             escalation_desc=escalation_desc,
+            escalation_threshold=escalation_threshold,
+            escalation_diff=escalation_diff,
             latest_val=latest,
             l1=l1, l2=l2, l3=l3,
             mean=mean, sd=round(sd, 4),
@@ -1134,6 +1166,53 @@ def _spi_build_table(indicators, cur_year):
             last_month=last_month,
         ))
     return table, MONTHS
+
+
+def _spi_record_escalation(ind, trigger_detail, l1, l2, l3, mean, sd):
+    """
+    Persist an SPIEscalation record when a trigger is detected.
+    Idempotent — checks if this trigger month/rule/indicator already recorded.
+    Returns the SPIEscalation instance (new or existing).
+    """
+    if not trigger_detail:
+        return None
+
+    rule  = trigger_detail['rule']
+    month = trigger_detail['trigger_month']
+    level = trigger_detail['level']
+    value = trigger_detail['trigger_value']
+    desc  = trigger_detail['description']
+
+    # Which threshold was exceeded?
+    thr_map = {'L3': l3, 'L2': l2, 'L1': l1}
+    threshold = thr_map.get(level, l1)
+
+    # Idempotency: don't duplicate for same indicator+month+rule
+    existing = SPIEscalation.query.filter_by(
+        spi_id=ind.id,
+        trigger_month=month,
+        trigger_rule=rule,
+        alert_level=level
+    ).first()
+    if existing:
+        return existing
+
+    esc = SPIEscalation(
+        spi_id          = ind.id,
+        trigger_month   = month,
+        trigger_year    = datetime.now().year,
+        trigger_rule    = rule,
+        alert_level     = level,
+        spi_value       = round(value, 4),
+        threshold_value = round(threshold, 4) if threshold else None,
+        mean_value      = round(mean, 4),
+        sd_value        = round(sd, 4),
+        description     = desc,
+        status          = 'Open',
+    )
+    db.session.add(esc)
+    db.session.flush()   # get ID without committing
+    return esc
 
 
 def spi_auto_update(source_type, department_id, category, year, month,
@@ -1294,9 +1373,20 @@ def spi_action_report(action_id):
     """Print-ready SPI Alert Mitigation Report."""
     a   = Action.query.get_or_404(action_id)
     ind = SPIIndicator.query.get(a.spi_id) if a.spi_id else None
+    # Load the linked escalation record for accurate trigger data
+    esc = None
+    if a.spi_escalation_id:
+        esc = SPIEscalation.query.get(a.spi_escalation_id)
+    # Fallback: search escalations for this indicator + stored month
+    if not esc and a.spi_id and a.spi_alert_month:
+        esc = SPIEscalation.query.filter_by(
+            spi_id=a.spi_id,
+            trigger_month=a.spi_alert_month,
+            trigger_rule=a.spi_trigger_rule
+        ).first()
     MONTHS = ['January','February','March','April','May','June',
               'July','August','September','October','November','December']
-    return render_template('spi/spi_action_report.html', a=a, ind=ind,
+    return render_template('spi/spi_action_report.html', a=a, ind=ind, esc=esc,
                            now=datetime.utcnow(), MONTHS=MONTHS)
 
 @app.route('/spi/indicators', methods=['GET','POST'])
@@ -3928,6 +4018,7 @@ with app.app_context():
                 ('verified_date',          'VARCHAR(20)'),
                 ('spi_alert_month',        'INTEGER'),
                 ('spi_alert_year',         'INTEGER'),
+                ('spi_escalation_id',      'INTEGER'),
                 ('evidence_filename',      'VARCHAR(200)'),
                 ('mitigation_description', 'TEXT'),
                 ('corrective_description', 'TEXT'),
@@ -3951,6 +4042,7 @@ with app.app_context():
                 ('verified_date',          'VARCHAR(20)'),
                 ('spi_alert_month',        'INTEGER'),
                 ('spi_alert_year',         'INTEGER'),
+                ('spi_escalation_id',      'INTEGER'),
                 ('evidence_filename',      'VARCHAR(200)'),
                 ('mitigation_description', 'TEXT'),
                 ('corrective_description', 'TEXT'),
