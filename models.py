@@ -409,17 +409,26 @@ class AuditSchedule(db.Model):
                                           cascade='all, delete-orphan')
 
 class AuditChecklist(db.Model):
-    """Dynamic checklist items for each scheduled audit."""
+    """
+    Dynamic checklist item for each scheduled audit.
+    If response = 'No' → finding REQUIRED before audit can be closed.
+    """
     __tablename__ = 'audit_checklists'
-    id             = db.Column(db.Integer, primary_key=True)
-    schedule_id    = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'))
-    category       = db.Column(db.String(100))   # SOP / Training / Safety Reporting / Operations / Risk Mgmt
-    item_ref       = db.Column(db.String(30))    # e.g. IOSA ISM 1.1.1
-    question       = db.Column(db.Text)
-    response       = db.Column(db.String(10))    # Yes / No / N/A
-    comment        = db.Column(db.Text)
-    evidence       = db.Column(db.Text)
-    sequence       = db.Column(db.Integer, default=0)
+    id              = db.Column(db.Integer, primary_key=True)
+    schedule_id     = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'))
+    category        = db.Column(db.String(100))
+    item_ref        = db.Column(db.String(30))    # e.g. FO-2.1 / IOSA ISM 1.1.1
+    question        = db.Column(db.Text)
+    response        = db.Column(db.String(10))    # Yes / No / N/A
+    comment         = db.Column(db.Text)          # mandatory when No
+    evidence        = db.Column(db.Text)          # evidence notes
+    evidence_filename = db.Column(db.String(200)) # uploaded evidence file
+    sequence        = db.Column(db.Integer, default=0)
+    # Link to Finding generated from this checklist item
+    linked_finding_id = db.Column(db.String(30), db.ForeignKey('audit_findings.id'), nullable=True)
+    linked_finding    = db.relationship('AuditFinding',
+                            foreign_keys=[linked_finding_id],
+                            backref=db.backref('source_checklist_item', uselist=False))
 
 class AuditFinding(db.Model):
     """
