@@ -71,21 +71,56 @@
   <!-- LEFT: Checklist -->
   <div>
     {% if s.checklist_items %}
-    <form method="POST" action="/audit-schedule/{{ s.id }}/checklist">
+
+    <!-- NO-items warning banner -->
+    {% if no_items_without_findings %}
+    <div style="background:#fee2e2;border:2px solid #dc2626;border-radius:9px;padding:12px 16px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-start">
+      <span style="font-size:20px;flex-shrink:0">⚠</span>
+      <div>
+        <div style="font-weight:800;color:#dc2626;font-size:13px;margin-bottom:3px">
+          {{ no_items_without_findings|length }} checklist item(s) answered NO — findings will be auto-created when you save
+        </div>
+        <div style="font-size:12px;color:#7f1d1d">
+          {% for item in no_items_without_findings %}
+          <span style="background:#fff;border:1px solid #fca5a5;padding:2px 7px;border-radius:3px;margin-right:4px;font-family:monospace;font-size:11px">{{ item.item_ref or 'Item '+item.id|string }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/audit-schedule/{{ s.id }}/checklist" enctype="multipart/form-data">
       <div class="card" style="padding:0;overflow:hidden">
-        <div style="background:var(--navy);color:#fff;padding:10px 16px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px">
-          Audit Checklist
+        <!-- Checklist header -->
+        <div style="background:var(--navy);color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px">Audit Checklist</span>
+          <span style="font-size:11px;color:rgba(255,255,255,.7)">
+            {{ done }}/{{ total }} answered
+            {% if nc > 0 %} · <span style="color:#fca5a5;font-weight:700">{{ nc }} NO</span>{% endif %}
+          </span>
         </div>
+
         {% for category, items in checklist.items() %}
-        <div style="padding:12px 16px;border-bottom:2px solid var(--border);background:#f8f9fc">
-          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy)">{{ category }}</div>
+        <!-- Category header -->
+        <div style="padding:10px 16px;border-bottom:2px solid var(--border);background:#f0f4ff;display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy)">{{ category }}</span>
+          {% set cat_nc = items|selectattr('response','eq','No')|list|length %}
+          {% if cat_nc > 0 %}<span style="background:#dc2626;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px">{{ cat_nc }} NO</span>{% endif %}
         </div>
+
         {% for item in items %}
-        <div style="padding:12px 16px;border-bottom:1px solid #f0f2f7">
+        <!-- Checklist item row -->
+        <div style="padding:12px 16px;border-bottom:1px solid #f0f2f7;
+                    {% if item.response=='No' %}background:#fff8f8{% endif %}">
+
+          <!-- Question + response buttons -->
           <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
             <div style="flex:1">
-              {% if item.item_ref %}<span class="mono" style="font-size:10px;color:var(--muted)">{{ item.item_ref }}</span>{% endif %}
-              <p style="font-size:13px;color:#374151;margin-top:2px">{{ item.question }}</p>
+              {% if item.item_ref %}
+              <span class="mono" style="font-size:10px;font-weight:800;color:var(--navy);
+                    background:#f0f4ff;padding:2px 6px;border-radius:3px">{{ item.item_ref }}</span>
+              {% endif %}
+              <p style="font-size:13px;color:#374151;margin-top:4px;line-height:1.5">{{ item.question }}</p>
             </div>
             <!-- Response buttons -->
             <div style="display:flex;gap:4px;flex-shrink:0">
@@ -93,8 +128,10 @@
               <label style="cursor:pointer">
                 <input type="radio" name="resp_{{ item.id }}" value="{{ resp }}"
                   {% if item.response==resp %}checked{% endif %}
-                  style="display:none"/>
-                <span style="padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;border:1.5px solid {{ col }};
+                  style="display:none"
+                  onchange="toggleNoRow({{ item.id }}, '{{ resp }}')"/>
+                <span style="padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;
+                             border:1.5px solid {{ col }};display:inline-block;
                   {% if item.response==resp %}background:{{ col }};color:#fff{% else %}color:{{ col }};background:#fff{% endif %}">
                   {{ resp }}
                 </span>
@@ -102,27 +139,73 @@
               {% endfor %}
             </div>
           </div>
-          {% if item.response == 'No' %}
-          <div style="background:#fff8f8;border:1px solid #fca5a5;border-radius:6px;padding:8px 10px">
-          {% else %}
-          <div>
-          {% endif %}
+
+          <!-- Comment/evidence (mandatory for NO) -->
+          <div style="margin-bottom:{% if item.response=='No' %}8px{% else %}0{% endif %}">
             <input type="text" name="comment_{{ item.id }}" value="{{ item.comment or '' }}"
-              placeholder="Comment / evidence…"
-              style="width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;font-family:inherit;background:#fff"/>
+              placeholder="{% if item.response=='No' %}⚠ Comment is required for NO answer{% else %}Comment / evidence notes (optional){% endif %}"
+              {% if item.response=='No' %}required{% endif %}
+              style="width:100%;border:1.5px solid {% if item.response=='No' %}#fca5a5{% else %}var(--border){% endif %};
+                     border-radius:5px;padding:6px 9px;font-size:12px;font-family:inherit;
+                     background:{% if item.response=='No' %}#fff8f8{% else %}#fff{% endif %}"/>
           </div>
+
+          <!-- Evidence upload (shown for all, mandatory highlight for NO) -->
+          <div id="ev-row-{{ item.id }}" style="{% if item.response != 'No' %}display:none{% endif %}">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:5px">
+              <input type="file" name="evidence_file_{{ item.id }}"
+                     accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg,.gif"
+                     style="font-size:11px;font-family:inherit;border:1px solid #fca5a5;
+                            border-radius:5px;padding:4px;background:#fff8f8;flex:1"/>
+              {% if item.evidence_filename %}
+              <a href="/spi/evidence/{{ item.evidence_filename }}" target="_blank"
+                 style="font-size:11px;color:#065f46;font-weight:700;white-space:nowrap">
+                📎 {{ item.evidence_filename.split('_',1)[-1] if '_' in item.evidence_filename else item.evidence_filename }}
+              </a>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Linked finding badge (if Finding was auto-created) -->
+          {% if item.linked_finding_id %}
+          <div style="margin-top:8px;padding:7px 10px;background:#dcfce7;border:1px solid #bbf7d0;
+                      border-radius:6px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:#15803d">
+              🔗 Finding auto-created
+            </span>
+            <a href="/audit-findings/{{ item.linked_finding_id }}"
+               style="font-family:monospace;font-size:12px;color:#1d4ed8;font-weight:700">
+              {{ item.linked_finding_id }}
+            </a>
+            {% set lf = item.linked_finding %}
+            {% if lf %}
+            <span class="badge {% if lf.status=='Closed' %}b-green{% elif lf.status in ('Overdue','Returned for Revision') %}b-red{% else %}b-yellow{% endif %}" style="font-size:9px">
+              {{ lf.status }}
+            </span>
+            <span style="font-size:10px;color:var(--muted)">{{ lf.finding_ref }}</span>
+            <a href="/audit-findings/{{ item.linked_finding_id }}" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 7px;margin-left:auto">
+              Manage →
+            </a>
+            {% endif %}
+          </div>
+          {% endif %}
         </div>
         {% endfor %}
         {% endfor %}
-        <div style="padding:14px 16px;background:#f8f9fc;border-top:1px solid var(--border)">
+
+        <div style="padding:14px 16px;background:#f8f9fc;border-top:1px solid var(--border);
+                    display:flex;gap:10px;align-items:center">
           <button type="submit" class="btn btn-nav">💾 Save Checklist</button>
+          <span style="font-size:12px;color:var(--muted)">
+            NO answers automatically create linked Findings.
+          </span>
         </div>
       </div>
     </form>
+
     {% else %}
     <div class="card" style="text-align:center;padding:28px;border:2px dashed var(--border)">
-      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">No checklist items yet for this audit type.</div>
-      <div style="font-size:12px;color:var(--muted)">Checklist items are auto-generated when the audit starts.</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">No checklist items for this audit type.</div>
     </div>
     {% endif %}
   </div>
@@ -243,6 +326,10 @@
       </div>
       <div style="display:flex;flex-direction:column;gap:7px;font-size:13px;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:{% if all_no_have_findings is defined and all_no_have_findings %}#15803d{% else %}#dc2626{% endif %};font-size:16px">{% if all_no_have_findings is defined and all_no_have_findings %}✓{% else %}✗{% endif %}</span>
+          All NO items have findings
+          </li>
+          <li style="display:flex;align-items:center;gap:8px;padding:5px 0">
           <span style="color:{% if all_findings_actioned %}#15803d{% else %}#dc2626{% endif %};font-size:16px">{% if all_findings_actioned %}✓{% else %}✗{% endif %}</span>
           All findings have actions
         </div>
