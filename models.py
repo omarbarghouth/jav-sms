@@ -152,6 +152,7 @@ class Action(db.Model):
     spi_trigger_rule     = db.Column(db.String(2))    # A / B / C
     spi_alert_month      = db.Column(db.Integer)      # month alert was triggered (1-12)
     spi_alert_year       = db.Column(db.Integer)      # year alert was triggered
+    spi_escalation_id    = db.Column(db.Integer, nullable=True)  # FK to spi_escalations.id
     # Evidence & mitigation
     evidence             = db.Column(db.Text)          # evidence text
     evidence_filename    = db.Column(db.String(200))   # uploaded evidence file
@@ -300,6 +301,36 @@ class SPIData(db.Model):
     # Statistical metadata (auto-computed, stored for performance)
     mean_at_time = db.Column(db.Float)   # historical mean when this point was recorded
     sd_at_time   = db.Column(db.Float)   # historical SD when recorded
+
+class SPIEscalation(db.Model):
+    """
+    Persistent record of each SPI escalation event.
+    Created automatically when _spi_trigger_detail fires.
+    This is the SOURCE RECORD for SPI actions — the action is a RESPONSE,
+    the escalation is the CAUSE.
+    """
+    __tablename__ = 'spi_escalations'
+    id             = db.Column(db.Integer, primary_key=True)
+    spi_id         = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'))
+    # When the threshold was exceeded (the REAL trigger event)
+    trigger_month  = db.Column(db.Integer)   # 1-12 calendar month
+    trigger_year   = db.Column(db.Integer)
+    # What happened
+    trigger_rule   = db.Column(db.String(2))  # A / B / C
+    alert_level    = db.Column(db.String(5))  # L1 / L2 / L3
+    spi_value      = db.Column(db.Float)      # actual SPI value at trigger month
+    threshold_value = db.Column(db.Float)     # L1/L2/L3 threshold that was exceeded
+    mean_value     = db.Column(db.Float)      # mean at time of trigger
+    sd_value       = db.Column(db.Float)      # SD at time of trigger
+    description    = db.Column(db.Text)       # e.g. "Rule A: 20.0 > L3 4.8"
+    # When this record was created (not the trigger month — those are different)
+    detected_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    # Status tracking
+    status         = db.Column(db.String(20), default='Open')  # Open / Actioned / Closed
+    linked_action_id = db.Column(db.String(30))
+    # Relationships
+    indicator      = db.relationship('SPIIndicator', backref=db.backref('escalations', lazy=True))
+
 
 class SafetyBulletin(db.Model):
     __tablename__ = 'safety_bulletins'
