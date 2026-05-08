@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Final Audit Report — {{ schedule.id }}</title>
+<style>
+  @page { size: A4 portrait; margin: 18mm 16mm; }
+  @media print { .no-print { display:none!important; } body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Arial,sans-serif; font-size:9.5pt; color:#111; background:#fff; }
+  .print-btn { position:fixed;top:12px;right:12px;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer; }
+  .doc-header { display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:14px; }
+  .logo { font-size:20px;font-weight:900;color:#0f1c3f; } .logo span { color:#c9a84c; }
+  .sec-title { background:#0f1c3f;color:#fff;font-weight:700;font-size:10pt;padding:5px 12px;margin:14px 0 6px;border-radius:3px; }
+  .finding-header { background:#f4f6fb;border:1px solid #d1d5db;padding:8px 12px;margin:10px 0 4px;border-radius:4px;display:flex;align-items:center;gap:10px;page-break-inside:avoid; }
+  .info-table { width:100%;border-collapse:collapse;margin-bottom:8px; }
+  .info-table td { border:1px solid #d1d5db;padding:6px 9px;font-size:9pt; }
+  .info-table .lbl { background:#f4f6fb;font-weight:700;color:#374151;width:130px; }
+  .text-box { border:1px solid #d1d5db;padding:8px 10px;font-size:9.5pt;line-height:1.6;background:#fafbfe;margin-bottom:8px; }
+  .status-pill { padding:2px 8px;border-radius:4px;font-size:9pt;font-weight:700;border:1px solid; }
+  .pill-green { background:#dcfce7;color:#15803d;border-color:#bbf7d0; }
+  .pill-yellow { background:#fef9c3;color:#b45309;border-color:#fde68a; }
+  .pill-red { background:#fee2e2;color:#dc2626;border-color:#fca5a5; }
+  .pill-blue { background:#dbeafe;color:#1d4ed8;border-color:#93c5fd; }
+  .progress-bar { height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden;display:inline-block;width:80px;vertical-align:middle; }
+  .sig-table { width:100%;border-collapse:collapse;margin-top:12px; }
+  .sig-table th { background:#0f1c3f;color:#fff;padding:6px 10px;text-align:left;font-size:9pt; }
+  .sig-table td { border:1px solid #d1d5db;padding:14px 10px; }
+  .sig-table .role { background:#f4f6fb;font-weight:700;width:120px; }
+  .footer { border-top:1px solid #d1d5db;margin-top:12px;padding-top:6px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between; }
+  .finding-block { border:1px solid #d1d5db;border-radius:6px;padding:12px;margin-bottom:14px;page-break-inside:avoid; }
+  .severity-major { border-left:4px solid #dc2626; }
+  .severity-minor { border-left:4px solid #d97706; }
+  .severity-obs { border-left:4px solid #6b7280; }
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print Final Report</button>
+
+<div class="doc-header">
+  <div class="logo">JORDAN<span>AVIATION</span></div>
+  <div style="text-align:center">
+    <h1 style="font-size:15pt;font-weight:900;color:#0f1c3f">FINAL AUDIT REPORT</h1>
+    <p style="font-size:9pt;color:#555;margin-top:2px">Safety Management System — Audit Closure Document</p>
+  </div>
+  <div style="text-align:right;font-size:8.5pt;color:#555;line-height:1.8">
+    <strong>{{ schedule.id }}</strong><br>
+    Generated: {{ now.strftime('%d %b %Y') }}<br>
+    Status: <strong>{% if all_closed %}CLOSED{% else %}OPEN / IN PROGRESS{% endif %}</strong>
+  </div>
+</div>
+
+<!-- Audit Summary -->
+<div class="sec-title">AUDIT INFORMATION</div>
+<table class="info-table">
+  <tr><td class="lbl">Audit Reference</td><td><strong>{{ schedule.id }}</strong></td>
+      <td class="lbl">Audit Type</td><td>{{ schedule.audit_type or '—' }}</td></tr>
+  <tr><td class="lbl">Scheduled Date</td><td>{{ schedule.scheduled_date or '—' }}</td>
+      <td class="lbl">Lead Auditor</td><td>{{ schedule.lead_auditor or '—' }}</td></tr>
+  <tr><td class="lbl">Scope</td><td colspan="3">{{ schedule.scope or '—' }}</td></tr>
+  <tr><td class="lbl">Objectives</td><td colspan="3">{{ schedule.objectives or '—' }}</td></tr>
+  <tr><td class="lbl">Status</td>
+      <td>{% if all_closed %}<span class="status-pill pill-green">Fully Closed</span>{% else %}<span class="status-pill pill-yellow">In Progress ({{ findings|selectattr('status','eq','Closed')|list|length }}/{{ findings|length }} closed)</span>{% endif %}</td>
+      <td class="lbl">Total Findings</td><td><strong>{{ findings|length }}</strong></td></tr>
+</table>
+
+{% if schedule.summary %}
+<div class="sec-title">AUDIT SUMMARY</div>
+<div class="text-box">{{ schedule.summary }}</div>
+{% endif %}
+
+<!-- Findings Summary Table -->
+<div class="sec-title">FINDINGS SUMMARY</div>
+<table class="info-table">
+  <thead>
+    <tr style="background:#0f1c3f;color:#fff">
+      <th style="padding:7px 10px;border:1px solid #1a2d5a;font-size:9pt">Ref</th>
+      <th style="padding:7px 10px;border:1px solid #1a2d5a">Severity</th>
+      <th style="padding:7px 10px;border:1px solid #1a2d5a">Description</th>
+      <th style="padding:7px 10px;border:1px solid #1a2d5a">Assigned To</th>
+      <th style="padding:7px 10px;border:1px solid #1a2d5a">CAP Due</th>
+      <th style="padding:7px 10px;border:1px solid #1a2d5a">Progress</th>
+      <th style="padding:7px 10px;border:1px solid #1a2d5a">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in findings %}
+    <tr>
+      <td style="font-weight:700;font-family:monospace;font-size:9pt">{{ f.finding_ref }}</td>
+      <td><span class="status-pill {% if f.severity=='Major' %}pill-red{% elif f.severity=='Minor' %}pill-yellow{% else %}pill-blue{% endif %}" style="font-size:8pt">{{ f.severity }}</span></td>
+      <td style="max-width:200px;font-size:9pt">{{ (f.description or '')[:80] }}</td>
+      <td style="font-size:9pt">{{ f.assigned_to or '—' }}</td>
+      <td style="font-size:9pt">{{ f.cap_due_date or '—' }}</td>
+      <td><div class="progress-bar"><div style="height:100%;width:{{ f.cap_completion_pct or 0 }}%;background:{% if (f.cap_completion_pct or 0)==100 %}#15803d{% else %}#1d4ed8{% endif %}"></div></div> <span style="font-size:8.5pt">{{ f.cap_completion_pct or 0 }}%</span></td>
+      <td><span class="status-pill {% if f.status=='Closed' %}pill-green{% elif f.status=='Overdue' %}pill-red{% else %}pill-yellow{% endif %}" style="font-size:8pt">{{ f.status }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Detailed Findings -->
+<div class="sec-title">DETAILED FINDINGS WITH CLOSURE INFORMATION</div>
+{% for f in findings %}
+<div class="finding-block {% if f.severity=='Major' %}severity-major{% elif f.severity=='Minor' %}severity-minor{% else %}severity-obs{% endif %}">
+  <div class="finding-header">
+    <strong style="font-size:11pt;color:#0f1c3f;font-family:monospace">{{ f.finding_ref }}</strong>
+    <span class="status-pill {% if f.severity=='Major' %}pill-red{% elif f.severity=='Minor' %}pill-yellow{% else %}pill-blue{% endif %}" style="font-size:8.5pt">{{ f.severity }}</span>
+    <span style="font-size:9pt;flex:1;color:#374151">{{ (f.description or '')[:100] }}</span>
+    <span class="status-pill {% if f.status=='Closed' %}pill-green{% elif f.status=='Overdue' %}pill-red{% else %}pill-yellow{% endif %}" style="font-size:8.5pt">{{ f.status }}</span>
+  </div>
+
+  <table class="info-table">
+    <tr><td class="lbl">Standard Ref</td><td><code>{{ f.standard_ref or '—' }}</code></td>
+        <td class="lbl">Assigned To</td><td>{{ f.assigned_to or '—' }} / {{ f.assigned_dept or '—' }}</td></tr>
+    <tr><td class="lbl">Requirement</td><td colspan="3">{{ f.requirement or '—' }}</td></tr>
+    <tr><td class="lbl">Description</td><td colspan="3">{{ f.description or '—' }}</td></tr>
+    <tr><td class="lbl">Auditor Evidence</td><td colspan="3">{{ f.evidence or '—' }}</td></tr>
+  </table>
+
+  {% if f.root_cause %}
+  <div style="font-size:9pt;font-weight:700;color:#374151;margin:6px 0 2px">Root Cause:</div>
+  <div class="text-box" style="min-height:30px">{{ f.root_cause }}</div>
+  {% endif %}
+
+  {% if f.immediate_action %}
+  <div style="font-size:9pt;font-weight:700;color:#374151;margin:6px 0 2px">Immediate Corrective Action:</div>
+  <div class="text-box" style="min-height:28px">{{ f.immediate_action }}</div>
+  {% endif %}
+
+  {% if f.longterm_action %}
+  <div style="font-size:9pt;font-weight:700;color:#374151;margin:6px 0 2px">Long-term Action:</div>
+  <div class="text-box" style="min-height:28px">{{ f.longterm_action }}</div>
+  {% endif %}
+
+  <table class="info-table" style="margin-top:6px">
+    <tr><td class="lbl">CAP Responsible</td><td>{{ f.cap_responsible or '—' }}</td>
+        <td class="lbl">CAP Due Date</td><td>{{ f.cap_due_date or '—' }}</td></tr>
+    <tr><td class="lbl">CAP Status</td>
+        <td><span class="status-pill {% if f.cap_status=='Completed' %}pill-green{% elif f.cap_status=='Overdue' %}pill-red{% else %}pill-blue{% endif %}" style="font-size:8.5pt">{{ f.cap_status or 'Pending' }}</span></td>
+        <td class="lbl">Completion</td><td><strong>{{ f.cap_completion_pct or 0 }}%</strong></td></tr>
+    {% if f.status == 'Closed' %}
+    <tr><td class="lbl">Closure Date</td><td>{{ f.closure_date or '—' }}</td>
+        <td class="lbl">Verified By</td><td>{{ f.closure_verified_by or '—' }}</td></tr>
+    <tr><td class="lbl">Closure Notes</td><td colspan="3">{{ f.closure_notes or '—' }}</td></tr>
+    {% endif %}
+  </table>
+
+  {% if f.evidence_files %}
+  <div style="font-size:8.5pt;color:#374151;margin-top:6px">
+    <strong>Evidence Files:</strong>
+    {% for ef in f.evidence_files.split(',') if ef %}
+    <span style="background:#f0fdf4;border:1px solid #bbf7d0;padding:2px 7px;border-radius:3px;color:#15803d;font-size:8pt;margin-left:4px">📎 {{ ef.split('_',1)[-1] if '_' in ef else ef }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Per-finding signature line -->
+  {% if f.status == 'Closed' %}
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;padding-top:8px;border-top:1px solid #e5e7eb">
+    {% for role, name in [('Dept Manager', f.sig_dept_manager),('Auditor', f.sig_auditor),('Safety Manager', f.sig_safety_manager)] %}
+    <div style="font-size:8.5pt">
+      <div style="color:#6b7280">{{ role }}</div>
+      <strong>{{ name or '—' }}</strong>
+      <div style="border-bottom:1px solid #9ca3af;height:16px;margin-top:4px"></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<!-- Final Signatures -->
+<div class="sec-title">FINAL REPORT SIGNATURES</div>
+<table class="sig-table">
+  <thead><tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:90px">Date</th></tr></thead>
+  <tbody>
+    <tr><td class="role">Lead Auditor</td><td>{{ schedule.lead_auditor or '' }}</td><td>Lead Auditor</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
+    <tr><td class="role">Safety Manager</td><td></td><td>Safety Department</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
+    <tr><td class="role">Accountable Mgr</td><td></td><td>Accountable Manager</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
+  </tbody>
+</table>
+
+<div class="footer">
+  <span>Jav/SMS/Audit · {{ now.strftime('%d %b %Y') }}</span>
+  <span>Final Audit Report — ICAO Annex 19</span>
+  <span>{{ schedule.id }}</span>
+</div>
+</body>
+</html>

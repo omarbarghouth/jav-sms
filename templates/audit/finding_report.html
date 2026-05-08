@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Finding Closure Report — {{ finding.id }}</title>
+<style>
+  @page { size: A4 portrait; margin: 20mm 18mm; }
+  @media print { .no-print { display:none!important; } body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Arial,sans-serif; font-size:10pt; color:#111; background:#fff; }
+  .print-btn { position:fixed;top:12px;right:12px;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer; }
+  .doc-header { display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:14px; }
+  .logo { font-size:20px;font-weight:900;color:#0f1c3f; } .logo span { color:#c9a84c; }
+  .doc-title h1 { font-size:14pt;font-weight:900;color:#0f1c3f;text-align:center; }
+  .doc-title p { font-size:9pt;color:#555;text-align:center;margin-top:2px; }
+  .ref-box { background:#0f1c3f;color:#c9a84c;font-family:monospace;font-size:13pt;font-weight:900;padding:4px 12px;border-radius:5px;display:inline-block;margin-bottom:10px; }
+  .sec-title { background:#0f1c3f;color:#fff;font-weight:700;font-size:10pt;padding:5px 12px;margin:14px 0 6px;border-radius:4px; }
+  .sec-yellow { background:#fef9c3;color:#b45309;border-left:4px solid #d97706;padding:5px 12px;margin:14px 0 6px;font-weight:700; }
+  .sec-red { background:#fee2e2;color:#dc2626;border-left:4px solid #dc2626;padding:5px 12px;margin:14px 0 6px;font-weight:700; }
+  .sec-green { background:#dcfce7;color:#15803d;border-left:4px solid #15803d;padding:5px 12px;margin:14px 0 6px;font-weight:700; }
+  .info-table { width:100%;border-collapse:collapse;margin-bottom:10px; }
+  .info-table td { border:1px solid #d1d5db;padding:7px 10px;font-size:9.5pt; }
+  .info-table .lbl { background:#f4f6fb;font-weight:700;color:#374151;width:150px; }
+  .text-box { border:1px solid #d1d5db;padding:10px 12px;min-height:40px;font-size:10pt;line-height:1.7;background:#fafbfe;margin-bottom:10px; }
+  .progress-bar { height:10px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:6px 0; }
+  .progress-fill { height:100%;border-radius:99px; }
+  .status-pill { padding:2px 10px;border-radius:4px;font-size:9.5pt;font-weight:700;border:1px solid;display:inline-block; }
+  .pill-green { background:#dcfce7;color:#15803d;border-color:#bbf7d0; }
+  .pill-yellow { background:#fef9c3;color:#b45309;border-color:#fde68a; }
+  .pill-red { background:#fee2e2;color:#dc2626;border-color:#fca5a5; }
+  .pill-blue { background:#dbeafe;color:#1d4ed8;border-color:#93c5fd; }
+  .sig-table { width:100%;border-collapse:collapse;margin-top:14px; }
+  .sig-table th { background:#0f1c3f;color:#fff;padding:7px 10px;text-align:left;border:1px solid #1a2d5a;font-size:9.5pt; }
+  .sig-table td { border:1px solid #d1d5db;padding:14px 10px; }
+  .sig-table .role { background:#f4f6fb;font-weight:700;width:130px; }
+  .sig-line { border-bottom:1px solid #9ca3af;height:26px; }
+  .footer { border-top:1px solid #d1d5db;margin-top:14px;padding-top:6px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between; }
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+
+<div class="doc-header">
+  <div class="logo">JORDAN<span>AVIATION</span></div>
+  <div class="doc-title">
+    <h1>Audit Finding Closure Report</h1>
+    <p>Corrective Action Plan &amp; Closure Verification</p>
+  </div>
+  <div style="text-align:right;font-size:8.5pt;color:#555;line-height:1.8">
+    Finding: <strong>{{ finding.id }}</strong><br>
+    Ref: <strong>{{ finding.finding_ref }}</strong><br>
+    Status: <strong>{{ finding.status }}</strong><br>
+    Generated: {{ now.strftime('%d %b %Y') }}
+  </div>
+</div>
+
+<div class="ref-box">{{ finding.id }}</div>
+
+<!-- Section 1: Finding Details -->
+<div class="sec-title">FINDING DETAILS</div>
+<table class="info-table">
+  <tr><td class="lbl">Finding Reference</td><td><strong>{{ finding.finding_ref }}</strong></td>
+      <td class="lbl">Audit</td><td>{{ finding.schedule_id }}</td></tr>
+  <tr><td class="lbl">Category</td><td>{{ finding.category or '—' }}</td>
+      <td class="lbl">Severity</td>
+      <td><span class="status-pill {% if finding.severity=='Major' %}pill-red{% elif finding.severity=='Minor' %}pill-yellow{% else %}pill-blue{% endif %}">{{ finding.severity or '—' }}</span></td></tr>
+  <tr><td class="lbl">Standard Reference</td><td colspan="3"><code>{{ finding.standard_ref or '—' }}</code></td></tr>
+  <tr><td class="lbl">Requirement</td><td colspan="3">{{ finding.requirement or '—' }}</td></tr>
+  <tr><td class="lbl">Description</td><td colspan="3">{{ finding.description or '—' }}</td></tr>
+  <tr><td class="lbl">Auditor Evidence</td><td colspan="3">{{ finding.evidence or '—' }}</td></tr>
+  <tr><td class="lbl">Assigned To</td><td>{{ finding.assigned_to or '—' }}</td>
+      <td class="lbl">Department</td><td>{{ finding.assigned_dept or '—' }}</td></tr>
+</table>
+
+<!-- Section 2: Root Cause -->
+<div class="sec-title">A. ROOT CAUSE ANALYSIS (Auditee)</div>
+<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Root Cause:</div>
+<div class="text-box">{{ finding.root_cause or 'Not yet submitted.' }}</div>
+{% if finding.investigation_notes %}
+<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Investigation Notes:</div>
+<div class="text-box">{{ finding.investigation_notes }}</div>
+{% endif %}
+{% if finding.contributing_factors %}
+<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Contributing Factors:</div>
+<div class="text-box">{{ finding.contributing_factors }}</div>
+{% endif %}
+
+<!-- Section 3: Corrective Actions -->
+<div class="sec-title">B. CORRECTIVE ACTIONS (Auditee)</div>
+<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Immediate Corrective Action:</div>
+<div class="text-box">{{ finding.immediate_action or 'Not yet submitted.' }}</div>
+{% if finding.longterm_action %}
+<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Long-term Corrective Action:</div>
+<div class="text-box">{{ finding.longterm_action }}</div>
+{% endif %}
+
+<!-- Section 4: CAP -->
+<div class="sec-title">C. CORRECTIVE ACTION PLAN (CAP)</div>
+<table class="info-table">
+  <tr><td class="lbl">Responsible Person</td><td><strong>{{ finding.cap_responsible or '—' }}</strong></td>
+      <td class="lbl">Due Date</td><td>{{ finding.cap_due_date or '—' }}</td></tr>
+  <tr><td class="lbl">CAP Status</td>
+      <td><span class="status-pill {% if finding.cap_status=='Completed' %}pill-green{% elif finding.cap_status=='Overdue' %}pill-red{% elif finding.cap_status=='In Progress' %}pill-blue{% else %}pill-yellow{% endif %}">{{ finding.cap_status or 'Pending' }}</span></td>
+      <td class="lbl">Completion</td><td><strong>{{ finding.cap_completion_pct or 0 }}%</strong>
+        <div class="progress-bar"><div class="progress-fill" style="width:{{ finding.cap_completion_pct or 0 }}%;background:{% if (finding.cap_completion_pct or 0)==100 %}#15803d{% else %}#1d4ed8{% endif %}"></div></div>
+      </td></tr>
+</table>
+
+<!-- Section 5: Evidence -->
+{% if evidence_file_list %}
+<div class="sec-title">D. EVIDENCE FILES</div>
+{% for fname in evidence_file_list %}
+<div style="padding:5px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;margin-bottom:4px;font-size:9.5pt;color:#15803d">
+  📎 {{ fname.split('_',1)[-1] if '_' in fname else fname }}
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- Section 6: Safety Review -->
+{% if finding.review_notes or finding.reviewed_by %}
+<div class="sec-title">E. SAFETY REVIEW</div>
+<table class="info-table">
+  <tr><td class="lbl">Reviewed By</td><td>{{ finding.reviewed_by or '—' }}</td>
+      <td class="lbl">Review Date</td><td>{{ finding.review_date or '—' }}</td></tr>
+</table>
+{% if finding.review_notes %}
+<div class="text-box">{{ finding.review_notes }}</div>
+{% endif %}
+{% endif %}
+
+<!-- Section 7: Closure -->
+<div class="sec-title">F. CLOSURE VERIFICATION</div>
+<table class="info-table">
+  <tr><td class="lbl">Status</td>
+      <td><span class="status-pill {% if finding.status=='Closed' %}pill-green{% else %}pill-yellow{% endif %}">{{ finding.status }}</span></td>
+      <td class="lbl">Closure Date</td><td>{{ finding.closure_date or 'Pending' }}</td></tr>
+  <tr><td class="lbl">Verified By</td><td>{{ finding.closure_verified_by or '—' }}</td>
+      <td class="lbl">Signature Date</td><td>{{ finding.sig_date or '—' }}</td></tr>
+</table>
+{% if finding.closure_notes %}
+<div class="text-box">{{ finding.closure_notes }}</div>
+{% endif %}
+
+<!-- Signatures -->
+<div class="sec-title">SIGNATORIES</div>
+<table class="sig-table">
+  <thead><tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:90px">Date</th></tr></thead>
+  <tbody>
+    <tr><td class="role">Dept Manager</td><td>{{ finding.sig_dept_manager or '' }}</td><td>Responsible Manager</td><td><div class="sig-line"></div></td><td></td></tr>
+    <tr><td class="role">Auditor</td><td>{{ finding.sig_auditor or '' }}</td><td>Lead Auditor</td><td><div class="sig-line"></div></td><td></td></tr>
+    <tr><td class="role">Safety Manager</td><td>{{ finding.sig_safety_manager or '' }}</td><td>Safety Department</td><td><div class="sig-line"></div></td><td></td></tr>
+  </tbody>
+</table>
+
+<div class="footer">
+  <span>Jav/SMS/Audit · {{ now.strftime('%d %b %Y') }}</span>
+  <span>Audit Finding Closure Report</span>
+  <span>{{ finding.id }}</span>
+</div>
+</body>
+</html>
