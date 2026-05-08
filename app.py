@@ -1370,23 +1370,90 @@ def spi_actions_list():
 
 @app.route('/spi/action-report/<action_id>')
 def spi_action_report(action_id):
-    """Print-ready SPI Alert Mitigation Report."""
-    a   = Action.query.get_or_404(action_id)
+    """
+    Print-ready SPI Alert Mitigation Report.
+
+    Escalation data priority:
+      1. Linked SPIEscalation record (most accurate — created when dashboard loaded)
+      2. Recompute from SPI history using stored spi_alert_month (reliable fallback)
+      3. Action's own spi_alert_* fields (last resort)
+
+    This ensures the report ALWAYS shows the real trigger month,
+    not the action creation date.
+    """
+    a   = Action.query.filter_by(id=action_id).first_or_404()
     ind = SPIIndicator.query.get(a.spi_id) if a.spi_id else None
-    # Load the linked escalation record for accurate trigger data
+
+    MONTHS = ['January','February','March','April','May','June',
+              'July','August','September','October','November','December']
+
+    # ── Step 1: try linked escalation record ─────────────────────────────
     esc = None
     if a.spi_escalation_id:
         esc = SPIEscalation.query.get(a.spi_escalation_id)
-    # Fallback: search escalations for this indicator + stored month
+
+    # ── Step 2: search existing escalation records ────────────────────────
     if not esc and a.spi_id and a.spi_alert_month:
         esc = SPIEscalation.query.filter_by(
-            spi_id=a.spi_id,
-            trigger_month=a.spi_alert_month,
-            trigger_rule=a.spi_trigger_rule
+            spi_id       = a.spi_id,
+            trigger_month= a.spi_alert_month,
+            trigger_rule = a.spi_trigger_rule or ''
         ).first()
-    MONTHS = ['January','February','March','April','May','June',
-              'July','August','September','October','November','December']
-    return render_template('spi/spi_action_report.html', a=a, ind=ind, esc=esc,
+        if not esc:
+            # also try without rule filter (broader match)
+            esc = SPIEscalation.query.filter_by(
+                spi_id        = a.spi_id,
+                trigger_month = a.spi_alert_month
+            ).first()
+
+    # ── Step 3: recompute from live SPI data ──────────────────────────────
+    # This is the guaranteed fallback — uses the stored trigger month and
+    # recomputes what the SPI value and thresholds were at that point.
+    esc_computed = None
+    if not esc and ind and a.spi_alert_month:
+        try:
+            history = _spi_history(ind)
+            all_vals = [v for _, _, v in history]
+            l1, l2, l3, mean, sd, is_stat = _spi_thresholds(ind, all_vals)
+
+            # Find the SPI value for the stored trigger month
+            from models import SPIData
+            dp = SPIData.query.filter_by(
+                spi_id = ind.id,
+                year   = a.spi_alert_year or datetime.now().year,
+                month  = a.spi_alert_month
+            ).first()
+            spi_val_at_trigger = dp.value if dp and dp.value else None
+
+            # Which threshold was triggered
+            level = a.spi_alert_level or 'L1'
+            thr_map  = {'L3': l3, 'L2': l2, 'L1': l1}
+            thr_val  = thr_map.get(level)
+            diff_val = round(spi_val_at_trigger - thr_val, 4)                        if spi_val_at_trigger and thr_val else None
+            rule_desc = {
+                'A': f'Rule A: One point exceeded L3 (Mean+3SD = {l3:.4f})',
+                'B': f'Rule B: Two consecutive exceeded L2 (Mean+2SD = {l2:.4f})',
+                'C': f'Rule C: Three consecutive exceeded L1 (Mean+1SD = {l1:.4f})',
+            }.get(a.spi_trigger_rule or '', '')
+
+            esc_computed = {
+                'trigger_month'  : a.spi_alert_month,
+                'trigger_year'   : a.spi_alert_year or datetime.now().year,
+                'trigger_rule'   : a.spi_trigger_rule,
+                'alert_level'    : level,
+                'spi_value'      : spi_val_at_trigger,
+                'threshold_value': round(thr_val, 4) if thr_val else None,
+                'mean_value'     : round(mean, 4),
+                'sd_value'       : round(sd, 4),
+                'description'    : rule_desc,
+                'diff_value'     : diff_val,
+            }
+        except Exception as ex:
+            esc_computed = None
+
+    return render_template('spi/spi_action_report.html',
+                           a=a, ind=ind, esc=esc,
+                           esc_computed=esc_computed,
                            now=datetime.utcnow(), MONTHS=MONTHS)
 
 @app.route('/spi/indicators', methods=['GET','POST'])
