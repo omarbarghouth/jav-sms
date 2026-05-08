@@ -1910,10 +1910,22 @@ def audit_execution(sid):
         all(a.effectiveness in ('Effective', 'Partially Effective') for a in f.actions)
         for f in s.findings
     ) if s.findings else True
-    can_close = all_findings_actioned and all_actions_closed and all_verified
+    # Checklist NO items without findings
+    no_items_without_findings = [
+        i for cat_items in checklist.values()
+        for i in cat_items
+        if i.response == 'No' and not i.linked_finding_id
+    ]
+    all_no_have_findings = len(no_items_without_findings) == 0
+    all_findings_closed  = all(f.status == 'Closed' for f in s.findings) if s.findings else True
+    can_close = (all_no_have_findings and all_findings_actioned and
+                 all_actions_closed and all_verified)
     return render_template('audit/audit_execution.html',
         s=s, checklist=checklist, total=total, done=done, nc=nc,
         can_close=can_close,
+        no_items_without_findings=no_items_without_findings,
+        all_no_have_findings=all_no_have_findings,
+        all_findings_closed=all_findings_closed,
         all_findings_actioned=all_findings_actioned,
         all_actions_closed=all_actions_closed,
         all_verified=all_verified)
@@ -1930,18 +1942,79 @@ def start_audit(sid):
 
 @app.route('/audit-schedule/<sid>/checklist', methods=['POST'])
 def save_checklist(sid):
+    """
+    Save checklist responses.
+    For any item answered 'No' without a linked finding:
+    Auto-create a Finding inheriting checklist metadata.
+    """
     s = AuditSchedule.query.get_or_404(sid)
+    new_findings = []
+
     for item in s.checklist_items:
+        prev_resp = item.response
         item.response = request.form.get(f'resp_{item.id}', '')
         item.comment  = request.form.get(f'comment_{item.id}', '')
         item.evidence = request.form.get(f'evidence_{item.id}', '')
+
+        # Handle evidence file upload per checklist item
+        ef_key = f'evidence_file_{item.id}'
+        if ef_key in request.files:
+            ef = request.files[ef_key]
+            if ef and ef.filename and allowed_file(ef.filename):
+                from werkzeug.utils import secure_filename
+                fn = f'CL{item.id}_{secure_filename(ef.filename)}'
+                ef.save(os.path.join(app.config['UPLOAD_FOLDER'], fn))
+                item.evidence_filename = fn
+
+        # Auto-create Finding when answer flips to 'No' and no finding yet
+        if item.response == 'No' and not item.linked_finding_id:
+            count       = AuditFinding.query.filter_by(schedule_id=sid).count() + len(new_findings) + 1
+            finding_ref = f'F-{count:03d}'
+            fid = new_id('FND')
+            finding = AuditFinding(
+                id          = fid,
+                schedule_id = sid,
+                finding_ref = finding_ref,
+                # Inherit checklist metadata
+                description  = item.question or '',
+                category     = item.category or 'Operational',
+                severity     = 'Minor',
+                standard_ref = item.item_ref or '',
+                requirement  = item.question or '',
+                evidence     = item.comment or item.evidence or '',
+                assigned_to  = s.lead_auditor or '',
+                status       = 'Open',
+            )
+            db.session.add(finding)
+            db.session.flush()
+            item.linked_finding_id = fid
+            new_findings.append(finding_ref)
+
+        # If answer changed FROM 'No' to something else → unlink auto-finding if still Open
+        elif item.response != 'No' and prev_resp == 'No' and item.linked_finding_id:
+            linked = AuditFinding.query.get(item.linked_finding_id)
+            if linked and linked.status == 'Open':
+                db.session.delete(linked)
+                item.linked_finding_id = None
+
     db.session.commit()
-    flash('✓ Checklist saved.', 'success')
+
+    if new_findings:
+        flash(f'✓ Checklist saved. Auto-created findings: {", ".join(new_findings)} for NO items.', 'success')
+    else:
+        flash('✓ Checklist saved.', 'success')
     return redirect(url_for('audit_execution', sid=sid))
 
 @app.route('/audit-schedule/<sid>/close', methods=['POST'])
 def close_audit(sid):
     s = AuditSchedule.query.get_or_404(sid)
+    # Validate: all NO checklist items must have linked findings
+    no_without = [i for i in s.checklist_items
+                  if i.response == 'No' and not i.linked_finding_id]
+    if no_without:
+        refs = ', '.join(i.item_ref or f'item {i.id}' for i in no_without[:3])
+        flash(f'✗ Cannot close: {len(no_without)} checklist NO item(s) still need findings ({refs}).', 'error')
+        return redirect(url_for('audit_execution', sid=sid))
     # Validate closure conditions
     if s.findings:
         for finding in s.findings:
@@ -4436,6 +4509,10 @@ with app.app_context():
                 ('auto_category',   'VARCHAR(50)'),
                 ('active',          'BOOLEAN DEFAULT 1'),
                 ('created_at',      'DATETIME'),
+            ],
+            'audit_checklists': [
+                ('evidence_filename',   'VARCHAR(200)'),
+                ('linked_finding_id',   'VARCHAR(30)'),
             ],
             'spi_data': [
                 ('exposure',        'FLOAT DEFAULT 1'),
