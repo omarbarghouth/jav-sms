@@ -255,16 +255,32 @@
             {% elif ind.calc_type=='PERCENT' %}<div style="font-size:9px;color:var(--muted)">%</div>
             {% else %}<div style="font-size:9px;color:var(--muted)">per 1,000</div>{% endif %}
           </td>
+          {% set action_months = {} %}
+          {% for sa in row.spi_actions %}
+            {% if sa.spi_alert_month %}
+              {% set _ = action_months.update({sa.spi_alert_month: sa}) %}
+            {% endif %}
+          {% endfor %}
           {% for i in range(1,13) %}
           {% set val = row.month_vals.get(i) %}
+          {% set linked_action = action_months.get(i) %}
           {% if val is not none %}
             {% set is_pct = ind.calc_type == 'PERCENT' %}
             {% if (not is_pct and val >= row.l3) or (is_pct and val <= row.l3) %}
-              <td style="background:#fee2e2;text-align:center;font-size:12px;font-weight:800;color:#dc2626">{{ '%.2f'|format(val) }}</td>
+              <td style="background:#fee2e2;text-align:center;font-size:12px;font-weight:800;color:#dc2626;vertical-align:top;padding:4px 3px">
+                {{ '%.2f'|format(val) }}
+                {% if linked_action %}<div style="font-size:8px;font-weight:700;color:#dc2626;margin-top:2px;line-height:1.2">🔗 Action<br>Linked</div>{% endif %}
+              </td>
             {% elif (not is_pct and val >= row.l2) or (is_pct and val <= row.l2) %}
-              <td style="background:#ffedd5;text-align:center;font-size:12px;font-weight:800;color:#ea580c">{{ '%.2f'|format(val) }}</td>
+              <td style="background:#ffedd5;text-align:center;font-size:12px;font-weight:800;color:#ea580c;vertical-align:top;padding:4px 3px">
+                {{ '%.2f'|format(val) }}
+                {% if linked_action %}<div style="font-size:8px;font-weight:700;color:#ea580c;margin-top:2px;line-height:1.2">🔗 Action<br>Linked</div>{% endif %}
+              </td>
             {% elif (not is_pct and val >= row.l1) or (is_pct and val <= row.l1) %}
-              <td style="background:#fef9c3;text-align:center;font-size:12px;font-weight:700;color:#b45309">{{ '%.2f'|format(val) }}</td>
+              <td style="background:#fef9c3;text-align:center;font-size:12px;font-weight:700;color:#b45309;vertical-align:top;padding:4px 3px">
+                {{ '%.2f'|format(val) }}
+                {% if linked_action %}<div style="font-size:8px;font-weight:700;color:#b45309;margin-top:2px;line-height:1.2">🔗 Action<br>Linked</div>{% endif %}
+              </td>
             {% elif (not is_pct and val > row.spt) or (is_pct and val < row.spt) %}
               <td style="background:#dbeafe;text-align:center;font-size:12px;font-weight:700;color:#1d4ed8">{{ '%.2f'|format(val) }}</td>
             {% else %}
@@ -301,46 +317,105 @@
     </table>
   </div>
 
-  <!-- Linked Actions Panel -->
+  <!-- Linked Actions Panel — full escalation traceability -->
   {% if row.spi_actions %}
-  <div style="border-top:1px solid var(--border);padding:10px 18px;background:#fff">
-    <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:.5px">
-      ✅ Linked Actions ({{ row.spi_actions|length }})
+  {% set MNAMES_A = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
+  <div style="border-top:2px solid var(--border);padding:12px 18px;background:#fafbff">
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center">
+      <span>✅ Linked Actions ({{ row.spi_actions|length }})</span>
+      <a href="/spi/actions" style="font-size:11px;color:#1d4ed8;font-weight:700">View All →</a>
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;flex-direction:column;gap:8px">
       {% for sa in row.spi_actions %}
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f8f9fc;border-radius:7px;border:1px solid var(--border);flex-wrap:wrap">
-        <span class="mono" style="font-size:11px;color:var(--navy)">{{ sa.id }}</span>
-        {% if sa.spi_alert_level %}
-        <span class="badge {% if sa.spi_alert_level=='L3' %}b-red{% elif sa.spi_alert_level=='L2' %}b-orange{% else %}b-yellow{% endif %}" style="font-size:9px">{{ sa.spi_alert_level }}</span>
-        {% endif %}
-        <span style="font-size:12px;color:#374151;flex:1">{{ (sa.description or '—')[:60] }}</span>
-        <span style="font-size:11px;color:var(--muted)">{{ sa.owner or '—' }}</span>
-        <!-- Status badge -->
-        {% if sa.status=='Closed' %}<span class="badge b-green" style="font-size:10px">✓ Closed</span>
-        {% elif sa.status=='Overdue' %}<span class="badge b-red" style="font-size:10px">Overdue</span>
-        {% elif sa.status=='In Progress' %}<span class="badge b-blue" style="font-size:10px">In Progress</span>
-        {% else %}<span class="badge b-yellow" style="font-size:10px">Open</span>{% endif %}
-        <!-- Mitigation status -->
-        {% if sa.mitigation_status and sa.mitigation_status != 'Pending' %}
-        <span class="badge {% if sa.mitigation_status=='Completed' %}b-green{% elif sa.mitigation_status=='Active' %}b-blue{% elif sa.mitigation_status=='Under Review' %}b-yellow{% else %}b-gray{% endif %}" style="font-size:10px">
-          Mitigation: {{ sa.mitigation_status }}
-        </span>
-        {% endif %}
-        <!-- Effectiveness -->
-        {% if sa.effectiveness %}
-        <span class="badge {% if sa.effectiveness=='Effective' %}b-green{% elif sa.effectiveness=='Partially Effective' %}b-yellow{% else %}b-red{% endif %}" style="font-size:10px">
-          {{ sa.effectiveness[:7] }}
-        </span>
-        {% endif %}
-        <!-- Verified -->
-        {% if sa.verified_by %}
-        <span style="font-size:10px;color:#15803d;font-weight:700">✓ Verified by {{ sa.verified_by }}</span>
-        {% endif %}
-        <a href="/actions/{{ sa.id }}" style="font-size:11px;color:#1d4ed8;font-weight:700;white-space:nowrap">Detail →</a>
-        {% if sa.spi_id %}
-        <a href="/spi/action-report/{{ sa.id }}" target="_blank" style="font-size:11px;color:#6b7280;white-space:nowrap">🖨 Report</a>
-        {% endif %}
+      {% set sa_lc = {'L3':'#dc2626','L2':'#ea580c','L1':'#d97706'}.get(sa.spi_alert_level,'#6b7280') %}
+      <!-- Action card with full escalation detail -->
+      <div style="border:1.5px solid {{ sa_lc }}35;border-left:4px solid {{ sa_lc }};border-radius:8px;background:#fff;overflow:hidden">
+
+        <!-- Action header row -->
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;flex-wrap:wrap;border-bottom:1px solid {{ sa_lc }}20">
+          <span class="mono" style="font-size:12px;font-weight:800;color:var(--navy)">{{ sa.id }}</span>
+          {% if sa.spi_alert_level %}
+          <span class="badge {% if sa.spi_alert_level=='L3' %}b-red{% elif sa.spi_alert_level=='L2' %}b-orange{% else %}b-yellow{% endif %}">{{ sa.spi_alert_level }} {{ {'L3':'Critical','L2':'Warning','L1':'Watch'}.get(sa.spi_alert_level,'') }}</span>
+          {% endif %}
+          <span style="font-size:12px;color:#374151;flex:1">{{ (sa.description or '—')[:70] }}</span>
+          <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+            {% if sa.status=='Closed' %}<span class="badge b-green" style="font-size:10px">✓ Closed</span>
+            {% elif sa.status=='Overdue' %}<span class="badge b-red" style="font-size:10px">⚠ Overdue</span>
+            {% elif sa.status=='In Progress' %}<span class="badge b-blue" style="font-size:10px">In Progress</span>
+            {% else %}<span class="badge b-yellow" style="font-size:10px">Open</span>{% endif %}
+            <a href="/actions/{{ sa.id }}" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px">Detail</a>
+            <a href="/spi/action-report/{{ sa.id }}" target="_blank" class="btn btn-sm" style="background:#065f46;color:#fff;font-size:11px;padding:3px 8px">🖨 Report</a>
+          </div>
+        </div>
+
+        <!-- Escalation detail grid — shows REAL trigger month, not action date -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:0;padding:0">
+          <!-- Trigger Month (from action's stored spi_alert_month) -->
+          <div style="padding:8px 12px;border-right:1px solid #f0f0f0;background:{{ sa_lc }}08">
+            <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:{{ sa_lc }};margin-bottom:3px">⚠ Trigger Month</div>
+            <div style="font-size:12px;font-weight:800;color:{{ sa_lc }}">
+              {% if sa.spi_alert_month %}{{ MNAMES_A[sa.spi_alert_month-1] }}<br>
+              <span style="font-size:10px">{{ sa.spi_alert_year or row.escalation_year }}</span>
+              {% else %}—{% endif %}
+            </div>
+          </div>
+          <!-- SPI Value at trigger — from escalation record or row -->
+          <div style="padding:8px 12px;border-right:1px solid #f0f0f0">
+            <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">SPI Value</div>
+            <div style="font-size:13px;font-weight:800;font-family:monospace;color:{{ sa_lc }}">
+              {{ '%.2f'|format(row.escalation_value) if row.escalation_value else '—' }}
+            </div>
+          </div>
+          <!-- Threshold -->
+          <div style="padding:8px 12px;border-right:1px solid #f0f0f0">
+            <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">{{ sa.spi_alert_level }} Threshold</div>
+            <div style="font-size:13px;font-weight:800;font-family:monospace;color:#374151">
+              {{ '%.2f'|format(row.escalation_threshold) if row.escalation_threshold else '—' }}
+            </div>
+          </div>
+          <!-- Difference -->
+          <div style="padding:8px 12px;border-right:1px solid #f0f0f0">
+            <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Difference</div>
+            <div style="font-size:13px;font-weight:800;font-family:monospace;color:{{ sa_lc }}">
+              {% if row.escalation_diff %}{{ '+' if row.escalation_diff > 0 else '' }}{{ '%.2f'|format(row.escalation_diff) }}{% else %}—{% endif %}
+            </div>
+          </div>
+          <!-- Trigger Rule -->
+          <div style="padding:8px 12px;border-right:1px solid #f0f0f0">
+            <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Trigger Rule</div>
+            <div style="font-size:11px;font-weight:700;color:#374151">
+              {{ {'A':'Rule A: 1 pt ≥ L3','B':'Rule B: 2 consec ≥ L2','C':'Rule C: 3 consec ≥ L1'}.get(sa.spi_trigger_rule, sa.spi_trigger_rule or '—') }}
+            </div>
+          </div>
+          <!-- Mitigation + Effectiveness -->
+          <div style="padding:8px 12px">
+            <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Mitigation</div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              {% if sa.mitigation_status %}
+              <span class="badge {% if sa.mitigation_status=='Completed' %}b-green{% elif sa.mitigation_status=='Active' %}b-blue{% elif sa.mitigation_status=='Under Review' %}b-yellow{% else %}b-gray{% endif %}" style="font-size:9px;align-self:flex-start">{{ sa.mitigation_status }}</span>
+              {% endif %}
+              {% if sa.effectiveness %}
+              <span class="badge {% if sa.effectiveness=='Effective' %}b-green{% elif sa.effectiveness=='Partially Effective' %}b-yellow{% else %}b-red{% endif %}" style="font-size:9px;align-self:flex-start">{{ sa.effectiveness[:10] }}</span>
+              {% endif %}
+              {% if sa.verified_by %}
+              <span style="font-size:9px;color:#15803d;font-weight:700">✓ {{ sa.verified_by }}</span>
+              {% endif %}
+              {% if sa.owner %}
+              <span style="font-size:9px;color:var(--muted)">{{ sa.owner }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Action creation date — clearly separate from trigger month -->
+        <div style="padding:5px 14px;background:#f8f9fc;border-top:1px solid #f0f0f0;font-size:10px;color:var(--muted);display:flex;gap:16px">
+          <span>Action created: <strong>{{ sa.created_at.strftime('%d %b %Y') if sa.created_at else '—' }}</strong></span>
+          {% if sa.due_date %}<span>Due: <strong>{{ sa.due_date }}</strong></span>{% endif %}
+          {% if sa.closed_date %}<span>Closed: <strong style="color:#15803d">{{ sa.closed_date }}</strong></span>{% endif %}
+          {% if sa.evidence_filename %}
+          <a href="/spi/evidence/{{ sa.evidence_filename }}" target="_blank" style="color:#065f46;font-weight:700">📎 Evidence</a>
+          {% endif %}
+        </div>
       </div>
       {% endfor %}
     </div>
