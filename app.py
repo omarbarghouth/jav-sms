@@ -2050,17 +2050,205 @@ def new_finding(sid):
     finding.status = 'Actioned'
     db.session.commit()
 
-    msg = f'✓ Finding {finding_ref} recorded. Action {aid} created.'
+    msg = f'✓ Finding {finding_ref} recorded. Action {unified_action.id} created.'
     if hid: msg += f' Hazard {hid} created in SMS Hazard Log.'
     flash(msg, 'success')
     return redirect(url_for('audit_execution', sid=sid))
 
 
 # ─── FINDING DETAIL ───────────────────────────────────────────────────────────
-@app.route('/audit-findings/<fid>')
+@app.route('/audit-findings/<fid>', methods=['GET','POST'])
 def finding_detail(fid):
+    """Finding detail with full lifecycle: auditee CAP submission + safety review."""
     finding = AuditFinding.query.get_or_404(fid)
-    return render_template('audit/finding_detail.html', finding=finding)
+    schedule = AuditSchedule.query.get(finding.schedule_id)
+
+    if request.method == 'POST':
+        action = request.form.get('form_action', '')
+        f = request.form
+
+        if action == 'assign':
+            finding.assigned_to   = f.get('assigned_to', '')
+            finding.assigned_dept = f.get('assigned_dept', '')
+            finding.assigned_date = datetime.now().strftime('%Y-%m-%d')
+            finding.status = 'Assigned'
+            db.session.commit()
+            flash(f'✓ Finding {fid} assigned to {finding.assigned_to}.', 'success')
+
+        elif action == 'submit_root_cause':
+            finding.root_cause           = f.get('root_cause', '')
+            finding.investigation_notes  = f.get('investigation_notes', '')
+            finding.contributing_factors = f.get('contributing_factors', '')
+            finding.immediate_action     = f.get('immediate_action', '')
+            finding.longterm_action      = f.get('longterm_action', '')
+            finding.root_cause_submitted_at = datetime.utcnow()
+            finding.status = 'Root Cause Submitted'
+            db.session.commit()
+            flash('✓ Root cause and corrective actions submitted.', 'success')
+
+        elif action == 'submit_cap':
+            finding.cap_responsible    = f.get('cap_responsible', '')
+            finding.cap_due_date       = f.get('cap_due_date', '')
+            finding.cap_completion_pct = int(f.get('cap_completion_pct', 0))
+            finding.cap_status         = 'In Progress'
+            finding.cap_submitted_at   = datetime.utcnow()
+            # Handle evidence file uploads
+            files = request.files.getlist('evidence_files')
+            new_files = []
+            for ef in files:
+                if ef and ef.filename and allowed_file(ef.filename):
+                    from werkzeug.utils import secure_filename
+                    fname = f"{fid}_{secure_filename(ef.filename)}"
+                    ef.save(os.path.join(app.config['UPLOAD_FOLDER'], fname))
+                    new_files.append(fname)
+            if new_files:
+                existing = [x for x in (finding.evidence_files or '').split(',') if x]
+                finding.evidence_files = ','.join(existing + new_files)
+            finding.status = 'CAP Submitted'
+            # Auto-create Action in main Action module if not already done
+            if not finding.linked_action_id and f.get('create_action') == 'yes':
+                from models import Action
+                aid = new_id('ACT')
+                a = Action(
+                    id=aid, source='Audit',
+                    linked_ref_id=fid,
+                    description=f'[{finding.finding_ref}] {(finding.immediate_action or finding.description or "")[:200]}',
+                    owner=finding.cap_responsible or finding.assigned_to or '',
+                    due_date=finding.cap_due_date or '',
+                    priority='High' if finding.severity == 'Major' else 'Medium',
+                    status='Open'
+                )
+                db.session.add(a)
+                finding.linked_action_id = aid
+            db.session.commit()
+            flash('✓ CAP submitted and sent for Safety review.', 'success')
+
+        elif action == 'submit_for_review':
+            finding.status = 'Under Safety Review'
+            db.session.commit()
+            flash('✓ Finding submitted for Safety review.', 'success')
+
+        elif action == 'safety_accept':
+            finding.reviewed_by   = f.get('reviewed_by', '')
+            finding.review_date   = datetime.now().strftime('%Y-%m-%d')
+            finding.review_notes  = f.get('review_notes', '')
+            finding.status = 'Accepted'
+            db.session.commit()
+            flash('✓ Finding accepted by Safety.', 'success')
+
+        elif action == 'safety_return':
+            finding.revision_reason = f.get('revision_reason', '')
+            finding.reviewed_by     = f.get('reviewed_by', '')
+            finding.status = 'Returned for Revision'
+            db.session.commit()
+            flash('⚠ Finding returned to auditee for revision.', 'warning')
+
+        elif action == 'close_finding':
+            finding.closure_verified_by = f.get('closure_verified_by', '')
+            finding.closure_date        = datetime.now().strftime('%Y-%m-%d')
+            finding.closure_notes       = f.get('closure_notes', '')
+            finding.sig_dept_manager    = f.get('sig_dept_manager', '')
+            finding.sig_auditor         = f.get('sig_auditor', '')
+            finding.sig_safety_manager  = f.get('sig_safety_manager', '')
+            finding.sig_date            = datetime.now().strftime('%Y-%m-%d')
+            finding.cap_status          = 'Completed'
+            finding.cap_completion_pct  = 100
+            finding.status = 'Closed'
+            # Update linked Action to Closed
+            if finding.linked_action_id:
+                from models import Action
+                la = Action.query.get(finding.linked_action_id)
+                if la:
+                    la.status = 'Closed'
+                    la.closed_date = finding.closure_date
+            db.session.commit()
+            flash(f'✓ Finding {fid} closed and verified.', 'success')
+
+        elif action == 'reopen':
+            finding.status = 'Assigned'
+            finding.closure_date = None
+            db.session.commit()
+            flash('⚠ Finding reopened.', 'warning')
+
+        elif action == 'update_cap_progress':
+            finding.cap_completion_pct = int(f.get('cap_completion_pct', 0))
+            finding.cap_status = f.get('cap_status', finding.cap_status)
+            # Check overdue
+            if finding.cap_due_date:
+                from datetime import date
+                try:
+                    due = date.fromisoformat(finding.cap_due_date)
+                    if date.today() > due and finding.cap_status != 'Completed':
+                        finding.status = 'Overdue'
+                        finding.cap_status = 'Overdue'
+                except Exception:
+                    pass
+            db.session.commit()
+            flash('✓ CAP progress updated.', 'success')
+
+        return redirect(url_for('finding_detail', fid=fid))
+
+    # Check overdue status on GET
+    if finding.cap_due_date and finding.status not in ('Closed', 'Accepted'):
+        from datetime import date
+        try:
+            due = date.fromisoformat(finding.cap_due_date)
+            if date.today() > due and finding.status not in ('Closed', 'Accepted'):
+                finding.status = 'Overdue'
+                finding.cap_status = 'Overdue'
+                db.session.commit()
+        except Exception:
+            pass
+
+    # Evidence files list
+    evidence_file_list = [x for x in (finding.evidence_files or '').split(',') if x]
+
+    # Linked Action
+    linked_action = None
+    if finding.linked_action_id:
+        from models import Action
+        linked_action = Action.query.get(finding.linked_action_id)
+
+    return render_template('audit/finding_detail.html',
+                           finding=finding, schedule=schedule,
+                           evidence_file_list=evidence_file_list,
+                           linked_action=linked_action,
+                           now=datetime.utcnow())
+
+
+@app.route('/audit-findings/<fid>/report')
+def finding_report(fid):
+    """Print-ready finding closure report."""
+    finding = AuditFinding.query.get_or_404(fid)
+    schedule = AuditSchedule.query.get(finding.schedule_id)
+    evidence_file_list = [x for x in (finding.evidence_files or '').split(',') if x]
+    MONTHS = ['January','February','March','April','May','June',
+              'July','August','September','October','November','December']
+    return render_template('audit/finding_report.html',
+                           finding=finding, schedule=schedule,
+                           evidence_file_list=evidence_file_list,
+                           now=datetime.utcnow(), MONTHS=MONTHS)
+
+
+@app.route('/audit-schedule/<sid>/final-report')
+def audit_final_report(sid):
+    """Full Final Audit Report — all findings + closures."""
+    schedule = AuditSchedule.query.get_or_404(sid)
+    plan = AuditPlan.query.get(schedule.plan_id) if schedule.plan_id else None
+    findings = AuditFinding.query.filter_by(schedule_id=sid).all()
+    # Overdue check
+    from datetime import date
+    for f in findings:
+        if f.cap_due_date and f.status not in ('Closed','Accepted'):
+            try:
+                if date.today() > date.fromisoformat(f.cap_due_date):
+                    f.status = 'Overdue'; f.cap_status = 'Overdue'
+            except Exception: pass
+    db.session.commit()
+    all_closed  = all(f.status == 'Closed' for f in findings) if findings else False
+    return render_template('audit/audit_final_report.html',
+                           schedule=schedule, plan=plan, findings=findings,
+                           all_closed=all_closed, now=datetime.utcnow())
 
 
 # ─── AUDIT ACTIONS ────────────────────────────────────────────────────────────
@@ -4177,6 +4365,32 @@ with app.app_context():
             ],
             'audit_findings': [
                 ('finding_ref',            'VARCHAR(30)'),
+                ('assigned_to',            'VARCHAR(100)'),
+                ('assigned_dept',          'VARCHAR(100)'),
+                ('assigned_date',          'VARCHAR(20)'),
+                ('investigation_notes',    'TEXT'),
+                ('contributing_factors',   'TEXT'),
+                ('root_cause_submitted_at','DATETIME'),
+                ('immediate_action',       'TEXT'),
+                ('longterm_action',        'TEXT'),
+                ('cap_responsible',        'VARCHAR(100)'),
+                ('cap_due_date',           'VARCHAR(20)'),
+                ('cap_status',             'VARCHAR(30) DEFAULT "Pending"'),
+                ('cap_completion_pct',     'INTEGER DEFAULT 0'),
+                ('cap_submitted_at',       'DATETIME'),
+                ('evidence_files',         'TEXT'),
+                ('review_notes',           'TEXT'),
+                ('reviewed_by',            'VARCHAR(100)'),
+                ('review_date',            'VARCHAR(20)'),
+                ('revision_reason',        'TEXT'),
+                ('closure_verified_by',    'VARCHAR(100)'),
+                ('closure_date',           'VARCHAR(20)'),
+                ('closure_notes',          'TEXT'),
+                ('sig_dept_manager',       'VARCHAR(100)'),
+                ('sig_auditor',            'VARCHAR(100)'),
+                ('sig_safety_manager',     'VARCHAR(100)'),
+                ('sig_date',               'VARCHAR(20)'),
+                ('linked_action_id',       'VARCHAR(30)'),
                 ('created_at',             'DATETIME'),
                 ('category',               'VARCHAR(50)'),
                 ('severity',               'VARCHAR(20)'),
