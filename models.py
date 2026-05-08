@@ -408,6 +408,39 @@ class AuditSchedule(db.Model):
     findings           = db.relationship('AuditFinding', backref='schedule', lazy=True,
                                           cascade='all, delete-orphan')
 
+class ChecklistTemplate(db.Model):
+    """
+    Saved, editable checklist template per department.
+    When an audit starts, the latest template for that department
+    is automatically loaded as the audit checklist.
+    """
+    __tablename__ = 'checklist_templates'
+    id            = db.Column(db.Integer, primary_key=True)
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    audit_type    = db.Column(db.String(50), default='Internal')
+    name          = db.Column(db.String(100))
+    version       = db.Column(db.Integer, default=1)
+    is_active     = db.Column(db.Boolean, default=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    department    = db.relationship('Department', foreign_keys=[department_id])
+    items         = db.relationship('ChecklistTemplateItem', backref='template',
+                                    lazy=True, cascade='all, delete-orphan',
+                                    order_by='ChecklistTemplateItem.sequence')
+
+
+class ChecklistTemplateItem(db.Model):
+    """Single editable line in a checklist template."""
+    __tablename__ = 'checklist_template_items'
+    id            = db.Column(db.Integer, primary_key=True)
+    template_id   = db.Column(db.Integer, db.ForeignKey('checklist_templates.id'))
+    category      = db.Column(db.String(100))
+    item_ref      = db.Column(db.String(30))    # e.g. FO-2.1
+    question      = db.Column(db.Text)
+    iosa_ref      = db.Column(db.String(100))   # regulatory reference
+    sequence      = db.Column(db.Integer, default=0)
+
+
 class AuditChecklist(db.Model):
     """
     Dynamic checklist item for each scheduled audit.
