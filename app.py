@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid, io
 from openpyxl import Workbook
@@ -1667,6 +1667,209 @@ def get_checklist_template(dept_code):
 
 
 # ─── AUDIT PLAN ───────────────────────────────────────────────────────────────
+# ─── CHECKLIST TEMPLATE MANAGEMENT ──────────────────────────────────────────
+
+@app.route('/audit-checklists')
+def checklist_templates():
+    """List all department checklist templates."""
+    templates = ChecklistTemplate.query.filter_by(is_active=True).all()
+    return render_template('audit/checklist_templates.html',
+                           templates=templates)
+
+
+@app.route('/audit-checklists/<int:dept_id>', methods=['GET','POST'])
+def checklist_template_dept(dept_id):
+    """
+    Editable checklist template for a specific department.
+    GET  = show current template with edit UI
+    POST = save updated template as new version → becomes active
+    """
+    dept = Department.query.get_or_404(dept_id)
+    audit_type = request.args.get('audit_type', 'Internal')
+
+    if request.method == 'POST':
+        action = request.form.get('action', 'save')
+
+        if action == 'save':
+            # Deactivate old templates for this dept+type
+            ChecklistTemplate.query.filter_by(
+                department_id=dept_id, audit_type=audit_type
+            ).update({'is_active': False})
+
+            # Get version number
+            last = ChecklistTemplate.query.filter_by(
+                department_id=dept_id, audit_type=audit_type
+            ).order_by(ChecklistTemplate.version.desc()).first()
+            ver = (last.version + 1) if last else 1
+
+            tmpl = ChecklistTemplate(
+                department_id=dept_id,
+                audit_type=audit_type,
+                name=f'{dept.name} — {audit_type} Audit Checklist v{ver}',
+                version=ver,
+                is_active=True,
+            )
+            db.session.add(tmpl)
+            db.session.flush()
+
+            # Save items from form
+            refs     = request.form.getlist('item_ref')
+            cats     = request.form.getlist('category')
+            qs       = request.form.getlist('question')
+            iosa_refs= request.form.getlist('iosa_ref')
+            for i, (ref, cat, q, iosa) in enumerate(zip(refs, cats, qs, iosa_refs)):
+                if q.strip():
+                    db.session.add(ChecklistTemplateItem(
+                        template_id=tmpl.id,
+                        item_ref=ref.strip(),
+                        category=cat.strip(),
+                        question=q.strip(),
+                        iosa_ref=iosa.strip(),
+                        sequence=i,
+                    ))
+
+            db.session.commit()
+            flash(f'✓ Checklist saved as version {ver}. Will be used for future {dept.name} audits.', 'success')
+
+        elif action == 'add_item':
+            # Quick add single item
+            tmpl = ChecklistTemplate.query.filter_by(
+                department_id=dept_id, audit_type=audit_type, is_active=True
+            ).first()
+            if tmpl:
+                seq = len(tmpl.items)
+                db.session.add(ChecklistTemplateItem(
+                    template_id=tmpl.id,
+                    item_ref=request.form.get('item_ref',''),
+                    category=request.form.get('category','General'),
+                    question=request.form.get('question',''),
+                    iosa_ref=request.form.get('iosa_ref',''),
+                    sequence=seq,
+                ))
+                db.session.commit()
+                flash('✓ Item added.', 'success')
+
+        return redirect(url_for('checklist_template_dept',
+                                dept_id=dept_id, audit_type=audit_type))
+
+    # GET — load active template
+    tmpl = ChecklistTemplate.query.filter_by(
+        department_id=dept_id, audit_type=audit_type, is_active=True
+    ).first()
+    all_versions = ChecklistTemplate.query.filter_by(
+        department_id=dept_id, audit_type=audit_type
+    ).order_by(ChecklistTemplate.version.desc()).all()
+    # Group by category for display
+    grouped = {}
+    if tmpl:
+        for item in tmpl.items:
+            grouped.setdefault(item.category, []).append(item)
+
+    audit_types = ['Internal', 'External', 'IOSA', 'Regulatory', 'Safety']
+    return render_template('audit/checklist_template_edit.html',
+                           dept=dept, tmpl=tmpl, grouped=grouped,
+                           audit_type=audit_type, audit_types=audit_types,
+                           all_versions=all_versions)
+
+
+@app.route('/audit-findings-report')
+def audit_findings_report():
+    """System-wide Audit Findings List Report with filters."""
+    dept_f   = request.args.get('dept', '')
+    sev_f    = request.args.get('severity', '')
+    status_f = request.args.get('status', '')
+    audit_f  = request.args.get('audit', '')
+    q_f      = request.args.get('q', '').strip()
+
+    query = AuditFinding.query
+    if dept_f:
+        # Filter via schedule → department
+        query = query.join(AuditSchedule, AuditFinding.schedule_id == AuditSchedule.id)                     .filter(AuditSchedule.department_id == int(dept_f))
+    if sev_f:
+        query = query.filter(AuditFinding.severity == sev_f)
+    if status_f:
+        query = query.filter(AuditFinding.status == status_f)
+    if audit_f:
+        query = query.filter(AuditFinding.schedule_id == audit_f)
+    if q_f:
+        query = query.filter(
+            AuditFinding.description.ilike(f'%{q_f}%') |
+            AuditFinding.root_cause.ilike(f'%{q_f}%') |
+            AuditFinding.finding_ref.ilike(f'%{q_f}%')
+        )
+
+    findings = query.order_by(AuditFinding.created_at.desc()).all()
+
+    # Stats
+    total    = AuditFinding.query.count()
+    open_c   = AuditFinding.query.filter_by(status='Open').count()
+    closed_c = AuditFinding.query.filter_by(status='Closed').count()
+    overdue_c= AuditFinding.query.filter_by(status='Overdue').count()
+
+    schedules = AuditSchedule.query.all()
+
+    return render_template('audit/audit_findings_report.html',
+                           findings=findings, total=total,
+                           open_c=open_c, closed_c=closed_c, overdue_c=overdue_c,
+                           dept_f=dept_f, sev_f=sev_f, status_f=status_f,
+                           audit_f=audit_f, q_f=q_f, schedules=schedules)
+
+
+@app.route('/audit-schedule-calendar')
+def audit_schedule_calendar():
+    """Calendar view of all scheduled audits."""
+    year  = int(request.args.get('year',  datetime.now().year))
+    month = int(request.args.get('month', datetime.now().month))
+    dept_f= request.args.get('dept', '')
+
+    # Get all schedules for the selected month/year
+    from calendar import monthrange
+    _, days_in_month = monthrange(year, month)
+
+    q = AuditSchedule.query
+    if dept_f:
+        q = q.filter_by(department_id=int(dept_f))
+    all_schedules = q.all()
+
+    # Group by day for calendar display
+    cal_data = {}  # day → list of schedules
+    for s in all_schedules:
+        if s.scheduled_date:
+            try:
+                from datetime import date as dt_date
+                sd = dt_date.fromisoformat(s.scheduled_date)
+                if sd.year == year and sd.month == month:
+                    cal_data.setdefault(sd.day, []).append(s)
+            except Exception:
+                pass
+
+    # Prev/next month
+    if month == 1:
+        prev_year, prev_month = year - 1, 12
+    else:
+        prev_year, prev_month = year, month - 1
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+
+    import calendar
+    first_weekday = calendar.monthrange(year, month)[0]  # 0=Mon
+
+    MONTH_NAMES = ['January','February','March','April','May','June',
+                   'July','August','September','October','November','December']
+
+    return render_template('audit/audit_schedule_calendar.html',
+                           year=year, month=month,
+                           month_name=MONTH_NAMES[month-1],
+                           days_in_month=days_in_month,
+                           first_weekday=first_weekday,
+                           cal_data=cal_data,
+                           prev_year=prev_year, prev_month=prev_month,
+                           next_year=next_year, next_month=next_month,
+                           dept_f=dept_f)
+
+
 @app.route('/audit-plans')
 def audit_plans():
     year_f     = request.args.get('year', datetime.now().year, type=int)
@@ -1936,8 +2139,43 @@ def start_audit(sid):
     s.status       = 'In Progress'
     s.actual_date  = date.today().isoformat()
     s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
+
+    # Auto-load checklist from latest saved department template
+    if s.department_id and not s.checklist_items:
+        from models import AuditChecklist
+        tmpl = ChecklistTemplate.query.filter_by(
+            department_id=s.department_id,
+            audit_type=s.audit_type or 'Internal',
+            is_active=True
+        ).first()
+        if tmpl and tmpl.items:
+            for ti in tmpl.items:
+                db.session.add(AuditChecklist(
+                    schedule_id=sid,
+                    category=ti.category,
+                    item_ref=ti.item_ref,
+                    question=ti.question,
+                    sequence=ti.sequence,
+                ))
+            db.session.flush()
+            flash(f'✓ Audit started. Loaded {len(tmpl.items)} items from {tmpl.name}.', 'success')
+        else:
+            # Fall back to static template (existing get_checklist_template logic)
+            from models import AuditChecklist as ACL
+            dept = Department.query.get(s.department_id)
+            static_tmpl = get_checklist_template(dept.code if dept else 'default')
+            for cat, items in static_tmpl.items():
+                for seq, (ref, q) in enumerate(items):
+                    db.session.add(ACL(
+                        schedule_id=sid,
+                        category=cat,
+                        item_ref=ref,
+                        question=q,
+                        sequence=seq,
+                    ))
+            flash('✓ Audit started. Checklist loaded from default template.', 'success')
+
     db.session.commit()
-    flash('✓ Audit started. Checklist is now active.', 'success')
     return redirect(url_for('audit_execution', sid=sid))
 
 @app.route('/audit-schedule/<sid>/checklist', methods=['POST'])
@@ -4509,6 +4747,14 @@ with app.app_context():
                 ('auto_category',   'VARCHAR(50)'),
                 ('active',          'BOOLEAN DEFAULT 1'),
                 ('created_at',      'DATETIME'),
+            ],
+            'checklist_templates': [
+                ('is_active',   'BOOLEAN DEFAULT 1'),
+                ('updated_at',  'DATETIME'),
+                ('version',     'INTEGER DEFAULT 1'),
+            ],
+            'checklist_template_items': [
+                ('iosa_ref',    'VARCHAR(100)'),
             ],
             'audit_checklists': [
                 ('evidence_filename',   'VARCHAR(200)'),
