@@ -1354,7 +1354,7 @@ def spi():
 
 @app.route('/spi/actions')
 def spi_actions_list():
-    """List of all SPI-linked actions — closed and open."""
+    """List of all SPI-linked actions with full escalation traceability."""
     status_f = request.args.get('status', '')
     dept_f   = request.args.get('dept', '')
     level_f  = request.args.get('level', '')
@@ -1364,9 +1364,39 @@ def spi_actions_list():
     if level_f:  q = q.filter_by(spi_alert_level=level_f)
     actions = q.order_by(Action.spi_alert_year.desc(),
                          Action.spi_alert_month.desc()).all()
+
+    # For each action, load or recompute escalation data
+    action_data = []
+    for a in actions:
+        esc = None
+        if a.spi_escalation_id:
+            esc = SPIEscalation.query.get(a.spi_escalation_id)
+        if not esc and a.spi_id and a.spi_alert_month:
+            esc = SPIEscalation.query.filter_by(
+                spi_id=a.spi_id,
+                trigger_month=a.spi_alert_month
+            ).first()
+        action_data.append({'action': a, 'esc': esc})
+
     return render_template('spi/spi_actions_list.html',
-                           actions=actions, status_f=status_f,
+                           action_data=action_data,
+                           actions=actions,
+                           status_f=status_f,
                            dept_f=dept_f, level_f=level_f)
+
+@app.route('/spi/escalation/<int:esc_id>')
+def spi_escalation_detail(esc_id):
+    """Escalation event detail — the source record for SPI actions."""
+    esc = SPIEscalation.query.get_or_404(esc_id)
+    ind = SPIIndicator.query.get(esc.spi_id) if esc.spi_id else None
+    actions = Action.query.filter_by(spi_id=esc.spi_id,
+                                     spi_alert_month=esc.trigger_month,
+                                     spi_alert_year=esc.trigger_year).all()
+    MONTHS = ['January','February','March','April','May','June',
+              'July','August','September','October','November','December']
+    return render_template('spi/spi_escalation_detail.html',
+                           esc=esc, ind=ind, actions=actions,
+                           MONTHS=MONTHS, now=datetime.utcnow())
 
 @app.route('/spi/action-report/<action_id>')
 def spi_action_report(action_id):
