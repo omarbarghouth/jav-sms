@@ -90,16 +90,46 @@
   SPI ESCALATION EVENT — {{ a.spi_alert_level or 'SPI Alert' }}
 </div>
 
-{# Use persisted escalation record if available, else fallback to action fields #}
-{% set t_month  = esc.trigger_month   if esc else a.spi_alert_month %}
-{% set t_year   = esc.trigger_year    if esc else a.spi_alert_year %}
-{% set t_rule   = esc.trigger_rule    if esc else a.spi_trigger_rule %}
-{% set spi_val  = esc.spi_value       if esc else None %}
-{% set thr_val  = esc.threshold_value if esc else None %}
-{% set mean_val = esc.mean_value      if esc else None %}
-{% set sd_val   = esc.sd_value        if esc else None %}
-{% set esc_desc = esc.description     if esc else '' %}
-{% set diff_val = ((esc.spi_value - esc.threshold_value) if esc and esc.spi_value and esc.threshold_value else None) %}
+{#
+  Escalation data priority:
+   1. esc       = persisted SPIEscalation record (best)
+   2. esc_computed = recomputed from live SPI history (reliable fallback)
+   3. action fields = last resort (spi_alert_month, spi_alert_year)
+  This guarantees we ALWAYS show the real trigger month, never action.created_at
+#}
+{% if esc %}
+  {% set t_month  = esc.trigger_month %}
+  {% set t_year   = esc.trigger_year %}
+  {% set t_rule   = esc.trigger_rule %}
+  {% set spi_val  = esc.spi_value %}
+  {% set thr_val  = esc.threshold_value %}
+  {% set mean_val = esc.mean_value %}
+  {% set sd_val   = esc.sd_value %}
+  {% set esc_desc = esc.description %}
+  {% set diff_val = ((esc.spi_value - esc.threshold_value)
+                     if esc.spi_value and esc.threshold_value else none) %}
+{% elif esc_computed %}
+  {% set t_month  = esc_computed.trigger_month %}
+  {% set t_year   = esc_computed.trigger_year %}
+  {% set t_rule   = esc_computed.trigger_rule %}
+  {% set spi_val  = esc_computed.spi_value %}
+  {% set thr_val  = esc_computed.threshold_value %}
+  {% set mean_val = esc_computed.mean_value %}
+  {% set sd_val   = esc_computed.sd_value %}
+  {% set esc_desc = esc_computed.description %}
+  {% set diff_val = esc_computed.diff_value %}
+{% else %}
+  {# Last resort — use stored action SPI fields (no statistical detail) #}
+  {% set t_month  = a.spi_alert_month %}
+  {% set t_year   = a.spi_alert_year %}
+  {% set t_rule   = a.spi_trigger_rule %}
+  {% set spi_val  = none %}
+  {% set thr_val  = none %}
+  {% set mean_val = none %}
+  {% set sd_val   = none %}
+  {% set esc_desc = '' %}
+  {% set diff_val = none %}
+{% endif %}
 
 <!-- Trigger month highlight box -->
 <div style="background:#fff8f8;border:2px solid #fca5a5;border-radius:6px;padding:10px 14px;margin-bottom:10px">
