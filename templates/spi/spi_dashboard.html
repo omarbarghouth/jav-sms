@@ -165,20 +165,41 @@
   {% if row.trigger and row.escalation_month %}
   {% set MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
   {% set esc_color = {'L3':'#dc2626','L2':'#ea580c','L1':'#d97706'}.get(row.escalation_level,'#d97706') %}
-  <div style="padding:10px 18px;background:{{ esc_color }}12;border-bottom:2px solid {{ esc_color }}40;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-    <div>
-      <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:{{ esc_color }};letter-spacing:.5px">
-        ⚠ ESCALATION DETECTED
+  <div style="background:{{ esc_color }}10;border-bottom:2px solid {{ esc_color }}50;padding:12px 18px">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;
+                   color:{{ esc_color }};background:{{ esc_color }}15;padding:3px 10px;border-radius:99px;border:1px solid {{ esc_color }}40">
+        ⚠ ESCALATION EVENT DETECTED
       </span>
-      <div style="font-size:13px;font-weight:700;color:#374151;margin-top:3px">
-        {{ row.escalation_level }} Triggered in
+      <span style="font-size:12px;font-weight:700;color:#374151">
+        {{ row.escalation_level }} triggered in
         <strong style="color:{{ esc_color }}">{{ MNAMES[row.escalation_month-1] }} {{ row.escalation_year }}</strong>
-        &nbsp;·&nbsp; Value: <strong style="font-family:monospace">{{ '%.3f'|format(row.escalation_value) }}</strong>
-      </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ row.escalation_desc }}</div>
+        — Rule {{ row.trigger }}
+      </span>
+      <span style="margin-left:auto;font-size:11px;color:var(--muted);font-style:italic">
+        This is the REAL trigger month · Action creation date is separate
+      </span>
     </div>
-    <div style="margin-left:auto;font-size:11px;color:var(--muted)">
-      Action creation date ≠ trigger month · The trigger month is: {{ MNAMES[row.escalation_month-1] }} {{ row.escalation_year }}
+    <!-- Detail grid -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+      {% set detail_items = [
+        ('Trigger Month',      MNAMES[row.escalation_month-1] + ' ' + row.escalation_year|string, esc_color, True),
+        ('SPI Value',          '%.4f'|format(row.escalation_value),       esc_color,  False),
+        ('Threshold Exceeded', '%.4f'|format(row.escalation_threshold) if row.escalation_threshold else '—', '#374151', False),
+        ('Difference (+)',     ('+' if row.escalation_diff and row.escalation_diff > 0 else '') + ('%.4f'|format(row.escalation_diff) if row.escalation_diff else '—'), esc_color, False),
+        ('Trigger Rule',       {'A':'Rule A: 1 pt ≥ L3','B':'Rule B: 2 consec ≥ L2','C':'Rule C: 3 consec ≥ L1'}.get(row.trigger,'Rule ' + row.trigger), '#374151', False),
+      ] %}
+      {% for lbl, val, color, bold in detail_items %}
+      <div style="background:#fff;border-radius:7px;padding:9px 12px;border:1px solid {{ esc_color }}25">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px;letter-spacing:.3px">{{ lbl }}</div>
+        <div style="font-size:{% if bold %}14px{% else %}13px{% endif %};font-weight:{% if bold %}800{% else %}700{% endif %};color:{{ color }};font-family:'IBM Plex Mono',monospace">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <!-- Description -->
+    <div style="font-size:11px;color:#374151;margin-top:8px;padding:6px 10px;background:#fff;border-radius:5px;border:1px solid {{ esc_color }}20">
+      {{ row.escalation_desc }}
     </div>
   </div>
   {% endif %}
