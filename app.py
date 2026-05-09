@@ -17,6 +17,19 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXT
 
+
+def _save_upload(field_name, prefix=''):
+    """Save an uploaded file, return filename or None."""
+    if field_name not in request.files:
+        return None
+    f = request.files[field_name]
+    if not f or not f.filename or not allowed_file(f.filename):
+        return None
+    from werkzeug.utils import secure_filename
+    fname = f'{prefix}{secure_filename(f.filename)}'
+    f.save(os.path.join(app.config['UPLOAD_FOLDER'], fname))
+    return fname
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
@@ -1654,40 +1667,264 @@ def sp_newsletter_publish(nid):
 
 @app.route('/safety-promotion/training')
 def sp_training():
-    dept_f=request.args.get('dept',''); status_f=request.args.get('status',''); type_f=request.args.get('type','')
+    """Training records list with auto status refresh."""
+    dept_f   = request.args.get('dept', '')
+    status_f = request.args.get('status', '')
+    type_f   = request.args.get('type', '')
+
+    # Auto-refresh expired / due soon statuses
+    from datetime import date as dt_date, timedelta
+    today = dt_date.today()
+    due_threshold = (today + timedelta(days=60)).isoformat()
+    today_str = today.isoformat()
+    for t in Training.query.filter(
+            Training.status.in_(['Scheduled','In Progress','Completed','Current'])).all():
+        if t.expiry_date and t.status not in ('Cancelled',):
+            if t.expiry_date < today_str:
+                t.status = 'Expired'
+            elif t.expiry_date < due_threshold and t.status == 'Completed':
+                t.status = 'Due Soon'
+    db.session.commit()
+
     q = Training.query
     if dept_f:   q = q.filter_by(department_id=int(dept_f))
     if status_f: q = q.filter_by(status=status_f)
     if type_f:   q = q.filter_by(training_type=type_f)
     trainings = q.order_by(Training.created_at.desc()).all()
-    stats = {'total':Training.query.count(),'current':Training.query.filter_by(status='Current').count(),
-             'expired':Training.query.filter_by(status='Expired').count(),
-             'due_soon':Training.query.filter_by(status='Due Soon').count()}
+
+    stats = {
+        'total':     Training.query.count(),
+        'scheduled': Training.query.filter_by(status='Scheduled').count(),
+        'in_progress':Training.query.filter_by(status='In Progress').count(),
+        'completed': Training.query.filter_by(status='Completed').count(),
+        'due_soon':  Training.query.filter(Training.status.in_(['Due Soon','Current'])).count(),
+        'expired':   Training.query.filter_by(status='Expired').count(),
+        'overdue':   Training.query.filter_by(status='Overdue').count(),
+    }
     return render_template('spi/sp_training.html', trainings=trainings, stats=stats,
                            dept_f=dept_f, status_f=status_f, type_f=type_f)
 
-@app.route('/safety-promotion/training/new', methods=['GET','POST'])
+
+@app.route('/safety-promotion/training/new', methods=['GET', 'POST'])
 def new_training():
     if request.method == 'POST':
         f = request.form
-        cert = None
-        if 'certificate' in request.files:
-            cf = request.files['certificate']
-            if cf and cf.filename and allowed_file(cf.filename):
-                from werkzeug.utils import secure_filename
-                cert = f'CERT_{secure_filename(cf.filename)}'
-                cf.save(os.path.join(app.config['UPLOAD_FOLDER'], cert))
-        t = Training(employee_name=f['employee_name'], employee_id=f.get('employee_id',''),
-            department_id=int(f['department_id']) if f.get('department_id') else None,
-            training_type=f.get('training_type','SMS Training'), training_program=f.get('training_program',''),
-            instructor=f.get('instructor',''), training_date=f.get('training_date',''),
-            completion_date=f.get('completion_date',''), expiry_date=f.get('expiry_date',''),
-            status=f.get('status','Current'), certificate=cert, notes=f.get('notes',''))
-        db.session.add(t); db.session.commit()
-        flash('✓ Training record saved.', 'success')
+        cert = _save_upload('certificate', f'CERT_')
+        evid = _save_upload('evidence', f'EV_')
+        t = Training(
+            employee_name    = f.get('employee_name', ''),
+            employee_id      = f.get('employee_id', ''),
+            department_id    = int(f['department_id']) if f.get('department_id') else None,
+            position         = f.get('position', ''),
+            training_type    = f.get('training_type', 'SMS Training'),
+            training_program = f.get('training_program', ''),
+            course_code      = f.get('course_code', ''),
+            instructor       = f.get('instructor', ''),
+            location         = f.get('location', ''),
+            scheduled_date   = f.get('scheduled_date', ''),
+            training_date    = f.get('training_date', ''),
+            completion_date  = f.get('completion_date', ''),
+            expiry_date      = f.get('expiry_date', ''),
+            duration_hours   = float(f['duration_hours']) if f.get('duration_hours') else None,
+            status           = f.get('status', 'Scheduled'),
+            certificate      = cert,
+            evidence         = evid,
+            is_recurrent     = 'is_recurrent' in f,
+            recurrence_months= int(f['recurrence_months']) if f.get('recurrence_months') else None,
+            notes            = f.get('notes', ''),
+        )
+        db.session.add(t)
+        db.session.commit()
+        flash(f'✓ Training record saved for {t.employee_name}.', 'success')
         return redirect(url_for('sp_training'))
-    return render_template('spi/sp_training_form.html',
-                           now=datetime.utcnow())
+    return render_template('spi/sp_training_form.html', now=datetime.utcnow(), editing=False)
+
+
+@app.route('/safety-promotion/training/<int:tid>', methods=['GET', 'POST'])
+def sp_training_detail(tid):
+    """View and edit a single training record."""
+    t = Training.query.get_or_404(tid)
+    if request.method == 'POST':
+        f = request.form
+        action = f.get('action', 'update')
+
+        if action == 'delete':
+            db.session.delete(t)
+            db.session.commit()
+            flash('Training record deleted.', 'success')
+            return redirect(url_for('sp_training'))
+
+        # Handle file uploads
+        new_cert = _save_upload('certificate', 'CERT_')
+        new_evid = _save_upload('evidence', 'EV_')
+
+        t.employee_name     = f.get('employee_name', t.employee_name)
+        t.employee_id       = f.get('employee_id', t.employee_id)
+        t.department_id     = int(f['department_id']) if f.get('department_id') else t.department_id
+        t.position          = f.get('position', t.position)
+        t.training_type     = f.get('training_type', t.training_type)
+        t.training_program  = f.get('training_program', t.training_program)
+        t.course_code       = f.get('course_code', t.course_code)
+        t.instructor        = f.get('instructor', t.instructor)
+        t.location          = f.get('location', t.location)
+        t.scheduled_date    = f.get('scheduled_date', t.scheduled_date)
+        t.training_date     = f.get('training_date', t.training_date)
+        t.completion_date   = f.get('completion_date', t.completion_date)
+        t.expiry_date       = f.get('expiry_date', t.expiry_date)
+        t.duration_hours    = float(f['duration_hours']) if f.get('duration_hours') else t.duration_hours
+        t.status            = f.get('status', t.status)
+        t.is_recurrent      = 'is_recurrent' in f
+        t.recurrence_months = int(f['recurrence_months']) if f.get('recurrence_months') else t.recurrence_months
+        t.notes             = f.get('notes', t.notes)
+        if new_cert: t.certificate = new_cert
+        if new_evid: t.evidence    = new_evid
+        t.updated_at = datetime.utcnow()
+        db.session.commit()
+        flash('✓ Training record updated.', 'success')
+        return redirect(url_for('sp_training_detail', tid=tid))
+    return render_template('spi/sp_training_detail.html', t=t, now=datetime.utcnow())
+
+
+@app.route('/safety-promotion/training/export/xlsx')
+def sp_training_export_xlsx():
+    """Export training records to Excel with formatting."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from flask import send_file
+
+    dept_f   = request.args.get('dept', '')
+    status_f = request.args.get('status', '')
+    q = Training.query
+    if dept_f:   q = q.filter_by(department_id=int(dept_f))
+    if status_f: q = q.filter_by(status=status_f)
+    records = q.order_by(Training.status, Training.expiry_date).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Training Records'
+
+    # Header styling
+    navy   = PatternFill('solid', start_color='0F1C3F')
+    gold   = PatternFill('solid', start_color='C9A84C')
+    red_f  = PatternFill('solid', start_color='FEE2E2')
+    amber_f= PatternFill('solid', start_color='FEF9C3')
+    green_f= PatternFill('solid', start_color='DCFCE7')
+    blue_f = PatternFill('solid', start_color='DBEAFE')
+    white_f= Font(color='FFFFFF', bold=True, name='Arial')
+    bold_f = Font(bold=True, name='Arial')
+    std_f  = Font(name='Arial')
+    center = Alignment(horizontal='center', vertical='center')
+    left   = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    thin   = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'),  bottom=Side(style='thin')
+    )
+
+    # Title row
+    ws.merge_cells('A1:L1')
+    ws['A1'] = 'JORDAN AVIATION — SAFETY TRAINING RECORDS'
+    ws['A1'].font = Font(name='Arial', bold=True, size=14, color='FFFFFF')
+    ws['A1'].fill = navy
+    ws['A1'].alignment = center
+
+    # Subtitle
+    ws.merge_cells('A2:L2')
+    ws['A2'] = f'Generated: {datetime.utcnow().strftime("%d %b %Y")}   |   Total Records: {len(records)}'
+    ws['A2'].font = Font(name='Arial', size=10, italic=True, color='C9A84C')
+    ws['A2'].fill = PatternFill('solid', start_color='0F1C3F')
+    ws['A2'].alignment = center
+
+    # Column headers
+    headers = [
+        ('Employee Name', 22), ('Employee ID', 12), ('Department', 18),
+        ('Position', 18), ('Training Type', 20), ('Program', 28),
+        ('Instructor', 18), ('Scheduled', 12), ('Completion', 12),
+        ('Expiry Date', 12), ('Status', 14), ('Certificate', 14)
+    ]
+    for col, (hdr, width) in enumerate(headers, 1):
+        cell = ws.cell(row=3, column=col, value=hdr)
+        cell.font = white_f
+        cell.fill = PatternFill('solid', start_color='1D4ED8')
+        cell.alignment = center
+        cell.border = thin
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    ws.row_dimensions[1].height = 28
+    ws.row_dimensions[2].height = 18
+    ws.row_dimensions[3].height = 20
+    ws.freeze_panes = 'A4'
+
+    # Data rows
+    STATUS_FILLS = {
+        'Expired':    red_f,
+        'Overdue':    red_f,
+        'Due Soon':   amber_f,
+        'Completed':  green_f,
+        'Scheduled':  blue_f,
+        'In Progress':blue_f,
+        'Cancelled':  PatternFill('solid', start_color='F3F4F6'),
+    }
+    for row_n, t in enumerate(records, 4):
+        fill = STATUS_FILLS.get(t.status, PatternFill())
+        row_data = [
+            t.employee_name or '',
+            t.employee_id or '',
+            t.department.name if t.department else '',
+            t.position or '',
+            t.training_type or '',
+            t.training_program or '',
+            t.instructor or '',
+            t.scheduled_date or t.training_date or '',
+            t.completion_date or '',
+            t.expiry_date or '',
+            t.status or '',
+            '✓ Uploaded' if t.certificate else '✗ Missing',
+        ]
+        for col, val in enumerate(row_data, 1):
+            cell = ws.cell(row=row_n, column=col, value=val)
+            cell.font = std_f
+            cell.border = thin
+            cell.alignment = left
+            if col in (11, 12):  # status + cert cols
+                cell.fill = fill
+                cell.alignment = center
+        ws.row_dimensions[row_n].height = 16
+
+    # Summary sheet
+    ws2 = wb.create_sheet('Summary')
+    ws2.merge_cells('A1:C1')
+    ws2['A1'] = 'Training Status Summary'
+    ws2['A1'].font = Font(name='Arial', bold=True, size=12, color='FFFFFF')
+    ws2['A1'].fill = navy
+    ws2['A1'].alignment = center
+    ws2.column_dimensions['A'].width = 22
+    ws2.column_dimensions['B'].width = 14
+    ws2.column_dimensions['C'].width = 14
+
+    statuses = ['Scheduled','In Progress','Completed','Due Soon','Expired','Overdue','Cancelled']
+    ws2.cell(row=2, column=1, value='Status').font = bold_f
+    ws2.cell(row=2, column=2, value='Count').font   = bold_f
+    ws2.cell(row=2, column=3, value='% of Total').font = bold_f
+    for i, st in enumerate(statuses, 3):
+        cnt = sum(1 for r in records if r.status == st)
+        ws2.cell(row=i, column=1, value=st)
+        ws2.cell(row=i, column=2, value=cnt)
+        ws2.cell(row=i, column=3, value=f'=B{i}/B{3+len(statuses)}' if cnt else 0)
+        if st in STATUS_FILLS:
+            for col in range(1, 4):
+                ws2.cell(row=i, column=col).fill = STATUS_FILLS[st]
+    total_row = 3 + len(statuses)
+    ws2.cell(row=total_row, column=1, value='TOTAL').font = bold_f
+    ws2.cell(row=total_row, column=2, value=f'=SUM(B3:B{total_row-1})').font = bold_f
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f'Training_Records_{datetime.now().strftime("%Y%m%d")}.xlsx'
+    return send_file(buf, as_attachment=True, download_name=fname,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.route('/safety-promotion/surveys')
 def sp_surveys():
@@ -1878,19 +2115,30 @@ def sp_campaign_complete(cid):
 
 # ── Training PDF report ───────────────────────────────────────────────────────
 
+@app.route('/safety-promotion/training/<int:tid>/edit', methods=['GET', 'POST'])
+def sp_training_edit(tid):
+    """Full edit form — alias for detail page with editing mode."""
+    t = Training.query.get_or_404(tid)
+    if request.method == 'POST':
+        return sp_training_detail(tid)
+    return render_template('spi/sp_training_form.html', t=t, editing=True,
+                           now=datetime.utcnow())
+
+
 @app.route('/safety-promotion/training/report')
 def sp_training_report():
-    dept_f = request.args.get('dept', '')
+    dept_f   = request.args.get('dept', '')
     status_f = request.args.get('status', '')
     q = Training.query
     if dept_f:   q = q.filter_by(department_id=int(dept_f))
     if status_f: q = q.filter_by(status=status_f)
     trainings = q.order_by(Training.expiry_date).all()
     stats = {
-        'total':    Training.query.count(),
-        'current':  Training.query.filter_by(status='Current').count(),
-        'expired':  Training.query.filter_by(status='Expired').count(),
-        'due_soon': Training.query.filter_by(status='Due Soon').count(),
+        'total':     Training.query.count(),
+        'scheduled': Training.query.filter_by(status='Scheduled').count(),
+        'completed': Training.query.filter_by(status='Completed').count(),
+        'expired':   Training.query.filter_by(status='Expired').count(),
+        'due_soon':  Training.query.filter(Training.status.in_(['Due Soon','Current'])).count(),
     }
     return render_template('spi/sp_training_report.html',
                            trainings=trainings, stats=stats, now=datetime.utcnow())
@@ -5147,6 +5395,18 @@ with app.app_context():
                 ('parent_ra_id',           'VARCHAR(30)'),
                 ('next_review_date',       'VARCHAR(20)'),
                 ('assessment_date',        'VARCHAR(20)'),
+            ],
+            'trainings': [
+                ('employee_id',        'VARCHAR(50)'),
+                ('position',           'VARCHAR(100)'),
+                ('course_code',        'VARCHAR(50)'),
+                ('location',           'VARCHAR(100)'),
+                ('scheduled_date',     'VARCHAR(20)'),
+                ('duration_hours',     'REAL'),
+                ('evidence',           'VARCHAR(200)'),
+                ('is_recurrent',       'BOOLEAN DEFAULT 0'),
+                ('recurrence_months',  'INTEGER'),
+                ('updated_at',         'DATETIME'),
             ],
         }
 
