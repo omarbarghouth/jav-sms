@@ -161,6 +161,11 @@ class Action(db.Model):
     safety_notes         = db.Column(db.Text)          # safety improvement notes
     follow_up_notes      = db.Column(db.Text)          # monitoring notes post-closure
     mitigation_status    = db.Column(db.String(30))    # Active / Completed / Pending
+    # Safety Review
+    safety_review_notes  = db.Column(db.Text)           # Safety Dept review notes
+    safety_reviewer      = db.Column(db.String(100))    # Safety reviewer name
+    safety_review_date   = db.Column(db.String(20))
+    implementation_date  = db.Column(db.String(20))     # when mitigation was implemented
     # People
     assigned_by          = db.Column(db.String(100))   # who assigned the action
     closure_by           = db.Column(db.String(100))   # who confirmed closure
