@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}New Campaign{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion/campaigns" style="color:var(--muted);font-size:13px">← Campaigns</a></div>
+<div class="page-title">Create Safety Awareness Campaign</div>
+<form class="form-card" method="POST" enctype="multipart/form-data" style="max-width:640px">
+  <div class="sec">Campaign Details</div>
+  <div class="fg"><label>Campaign Title *</label><input type="text" name="title" required placeholder="e.g. FOD Awareness Month 2026"/></div>
+  <div class="g2">
+    <div class="fg"><label>Campaign Type *</label>
+      <select name="campaign_type" required>
+        {% for t in ["Monthly","Seasonal","FOD Campaign","Fatigue Awareness","Operational Safety","Human Factors","Reporting Culture","Emergency Preparedness"] %}
+        <option>{{ t }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Department (optional)</label>
+      <select name="department_id">
+        <option value="">All Departments</option>
+        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Start Date</label><input type="date" name="start_date"/></div>
+    <div class="fg"><label>End Date</label><input type="date" name="end_date"/></div>
+  </div>
+  <div class="fg"><label>Description *</label><textarea name="description" required rows="3" placeholder="Describe the campaign…"></textarea></div>
+  <div class="fg"><label>Objectives</label><textarea name="objectives" rows="2" placeholder="Campaign objectives and goals…"></textarea></div>
+  <div class="fg"><label>Upload Campaign Material (PDF, Image, Document)</label>
+    <input type="file" name="attachment" accept=".pdf,.docx,.png,.jpg,.jpeg,.gif"
+           style="border:1.5px solid var(--border);border-radius:7px;padding:8px;font-size:12px;font-family:inherit;background:#fafbfe"/></div>
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <button type="submit" class="btn btn-nav">📣 Create Campaign</button>
+    <a href="/safety-promotion/campaigns" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}

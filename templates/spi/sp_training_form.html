@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Add Training Record{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion/training" style="color:var(--muted);font-size:13px">← Training Records</a></div>
+<div class="page-title">Add Training Record</div>
+<form class="form-card" method="POST" enctype="multipart/form-data" style="max-width:640px">
+  <div class="sec">Employee Information</div>
+  <div class="g2">
+    <div class="fg"><label>Employee Name *</label><input type="text" name="employee_name" required placeholder="Full name"/></div>
+    <div class="fg"><label>Employee ID</label><input type="text" name="employee_id" placeholder="Staff ID"/></div>
+  </div>
+  <div class="fg"><label>Department</label>
+    <select name="department_id">
+      <option value="">Select department…</option>
+      {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+    </select></div>
+  <div class="sec">Training Details</div>
+  <div class="g2">
+    <div class="fg"><label>Training Type *</label>
+      <select name="training_type" required>
+        {% for t in ["SMS Training","Hazard Reporting Training","Emergency Response Training","Human Factors Training","Investigation Training","Audit Training","Safety Leadership","Other"] %}
+        <option>{{ t }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Training Program</label><input type="text" name="training_program" placeholder="Program/course name"/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Instructor / Provider</label><input type="text" name="instructor" placeholder="Instructor or training org"/></div>
+    <div class="fg"><label>Training Date</label><input type="date" name="training_date"/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Completion Date</label><input type="date" name="completion_date"/></div>
+    <div class="fg"><label>Expiry Date</label><input type="date" name="expiry_date"/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Status</label>
+      <select name="status">
+        {% for s in ["Current","Scheduled","Due Soon","Expired"] %}<option>{{ s }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Certificate Upload</label>
+      <input type="file" name="certificate" accept=".pdf,.png,.jpg,.jpeg"
+             style="border:1.5px solid var(--border);border-radius:7px;padding:7px;font-size:12px;font-family:inherit;background:#fafbfe"/></div>
+  </div>
+  <div class="fg"><label>Notes</label><textarea name="notes" rows="2" placeholder="Additional notes…"></textarea></div>
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <button type="submit" class="btn btn-nav">🎓 Save Training Record</button>
+    <a href="/safety-promotion/training" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}
