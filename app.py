@@ -2101,18 +2101,10 @@ def audit_execution(sid):
     checklist = {}
     for item in sorted(s.checklist_items, key=lambda x: x.sequence):
         checklist.setdefault(item.category, []).append(item)
-    total   = len(s.checklist_items)
-    done    = sum(1 for i in s.checklist_items if i.response)
-    nc      = sum(1 for i in s.checklist_items if i.response == 'No')
-    # Closure eligibility
-    all_findings_actioned = all(len(f.actions) > 0 for f in s.findings) if s.findings else True
-    all_actions_closed    = all(
-        all(a.status == 'Closed' for a in f.actions) for f in s.findings
-    ) if s.findings else True
-    all_verified = all(
-        all(a.effectiveness in ('Effective', 'Partially Effective') for a in f.actions)
-        for f in s.findings
-    ) if s.findings else True
+    total = len(s.checklist_items)
+    done  = sum(1 for i in s.checklist_items if i.response)
+    nc    = sum(1 for i in s.checklist_items if i.response == 'No')
+
     # Checklist NO items without findings
     no_items_without_findings = [
         i for cat_items in checklist.values()
@@ -2120,9 +2112,33 @@ def audit_execution(sid):
         if i.response == 'No' and not i.linked_finding_id
     ]
     all_no_have_findings = len(no_items_without_findings) == 0
-    all_findings_closed  = all(f.status == 'Closed' for f in s.findings) if s.findings else True
-    can_close = (all_no_have_findings and all_findings_actioned and
-                 all_actions_closed and all_verified)
+
+    # All findings closed (using the new lifecycle status OR old AuditAction check)
+    all_findings_closed = all(
+        f.status == 'Closed' for f in s.findings
+    ) if s.findings else True
+
+    # AuditAction-based checks (legacy — some findings have AuditActions)
+    findings_with_audit_actions = [f for f in s.findings if f.actions]
+    all_findings_actioned = True  # satisfied if all findings are Closed
+    all_actions_closed    = True
+    all_verified          = True
+
+    if findings_with_audit_actions:
+        all_actions_closed = all(
+            all(a.status == 'Closed' for a in f.actions)
+            for f in findings_with_audit_actions
+        )
+        # Effectiveness is optional — don't block closure on it
+        all_verified = True
+
+    # CAN CLOSE: checklist complete + all findings closed
+    can_close = (
+        all_no_have_findings and
+        all_findings_closed and
+        all_actions_closed
+    )
+
     return render_template('audit/audit_execution.html',
         s=s, checklist=checklist, total=total, done=done, nc=nc,
         can_close=can_close,
@@ -2253,22 +2269,29 @@ def close_audit(sid):
         refs = ', '.join(i.item_ref or f'item {i.id}' for i in no_without[:3])
         flash(f'✗ Cannot close: {len(no_without)} checklist NO item(s) still need findings ({refs}).', 'error')
         return redirect(url_for('audit_execution', sid=sid))
-    # Validate closure conditions
+    # Validate: all findings must be Closed OR have closed AuditActions
     if s.findings:
         for finding in s.findings:
-            if not finding.actions:
-                flash(f'✗ Cannot close: Finding {finding.id} has no corrective action.', 'error')
-                return redirect(url_for('audit_execution', sid=sid))
-            for a in finding.actions:
-                if a.status != 'Closed':
-                    flash(f'✗ Cannot close: Action {a.id} is not yet closed.', 'error')
-                    return redirect(url_for('audit_execution', sid=sid))
-                if not a.effectiveness:
-                    flash(f'✗ Cannot close: Action {a.id} has no effectiveness review.', 'error')
+            if finding.status != 'Closed':
+                # Allow if all AuditActions are closed (legacy workflow)
+                if finding.actions:
+                    open_actions = [a for a in finding.actions if a.status != 'Closed']
+                    if open_actions:
+                        flash(f'✗ Cannot close: Finding {finding.finding_ref} — '
+                              f'{len(open_actions)} action(s) not yet closed.', 'error')
+                        return redirect(url_for('audit_execution', sid=sid))
+                else:
+                    flash(f'✗ Cannot close: Finding {finding.finding_ref} is not yet Closed '
+                          f'(current status: {finding.status}).', 'error')
                     return redirect(url_for('audit_execution', sid=sid))
     s.status        = 'Completed'
     s.closure_date  = date.today().isoformat()
     s.closed_by     = request.form.get('closed_by', 'Safety Manager')
+    s.final_remarks = request.form.get('final_remarks', '')
+    s.closing_meeting = request.form.get('closing_meeting', date.today().isoformat())
+    db.session.commit()
+    flash(f'✓ Audit {sid} closed and marked Completed.', 'success')
+    return redirect(url_for('audit_execution', sid=sid))
     s.final_remarks = request.form.get('final_remarks', '')
     s.closing_meeting = request.form.get('closing_meeting', date.today().isoformat())
     db.session.commit()
