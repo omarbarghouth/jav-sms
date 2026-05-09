@@ -1,154 +1,364 @@
 {% extends "base.html" %}
-{% block title %}{{ a.id }} — Action{% endblock %}
+{% block title %}{{ a.id }} — Action Detail{% endblock %}
 {% block content %}
 
-<div style="margin-bottom:14px">
-  <a href="/actions" style="color:var(--muted);font-size:13px">← All Actions</a>
-  {% if hazard %}
-  &nbsp;·&nbsp;
-  <a href="/hazard-log/{{ hazard.id }}" style="color:var(--muted);font-size:13px">
-    Hazard: {{ hazard.id }}
-  </a>
-  {% endif %}
+<!-- Header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div style="margin-bottom:6px">
+      <a href="/actions" style="color:var(--muted);font-size:13px">← Action Management</a>
+      {% if a.linked_ref_id %}
+      <span style="color:var(--muted);font-size:13px"> · </span>
+      <a href="/audit-findings/{{ a.linked_ref_id }}" style="color:#1d4ed8;font-size:13px">Finding {{ a.linked_ref_id }}</a>
+      {% endif %}
+      {% if a.hazard_id %}
+      <span style="color:var(--muted);font-size:13px"> · </span>
+      <a href="/hazard-log/{{ a.hazard_id }}" style="color:#dc2626;font-size:13px">⚠ {{ a.hazard_id }}</a>
+      {% endif %}
+      {% if a.spi_id %}
+      <span style="color:var(--muted);font-size:13px"> · </span>
+      <a href="/spi" style="color:#7c3aed;font-size:13px">📈 SPI Alert</a>
+      {% endif %}
+    </div>
+    <div class="page-title">{{ a.id }}</div>
+    <div class="page-sub">{{ a.source or 'Manual' }} action · Created {{ a.created_at.strftime('%d %b %Y') }}</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/actions/{{ a.id }}/report" target="_blank" class="btn btn-sm" style="background:#065f46;color:#fff">🖨 Print Report</a>
+    <a href="/actions" class="btn btn-outline btn-sm">← Back</a>
+  </div>
 </div>
 
-<div class="page-title">{{ a.id }}</div>
-<div class="page-sub">
-  Source: <strong>{{ a.source }}</strong> ·
-  Created: {{ a.created_at.strftime('%d %b %Y') }}
-  {% if a.closed_date %} · Closed: <strong style="color:#15803d">{{ a.closed_date }}</strong>{% endif %}
-</div>
-
-<!-- Status bar — simple 3-step -->
-<div class="card" style="padding:14px 20px;margin-bottom:20px">
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
-    {% for step, col in [('Open','#d97706'),('In Progress','#1d4ed8'),('Closed','#15803d')] %}
-    <span style="padding:6px 18px;border-radius:20px;font-size:12px;font-weight:700;
-      {% if a.status == step or (a.status=='Overdue' and step=='Open') %}
-        background:{{ col }};color:#fff;
-      {% else %}
-        background:#f3f4f6;color:#9ca3af;
-      {% endif %}">
-      {{ step }}
-    </span>
-    {% if not loop.last %}
-    <span style="color:#d1d5db;font-size:16px">→</span>
-    {% endif %}
+<!-- Lifecycle progress bar -->
+{% set STAGES = ['Open','In Progress','Mitigation Implemented','Under Safety Review','Closed'] %}
+{% set STAGE_IDX = {'Open':0,'In Progress':1,'Mitigation Implemented':2,'Under Safety Review':3,'Closed':4,'Overdue':0} %}
+{% set cur_idx = STAGE_IDX.get(a.status, 0) %}
+<div class="card" style="padding:16px 20px;margin-bottom:18px">
+  <div style="display:flex;align-items:center;gap:0">
+    {% for s in STAGES %}
+    {% set i = loop.index0 %}
+    {% set is_done = i < cur_idx %}
+    {% set is_active = i == cur_idx %}
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;position:relative">
+      <!-- Connector line -->
+      {% if not loop.first %}
+      <div style="position:absolute;top:12px;right:50%;width:100%;height:3px;background:{% if i <= cur_idx %}var(--navy){% else %}#e5e7eb{% endif %};z-index:0"></div>
+      {% endif %}
+      <!-- Dot -->
+      <div style="width:26px;height:26px;border-radius:50%;z-index:1;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;
+                  background:{% if is_done %}var(--navy){% elif is_active %}{% if a.status=='Overdue' %}#dc2626{% else %}var(--gold){% endif %}{% else %}#e5e7eb{% endif %};
+                  color:{% if is_done %}var(--gold){% elif is_active %}var(--navy){% else %}#9ca3af{% endif %};
+                  border:3px solid {% if is_active %}{% if a.status=='Overdue' %}#dc2626{% else %}var(--gold){% endif %}{% elif is_done %}var(--navy){% else %}#e5e7eb{% endif %}">
+        {% if is_done %}✓{% else %}{{ loop.index }}{% endif %}
+      </div>
+      <div style="margin-top:5px;font-size:9.5px;font-weight:{% if is_active %}800{% else %}500{% endif %};
+                  color:{% if is_active %}{% if a.status=='Overdue' %}#dc2626{% else %}var(--navy){% endif %}{% elif is_done %}#374151{% else %}#9ca3af{% endif %};
+                  text-align:center;line-height:1.3;max-width:70px">{{ s }}</div>
+    </div>
     {% endfor %}
-    {% if a.status == 'Overdue' %}
-    <span style="margin-left:10px;background:#dc2626;color:#fff;padding:6px 18px;border-radius:20px;font-size:12px;font-weight:800">
-      ⚠ OVERDUE
-    </span>
-    {% endif %}
   </div>
-
-  <!-- Key dates -->
-  <div style="display:flex;gap:20px;font-size:12px;color:var(--muted);flex-wrap:wrap">
-    <span>Due: <strong style="color:{% if a.status=='Overdue' %}#dc2626{% else %}#374151{% endif %}">
-      {{ a.due_date or '—' }}</strong></span>
-    {% if a.closed_date %}
-    <span>Closed: <strong style="color:#15803d">{{ a.closed_date }}</strong></span>
-    {% endif %}
+  {% if a.status == 'Overdue' %}
+  <div style="text-align:center;margin-top:10px;font-size:12px;font-weight:700;color:#dc2626">
+    ⚠ OVERDUE — was due {{ a.due_date }}
   </div>
+  {% endif %}
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
 
-  <!-- LEFT: What is this action about -->
-  <div>
-    <div class="card">
-      <div class="card-title">Action Details</div>
-      <table style="font-size:13px;width:100%">
-        <tr>
-          <td style="color:var(--muted);padding:7px 0;width:120px">Description</td>
-          <td>{{ a.description or '—' }}</td>
-        </tr>
-        <tr>
-          <td style="color:var(--muted);padding:7px 0">Owner</td>
-          <td><strong>{{ a.owner or '—' }}</strong></td>
-        </tr>
-        <tr>
-          <td style="color:var(--muted);padding:7px 0">Due Date</td>
-          <td style="{% if a.status=='Overdue' %}color:#dc2626;font-weight:700{% endif %}">
-            {{ a.due_date or '—' }}
-          </td>
-        </tr>
-        <tr>
-          <td style="color:var(--muted);padding:7px 0">Priority</td>
-          <td>
-            {% if a.priority=='High' %}<span class="badge b-red">High</span>
-            {% elif a.priority=='Medium' %}<span class="badge b-yellow">Medium</span>
-            {% else %}<span class="badge b-gray">Low</span>{% endif %}
-          </td>
-        </tr>
-        <tr>
-          <td style="color:var(--muted);padding:7px 0">Status</td>
-          <td>
-            {% if a.status=='Closed' %}<span class="badge b-green">✓ Closed</span>
-            {% elif a.status=='Overdue' %}<span class="badge b-red">⚠ Overdue</span>
-            {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
-            {% else %}<span class="badge b-yellow">Open</span>{% endif %}
-          </td>
-        </tr>
-        {% if a.effectiveness %}
-        <tr>
-          <td style="color:var(--muted);padding:7px 0">Effectiveness</td>
-          <td>
-            {% if a.effectiveness=='Effective' %}<span class="badge b-green">✓ Effective</span>
-            {% elif a.effectiveness=='Partially Effective' %}<span class="badge b-yellow">~ Partially Effective</span>
-            {% else %}<span class="badge b-red">✗ Ineffective</span>{% endif %}
-          </td>
-        </tr>
-        {% endif %}
-        {% if a.effectiveness_review %}
-        <tr>
-          <td style="color:var(--muted);padding:7px 0;vertical-align:top">Review Notes</td>
-          <td>{{ a.effectiveness_review }}</td>
-        </tr>
-        {% endif %}
-      </table>
+<!-- ════ LEFT COLUMN ════════════════════════════════════════════════════════ -->
+<div>
+
+  <!-- Action Summary -->
+  <div class="card">
+    <div class="card-title">Action Details</div>
+    <table style="font-size:13px;width:100%">
+      {% for label, val, color in [
+        ('Source Module', a.source or 'Manual', '#374151'),
+        ('Priority', a.priority, {'High':'#dc2626','Medium':'#d97706','Low':'#374151'}.get(a.priority,'#374151')),
+        ('Status', a.status, '#374151'),
+        ('Due Date', a.due_date or '—', '#dc2626' if a.status=='Overdue' else '#374151'),
+        ('Created', a.created_at.strftime('%d %b %Y'), '#6b7280'),
+      ] %}
+      <tr>
+        <td style="color:var(--muted);padding:5px 0;width:130px;font-size:12px">{{ label }}</td>
+        <td style="font-weight:600;color:{{ color }}">{{ val }}</td>
+      </tr>
+      {% endfor %}
+      {% if a.linked_ref_id %}
+      <tr>
+        <td style="color:var(--muted);padding:5px 0;font-size:12px">Linked Record</td>
+        <td><span class="mono">{{ a.linked_ref_id }}</span></td>
+      </tr>
+      {% endif %}
+      {% if a.spi_id %}
+      <tr>
+        <td style="color:var(--muted);padding:5px 0;font-size:12px">SPI Alert</td>
+        <td>
+          {% set MNAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+          <span class="badge {% if a.spi_alert_level=='L3' %}b-red{% elif a.spi_alert_level=='L2' %}b-orange{% else %}b-yellow{% endif %}">{{ a.spi_alert_level }}</span>
+          {% if a.spi_alert_month %}<span style="font-size:11px;color:var(--muted);margin-left:5px">{{ MNAMES[a.spi_alert_month-1] }} {{ a.spi_alert_year }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <!-- ── STEP 1: Description (always visible) ───────────────────────────── -->
+  <div class="card">
+    <div class="card-title">📋 Step 1 — Action Description</div>
+    <p style="font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap">{{ a.description or '—' }}</p>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Owner</div>
+        <div style="font-size:13px;font-weight:700">{{ a.owner or '—' }}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Assigned By</div>
+        <div style="font-size:13px">{{ a.assigned_by or '—' }}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Due Date</div>
+        <div style="font-size:13px;font-weight:700;color:{% if a.status=='Overdue' %}#dc2626{% else %}#374151{% endif %}">{{ a.due_date or '—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 2: Corrective + Mitigation (filled by responsible) ──────── -->
+  <div class="card" style="border-left:4px solid {% if a.corrective_description or a.mitigation_description %}#1d4ed8{% else %}#e5e7eb{% endif %}">
+    <div class="card-title" style="color:{% if a.corrective_description %}#1d4ed8{% else %}var(--navy){% endif %}">
+      📝 Step 2 — Corrective &amp; Mitigation Actions
+      {% if not a.corrective_description and a.status not in ('Closed',) %}
+      <span class="badge b-yellow" style="font-size:10px">Pending</span>
+      {% elif a.corrective_description %}
+      <span class="badge b-green" style="font-size:10px">✓ Submitted</span>
+      {% endif %}
+    </div>
+    {% if a.corrective_description %}
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Corrective Action Taken</div>
+      <p style="font-size:13px;color:#374151;line-height:1.6;white-space:pre-wrap">{{ a.corrective_description }}</p>
+    </div>
+    {% endif %}
+    {% if a.mitigation_description %}
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Mitigation Implemented</div>
+      <p style="font-size:13px;color:#374151;line-height:1.6;white-space:pre-wrap">{{ a.mitigation_description }}</p>
+    </div>
+    {% endif %}
+    {% if a.safety_notes %}
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Safety Improvement Notes</div>
+      <p style="font-size:13px;color:#374151;line-height:1.6;white-space:pre-wrap">{{ a.safety_notes }}</p>
+    </div>
+    {% endif %}
+    {% if a.implementation_date %}
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:7px 12px;font-size:12px">
+      ✅ Mitigation implemented on: <strong>{{ a.implementation_date }}</strong>
+      {% if a.mitigation_status %} · Status: <span class="badge {% if a.mitigation_status=='Completed' %}b-green{% elif a.mitigation_status=='Active' %}b-blue{% else %}b-yellow{% endif %}" style="font-size:10px">{{ a.mitigation_status }}</span>{% endif %}
+    </div>
+    {% elif not a.corrective_description %}
+    <p style="color:var(--muted);font-size:12px;font-style:italic">Not yet submitted by responsible person.</p>
+    {% endif %}
+    {% if a.follow_up_notes %}
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Follow-up Notes</div>
+      <p style="font-size:13px;color:#374151;white-space:pre-wrap">{{ a.follow_up_notes }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- ════ RIGHT COLUMN ═══════════════════════════════════════════════════════ -->
+<div>
+
+  <!-- ── STEP 3: Evidence ─────────────────────────────────────────────── -->
+  <div class="card" style="border-left:4px solid {% if a.evidence_filename %}#15803d{% else %}#e5e7eb{% endif %}">
+    <div class="card-title" style="color:{% if a.evidence_filename %}#15803d{% else %}var(--navy){% endif %}">
+      📎 Step 3 — Evidence &amp; Attachments
+      {% if a.evidence_filename %}
+      <span class="badge b-green" style="font-size:10px">✓ File Attached</span>
+      {% else %}
+      <span class="badge b-yellow" style="font-size:10px">No file yet</span>
+      {% endif %}
     </div>
 
-    <!-- Update form — only shown if not closed -->
-    {% if a.status != 'Closed' %}
-    <div class="card">
-      <div class="card-title">Update This Action</div>
-      <form method="POST" action="/actions/{{ a.id }}/update" enctype="multipart/form-data">
-        <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
+    {% if a.evidence %}
+    <div style="background:#f8f9fc;border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#374151;line-height:1.6">
+      {{ a.evidence }}
+    </div>
+    {% endif %}
 
+    {% if a.evidence_filename %}
+    <!-- Attachment card -->
+    <div style="border:2px solid #bbf7d0;border-radius:8px;padding:12px 14px;background:#f0fdf4;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:24px">📄</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:#15803d">{{ a.evidence_filename.split('_',1)[-1] if '_' in a.evidence_filename else a.evidence_filename }}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Attached evidence file · Linked to {{ a.id }}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <a href="/spi/evidence/{{ a.evidence_filename }}" target="_blank"
+             class="btn btn-sm" style="background:#15803d;color:#fff">👁 View</a>
+          <a href="/spi/evidence/{{ a.evidence_filename }}" download
+             class="btn btn-outline btn-sm">⬇ Download</a>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div style="border:2px dashed #e5e7eb;border-radius:8px;padding:20px;text-align:center;color:var(--muted)">
+      <div style="font-size:28px;margin-bottom:8px">📁</div>
+      <div style="font-size:13px;font-weight:600">No evidence uploaded yet</div>
+      <div style="font-size:11px;margin-top:4px">Upload proof of implementation below</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── STEP 4: Safety Review ─────────────────────────────────────────── -->
+  <div class="card" style="border-left:4px solid {% if a.status=='Under Safety Review' %}#ea580c{% elif a.status in ('Closed',) and a.safety_reviewer %}#15803d{% else %}#e5e7eb{% endif %}">
+    <div class="card-title" style="color:{% if a.status=='Under Safety Review' %}#ea580c{% elif a.safety_reviewer %}#15803d{% else %}var(--navy){% endif %}">
+      🔍 Step 4 — Safety Department Review
+      {% if a.status == 'Under Safety Review' %}
+      <span class="badge b-orange" style="font-size:10px">⚠ Awaiting Review</span>
+      {% elif a.safety_reviewer %}
+      <span class="badge b-green" style="font-size:10px">✓ Reviewed</span>
+      {% else %}
+      <span class="badge b-gray" style="font-size:10px">Pending submission</span>
+      {% endif %}
+    </div>
+    {% if a.safety_review_notes %}
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#ea580c;margin-bottom:3px">Safety Review Notes</div>
+      <p style="font-size:13px;color:#374151;line-height:1.6">{{ a.safety_review_notes }}</p>
+    </div>
+    {% endif %}
+    {% if a.safety_reviewer %}
+    <div style="font-size:12px;color:var(--muted)">
+      Reviewed by <strong>{{ a.safety_reviewer }}</strong>
+      {% if a.safety_review_date %} on {{ a.safety_review_date }}{% endif %}
+    </div>
+    {% endif %}
+    {% if not a.safety_reviewer and a.status not in ('Under Safety Review','Closed') %}
+    <p style="font-size:12px;color:var(--muted);font-style:italic">Safety review will be triggered when implementation is submitted for review.</p>
+    {% endif %}
+  </div>
+
+  <!-- ── STEP 5: Effectiveness + Closure ──────────────────────────────── -->
+  <div class="card" style="border-left:4px solid {% if a.status=='Closed' %}#15803d{% else %}#e5e7eb{% endif %}">
+    <div class="card-title" style="color:{% if a.status=='Closed' %}#15803d{% else %}var(--navy){% endif %}">
+      ✅ Step 5 — Effectiveness &amp; Closure
+      {% if a.status=='Closed' %}
+      <span class="badge b-green" style="font-size:10px">✓ Closed</span>
+      {% else %}
+      <span class="badge b-gray" style="font-size:10px">Pending</span>
+      {% endif %}
+    </div>
+    {% if a.effectiveness %}
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+      {% if a.effectiveness=='Effective' %}<span class="badge b-green">✓ Effective</span>
+      {% elif a.effectiveness=='Partially Effective' %}<span class="badge b-yellow">~ Partially Effective</span>
+      {% elif a.effectiveness=='Ineffective' %}<span class="badge b-red">✗ Ineffective — Reopened</span>{% endif %}
+    </div>
+    {% endif %}
+    {% if a.effectiveness_review %}
+    <div style="background:#f8f9fc;border-radius:6px;padding:9px 12px;margin-bottom:8px;font-size:12px;color:#374151;line-height:1.6">{{ a.effectiveness_review }}</div>
+    {% endif %}
+    {% if a.verified_by %}
+    <div style="font-size:12px;color:var(--muted)">
+      Verified by <strong>{{ a.verified_by }}</strong>
+      {% if a.verified_date %} · {{ a.verified_date }}{% endif %}
+    </div>
+    {% endif %}
+    {% if a.status == 'Closed' %}
+    <div style="background:#dcfce7;border:1.5px solid #bbf7d0;border-radius:8px;padding:12px 14px;margin-top:8px">
+      <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:5px">✅ Action Closed</div>
+      <div style="font-size:11px;color:#374151">
+        Closed {{ a.closed_date or '—' }}{% if a.closure_by %} · Approved by <strong>{{ a.closure_by }}</strong>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div><!-- /RIGHT -->
+</div><!-- /grid -->
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     WORKFLOW ACTION FORMS — shown based on current lifecycle stage
+═══════════════════════════════════════════════════════════════════════════ -->
+{% if a.status != 'Closed' %}
+<div style="margin-top:22px">
+
+  <!-- RESPONSIBLE PERSON: Submit corrective action + evidence ─────────── -->
+  {% if a.status in ('Open','In Progress','Overdue') %}
+  <div class="card" style="border:2px solid #1d4ed8">
+    <div class="card-title" style="color:#1d4ed8">📝 Submit Corrective Action &amp; Evidence</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">
+      Complete the corrective action implementation details and upload supporting evidence before submitting for Safety review.
+    </p>
+    <form method="POST" action="/actions/{{ a.id }}/update" enctype="multipart/form-data">
+      <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
+
+      <div class="sec">A. Corrective &amp; Mitigation Details</div>
+      <div class="fg">
+        <label>Corrective Action Taken *</label>
+        <textarea name="corrective_description" required rows="3"
+          placeholder="Describe exactly what corrective action was taken…">{{ a.corrective_description or '' }}</textarea>
+      </div>
+      <div class="fg">
+        <label>Mitigation Description</label>
+        <textarea name="mitigation_description" rows="3"
+          placeholder="What mitigation measure was implemented to prevent recurrence?">{{ a.mitigation_description or '' }}</textarea>
+      </div>
+      <div class="fg">
+        <label>Safety Improvement Notes</label>
+        <textarea name="safety_notes" rows="2"
+          placeholder="How does this improve safety performance?">{{ a.safety_notes or '' }}</textarea>
+      </div>
+      <div class="g2">
         <div class="fg">
-          <label>Status</label>
-          <select name="status" id="status-sel" onchange="toggleEffectiveness()">
-            {% for s in ['Open','In Progress','Closed'] %}
-            <option {% if a.status==s %}selected{% endif %}>{{ s }}</option>
+          <label>Implementation Date</label>
+          <input type="date" name="implementation_date" value="{{ a.implementation_date or '' }}"/>
+        </div>
+        <div class="fg">
+          <label>Mitigation Status</label>
+          <select name="mitigation_status">
+            {% for ms in ['Pending','Active','Under Review','Completed'] %}
+            <option {% if a.mitigation_status==ms %}selected{% endif %}>{{ ms }}</option>
             {% endfor %}
           </select>
         </div>
+      </div>
 
-        <!-- Effectiveness — only required when closing -->
-        <div class="fg" id="eff-block" style="display:none">
-          <label>
-            Was this action effective?
-            <span style="color:#dc2626">*</span>
-            <span style="font-weight:400;color:var(--muted)">(required to close)</span>
-          </label>
-          <select name="effectiveness" id="eff-sel">
-            <option value="">Select…</option>
-            <option>Effective</option>
-            <option>Partially Effective</option>
-            <option>Ineffective</option>
-          </select>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">
-            If you select <strong>Ineffective</strong> — the action will be automatically re-opened so you can try a different approach.
-          </div>
+      <div class="sec">B. Evidence Upload</div>
+      <div class="fg">
+        <label>Evidence Description</label>
+        <textarea name="evidence" rows="2"
+          placeholder="Describe the evidence (e.g. 'Revised SOP-GR-004 v2.0 attached')">{{ a.evidence or '' }}</textarea>
+      </div>
+      <div class="fg">
+        <label>Upload Evidence File (PDF, DOCX, XLSX, Image)</label>
+        <input type="file" name="evidence_file"
+               accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg,.gif,.mp4"
+               style="border:1.5px solid var(--border);border-radius:7px;padding:9px;font-size:13px;font-family:inherit;background:#fafbfe"/>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">
+          Accepted: PDF, DOCX, XLSX, PNG, JPG, GIF · Evidence remains linked to this action permanently
         </div>
-
-        <div class="fg" id="review-block" style="display:none">
-          <label>Notes on what was done</label>
-          <textarea name="effectiveness_review" rows="3"
-            placeholder="Describe what was done and why it was or was not effective…"></textarea>
+        {% if a.evidence_filename %}
+        <div style="margin-top:5px;font-size:12px;color:#15803d">
+          Current: <a href="/spi/evidence/{{ a.evidence_filename }}" target="_blank">📎 {{ a.evidence_filename.split('_',1)[-1] if '_' in a.evidence_filename else a.evidence_filename }}</a>
         </div>
+        {% endif %}
+      </div>
 
+      <div class="sec">C. Follow-up</div>
+      <div class="fg">
+        <label>Follow-up / Monitoring Notes</label>
+        <textarea name="follow_up_notes" rows="2"
+          placeholder="How will effectiveness be monitored after implementation?">{{ a.follow_up_notes or '' }}</textarea>
+      </div>
+      <div class="g2">
         <div class="fg">
           <label>Owner</label>
           <input type="text" name="owner" value="{{ a.owner or '' }}"/>
@@ -157,221 +367,128 @@
           <label>Due Date</label>
           <input type="date" name="due_date" value="{{ a.due_date or '' }}"/>
         </div>
+      </div>
 
-        {% if a.spi_id %}
-        <div class="sec" style="margin-top:14px">SPI Lifecycle Tracking</div>
-        <div class="g2">
-          <div class="fg"><label>Mitigation Status</label>
-            <select name="mitigation_status">
-              {% for ms in ['Pending','Active','Under Review','Completed'] %}
-              <option {% if a.mitigation_status==ms %}selected{% endif %}>{{ ms }}</option>
-              {% endfor %}
-            </select></div>
-          <div class="fg"><label>Assigned By</label>
-            <input type="text" name="assigned_by" value="{{ a.assigned_by or '' }}" placeholder="Who assigned?"/></div>
-        </div>
-        <div class="fg"><label>Mitigation Description</label>
-          <textarea name="mitigation_description" rows="2">{{ a.mitigation_description or '' }}</textarea></div>
-        <div class="fg"><label>Corrective Action Description</label>
-          <textarea name="corrective_description" rows="2">{{ a.corrective_description or '' }}</textarea></div>
-        <div class="fg"><label>Safety Improvement Notes</label>
-          <textarea name="safety_notes" rows="2">{{ a.safety_notes or '' }}</textarea></div>
-        <div class="fg"><label>Evidence Text</label>
-          <textarea name="evidence" rows="2">{{ a.evidence or '' }}</textarea></div>
-        {% if a.evidence_filename %}
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:9px 13px;margin-bottom:10px;font-size:12px">
-          📎 <a href="/spi/evidence/{{ a.evidence_filename }}" target="_blank" style="color:#1d4ed8;font-weight:700">{{ a.evidence_filename }}</a>
-        </div>
-        {% endif %}
-        <div class="fg"><label>Upload / Replace Evidence File (PDF, DOCX, XLSX, Image)</label>
-          <input type="file" name="evidence_file" accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg,.gif"
-                 style="border:1.5px solid var(--border);border-radius:7px;padding:7px;font-size:12px;font-family:inherit;background:#fafbfe"/></div>
-        <div class="fg"><label>Follow-up / Monitoring Notes</label>
-          <textarea name="follow_up_notes" rows="2">{{ a.follow_up_notes or '' }}</textarea></div>
-        <div class="g2">
-          <div class="fg"><label>Verified By</label>
-            <input type="text" name="verified_by" value="{{ a.verified_by or '' }}" placeholder="Verifier name"/></div>
-          <div class="fg"><label>Verification Date</label>
-            <input type="date" name="verified_date" value="{{ a.verified_date or '' }}"/></div>
-        </div>
-        <div class="fg"><label>Confirmed / Closed By</label>
-          <input type="text" name="closure_by" value="{{ a.closure_by or '' }}" placeholder="Who confirmed closure?"/></div>
-        {% endif %}
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" name="status" value="In Progress" class="btn btn-nav">💾 Save Progress</button>
+        <button type="submit" name="status" value="Mitigation Implemented" class="btn btn-nav"
+                style="background:#1d4ed8"
+                onclick="return confirm('Mark mitigation as implemented and submit for Safety review?')">
+          ✓ Submit for Safety Review →
+        </button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
 
-        <button type="submit" class="btn btn-nav">Save Changes</button>
-        {% if a.spi_id %}
-        <a href="/spi/action-report/{{ a.id }}" target="_blank"
-           class="btn btn-outline btn-sm" style="margin-left:8px">🖨 Print Report</a>
-        {% endif %}
+  <!-- MITIGATION IMPLEMENTED: Trigger Safety Review ───────────────────── -->
+  {% if a.status == 'Mitigation Implemented' %}
+  <div class="card" style="border:2px solid #d97706;background:#fffbeb">
+    <div class="card-title" style="color:#b45309">🔔 Ready for Safety Department Review</div>
+    <p style="font-size:13px;color:#374151;margin-bottom:14px">
+      Mitigation has been marked as implemented. The Safety Department must now review the evidence and corrective action before closure is approved.
+    </p>
+    <form method="POST" action="/actions/{{ a.id }}/update">
+      <input type="hidden" name="status" value="Under Safety Review"/>
+      <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
+      <button type="submit" class="btn btn-nav" style="background:#d97706">
+        📨 Send to Safety Department for Review →
+      </button>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- SAFETY DEPARTMENT: Review + Accept/Return ────────────────────────── -->
+  {% if a.status == 'Under Safety Review' %}
+  <div class="card" style="border:2px solid #ea580c">
+    <div class="card-title" style="color:#ea580c">🔍 Safety Department Review</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+      Review the evidence, corrective action description, and mitigation implementation before approving closure.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+
+      <!-- Accept → move to Effectiveness Verification -->
+      <form method="POST" action="/actions/{{ a.id }}/update" enctype="multipart/form-data">
+        <input type="hidden" name="status" value="Closed"/>
+        <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
+        <div class="fg">
+          <label>Safety Reviewer Name *</label>
+          <input type="text" name="safety_reviewer" required placeholder="Safety Manager"/>
+        </div>
+        <div class="fg">
+          <label>Safety Review Notes</label>
+          <textarea name="safety_review_notes" rows="2" placeholder="Review observations…"></textarea>
+        </div>
+        <div class="fg">
+          <label>Effectiveness *</label>
+          <select name="effectiveness" required>
+            <option value="">— Select —</option>
+            <option value="Effective">✓ Effective</option>
+            <option value="Partially Effective">~ Partially Effective</option>
+            <option value="Ineffective">✗ Ineffective (will reopen)</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Effectiveness Review Notes *</label>
+          <textarea name="effectiveness_review" required rows="2"
+            placeholder="Describe verification findings…"></textarea>
+        </div>
+        <div class="fg">
+          <label>Verified By</label>
+          <input type="text" name="verified_by" placeholder="Safety Manager"/>
+        </div>
+        <div class="g2">
+          <div class="fg">
+            <label>Verification Date</label>
+            <input type="date" name="verified_date"/>
+          </div>
+          <div class="fg">
+            <label>Closure Approved By</label>
+            <input type="text" name="closure_by" placeholder="Accountable Manager"/>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-nav" style="background:#15803d;width:100%"
+                onclick="return confirm('Approve closure of this action?')">
+          ✅ Approve &amp; Close Action
+        </button>
       </form>
-    </div>
-    {% endif %}
-  </div>
 
-  <!-- RIGHT: Where does this action come from (traceability) -->
-  <div>
-    <div class="card">
-      <div class="card-title">🔗 Linked To</div>
-
-      {% if hazard %}
-      <div style="border:1.5px solid #d97706;border-radius:8px;padding:14px;margin-bottom:12px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#d97706;margin-bottom:5px">
-          ⚠ HAZARD
+      <!-- Return for revision -->
+      <form method="POST" action="/actions/{{ a.id }}/update">
+        <input type="hidden" name="status" value="In Progress"/>
+        <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
+        <div class="fg">
+          <label>Reviewer Name</label>
+          <input type="text" name="safety_reviewer" placeholder="Safety Manager"/>
         </div>
-        <div style="font-weight:700;font-size:14px;color:#0f1c3f">
-          {{ hazard.generic_hazard or hazard.specific_components or '—' }}
+        <div class="fg">
+          <label>Reason for Returning *</label>
+          <textarea name="safety_review_notes" required rows="6"
+            placeholder="Explain what additional evidence or action is needed…"></textarea>
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">
-          {{ hazard.id }} ·
-          {{ hazard.classification or '—' }} ·
-          <span style="font-weight:700;
-            {% if hazard.status=='Open' %}color:#d97706
-            {% elif hazard.status=='Controlled' %}color:#15803d
-            {% else %}color:#6b7280{% endif %}">
-            {{ hazard.status }}
-          </span>
-        </div>
-        {% if hazard.risks %}
-        <div style="margin-top:8px;padding:8px;background:#f8f9fc;border-radius:6px;font-size:12px">
-          <strong>Risk:</strong>
-          <span style="font-size:16px;font-weight:900;font-family:monospace;
-            color:{% if hazard.risks[0].initial_tolerance=='INTOLERABLE' %}#dc2626{% elif hazard.risks[0].initial_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
-            {{ hazard.risks[0].initial_risk_index }}
-          </span>
-          <span class="badge {% if hazard.risks[0].initial_tolerance=='INTOLERABLE' %}b-red{% elif hazard.risks[0].initial_tolerance=='TOLERABLE' %}b-yellow{% else %}b-green{% endif %}" style="font-size:10px">
-            {{ hazard.risks[0].initial_tolerance }}
-          </span>
-          {% if hazard.risks[0].residual_risk_index %}
-          → <span style="font-size:14px;font-weight:900;font-family:monospace;
-            color:{% if hazard.risks[0].residual_tolerance=='INTOLERABLE' %}#dc2626{% elif hazard.risks[0].residual_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
-            {{ hazard.risks[0].residual_risk_index }}
-          </span>
-          {% endif %}
-        </div>
-        {% endif %}
-        <a href="/hazard-log/{{ hazard.id }}"
-           style="display:inline-block;margin-top:10px;font-size:12px;color:#1d4ed8;font-weight:700">
-          Open Hazard →
-        </a>
-      </div>
-      {% endif %}
-
-      {% if a.linked_ref_id %}
-      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px">
-          Reference
-        </div>
-        <span class="mono">{{ a.linked_ref_id }}</span>
-      </div>
-      {% endif %}
-
-      {% if a.spi_id %}
-      {% set spi_ind = a.spi_indicator %}
-      {% set lc = {'L3':'#dc2626','L2':'#ea580c','L1':'#d97706'}.get(a.spi_alert_level,'#d97706') %}
-      {% set MNAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
-      <div style="border:1.5px solid {{ lc }};border-radius:8px;padding:14px;margin-bottom:12px">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:{{ lc }};margin-bottom:6px">
-          📈 SPI ALERT — {{ a.spi_alert_level or 'Linked' }}
-        </div>
-        {% if spi_ind %}
-        <div style="font-weight:700;font-size:13px;color:var(--navy)">{{ spi_ind.code }} — {{ spi_ind.name }}</div>
-        {% endif %}
-        <!-- Trigger month box — prominently separated from creation date -->
-        <div style="background:{{ lc }}12;border:1px solid {{ lc }}40;border-radius:6px;
-                    padding:9px 12px;margin:8px 0">
-          <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12px">
-            <div>
-              <span style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted)">
-                SPI Alert Trigger Month
-              </span>
-              <div style="font-weight:800;font-size:14px;color:{{ lc }}">
-                {% if a.spi_alert_month and a.spi_alert_year %}
-                {{ MNAMES[a.spi_alert_month - 1] }} {{ a.spi_alert_year }}
-                {% else %}—{% endif %}
-              </div>
-            </div>
-            <div>
-              <span style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted)">
-                Action Created
-              </span>
-              <div style="font-size:12px;color:#374151;font-weight:600">
-                {{ a.created_at.strftime('%d %b %Y') if a.created_at else '—' }}
-              </div>
-            </div>
-          </div>
-          <div style="font-size:10px;color:var(--muted);margin-top:5px;font-style:italic">
-            ↑ These dates are intentionally different — trigger month is when the SPI threshold was crossed
-          </div>
-        </div>
-        {% if a.spi_trigger_rule %}
-        {% set rule_map = {'A':'Rule A: One point ≥ L3 (Mean+3SD)','B':'Rule B: Two consecutive ≥ L2 (Mean+2SD)','C':'Rule C: Three consecutive ≥ L1 (Mean+1SD)'} %}
-        <div style="font-size:12px;color:#374151;font-weight:600">{{ rule_map.get(a.spi_trigger_rule,'') }}</div>
-        {% endif %}
-        {% if a.mitigation_status %}
-        <div style="margin-top:8px">
-          <span class="badge {% if a.mitigation_status=='Completed' %}b-green{% elif a.mitigation_status=='Active' %}b-blue{% elif a.mitigation_status=='Under Review' %}b-yellow{% else %}b-gray{% endif %}">
-            Mitigation: {{ a.mitigation_status }}
-          </span>
-        </div>
-        {% endif %}
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <a href="/spi" style="font-size:12px;color:#1d4ed8;font-weight:600">← SPI Dashboard</a>
-          <a href="/spi/action-report/{{ a.id }}" target="_blank"
-             style="font-size:12px;color:#065f46;font-weight:600">🖨 Print Report</a>
-        </div>
-      </div>
-      {% endif %}
-
-      {% if not hazard and not a.linked_ref_id and not a.spi_id %}
-      <p style="color:var(--muted);font-size:13px">
-        No linked entities. Actions should always be connected to a hazard or finding.
-      </p>
-      {% endif %}
-
-      <!-- Other actions on the same hazard -->
-      {% if hazard and hazard.actions|length > 1 %}
-      <div style="margin-top:14px">
-        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:8px">
-          Other Actions on This Hazard
-        </div>
-        {% for other in hazard.actions %}
-        {% if other.id != a.id %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
-          <a href="/actions/{{ other.id }}" class="mono" style="color:#1d4ed8;font-size:11px">{{ other.id }}</a>
-          <span style="color:#374151;max-width:160px;overflow:hidden">{{ (other.description or '—')[:40] }}</span>
-          {% if other.status=='Closed' %}<span class="badge b-green" style="font-size:10px">Closed</span>
-          {% elif other.status=='Overdue' %}<span class="badge b-red" style="font-size:10px">Overdue</span>
-          {% elif other.status=='In Progress' %}<span class="badge b-blue" style="font-size:10px">In Progress</span>
-          {% else %}<span class="badge b-yellow" style="font-size:10px">Open</span>{% endif %}
-        </div>
-        {% endif %}
-        {% endfor %}
-      </div>
-      {% endif %}
+        <div style="height:70px"></div><!-- spacer to align button -->
+        <button type="submit" class="btn btn-danger" style="width:100%"
+                onclick="return confirm('Return this action for revision?')">
+          ↩ Return for Revision
+        </button>
+      </form>
 
     </div>
   </div>
+  {% endif %}
 
+</div><!-- /workflow forms -->
+
+{% else %}
+<!-- CLOSED — reopen option -->
+<div style="margin-top:16px;text-align:right">
+  <form method="POST" action="/actions/{{ a.id }}/update"
+        onsubmit="return confirm('Reopen this action?')">
+    <input type="hidden" name="status" value="Open"/>
+    <input type="hidden" name="return_url" value="/actions/{{ a.id }}"/>
+    <button type="submit" class="btn btn-outline btn-sm">↩ Reopen Action</button>
+  </form>
 </div>
+{% endif %}
 
-{% endblock %}
-{% block scripts %}
-<script>
-function toggleEffectiveness() {
-  var sel  = document.getElementById('status-sel');
-  var eff  = document.getElementById('eff-block');
-  var rev  = document.getElementById('review-block');
-  if (sel.value === 'Closed') {
-    eff.style.display = 'flex';
-    eff.style.flexDirection = 'column';
-    rev.style.display = 'flex';
-    rev.style.flexDirection = 'column';
-  } else {
-    eff.style.display = 'none';
-    rev.style.display = 'none';
-  }
-}
-// Run on page load in case status is pre-selected
-toggleEffectiveness();
-</script>
 {% endblock %}
