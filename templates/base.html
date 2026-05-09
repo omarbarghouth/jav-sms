@@ -154,6 +154,7 @@
     <a href="/risk-matrix" class="nav-a {% if request.path=='/risk-matrix' %}active{% endif %}"><span class="nav-icon">🎯</span>Risk Matrix</a>
 
     <div class="sb-section">Action Management</div>
+    <a href="/actions/dashboard" class="nav-a {% if request.path=='/actions/dashboard' %}active{% endif %}"><span class="nav-icon">📊</span>Action Dashboard</a>
     <a href="/actions" class="nav-a {% if request.path=='/actions' and not request.args.get('status') %}active{% endif %}"><span class="nav-icon">✅</span>All Actions{% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}</a>
     <a href="/actions?status=Open" class="nav-a {% if request.path=='/actions' and request.args.get('status')=='Open' %}active{% endif %}"><span class="nav-icon">🔶</span>Open Actions</a>
     <a href="/actions?status=Overdue" class="nav-a {% if request.args.get('status')=='Overdue' %}active{% endif %}"><span class="nav-icon">⏰</span>Overdue{% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}</a>
