@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid, io
 from openpyxl import Workbook
@@ -1544,42 +1544,366 @@ def spi_toggle_indicator(iid):
 
 
 # ─── Safety Promotion ─────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SAFETY PROMOTION MODULE
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @app.route('/safety-promotion')
 def safety_promotion():
-    bulletins = SafetyBulletin.query.order_by(SafetyBulletin.created_at.desc()).all()
-    trainings = Training.query.order_by(Training.training_date.desc()).all()
-    completed = Training.query.filter_by(status='Completed').count()
-    overdue_t = Training.query.filter_by(status='Overdue').count()
+    bulletins   = SafetyBulletin.query.filter_by(status='Active').order_by(SafetyBulletin.created_at.desc()).limit(5).all()
+    newsletters = SafetyNewsletter.query.filter_by(status='Published').order_by(SafetyNewsletter.created_at.desc()).limit(4).all()
+    trainings   = Training.query.order_by(Training.created_at.desc()).limit(8).all()
+    campaigns   = SafetyCampaign.query.filter_by(status='Active').order_by(SafetyCampaign.created_at.desc()).limit(4).all()
+    lessons     = LessonLearned.query.order_by(LessonLearned.created_at.desc()).limit(4).all()
+    surveys     = SafetySurvey.query.filter_by(status='Active').all()
+    overdue_training = Training.query.filter_by(status='Expired').count()
+    due_soon    = Training.query.filter_by(status='Due Soon').count()
     return render_template('spi/safety_promotion.html',
-        bulletins=bulletins, trainings=trainings,
-        completed=completed, overdue_t=overdue_t)
+                           bulletins=bulletins, newsletters=newsletters,
+                           trainings=trainings, campaigns=campaigns,
+                           lessons=lessons, surveys=surveys,
+                           overdue_training=overdue_training, due_soon=due_soon)
 
-@app.route('/safety-promotion/bulletin/new', methods=['POST'])
+@app.route('/safety-promotion/bulletins')
+def sp_bulletins():
+    status_f = request.args.get('status','')
+    type_f   = request.args.get('type','')
+    q = SafetyBulletin.query
+    if status_f: q = q.filter_by(status=status_f)
+    if type_f:   q = q.filter_by(bulletin_type=type_f)
+    bulletins = q.order_by(SafetyBulletin.created_at.desc()).all()
+    return render_template('spi/sp_bulletins.html', bulletins=bulletins, status_f=status_f, type_f=type_f)
+
+@app.route('/safety-promotion/bulletin/new', methods=['GET','POST'])
 def new_bulletin():
-    f = request.form
-    b = SafetyBulletin(id=new_id('BUL'),
-        title=f['title'], bulletin_type=f['bulletin_type'],
-        content=f['content'], issued_by=f['issued_by'],
-        department_ids=f.get('department_ids','all'))
-    db.session.add(b)
-    db.session.commit()
-    flash('✓ Bulletin published.', 'success')
-    return redirect(url_for('safety_promotion'))
+    if request.method == 'POST':
+        f = request.form
+        bid = new_id('SB')
+        ef = None
+        if 'attachment' in request.files:
+            att = request.files['attachment']
+            if att and att.filename and allowed_file(att.filename):
+                from werkzeug.utils import secure_filename
+                ef = f'{bid}_{secure_filename(att.filename)}'
+                att.save(os.path.join(app.config['UPLOAD_FOLDER'], ef))
+        b = SafetyBulletin(id=bid, ref_number=f.get('ref_number',bid), title=f['title'],
+            bulletin_type=f.get('bulletin_type','Bulletin'), severity=f.get('severity','Information'),
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            issue_date=f.get('issue_date',datetime.now().strftime('%Y-%m-%d')),
+            content=f['content'], recommendations=f.get('recommendations',''),
+            issued_by=f.get('issued_by','Safety Department'), status='Active',
+            attachment=ef, linked_hazard_id=f.get('linked_hazard_id') or None)
+        db.session.add(b); db.session.commit()
+        flash(f'✓ Bulletin {bid} published.', 'success')
+        return redirect(url_for('sp_bulletins'))
+    return render_template('spi/sp_bulletin_form.html')
 
-@app.route('/safety-promotion/training/new', methods=['POST'])
+@app.route('/safety-promotion/bulletin/<bid>')
+def sp_bulletin_detail(bid):
+    b = SafetyBulletin.query.get_or_404(bid)
+    return render_template('spi/sp_bulletin_detail.html', b=b, now=datetime.utcnow())
+
+@app.route('/safety-promotion/bulletin/<bid>/archive', methods=['POST'])
+def sp_bulletin_archive(bid):
+    b = SafetyBulletin.query.get_or_404(bid)
+    b.status = 'Archived'; db.session.commit()
+    flash('✓ Bulletin archived.', 'success')
+    return redirect(url_for('sp_bulletins'))
+
+@app.route('/safety-promotion/newsletters')
+def sp_newsletters():
+    newsletters = SafetyNewsletter.query.order_by(SafetyNewsletter.created_at.desc()).all()
+    return render_template('spi/sp_newsletters.html', newsletters=newsletters)
+
+@app.route('/safety-promotion/newsletter/new', methods=['GET','POST'])
+def sp_newsletter_new():
+    if request.method == 'POST':
+        f = request.form
+        nid_str = new_id('NL')
+        ef = None
+        if 'attachment' in request.files:
+            att = request.files['attachment']
+            if att and att.filename and allowed_file(att.filename):
+                from werkzeug.utils import secure_filename
+                ef = f'{nid_str}_{secure_filename(att.filename)}'
+                att.save(os.path.join(app.config['UPLOAD_FOLDER'], ef))
+        n = SafetyNewsletter(ref_number=f.get('ref_number',nid_str), title=f['title'],
+            issue_number=f.get('issue_number',''),
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            issue_date=f.get('issue_date',datetime.now().strftime('%Y-%m-%d')),
+            author=f.get('author','Safety Department'), summary=f.get('summary',''),
+            content=f.get('content',''), status=f.get('status','Draft'), attachment=ef)
+        db.session.add(n); db.session.commit()
+        flash(f'✓ Newsletter saved.', 'success')
+        return redirect(url_for('sp_newsletters'))
+    return render_template('spi/sp_newsletter_form.html')
+
+@app.route('/safety-promotion/newsletter/<int:nid>')
+def sp_newsletter_detail(nid):
+    n = SafetyNewsletter.query.get_or_404(nid)
+    return render_template('spi/sp_newsletter_detail.html', n=n, now=datetime.utcnow())
+
+@app.route('/safety-promotion/newsletter/<int:nid>/publish', methods=['POST'])
+def sp_newsletter_publish(nid):
+    n = SafetyNewsletter.query.get_or_404(nid)
+    n.status = 'Published'; db.session.commit()
+    flash('✓ Newsletter published.', 'success')
+    return redirect(url_for('sp_newsletters'))
+
+@app.route('/safety-promotion/training')
+def sp_training():
+    dept_f=request.args.get('dept',''); status_f=request.args.get('status',''); type_f=request.args.get('type','')
+    q = Training.query
+    if dept_f:   q = q.filter_by(department_id=int(dept_f))
+    if status_f: q = q.filter_by(status=status_f)
+    if type_f:   q = q.filter_by(training_type=type_f)
+    trainings = q.order_by(Training.created_at.desc()).all()
+    stats = {'total':Training.query.count(),'current':Training.query.filter_by(status='Current').count(),
+             'expired':Training.query.filter_by(status='Expired').count(),
+             'due_soon':Training.query.filter_by(status='Due Soon').count()}
+    return render_template('spi/sp_training.html', trainings=trainings, stats=stats,
+                           dept_f=dept_f, status_f=status_f, type_f=type_f)
+
+@app.route('/safety-promotion/training/new', methods=['GET','POST'])
 def new_training():
-    f = request.form
-    t = Training(employee_name=f['employee_name'],
-                 department_id=int(f['department_id']),
-                 training_type=f['training_type'],
-                 training_date=f['training_date'],
-                 expiry_date=f.get('expiry_date',''),
-                 status=f.get('status','Completed'),
-                 notes=f.get('notes',''))
-    db.session.add(t)
+    if request.method == 'POST':
+        f = request.form
+        cert = None
+        if 'certificate' in request.files:
+            cf = request.files['certificate']
+            if cf and cf.filename and allowed_file(cf.filename):
+                from werkzeug.utils import secure_filename
+                cert = f'CERT_{secure_filename(cf.filename)}'
+                cf.save(os.path.join(app.config['UPLOAD_FOLDER'], cert))
+        t = Training(employee_name=f['employee_name'], employee_id=f.get('employee_id',''),
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            training_type=f.get('training_type','SMS Training'), training_program=f.get('training_program',''),
+            instructor=f.get('instructor',''), training_date=f.get('training_date',''),
+            completion_date=f.get('completion_date',''), expiry_date=f.get('expiry_date',''),
+            status=f.get('status','Current'), certificate=cert, notes=f.get('notes',''))
+        db.session.add(t); db.session.commit()
+        flash('✓ Training record saved.', 'success')
+        return redirect(url_for('sp_training'))
+    return render_template('spi/sp_training_form.html')
+
+@app.route('/safety-promotion/surveys')
+def sp_surveys():
+    surveys = SafetySurvey.query.order_by(SafetySurvey.created_at.desc()).all()
+    return render_template('spi/sp_surveys.html', surveys=surveys)
+
+@app.route('/safety-promotion/survey/new', methods=['GET','POST'])
+def sp_survey_new():
+    if request.method == 'POST':
+        f = request.form
+        import json
+        questions = request.form.getlist('question')
+        s = SafetySurvey(title=f['title'], survey_type=f.get('survey_type','Safety Culture Survey'),
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            start_date=f.get('start_date',''), end_date=f.get('end_date',''),
+            description=f.get('description',''), questions=json.dumps([q for q in questions if q.strip()]),
+            status='Draft', target_count=int(f.get('target_count',0)))
+        db.session.add(s); db.session.commit()
+        flash('✓ Survey created.', 'success')
+        return redirect(url_for('sp_surveys'))
+    return render_template('spi/sp_survey_form.html')
+
+@app.route('/safety-promotion/survey/<int:sid>/activate', methods=['POST'])
+def sp_survey_activate(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    s.status = 'Active'; db.session.commit()
+    flash('✓ Survey activated.', 'success')
+    return redirect(url_for('sp_surveys'))
+
+@app.route('/safety-promotion/survey/<int:sid>/close', methods=['POST'])
+def sp_survey_close(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    s.status = 'Closed'; db.session.commit()
+    flash('✓ Survey closed.', 'success')
+    return redirect(url_for('sp_surveys'))
+
+@app.route('/safety-promotion/survey/<int:sid>/respond', methods=['POST'])
+def sp_survey_respond(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    s.response_count = (s.response_count or 0) + 1; db.session.commit()
+    flash('✓ Response recorded.', 'success')
+    return redirect(url_for('sp_surveys'))
+
+@app.route('/safety-promotion/campaigns')
+def sp_campaigns():
+    campaigns = SafetyCampaign.query.order_by(SafetyCampaign.created_at.desc()).all()
+    return render_template('spi/sp_campaigns.html', campaigns=campaigns)
+
+@app.route('/safety-promotion/campaign/new', methods=['GET','POST'])
+def sp_campaign_new():
+    if request.method == 'POST':
+        f = request.form
+        ef = None
+        if 'attachment' in request.files:
+            att = request.files['attachment']
+            if att and att.filename and allowed_file(att.filename):
+                from werkzeug.utils import secure_filename
+                ef = f'CAM_{secure_filename(att.filename)}'
+                att.save(os.path.join(app.config['UPLOAD_FOLDER'], ef))
+        sc = SafetyCampaign(title=f['title'], campaign_type=f.get('campaign_type','Monthly'),
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            start_date=f.get('start_date',''), end_date=f.get('end_date',''),
+            description=f.get('description',''), objectives=f.get('objectives',''),
+            status='Active', attachment=ef)
+        db.session.add(sc); db.session.commit()
+        flash('✓ Campaign created.', 'success')
+        return redirect(url_for('sp_campaigns'))
+    return render_template('spi/sp_campaign_form.html')
+
+@app.route('/safety-promotion/lessons')
+def sp_lessons():
+    cat_f=request.args.get('category',''); q_f=request.args.get('q','').strip()
+    q = LessonLearned.query
+    if cat_f: q = q.filter_by(category=cat_f)
+    if q_f:   q = q.filter(LessonLearned.title.ilike(f'%{q_f}%')|LessonLearned.description.ilike(f'%{q_f}%'))
+    lessons = q.order_by(LessonLearned.created_at.desc()).all()
+    return render_template('spi/sp_lessons.html', lessons=lessons, cat_f=cat_f, q_f=q_f)
+
+@app.route('/safety-promotion/lesson/new', methods=['GET','POST'])
+def sp_lesson_new():
+    if request.method == 'POST':
+        f = request.form
+        lid = new_id('LL')
+        ef = None
+        if 'attachment' in request.files:
+            att = request.files['attachment']
+            if att and att.filename and allowed_file(att.filename):
+                from werkzeug.utils import secure_filename
+                ef = f'{lid}_{secure_filename(att.filename)}'
+                att.save(os.path.join(app.config['UPLOAD_FOLDER'], ef))
+        ll = LessonLearned(ref_number=f.get('ref_number',lid), title=f['title'],
+            category=f.get('category','Incident'),
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            date=f.get('date',datetime.now().strftime('%Y-%m-%d')),
+            author=f.get('author','Safety Department'), description=f.get('description',''),
+            lesson=f.get('lesson',''), recommendations=f.get('recommendations',''),
+            status='Published', attachment=ef, linked_hazard_id=f.get('linked_hazard_id') or None)
+        db.session.add(ll); db.session.commit()
+        flash(f'✓ Lesson Learned {lid} published.', 'success')
+        return redirect(url_for('sp_lessons'))
+    return render_template('spi/sp_lesson_form.html')
+
+# ── Bulletin PDF print ────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/bulletin/<bid>/print')
+def sp_bulletin_print(bid):
+    b = SafetyBulletin.query.get_or_404(bid)
+    return render_template('spi/sp_bulletin_print.html', b=b, now=datetime.utcnow())
+
+
+# ── Newsletter edit ────────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/newsletter/<int:nid>/edit', methods=['GET','POST'])
+def sp_newsletter_edit(nid):
+    n = SafetyNewsletter.query.get_or_404(nid)
+    if request.method == 'POST':
+        f = request.form
+        n.title        = f.get('title', n.title)
+        n.issue_number = f.get('issue_number', n.issue_number)
+        n.author       = f.get('author', n.author)
+        n.issue_date   = f.get('issue_date', n.issue_date)
+        n.summary      = f.get('summary', n.summary)
+        n.content      = f.get('content', n.content)
+        n.status       = f.get('status', n.status)
+        if 'attachment' in request.files:
+            att = request.files['attachment']
+            if att and att.filename and allowed_file(att.filename):
+                from werkzeug.utils import secure_filename
+                fn = f'NL{n.id}_{secure_filename(att.filename)}'
+                att.save(os.path.join(app.config['UPLOAD_FOLDER'], fn))
+                n.attachment = fn
+        db.session.commit()
+        flash('✓ Newsletter updated.', 'success')
+        return redirect(url_for('sp_newsletter_detail', nid=nid))
+    return render_template('spi/sp_newsletter_form.html', n=n, editing=True)
+
+
+@app.route('/safety-promotion/newsletter/<int:nid>/archive', methods=['POST'])
+def sp_newsletter_archive(nid):
+    n = SafetyNewsletter.query.get_or_404(nid)
+    n.status = 'Archived'
     db.session.commit()
-    flash('✓ Training record added.', 'success')
-    return redirect(url_for('safety_promotion'))
+    flash('✓ Newsletter archived.', 'success')
+    return redirect(url_for('sp_newsletters'))
+
+
+@app.route('/safety-promotion/newsletter/<int:nid>/print')
+def sp_newsletter_print(nid):
+    n = SafetyNewsletter.query.get_or_404(nid)
+    return render_template('spi/sp_newsletter_print.html', n=n, now=datetime.utcnow())
+
+
+# ── Survey results dashboard ──────────────────────────────────────────────────
+
+@app.route('/safety-promotion/survey/<int:sid>')
+def sp_survey_detail(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    import json
+    questions = []
+    try:
+        questions = json.loads(s.questions or '[]')
+    except Exception:
+        pass
+    pct = int((s.response_count or 0) / max(s.target_count or 1, 1) * 100)
+    return render_template('spi/sp_survey_detail.html', s=s,
+                           questions=questions, pct=pct, now=datetime.utcnow())
+
+
+# ── Campaign detail & close ───────────────────────────────────────────────────
+
+@app.route('/safety-promotion/campaign/<int:cid>')
+def sp_campaign_detail(cid):
+    c = SafetyCampaign.query.get_or_404(cid)
+    return render_template('spi/sp_campaign_detail.html', c=c, now=datetime.utcnow())
+
+
+@app.route('/safety-promotion/campaign/<int:cid>/complete', methods=['POST'])
+def sp_campaign_complete(cid):
+    c = SafetyCampaign.query.get_or_404(cid)
+    c.status = 'Completed'
+    db.session.commit()
+    flash('✓ Campaign marked as Completed.', 'success')
+    return redirect(url_for('sp_campaigns'))
+
+
+# ── Training PDF report ───────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/training/report')
+def sp_training_report():
+    dept_f = request.args.get('dept', '')
+    status_f = request.args.get('status', '')
+    q = Training.query
+    if dept_f:   q = q.filter_by(department_id=int(dept_f))
+    if status_f: q = q.filter_by(status=status_f)
+    trainings = q.order_by(Training.expiry_date).all()
+    stats = {
+        'total':    Training.query.count(),
+        'current':  Training.query.filter_by(status='Current').count(),
+        'expired':  Training.query.filter_by(status='Expired').count(),
+        'due_soon': Training.query.filter_by(status='Due Soon').count(),
+    }
+    return render_template('spi/sp_training_report.html',
+                           trainings=trainings, stats=stats, now=datetime.utcnow())
+
+
+# ── Lessons Learned PDF ───────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/lesson/<int:lid>/print')
+def sp_lesson_print(lid):
+    ll = LessonLearned.query.get_or_404(lid)
+    return render_template('spi/sp_lesson_print.html', ll=ll, now=datetime.utcnow())
+
+
+@app.route('/safety-promotion/lesson/<int:lid>')
+
+def sp_lesson_detail(lid):
+    ll = LessonLearned.query.get_or_404(lid)
+    return render_template('spi/sp_lesson_detail.html', ll=ll, now=datetime.utcnow())
+
 
 # ─── Risk Matrix Reference ────────────────────────────────────────────────────
 @app.route('/risk-matrix')
