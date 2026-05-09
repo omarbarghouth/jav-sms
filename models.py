@@ -332,32 +332,114 @@ class SPIEscalation(db.Model):
     indicator      = db.relationship('SPIIndicator', backref=db.backref('escalations', lazy=True))
 
 
+class SafetyNewsletter(db.Model):
+    """Safety Newsletter — professional communications from Safety Dept."""
+    __tablename__ = 'safety_newsletters'
+    id             = db.Column(db.Integer, primary_key=True)
+    ref_number     = db.Column(db.String(30))    # e.g. NL-2026-001
+    title          = db.Column(db.String(200))
+    issue_number   = db.Column(db.String(20))
+    department_id  = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    issue_date     = db.Column(db.String(20))
+    author         = db.Column(db.String(100))
+    summary        = db.Column(db.Text)
+    content        = db.Column(db.Text)
+    status         = db.Column(db.String(20), default='Draft')  # Draft / Published / Archived
+    attachment     = db.Column(db.String(200))   # uploaded file
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    department     = db.relationship('Department', foreign_keys=[department_id])
+
+
+class SafetyCampaign(db.Model):
+    """Safety Awareness Campaign."""
+    __tablename__ = 'safety_campaigns'
+    id             = db.Column(db.Integer, primary_key=True)
+    title          = db.Column(db.String(200))
+    campaign_type  = db.Column(db.String(50))    # Monthly / Seasonal / FOD / Fatigue / Operational
+    department_id  = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    start_date     = db.Column(db.String(20))
+    end_date       = db.Column(db.String(20))
+    description    = db.Column(db.Text)
+    objectives     = db.Column(db.Text)
+    status         = db.Column(db.String(20), default='Active')  # Active / Completed / Planned
+    attachment     = db.Column(db.String(200))
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    department     = db.relationship('Department', foreign_keys=[department_id])
+
+
+class SafetySurvey(db.Model):
+    """Safety Survey with questions and response tracking."""
+    __tablename__ = 'safety_surveys'
+    id             = db.Column(db.Integer, primary_key=True)
+    title          = db.Column(db.String(200))
+    survey_type    = db.Column(db.String(50))    # Safety Culture / Fatigue / Training / Reporting
+    department_id  = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    start_date     = db.Column(db.String(20))
+    end_date       = db.Column(db.String(20))
+    description    = db.Column(db.Text)
+    questions      = db.Column(db.Text)          # JSON string of questions
+    status         = db.Column(db.String(20), default='Draft')  # Draft / Active / Closed
+    target_count   = db.Column(db.Integer, default=0)
+    response_count = db.Column(db.Integer, default=0)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    department     = db.relationship('Department', foreign_keys=[department_id])
+
+
+class LessonLearned(db.Model):
+    """Lessons Learned Library."""
+    __tablename__ = 'lessons_learned'
+    id             = db.Column(db.Integer, primary_key=True)
+    ref_number     = db.Column(db.String(30))    # e.g. LL-2026-001
+    title          = db.Column(db.String(200))
+    category       = db.Column(db.String(50))    # Incident / Audit / Investigation / Operational
+    department_id  = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    date           = db.Column(db.String(20))
+    author         = db.Column(db.String(100))
+    description    = db.Column(db.Text)
+    lesson         = db.Column(db.Text)
+    recommendations= db.Column(db.Text)
+    status         = db.Column(db.String(20), default='Published')
+    attachment     = db.Column(db.String(200))
+    linked_hazard_id = db.Column(db.String(30), nullable=True)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    department     = db.relationship('Department', foreign_keys=[department_id])
+
+
 class SafetyBulletin(db.Model):
     __tablename__ = 'safety_bulletins'
     id            = db.Column(db.String(30), primary_key=True)
+    ref_number    = db.Column(db.String(30))
     title         = db.Column(db.String(200))
-    bulletin_type = db.Column(db.String(30))   # Bulletin / Alert / Newsletter
+    bulletin_type = db.Column(db.String(30))
+    severity      = db.Column(db.String(20), default='Information')
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    issue_date    = db.Column(db.String(20))
     content       = db.Column(db.Text)
+    recommendations = db.Column(db.Text)
     issued_by     = db.Column(db.String(100))
-    department_ids = db.Column(db.String(100), default='all')
+    status        = db.Column(db.String(20), default='Active')
+    attachment    = db.Column(db.String(200))
+    linked_hazard_id = db.Column(db.String(30), nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    department    = db.relationship('Department', foreign_keys=[department_id])
 
 class Training(db.Model):
     __tablename__ = 'trainings'
-    id             = db.Column(db.Integer, primary_key=True)
-    employee_name  = db.Column(db.String(100))
-    department_id  = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    training_type  = db.Column(db.String(100))
-    training_date  = db.Column(db.String(20))
-    expiry_date    = db.Column(db.String(20))
-    status         = db.Column(db.String(20), default='Completed')  # Completed / Due / Overdue
-    notes          = db.Column(db.Text)
-    department     = db.relationship('Department', foreign_keys=[department_id])
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  AUDIT MANAGEMENT MODULE — ADDED TO EXISTING SMS
-#  Follows ICAO Annex 19, Doc 9859, IOSA ISM Standards
-# ═══════════════════════════════════════════════════════════════════════════════
+    id              = db.Column(db.Integer, primary_key=True)
+    employee_name   = db.Column(db.String(100))
+    employee_id     = db.Column(db.String(50))
+    department_id   = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    training_type   = db.Column(db.String(50))
+    training_program= db.Column(db.String(200))
+    instructor      = db.Column(db.String(100))
+    training_date   = db.Column(db.String(20))
+    completion_date = db.Column(db.String(20))
+    expiry_date     = db.Column(db.String(20))
+    status          = db.Column(db.String(20), default='Current')
+    certificate     = db.Column(db.String(200))
+    notes           = db.Column(db.Text)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    department      = db.relationship('Department', foreign_keys=[department_id])
 
 class AuditPlan(db.Model):
     """Annual audit plan — defines what must be audited in a given year."""
