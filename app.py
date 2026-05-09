@@ -9,8 +9,10 @@ from flask import send_file, make_response
 
 app = Flask(__name__)
 # Evidence file uploads
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'evidence')
-ALLOWED_EXT   = {'pdf','docx','xlsx','png','jpg','jpeg','gif'}
+# Upload folder: use env var override for cloud (e.g. /tmp on Render free tier)
+_default_upload = os.path.join(os.path.dirname(__file__), 'static', 'evidence')
+UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', _default_upload)
+ALLOWED_EXT   = {'pdf','docx','xlsx','png','jpg','jpeg','gif','mp4','mov'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -32,10 +34,14 @@ def _save_upload(field_name, prefix=''):
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
-    'DATABASE_URL', f'sqlite:///{os.path.join(BASE_DIR, "sms.db")}')
+# Render PostgreSQL uses postgres:// but SQLAlchemy needs postgresql://
+_db_url = os.environ.get('DATABASE_URL', f'sqlite:///{os.path.join(BASE_DIR, "sms.db")}')
+if _db_url.startswith('postgres://'):
+    _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = os.environ.get('SECRET_KEY', 'jav-sms-2024')
+app.secret_key = os.environ.get('SECRET_KEY', 'jav-sms-dev-only-change-in-prod')
+# IMPORTANT: Set a strong SECRET_KEY env var in production (Render dashboard)
 
 db.init_app(app)
 
