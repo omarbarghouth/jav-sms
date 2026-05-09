@@ -565,18 +565,19 @@ def update_action(aid):
     f   = request.form
     new_status    = f.get('status', a.status)
     # Map friendly status to canonical
-    STATUS_MAP = {
-        'Open':'Open','Assigned':'In Progress','In Progress':'In Progress',
-        'Mitigation Implemented':'In Progress','Under Review':'In Progress',
-        'Effectiveness Verification':'In Progress','Closed':'Closed','Overdue':'Overdue'
-    }
-    new_status = STATUS_MAP.get(new_status, new_status)
+    # Store the actual workflow status (not mapped) — allows richer lifecycle
+    # Only map unknown values to avoid corruption
+    VALID_STATUSES = {'Open','In Progress','Mitigation Implemented',
+                      'Under Safety Review','Effectiveness Verification',
+                      'Closed','Overdue'}
+    if new_status not in VALID_STATUSES:
+        new_status = 'In Progress'
     effectiveness = f.get('effectiveness', '')
     return_url    = f.get('return_url', url_for('actions'))
 
-    # If trying to close without effectiveness → block it
+    # Only Safety Review step can close — require review fields
     if new_status == 'Closed' and not effectiveness:
-        flash('⚠ Please select Effectiveness before closing the action.', 'error')
+        flash('⚠ Please select Effectiveness rating before closing the action.', 'error')
         return redirect(return_url)
 
     # If ineffective → re-open automatically
@@ -600,6 +601,16 @@ def update_action(aid):
     a.closure_by             = f.get('closure_by', a.closure_by)
     a.verified_by            = f.get('verified_by', a.verified_by)
     a.verified_date          = f.get('verified_date', a.verified_date)
+    # Implementation date
+    if f.get('implementation_date'):
+        a.implementation_date = f.get('implementation_date')
+    # Safety review fields
+    if f.get('safety_review_notes'):
+        a.safety_review_notes = f.get('safety_review_notes')
+    if f.get('safety_reviewer'):
+        a.safety_reviewer = f.get('safety_reviewer')
+    if new_status == 'Under Safety Review' and not a.safety_review_date:
+        a.safety_review_date = datetime.now().strftime('%Y-%m-%d')
     if new_status == 'Closed' and not a.closed_date:
         a.closed_date = datetime.now().strftime('%Y-%m-%d')
         if not a.closure_by:
@@ -5335,6 +5346,10 @@ with app.app_context():
                 ('spi_alert_month',        'INTEGER'),
                 ('spi_alert_year',         'INTEGER'),
                 ('spi_escalation_id',      'INTEGER'),
+                ('safety_review_notes',    'TEXT'),
+                ('safety_reviewer',        'VARCHAR(100)'),
+                ('safety_review_date',     'VARCHAR(20)'),
+                ('implementation_date',    'VARCHAR(20)'),
                 ('evidence_filename',      'VARCHAR(200)'),
                 ('mitigation_description', 'TEXT'),
                 ('corrective_description', 'TEXT'),
@@ -5359,6 +5374,10 @@ with app.app_context():
                 ('spi_alert_month',        'INTEGER'),
                 ('spi_alert_year',         'INTEGER'),
                 ('spi_escalation_id',      'INTEGER'),
+                ('safety_review_notes',    'TEXT'),
+                ('safety_reviewer',        'VARCHAR(100)'),
+                ('safety_review_date',     'VARCHAR(20)'),
+                ('implementation_date',    'VARCHAR(20)'),
                 ('evidence_filename',      'VARCHAR(200)'),
                 ('mitigation_description', 'TEXT'),
                 ('corrective_description', 'TEXT'),
