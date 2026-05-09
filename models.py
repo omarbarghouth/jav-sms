@@ -424,22 +424,41 @@ class SafetyBulletin(db.Model):
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 class Training(db.Model):
+    """
+    Aviation Safety Training Record.
+    Lifecycle: Scheduled → In Progress → Completed → Expired / Overdue
+    """
     __tablename__ = 'trainings'
-    id              = db.Column(db.Integer, primary_key=True)
-    employee_name   = db.Column(db.String(100))
-    employee_id     = db.Column(db.String(50))
-    department_id   = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
-    training_type   = db.Column(db.String(50))
-    training_program= db.Column(db.String(200))
-    instructor      = db.Column(db.String(100))
-    training_date   = db.Column(db.String(20))
-    completion_date = db.Column(db.String(20))
-    expiry_date     = db.Column(db.String(20))
-    status          = db.Column(db.String(20), default='Current')
-    certificate     = db.Column(db.String(200))
-    notes           = db.Column(db.Text)
-    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
-    department      = db.relationship('Department', foreign_keys=[department_id])
+    id               = db.Column(db.Integer, primary_key=True)
+    # Employee
+    employee_name    = db.Column(db.String(100))
+    employee_id      = db.Column(db.String(50))
+    department_id    = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    position         = db.Column(db.String(100))
+    # Course
+    training_type    = db.Column(db.String(50))
+    training_program = db.Column(db.String(200))
+    course_code      = db.Column(db.String(50))
+    instructor       = db.Column(db.String(100))
+    location         = db.Column(db.String(100))
+    # Dates
+    scheduled_date   = db.Column(db.String(20))
+    training_date    = db.Column(db.String(20))
+    completion_date  = db.Column(db.String(20))
+    expiry_date      = db.Column(db.String(20))
+    duration_hours   = db.Column(db.Float)
+    # Status
+    status           = db.Column(db.String(20), default='Scheduled')
+    # Files
+    certificate      = db.Column(db.String(200))
+    evidence         = db.Column(db.String(200))
+    # Recurrence
+    is_recurrent     = db.Column(db.Boolean, default=False)
+    recurrence_months= db.Column(db.Integer)
+    notes            = db.Column(db.Text)
+    updated_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    department       = db.relationship('Department', foreign_keys=[department_id])
 
 class AuditPlan(db.Model):
     """Annual audit plan — defines what must be audited in a given year."""
