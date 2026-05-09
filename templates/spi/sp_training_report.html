@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><title>Safety Training Report — {{ now.strftime("%d %b %Y") }}</title>
+<style>
+  @page{size:A4 landscape;margin:15mm 14mm}
+  @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:9.5pt;color:#111;background:#fff}
+  .print-btn{position:fixed;top:12px;right:12px;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
+  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:14px}
+  .logo{font-size:18px;font-weight:900;color:#0f1c3f}.logo span{color:#c9a84c}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  .kpi-card{border:1px solid #e5e7eb;border-radius:7px;padding:10px 14px;text-align:center}
+  .kpi-val{font-size:22pt;font-weight:900}.kpi-lbl{font-size:8pt;color:#6b7280;text-transform:uppercase}
+  table{width:100%;border-collapse:collapse;margin-bottom:10px}
+  th{background:#0f1c3f;color:#fff;padding:7px 8px;text-align:left;font-size:9pt;border:1px solid #1a2d5a}
+  td{border:1px solid #e5e7eb;padding:6px 8px;font-size:9pt}
+  .status-cur{background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:99px;font-size:8.5pt;font-weight:700}
+  .status-exp{background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:99px;font-size:8.5pt;font-weight:700}
+  .status-due{background:#fef9c3;color:#b45309;padding:2px 8px;border-radius:99px;font-size:8.5pt;font-weight:700}
+  .footer{border-top:1px solid #e5e7eb;margin-top:10px;padding-top:5px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+<div class="header">
+  <div class="logo">JORDAN<span>AVIATION</span></div>
+  <div style="text-align:center"><h1 style="font-size:14pt;font-weight:900;color:#0f1c3f">SAFETY TRAINING STATUS REPORT</h1>
+    <p style="font-size:9pt;color:#555">Generated {{ now.strftime("%d %b %Y") }}</p></div>
+  <div style="text-align:right;font-size:8.5pt;color:#555">SMS — Safety Promotion<br>Safety Management System</div>
+</div>
+<div class="kpi">
+  <div class="kpi-card" style="border-top:3px solid #374151"><div class="kpi-val">{{ stats.total }}</div><div class="kpi-lbl">Total Records</div></div>
+  <div class="kpi-card" style="border-top:3px solid #15803d"><div class="kpi-val" style="color:#15803d">{{ stats.current }}</div><div class="kpi-lbl">🟢 Current</div></div>
+  <div class="kpi-card" style="border-top:3px solid #d97706"><div class="kpi-val" style="color:#d97706">{{ stats.due_soon }}</div><div class="kpi-lbl">🟡 Due Soon</div></div>
+  <div class="kpi-card" style="border-top:3px solid #dc2626"><div class="kpi-val" style="color:#dc2626">{{ stats.expired }}</div><div class="kpi-lbl">🔴 Expired</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th>Employee</th><th>Employee ID</th><th>Department</th>
+    <th>Training Type</th><th>Program</th><th>Instructor</th>
+    <th>Completion</th><th>Expiry Date</th><th>Status</th>
+  </tr></thead>
+  <tbody>
+    {% for t in trainings %}
+    <tr style="{% if t.status=="Expired" %}background:#fff8f8{% elif t.status=="Due Soon" %}background:#fef9c3{% endif %}">
+      <td><strong>{{ t.employee_name }}</strong></td>
+      <td style="font-family:monospace;font-size:8.5pt">{{ t.employee_id or "—" }}</td>
+      <td>{{ t.department.code if t.department else "—" }}</td>
+      <td>{{ t.training_type }}</td>
+      <td style="font-size:8.5pt">{{ (t.training_program or "")[:30] }}</td>
+      <td style="font-size:8.5pt">{{ t.instructor or "—" }}</td>
+      <td>{{ t.completion_date or "—" }}</td>
+      <td style="font-weight:700;{% if t.status=="Expired" %}color:#dc2626{% elif t.status=="Due Soon" %}color:#b45309{% endif %}">{{ t.expiry_date or "—" }}</td>
+      <td>{% if t.status=="Expired" %}<span class="status-exp">Expired</span>
+          {% elif t.status=="Due Soon" %}<span class="status-due">Due Soon</span>
+          {% elif t.status=="Scheduled" %}<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:8.5pt;font-weight:700">Scheduled</span>
+          {% else %}<span class="status-cur">Current</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<div class="footer">
+  <span>Jordan Aviation · Safety Training Report · {{ now.strftime("%d %b %Y") }}</span>
+  <span>Safety Management System — ICAO Annex 19</span>
+</div>
+</body></html>

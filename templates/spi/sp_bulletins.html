@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Safety Bulletins{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion" style="color:var(--muted);font-size:13px">← Safety Promotion</a></div>
+<div class="page-title">Safety Bulletins</div>
+<div class="page-sub">Urgent notices · Operational safety alerts · Hazard awareness</div>
+<form method="GET" class="fbar">
+  <select name="type" onchange="this.form.submit()">
+    <option value="">All Types</option>
+    {% for t in ['Alert','Urgent','Bulletin','Operational','Hazard','Lessons Learned'] %}
+    <option {% if type_f==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    <option {% if status_f=="Active" %}selected{% endif %}>Active</option>
+    <option {% if status_f=="Archived" %}selected{% endif %}>Archived</option>
+  </select>
+  {% if type_f or status_f %}<a href="/safety-promotion/bulletins" class="btn btn-outline btn-sm">Clear</a>{% endif %}
+  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ bulletins|length }} bulletin(s)</span>
+  <a href="/safety-promotion/bulletin/new" class="btn btn-nav btn-sm">+ New Bulletin</a>
+</form>
+{% if bulletins %}
+<div style="display:flex;flex-direction:column;gap:12px">
+{% for b in bulletins %}
+{% set lc = {"Critical":"#dc2626","High":"#ea580c","Information":"#1d4ed8"}.get(b.severity,"#6b7280") %}
+<div class="card" style="border-left:5px solid {{ lc }};padding:0;overflow:hidden">
+  <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+        <span class="mono" style="font-size:11px;color:var(--muted)">{{ b.ref_number or b.id }}</span>
+        <span class="badge {% if b.bulletin_type=="Alert" %}b-red{% elif b.bulletin_type=="Urgent" %}b-orange{% else %}b-blue{% endif %}">{{ b.bulletin_type }}</span>
+        {% if b.severity=="Critical" %}<span class="badge b-red">🔴 Critical</span>
+        {% elif b.severity=="High" %}<span class="badge b-orange">High</span>{% endif %}
+        {% if b.status=="Archived" %}<span class="badge b-gray">Archived</span>{% endif %}
+      </div>
+      <div style="font-size:15px;font-weight:800;color:var(--navy)">{{ b.title }}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">
+        {{ b.issued_by }} · {{ b.issue_date or b.created_at.strftime("%d %b %Y") }}
+        {% if b.department %} · {{ b.department.name }}{% endif %}
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <a href="/safety-promotion/bulletin/{{ b.id }}" class="btn btn-nav btn-sm">View</a>
+      <a href="/safety-promotion/bulletin/{{ b.id }}/print" target="_blank" class="btn btn-outline btn-sm">🖨 PDF</a>
+      {% if b.status=="Active" %}
+      <form method="POST" action="/safety-promotion/bulletin/{{ b.id }}/archive" style="display:inline">
+        <button class="btn btn-outline btn-sm">Archive</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  <div style="padding:0 16px 12px;font-size:12px;color:#374151;line-height:1.6">{{ (b.content or "")[:200] }}{% if (b.content or "")|length > 200 %}…{% endif %}</div>
+  {% if b.attachment %}
+  <div style="padding:6px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;font-size:11px">
+    <a href="/spi/evidence/{{ b.attachment }}" target="_blank" style="color:#15803d;font-weight:700">
+      📎 {{ b.attachment.split("_",1)[-1] if "_" in b.attachment else b.attachment }}
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:12px">🔔</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No Bulletins Yet</div>
+  <a href="/safety-promotion/bulletin/new" class="btn btn-nav">+ Publish First Bulletin</a>
+</div>
+{% endif %}
+{% endblock %}

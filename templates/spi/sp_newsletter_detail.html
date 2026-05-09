@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ n.title }}{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+  <a href="/safety-promotion/newsletters" style="color:var(--muted);font-size:13px">← Newsletters</a>
+  <div style="display:flex;gap:8px">
+    <a href="/safety-promotion/newsletter/{{ n.id }}/edit" class="btn btn-outline btn-sm">✏ Edit</a>
+    <a href="/safety-promotion/newsletter/{{ n.id }}/print" target="_blank" class="btn btn-nav btn-sm">🖨 Print PDF</a>
+    {% if n.status=="Draft" %}
+    <form method="POST" action="/safety-promotion/newsletter/{{ n.id }}/publish" style="display:inline">
+      <button class="btn btn-nav btn-sm" style="background:#15803d">Publish</button>
+    </form>
+    {% elif n.status=="Published" %}
+    <form method="POST" action="/safety-promotion/newsletter/{{ n.id }}/archive" style="display:inline">
+      <button class="btn btn-outline btn-sm">Archive</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+<div class="card" style="padding:20px 24px;margin-bottom:18px;border-top:5px solid var(--navy)">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+    <div>
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin-bottom:5px">
+        Safety Newsletter · {{ n.ref_number }}{% if n.issue_number %} · {{ n.issue_number }}{% endif %}
+      </div>
+      <div style="font-size:24px;font-weight:900;color:var(--navy)">{{ n.title }}</div>
+    </div>
+    <div style="text-align:right;font-size:12px;color:var(--muted);line-height:1.8">
+      <div>📅 {{ n.issue_date or n.created_at.strftime("%d %b %Y") }}</div>
+      <div>✍ {{ n.author }}</div>
+      {% if n.department %}<div>🏢 {{ n.department.name }}</div>{% endif %}
+      <span class="badge {% if n.status=="Published" %}b-green{% elif n.status=="Archived" %}b-gray{% else %}b-yellow{% endif %}" style="font-size:10px">{{ n.status }}</span>
+    </div>
+  </div>
+</div>
+{% if n.summary %}
+<div class="card" style="background:#f0f4ff;border-left:5px solid var(--navy)">
+  <div style="font-size:14px;font-style:italic;color:#374151;line-height:1.7">{{ n.summary }}</div>
+</div>
+{% endif %}
+<div class="card">
+  <div class="card-title">Content</div>
+  <div style="font-size:13px;color:#374151;line-height:1.9;white-space:pre-wrap">{{ n.content }}</div>
+</div>
+{% if n.attachment %}
+<div class="card">
+  <div class="card-title">Attachments</div>
+  <a href="/spi/evidence/{{ n.attachment }}" target="_blank" class="btn btn-outline btn-sm">
+    📎 {{ n.attachment.split("_",1)[-1] if "_" in n.attachment else n.attachment }}
+  </a>
+</div>
+{% endif %}
+{% endblock %}

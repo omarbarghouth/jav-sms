@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Safety Campaigns{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion" style="color:var(--muted);font-size:13px">← Safety Promotion</a></div>
+<div class="page-title">Safety Awareness Campaigns</div>
+<div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+  <a href="/safety-promotion/campaign/new" class="btn btn-nav btn-sm">+ New Campaign</a>
+</div>
+{% if campaigns %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
+{% for c in campaigns %}
+{% set cc = {"Monthly":"#1d4ed8","Seasonal":"#15803d","FOD":"#d97706","Fatigue":"#7c3aed","Operational":"#ea580c"}.get(c.campaign_type,"#6b7280") %}
+<div class="card" style="border-top:4px solid {{ cc }}">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span class="badge" style="background:{{ cc }}20;color:{{ cc }};border:1px solid {{ cc }}40;font-size:10px">{{ c.campaign_type }}</span>
+    <span class="badge {% if c.status=="Active" %}b-green{% elif c.status=="Completed" %}b-gray{% else %}b-yellow{% endif %}" style="font-size:10px">{{ c.status }}</span>
+  </div>
+  <div style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:6px">{{ c.title }}</div>
+  {% if c.department %}<div style="font-size:11px;color:var(--muted);margin-bottom:4px">{{ c.department.name }}</div>{% endif %}
+  <p style="font-size:12px;color:#374151;line-height:1.5;margin-bottom:8px">{{ (c.description or "")[:100] }}</p>
+  {% if c.objectives %}<div style="font-size:11px;color:var(--muted);margin-bottom:8px"><strong>Objectives:</strong> {{ c.objectives[:60] }}</div>{% endif %}
+  <div style="font-size:10px;color:var(--muted);margin-bottom:10px">{{ c.start_date or "—" }} → {{ c.end_date or "—" }}</div>
+  <div style="display:flex;gap:6px;margin-top:8px">
+    <a href="/safety-promotion/campaign/{{ c.id }}" class="btn btn-nav btn-sm">View Details</a>
+    {% if c.attachment %}
+    <a href="/spi/evidence/{{ c.attachment }}" target="_blank" class="btn btn-outline btn-sm">📎 Materials</a>
+    {% endif %}
+    {% if c.status == "Active" %}
+    <form method="POST" action="/safety-promotion/campaign/{{ c.id }}/complete" style="display:inline">
+      <button class="btn btn-outline btn-sm" style="color:#15803d;border-color:#15803d">✓ Complete</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:12px">📣</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No Campaigns Yet</div>
+  <a href="/safety-promotion/campaign/new" class="btn btn-nav">+ Create First Campaign</a>
+</div>
+{% endif %}
+{% endblock %}

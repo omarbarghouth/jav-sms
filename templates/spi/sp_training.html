@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Training Records{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion" style="color:var(--muted);font-size:13px">← Safety Promotion</a></div>
+<div class="page-title">Safety Training Records</div>
+<div class="page-sub">Employee training tracking · Completion status · Expiry monitoring</div>
+<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+  <div class="stat-card"><div class="stat-val" style="color:#374151">{{ stats.total }}</div><div class="stat-lbl">Total Records</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ stats.current }}</div><div class="stat-lbl">🟢 Current</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ stats.due_soon }}</div><div class="stat-lbl">🟡 Due Soon</div></div>
+  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ stats.expired }}</div><div class="stat-lbl">🔴 Expired</div></div>
+</div>
+<form method="GET" class="fbar">
+  <select name="dept" onchange="this.form.submit()">
+    <option value="">All Departments</option>
+    {% for d in all_departments %}<option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+  </select>
+  <select name="type" onchange="this.form.submit()">
+    <option value="">All Types</option>
+    {% for t in ["SMS Training","Hazard Reporting","Emergency Response","Human Factors","Investigation","Audit"] %}
+    <option {% if type_f==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ["Current","Due Soon","Expired","Scheduled"] %}
+    <option {% if status_f==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  {% if dept_f or type_f or status_f %}<a href="/safety-promotion/training" class="btn btn-outline btn-sm">Clear</a>{% endif %}
+  <span style="margin-left:auto;font-size:12px;color:var(--muted)">{{ trainings|length }} record(s)</span>
+  <a href="/safety-promotion/training/new" class="btn btn-nav btn-sm">+ Add Record</a>
+  <a href="/safety-promotion/training/report" target="_blank" class="btn btn-outline btn-sm">🖨 PDF Report</a>
+</form>
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Employee</th><th>Dept</th><th>Training Type</th><th>Program</th>
+        <th>Completion</th><th>Expiry</th><th>Status</th><th>Certificate</th></tr></thead>
+      <tbody>
+        {% for t in trainings %}
+        <tr style="{% if t.status=="Expired" %}background:#fff8f8{% elif t.status=="Due Soon" %}background:#fef9c3{% endif %}">
+          <td><strong style="font-size:12px">{{ t.employee_name }}</strong>
+            {% if t.employee_id %}<div style="font-size:10px;color:var(--muted)">{{ t.employee_id }}</div>{% endif %}</td>
+          <td style="font-size:11px">{% if t.department %}{{ t.department.code }}{% else %}—{% endif %}</td>
+          <td style="font-size:12px">{{ t.training_type }}</td>
+          <td style="font-size:11px;color:var(--muted)">{{ (t.training_program or "")[:30] }}</td>
+          <td style="font-size:11px">{{ t.completion_date or "—" }}</td>
+          <td style="font-size:11px;{% if t.status=="Expired" %}color:#dc2626;font-weight:700{% elif t.status=="Due Soon" %}color:#d97706;font-weight:700{% endif %}">{{ t.expiry_date or "—" }}</td>
+          <td>{% if t.status=="Expired" %}<span class="badge b-red">Expired</span>
+              {% elif t.status=="Due Soon" %}<span class="badge b-yellow">Due Soon</span>
+              {% elif t.status=="Scheduled" %}<span class="badge b-blue">Scheduled</span>
+              {% else %}<span class="badge b-green">Current</span>{% endif %}</td>
+          <td>{% if t.certificate %}<a href="/spi/evidence/{{ t.certificate }}" target="_blank" style="color:#15803d;font-size:11px;font-weight:700">📎 View</a>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
