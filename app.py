@@ -410,28 +410,69 @@ def add_control(rid):
 # ─── Actions ──────────────────────────────────────────────────────────────────
 @app.route('/actions')
 def actions():
-    """Main action dashboard — shows ALL actions from ALL sources in one table."""
+    """
+    Centralized Action Management Dashboard.
+    Shows ALL actions from ALL SMS modules in one place.
+    """
     check_overdue_actions()
     stat_f = request.args.get('status', '')
     pri_f  = request.args.get('priority', '')
     src_f  = request.args.get('source', '')
+    dept_f = request.args.get('dept', '')
+    q_f    = request.args.get('q', '').strip()
 
     q = Action.query
-    if stat_f: q = q.filter_by(status=stat_f)
-    if pri_f:  q = q.filter_by(priority=pri_f)
-    if src_f:  q = q.filter_by(source=src_f)
+    if stat_f:  q = q.filter_by(status=stat_f)
+    if pri_f:   q = q.filter_by(priority=pri_f)
+    if src_f:   q = q.filter_by(source=src_f)
+    if q_f:
+        q = q.filter(
+            Action.description.ilike(f'%{q_f}%') |
+            Action.owner.ilike(f'%{q_f}%') |
+            Action.id.ilike(f'%{q_f}%')
+        )
     all_actions = q.order_by(Action.created_at.desc()).all()
 
-    # Count by status for the stat cards
+    # Status counts
     counts = {
-        'open':    Action.query.filter_by(status='Open').count(),
-        'prog':    Action.query.filter_by(status='In Progress').count(),
-        'closed':  Action.query.filter_by(status='Closed').count(),
-        'overdue': Action.query.filter_by(status='Overdue').count(),
+        'open':        Action.query.filter_by(status='Open').count(),
+        'prog':        Action.query.filter_by(status='In Progress').count(),
+        'closed':      Action.query.filter_by(status='Closed').count(),
+        'overdue':     Action.query.filter_by(status='Overdue').count(),
+        'total':       Action.query.count(),
+        'pending_rev': Action.query.filter(
+                           Action.effectiveness.is_(None),
+                           Action.status=='Closed'
+                       ).count(),
+        'high':        Action.query.filter_by(priority='High',
+                           status='Open').count(),
     }
+
+    # Source breakdown
+    from sqlalchemy import func
+    sources = db.session.query(
+        Action.source, func.count(Action.id)
+    ).filter(Action.status != 'Closed').group_by(Action.source).all()
+    source_counts = {s: n for s, n in sources if s}
+
+    # All distinct sources for filter
+    all_sources = [r[0] for r in
+                   db.session.query(Action.source).distinct().all() if r[0]]
+
+    # Department breakdown
+    from sqlalchemy import func as sqlfunc
+    dept_actions = db.session.query(Action.source, sqlfunc.count(Action.id))                   .filter(Action.status.in_(['Open','In Progress','Overdue']))                   .group_by(Action.source).all()
+
+    # Pending effectiveness review
+    pending_eff = Action.query.filter(
+        Action.status=='Closed', Action.effectiveness.is_(None)
+    ).all()
+
     return render_template('action/action_list.html',
         actions=all_actions, counts=counts,
-        stat_f=stat_f, pri_f=pri_f, src_f=src_f)
+        source_counts=source_counts, all_sources=sorted(all_sources),
+        pending_eff=pending_eff,
+        stat_f=stat_f, pri_f=pri_f, src_f=src_f, dept_f=dept_f, q_f=q_f)
 
 
 @app.route('/actions/new', methods=['GET', 'POST'])
@@ -523,6 +564,13 @@ def update_action(aid):
     a   = Action.query.get_or_404(aid)
     f   = request.form
     new_status    = f.get('status', a.status)
+    # Map friendly status to canonical
+    STATUS_MAP = {
+        'Open':'Open','Assigned':'In Progress','In Progress':'In Progress',
+        'Mitigation Implemented':'In Progress','Under Review':'In Progress',
+        'Effectiveness Verification':'In Progress','Closed':'Closed','Overdue':'Overdue'
+    }
+    new_status = STATUS_MAP.get(new_status, new_status)
     effectiveness = f.get('effectiveness', '')
     return_url    = f.get('return_url', url_for('actions'))
 
@@ -577,6 +625,77 @@ def update_action(aid):
     db.session.commit()
     flash('✓ Action updated.', 'success')
     return redirect(return_url)
+
+
+@app.route('/actions/<aid>/report')
+def action_report(aid):
+    """Print-ready action report — full traceability."""
+    a = Action.query.get_or_404(aid)
+    # Resolve source reference details
+    source_ref = None
+    if a.linked_ref_id:
+        from models import AuditFinding
+        source_ref = AuditFinding.query.get(a.linked_ref_id)
+    hazard_ref = None
+    if a.hazard_id:
+        from models import Hazard
+        hazard_ref = Hazard.query.get(a.hazard_id)
+    MONTHS = ['January','February','March','April','May','June',
+              'July','August','September','October','November','December']
+    return render_template('action/action_report.html',
+                           a=a, source_ref=source_ref, hazard_ref=hazard_ref,
+                           MONTHS=MONTHS, now=datetime.utcnow())
+
+
+@app.route('/actions/dashboard')
+def action_dashboard():
+    """Aviation Action Management Dashboard — centralized view of all action streams."""
+    check_overdue_actions()
+    from sqlalchemy import func as sqlfunc
+    from datetime import date
+
+    # Core stats
+    total    = Action.query.count()
+    open_c   = Action.query.filter_by(status='Open').count()
+    prog_c   = Action.query.filter_by(status='In Progress').count()
+    overdue_c= Action.query.filter_by(status='Overdue').count()
+    closed_c = Action.query.filter_by(status='Closed').count()
+    high_c   = Action.query.filter_by(status='Open', priority='High').count()
+    pend_eff = Action.query.filter(Action.status=='Closed',
+                                    Action.effectiveness.is_(None)).count()
+
+    # Source breakdown (open only)
+    src_rows = db.session.query(Action.source, sqlfunc.count(Action.id))               .filter(Action.status.in_(['Open','In Progress','Overdue']))               .group_by(Action.source).all()
+    source_data = sorted(src_rows, key=lambda x: x[1], reverse=True)
+
+    # Critical overdue actions
+    overdue_list = Action.query.filter_by(status='Overdue')                   .order_by(Action.due_date).limit(10).all()
+
+    # Recently closed (last 30 days)
+    from datetime import timedelta
+    cutoff = (date.today() - timedelta(days=30)).isoformat()
+    recently_closed = Action.query.filter(
+        Action.status=='Closed', Action.closed_date >= cutoff
+    ).order_by(Action.closed_date.desc()).limit(8).all()
+
+    # High priority open
+    high_priority = Action.query.filter_by(status='Open', priority='High')                    .order_by(Action.due_date).limit(8).all()
+
+    # Pending effectiveness review
+    pending_review = Action.query.filter(
+        Action.status=='Closed', Action.effectiveness.is_(None)
+    ).order_by(Action.closed_date.desc()).limit(8).all()
+
+    return render_template('action/action_dashboard.html',
+                           total=total, open_c=open_c, prog_c=prog_c,
+                           overdue_c=overdue_c, closed_c=closed_c,
+                           high_c=high_c, pend_eff=pend_eff,
+                           source_data=source_data,
+                           overdue_list=overdue_list,
+                           recently_closed=recently_closed,
+                           high_priority=high_priority,
+                           pending_review=pending_review,
+                           now=datetime.utcnow())
 
 
 @app.route('/actions/<aid>')
