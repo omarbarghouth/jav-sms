@@ -1596,7 +1596,8 @@ def new_bulletin():
         db.session.add(b); db.session.commit()
         flash(f'✓ Bulletin {bid} published.', 'success')
         return redirect(url_for('sp_bulletins'))
-    return render_template('spi/sp_bulletin_form.html')
+    return render_template('spi/sp_bulletin_form.html',
+                           now=datetime.utcnow())
 
 @app.route('/safety-promotion/bulletin/<bid>')
 def sp_bulletin_detail(bid):
@@ -1636,7 +1637,8 @@ def sp_newsletter_new():
         db.session.add(n); db.session.commit()
         flash(f'✓ Newsletter saved.', 'success')
         return redirect(url_for('sp_newsletters'))
-    return render_template('spi/sp_newsletter_form.html')
+    return render_template('spi/sp_newsletter_form.html',
+                           now=datetime.utcnow())
 
 @app.route('/safety-promotion/newsletter/<int:nid>')
 def sp_newsletter_detail(nid):
@@ -1684,7 +1686,8 @@ def new_training():
         db.session.add(t); db.session.commit()
         flash('✓ Training record saved.', 'success')
         return redirect(url_for('sp_training'))
-    return render_template('spi/sp_training_form.html')
+    return render_template('spi/sp_training_form.html',
+                           now=datetime.utcnow())
 
 @app.route('/safety-promotion/surveys')
 def sp_surveys():
@@ -1705,7 +1708,8 @@ def sp_survey_new():
         db.session.add(s); db.session.commit()
         flash('✓ Survey created.', 'success')
         return redirect(url_for('sp_surveys'))
-    return render_template('spi/sp_survey_form.html')
+    return render_template('spi/sp_survey_form.html',
+                           now=datetime.utcnow())
 
 @app.route('/safety-promotion/survey/<int:sid>/activate', methods=['POST'])
 def sp_survey_activate(sid):
@@ -1752,7 +1756,8 @@ def sp_campaign_new():
         db.session.add(sc); db.session.commit()
         flash('✓ Campaign created.', 'success')
         return redirect(url_for('sp_campaigns'))
-    return render_template('spi/sp_campaign_form.html')
+    return render_template('spi/sp_campaign_form.html',
+                           now=datetime.utcnow())
 
 @app.route('/safety-promotion/lessons')
 def sp_lessons():
@@ -1785,7 +1790,7 @@ def sp_lesson_new():
         db.session.add(ll); db.session.commit()
         flash(f'✓ Lesson Learned {lid} published.', 'success')
         return redirect(url_for('sp_lessons'))
-    return render_template('spi/sp_lesson_form.html')
+    return render_template('spi/sp_lesson_form.html', now=datetime.utcnow())
 
 # ── Bulletin PDF print ────────────────────────────────────────────────────────
 
@@ -1819,7 +1824,8 @@ def sp_newsletter_edit(nid):
         db.session.commit()
         flash('✓ Newsletter updated.', 'success')
         return redirect(url_for('sp_newsletter_detail', nid=nid))
-    return render_template('spi/sp_newsletter_form.html', n=n, editing=True)
+    return render_template('spi/sp_newsletter_form.html', n=n, editing=True,
+                           now=datetime.utcnow())
 
 
 @app.route('/safety-promotion/newsletter/<int:nid>/archive', methods=['POST'])
