@@ -106,7 +106,17 @@
                class="btn btn-sm" style="background:#065f46;color:#fff;padding:3px 8px;font-size:11px">🖨</a>
             {% endif %}
           </td>
-          <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">Open →</a></td>
+          <td style="white-space:nowrap">
+            <a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">Open →</a>
+              <form method="POST" action="/delete/hazard/{{ h.id }}" style="display:inline"
+                    onsubmit="return confirm('Delete Hazard {{ h.id }} and all linked risks/controls?')">
+                <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+              </form>
+            <form method="POST" action="/delete/hazard/{{ h.id }}" style="display:inline"
+                  onsubmit="return confirm('Delete Hazard {{ h.id }}?\nLinked Risks, Controls and Actions will also be removed.')">
+              <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5">🗑</button>
+            </form>
+          </td>
         </tr>
         {% else %}
         <tr>
