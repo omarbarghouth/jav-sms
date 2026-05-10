@@ -110,7 +110,15 @@
             {% elif srm_stat=='Closed' %}<span class="badge b-gray">Closed</span>
             {% else %}<span class="badge b-yellow">Open</span>{% endif %}
           </td>
-          <td><a href="/risk/{{ r.id }}" class="btn btn-nav btn-sm">Detail →</a></td>
+          <td style="white-space:nowrap">
+            <a href="/risk/{{ r.id }}" class="btn btn-nav btn-sm">Detail →</a>
+            <form method="POST" action="/delete/risk/{{ r.id }}" style="display:inline"
+                  onsubmit="return confirm('Delete Risk {{ r.id }}?\nLinked controls will also be removed.')">
+              <input type="hidden" name="return_url" value="/risk-register"/>
+              <button type="submit" class="btn btn-sm"
+                      style="background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5">🗑</button>
+            </form>
+          </td>
         </tr>
         {% else %}
         <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:32px">
