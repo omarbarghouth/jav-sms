@@ -294,6 +294,15 @@
               </form>
               {% endif %}
 
+              <!-- Delete plan -->
+              <form method="POST" action="/audit-plans/{{ p.id }}/delete"
+                    onsubmit="return confirm('Delete Audit Plan {{ p.id }}?\nThis cannot be undone.')">
+                <button type="submit"
+                        style="font-size:10px;padding:3px 8px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:5px;cursor:pointer;font-family:inherit;font-weight:700">
+                  🗑 Delete
+                </button>
+              </form>
+
             </div>
           </td>
         </tr>
