@@ -2298,6 +2298,211 @@ def sp_lesson_detail(lid):
     return render_template('spi/sp_lesson_detail.html', ll=ll, now=datetime.utcnow())
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TESTING-PHASE DELETE ROUTES — Safe cascade deletion for all major modules
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/delete/hazard-report/<rid>', methods=['POST'])
+def delete_hazard_report(rid):
+    rep = HazardReport.query.get_or_404(rid)
+    hid = rep.hazard_id
+    # 1. Nullify FK on report so hazard can be deleted
+    rep.hazard_id = None
+    db.session.flush()
+    db.session.delete(rep)
+    db.session.flush()
+    # 2. Cascade: actions → risks → controls (via risk_id) → hazard
+    if hid:
+        Action.query.filter_by(hazard_id=hid).delete()
+        for r in Risk.query.filter_by(hazard_id=hid).all():
+            Control.query.filter_by(risk_id=r.id).delete()
+            db.session.delete(r)
+        haz = Hazard.query.get(hid)
+        if haz:
+            db.session.delete(haz)
+    db.session.commit()
+    flash(f'✓ Hazard Report {rid} deleted.', 'success')
+    return redirect(request.form.get('return_url', url_for('hazard_report_list')))
+
+
+@app.route('/delete/hazard/<hid>', methods=['POST'])
+def delete_hazard(hid):
+    h = Hazard.query.get_or_404(hid)
+    # Unlink any reports
+    HazardReport.query.filter_by(hazard_id=hid).update({'hazard_id': None})
+    db.session.flush()
+    Action.query.filter_by(hazard_id=hid).delete()
+    for r in Risk.query.filter_by(hazard_id=hid).all():
+        Control.query.filter_by(risk_id=r.id).delete()
+        db.session.delete(r)
+    db.session.delete(h)
+    db.session.commit()
+    flash(f'✓ Hazard {hid} deleted.', 'success')
+    return redirect(url_for('hazard_log'))
+
+
+@app.route('/delete/asr/<aid>', methods=['POST'])
+def delete_asr(aid):
+    rec = ASRReport.query.get_or_404(aid)
+    db.session.delete(rec)
+    db.session.commit()
+    flash(f'✓ ASR Report {aid} deleted.', 'success')
+    return redirect('/asr')
+
+
+@app.route('/delete/action/<aid>', methods=['POST'])
+def delete_action(aid):
+    a = Action.query.get_or_404(aid)
+    db.session.delete(a)
+    db.session.commit()
+    flash(f'✓ Action {aid} deleted.', 'success')
+    return redirect(request.form.get('return_url', '/actions'))
+
+
+@app.route('/delete/risk-assessment/<ra_id>', methods=['POST'])
+def delete_risk_assessment(ra_id):
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    RARow.query.filter_by(ra_id=ra_id).delete()
+    RAMitigation.query.filter_by(ra_id=ra_id).delete()
+    RAReview.query.filter_by(ra_id=ra_id).delete()
+    RAChecklistItem.query.filter_by(ra_id=ra_id).delete()
+    db.session.delete(ra)
+    db.session.commit()
+    flash(f'✓ Risk Assessment {ra_id} deleted.', 'success')
+    return redirect(url_for('ra_list'))
+
+
+@app.route('/delete/audit-schedule/<sid>', methods=['POST'])
+def delete_audit_schedule(sid):
+    s = AuditSchedule.query.get_or_404(sid)
+    AuditChecklist.query.filter_by(schedule_id=sid).delete()
+    AuditFinding.query.filter_by(schedule_id=sid).delete()
+    AuditAction.query.filter_by(schedule_id=sid).delete()
+    db.session.delete(s)
+    db.session.commit()
+    flash(f'✓ Audit Schedule {sid} deleted.', 'success')
+    return redirect(url_for('audit_schedule'))
+
+
+@app.route('/delete/audit-finding/<int:fid>', methods=['POST'])
+def delete_audit_finding(fid):
+    f = AuditFinding.query.get_or_404(fid)
+    schedule_id = f.schedule_id
+    db.session.delete(f)
+    db.session.commit()
+    flash('✓ Audit Finding deleted.', 'success')
+    return redirect(url_for('audit_execution', sid=schedule_id))
+
+
+@app.route('/delete/investigation/<int:iid>', methods=['POST'])
+def delete_investigation(iid):
+    inv = Investigation.query.get_or_404(iid)
+    db.session.delete(inv)
+    db.session.commit()
+    flash('✓ Investigation deleted.', 'success')
+    return redirect(url_for('investigation_list'))
+
+
+@app.route('/delete/training/<int:tid>', methods=['POST'])
+def delete_training(tid):
+    t = Training.query.get_or_404(tid)
+    db.session.delete(t)
+    db.session.commit()
+    flash('✓ Training record deleted.', 'success')
+    return redirect(url_for('sp_training'))
+
+
+@app.route('/delete/bulletin/<bid>', methods=['POST'])
+def delete_bulletin(bid):
+    b = SafetyBulletin.query.get_or_404(bid)
+    db.session.delete(b)
+    db.session.commit()
+    flash('✓ Bulletin deleted.', 'success')
+    return redirect(url_for('sp_bulletins'))
+
+
+@app.route('/delete/newsletter/<int:nid>', methods=['POST'])
+def delete_newsletter(nid):
+    n = SafetyNewsletter.query.get_or_404(nid)
+    db.session.delete(n)
+    db.session.commit()
+    flash('✓ Newsletter deleted.', 'success')
+    return redirect(url_for('sp_newsletters'))
+
+
+@app.route('/delete/survey/<int:sid>', methods=['POST'])
+def delete_survey(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    db.session.delete(s)
+    db.session.commit()
+    flash('✓ Survey deleted.', 'success')
+    return redirect(url_for('sp_surveys'))
+
+
+@app.route('/delete/campaign/<int:cid>', methods=['POST'])
+def delete_campaign(cid):
+    sc = SafetyCampaign.query.get_or_404(cid)
+    db.session.delete(sc)
+    db.session.commit()
+    flash('✓ Campaign deleted.', 'success')
+    return redirect(url_for('sp_campaigns'))
+
+
+@app.route('/delete/lesson/<int:lid>', methods=['POST'])
+def delete_lesson(lid):
+    ll = LessonLearned.query.get_or_404(lid)
+    db.session.delete(ll)
+    db.session.commit()
+    flash('✓ Lesson Learned deleted.', 'success')
+    return redirect(url_for('sp_lessons'))
+
+
+@app.route('/delete/spi-data/<int:did>', methods=['POST'])
+def delete_spi_data(did):
+    d = SPIData.query.get_or_404(did)
+    iid = d.spi_id
+    db.session.delete(d)
+    db.session.commit()
+    flash('✓ SPI data point deleted.', 'success')
+    return redirect(url_for('spi_indicator_detail', iid=iid))
+
+
+@app.route('/delete/moc/<mid>', methods=['POST'])
+def delete_moc(mid):
+    m = MOC.query.get_or_404(mid)
+    if m.hazard_id:
+        Action.query.filter_by(hazard_id=m.hazard_id).update({'hazard_id': None})
+        haz = Hazard.query.get(m.hazard_id)
+        if haz: db.session.delete(haz)
+    db.session.delete(m)
+    db.session.commit()
+    flash('✓ MOC record deleted.', 'success')
+    return redirect(url_for('moc_list'))
+
+
+# ── Admin cleanup dashboard ───────────────────────────────────────────────────
+
+@app.route('/admin/cleanup')
+def admin_cleanup():
+    counts = {
+        'hazard_reports':   HazardReport.query.count(),
+        'hazards':          Hazard.query.count(),
+        'asr_reports':      ASRReport.query.count(),
+        'actions':          Action.query.count(),
+        'risk_assessments': RiskAssessment.query.count(),
+        'audit_schedules':  AuditSchedule.query.count(),
+        'investigations':   Investigation.query.count(),
+        'training':         Training.query.count(),
+        'bulletins':        SafetyBulletin.query.count(),
+        'newsletters':      SafetyNewsletter.query.count(),
+        'surveys':          SafetySurvey.query.count(),
+        'campaigns':        SafetyCampaign.query.count(),
+        'lessons':          LessonLearned.query.count(),
+        'spi_data':         SPIData.query.count(),
+    }
+    return render_template('admin_cleanup.html', counts=counts, total=sum(counts.values()))
+
+
 # ─── Risk Matrix Reference ────────────────────────────────────────────────────
 @app.route('/risk-matrix')
 def risk_matrix():
