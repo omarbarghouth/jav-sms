@@ -139,7 +139,9 @@
   <nav>
 
     <div class="sb-section">Overview</div>
-    <a href="/" class="nav-a {% if request.path=='/' %}active{% endif %}"><span class="nav-icon">📊</span>Dashboard</a>
+    <a href="/dashboard" class="nav-a {% if request.path=='/dashboard' %}active{% endif %}"><span class="nav-icon">📊</span>Dashboard</a>
+    <a href="/admin/reports" class="nav-a {% if request.path=='/admin/reports' %}active{% endif %}"><span class="nav-icon">📬</span>Reports Inbox</a>
+    <a href="/portal" target="_blank" class="nav-a"><span class="nav-icon">🌐</span>Public Portal <span class="nav-tag-blue">OPEN</span></a>
 
     <div class="sb-section">Safety Reporting</div>
     <a href="/hazard-report" class="nav-a {% if request.path=='/hazard-report' %}active{% endif %}"><span class="nav-icon">⚠️</span>Submit Hazard Report</a>
@@ -202,7 +204,10 @@
     <a href="/erp" class="nav-a {% if '/erp' in request.path %}active{% endif %}"><span class="nav-icon">🚨</span>Emergency Response</a>
 
   </nav>
-  <a href="/admin/cleanup" class="nav-a" style="opacity:.4;font-size:11px;border-top:1px solid rgba(255,255,255,.06)">
+  <a href="/admin/users" class="nav-a" style="opacity:.5;font-size:11px">
+    <span class="nav-icon" style="font-size:12px">👥</span>User Management
+  </a>
+  <a href="/admin/cleanup" class="nav-a" style="opacity:.35;font-size:11px;border-top:1px solid rgba(255,255,255,.06)">
     <span class="nav-icon" style="font-size:12px">🗑</span>DB Cleanup <span style="font-size:9px;opacity:.6">(Testing)</span>
   </a>
   <div class="sb-foot"><strong>ICAO</strong> Annex 19 · Doc 9859<br><strong>IOSA</strong> Compliant · Jav/SMS/001<br>Rev 02 — {{ now.year }}</div>
@@ -212,8 +217,14 @@
   <div class="topbar">
     <div class="topbar-brand">Jordan Aviation <span>Safety Management System</span></div>
     <div class="topbar-right">
+      <a href="/admin/reports" style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none">
+        📬 Reports Inbox
+      </a>
       <span class="topbar-ref">Jav/SMS/001</span>
       <span class="topbar-date">{{ now.strftime('%d %b %Y') }}</span>
+      <span style="font-size:12px;color:var(--muted)">|</span>
+      <span style="font-size:12px;color:var(--text);font-weight:600">{{ session.get('admin_name','Admin') }}</span>
+      <a href="/admin/logout" style="font-size:12px;color:#dc2626;font-weight:700;text-decoration:none;padding:4px 10px;border:1.5px solid #fca5a5;border-radius:5px;background:#fff5f5">Logout</a>
     </div>
   </div>
   <div class="content">
