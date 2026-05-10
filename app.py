@@ -2318,12 +2318,18 @@ def delete_hazard_report(rid):
 
         # Step 3: If a linked Hazard exists, cascade-delete everything under it
         if hid:
-            # Unlink Actions referencing this hazard (nullify rather than delete)
-            db.session.execute(
-                db.text("UPDATE actions SET hazard_id = NULL WHERE hazard_id = :hid"),
-                {'hid': hid}
-            )
-            # Nullify RA rows referencing risks under this hazard
+            # Nullify hazard_id on ALL tables that reference hazards.id
+            tables_to_nullify = [
+                'asr_reports', 'actions', 'investigations',
+                'audit_findings', 'audit_actions', 'risk_occurrences',
+                'risk_actions', 'risk_assessments',
+            ]
+            for tbl in tables_to_nullify:
+                db.session.execute(
+                    db.text(f"UPDATE {tbl} SET hazard_id = NULL WHERE hazard_id = :hid"),
+                    {'hid': hid}
+                )
+            db.session.flush()
             for r in Risk.query.filter_by(hazard_id=hid).all():
                 db.session.execute(
                     db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),
@@ -2345,17 +2351,23 @@ def delete_hazard_report(rid):
 
 @app.route('/delete/hazard/<hid>', methods=['POST'])
 def delete_hazard(hid):
-    """Safe delete hazard: unlink all FKs before removing parent row."""
+    """Safe delete hazard: nullify ALL FK references across all 10 tables first."""
     h = Hazard.query.get_or_404(hid)
     try:
-        # Nullify FK references on child tables
-        HazardReport.query.filter_by(hazard_id=hid).update(
-            {'hazard_id': None}, synchronize_session=False)
-        db.session.execute(
-            db.text("UPDATE actions SET hazard_id = NULL WHERE hazard_id = :hid"),
-            {'hid': hid}
-        )
-        # Delete risks + controls
+        # Nullify hazard_id on every table that references hazards.id
+        tables_to_nullify = [
+            'hazard_reports', 'asr_reports', 'actions', 'investigations',
+            'audit_findings', 'audit_actions', 'risk_occurrences',
+            'risk_actions', 'risk_assessments',
+        ]
+        for tbl in tables_to_nullify:
+            db.session.execute(
+                db.text(f"UPDATE {tbl} SET hazard_id = NULL WHERE hazard_id = :hid"),
+                {'hid': hid}
+            )
+        db.session.flush()
+
+        # Delete risks under this hazard (and their controls + ra_rows)
         for r in Risk.query.filter_by(hazard_id=hid).all():
             db.session.execute(
                 db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),
@@ -2364,6 +2376,7 @@ def delete_hazard(hid):
             Control.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
             db.session.delete(r)
         db.session.flush()
+
         db.session.delete(h)
         db.session.commit()
         flash(f'✓ Hazard {hid} deleted.', 'success')
@@ -2398,8 +2411,8 @@ def delete_risk_assessment(ra_id):
     try:
         # RAMitigation and RARow use assessment_id (not ra_id)
         RAMitigation.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
-        RAReview.query.filter_by(ra_id=ra_id).delete(synchronize_session=False)
-        RAChecklistItem.query.filter_by(ra_id=ra_id).delete(synchronize_session=False)
+        RAReview.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
+        RAChecklistItem.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
         # RARows: nullify risk_id FK first, then delete
         for row in RARow.query.filter_by(assessment_id=ra_id).all():
             row.risk_id = None
