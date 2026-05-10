@@ -61,7 +61,11 @@
             {% else %}<span class="badge b-gray">Draft</span>{% endif %}
             {% if ra.revision %}<span class="badge b-gray" style="font-size:9px">REV{{ ra.revision }}</span>{% endif %}
           </td>
-          <td><a href="/risk-assessments/{{ ra.id }}" class="btn btn-nav btn-sm">Open →</a></td>
+          <td><a href="/risk-assessments/{{ ra.id }}" class="btn btn-nav btn-sm">Open →</a>
+      <form method="POST" action="/delete/risk-assessment/{{ ra.id }}" style="display:inline"
+            onsubmit="return confirm('Delete Risk Assessment {{ ra.id }}?')">
+        <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+      </form></td>
         </tr>
         {% else %}
         <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">
