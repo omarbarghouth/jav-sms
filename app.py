@@ -2304,40 +2304,72 @@ def sp_lesson_detail(lid):
 
 @app.route('/delete/hazard-report/<rid>', methods=['POST'])
 def delete_hazard_report(rid):
+    """Safe delete: nullify FKs first, then cascade in correct dependency order."""
     rep = HazardReport.query.get_or_404(rid)
     hid = rep.hazard_id
-    # 1. Nullify FK on report so hazard can be deleted
-    rep.hazard_id = None
-    db.session.flush()
-    db.session.delete(rep)
-    db.session.flush()
-    # 2. Cascade: actions → risks → controls (via risk_id) → hazard
-    if hid:
-        Action.query.filter_by(hazard_id=hid).delete()
-        for r in Risk.query.filter_by(hazard_id=hid).all():
-            Control.query.filter_by(risk_id=r.id).delete()
-            db.session.delete(r)
-        haz = Hazard.query.get(hid)
-        if haz:
-            db.session.delete(haz)
-    db.session.commit()
-    flash(f'✓ Hazard Report {rid} deleted.', 'success')
+    try:
+        # Step 1: Nullify hazard_id on the report (removes the FK reference)
+        rep.hazard_id = None
+        db.session.flush()
+
+        # Step 2: Delete the report row
+        db.session.delete(rep)
+        db.session.flush()
+
+        # Step 3: If a linked Hazard exists, cascade-delete everything under it
+        if hid:
+            # Unlink Actions referencing this hazard (nullify rather than delete)
+            db.session.execute(
+                db.text("UPDATE actions SET hazard_id = NULL WHERE hazard_id = :hid"),
+                {'hid': hid}
+            )
+            # Nullify RA rows referencing risks under this hazard
+            for r in Risk.query.filter_by(hazard_id=hid).all():
+                db.session.execute(
+                    db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),
+                    {'rid': r.id}
+                )
+                Control.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
+                db.session.delete(r)
+            db.session.flush()
+            haz = Hazard.query.get(hid)
+            if haz:
+                db.session.delete(haz)
+        db.session.commit()
+        flash(f'✓ Hazard Report {rid} deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete {rid}: {str(e)[:120]}', 'error')
     return redirect(request.form.get('return_url', url_for('hazard_report_list')))
 
 
 @app.route('/delete/hazard/<hid>', methods=['POST'])
 def delete_hazard(hid):
+    """Safe delete hazard: unlink all FKs before removing parent row."""
     h = Hazard.query.get_or_404(hid)
-    # Unlink any reports
-    HazardReport.query.filter_by(hazard_id=hid).update({'hazard_id': None})
-    db.session.flush()
-    Action.query.filter_by(hazard_id=hid).delete()
-    for r in Risk.query.filter_by(hazard_id=hid).all():
-        Control.query.filter_by(risk_id=r.id).delete()
-        db.session.delete(r)
-    db.session.delete(h)
-    db.session.commit()
-    flash(f'✓ Hazard {hid} deleted.', 'success')
+    try:
+        # Nullify FK references on child tables
+        HazardReport.query.filter_by(hazard_id=hid).update(
+            {'hazard_id': None}, synchronize_session=False)
+        db.session.execute(
+            db.text("UPDATE actions SET hazard_id = NULL WHERE hazard_id = :hid"),
+            {'hid': hid}
+        )
+        # Delete risks + controls
+        for r in Risk.query.filter_by(hazard_id=hid).all():
+            db.session.execute(
+                db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),
+                {'rid': r.id}
+            )
+            Control.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
+            db.session.delete(r)
+        db.session.flush()
+        db.session.delete(h)
+        db.session.commit()
+        flash(f'✓ Hazard {hid} deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete {hid}: {str(e)[:120]}', 'error')
     return redirect(url_for('hazard_log'))
 
 
@@ -2361,46 +2393,95 @@ def delete_action(aid):
 
 @app.route('/delete/risk-assessment/<ra_id>', methods=['POST'])
 def delete_risk_assessment(ra_id):
+    """Safe delete RA: RARow/RAMitigation use assessment_id FK."""
     ra = RiskAssessment.query.get_or_404(ra_id)
-    RARow.query.filter_by(ra_id=ra_id).delete()
-    RAMitigation.query.filter_by(ra_id=ra_id).delete()
-    RAReview.query.filter_by(ra_id=ra_id).delete()
-    RAChecklistItem.query.filter_by(ra_id=ra_id).delete()
-    db.session.delete(ra)
-    db.session.commit()
-    flash(f'✓ Risk Assessment {ra_id} deleted.', 'success')
+    try:
+        # RAMitigation and RARow use assessment_id (not ra_id)
+        RAMitigation.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
+        RAReview.query.filter_by(ra_id=ra_id).delete(synchronize_session=False)
+        RAChecklistItem.query.filter_by(ra_id=ra_id).delete(synchronize_session=False)
+        # RARows: nullify risk_id FK first, then delete
+        for row in RARow.query.filter_by(assessment_id=ra_id).all():
+            row.risk_id = None
+        db.session.flush()
+        RARow.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
+        db.session.flush()
+        db.session.delete(ra)
+        db.session.commit()
+        flash(f'✓ Risk Assessment {ra_id} deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete {ra_id}: {str(e)[:120]}', 'error')
     return redirect(url_for('ra_list'))
 
 
 @app.route('/delete/audit-schedule/<sid>', methods=['POST'])
 def delete_audit_schedule(sid):
+    """Safe delete audit: AuditAction.finding_id and
+    AuditChecklist.linked_finding_id must be nullified before finding delete."""
     s = AuditSchedule.query.get_or_404(sid)
-    AuditChecklist.query.filter_by(schedule_id=sid).delete()
-    AuditFinding.query.filter_by(schedule_id=sid).delete()
-    AuditAction.query.filter_by(schedule_id=sid).delete()
-    db.session.delete(s)
-    db.session.commit()
-    flash(f'✓ Audit Schedule {sid} deleted.', 'success')
+    try:
+        findings = AuditFinding.query.filter_by(schedule_id=sid).all()
+        fids = [f.id for f in findings]
+
+        # Nullify linked_finding_id on checklists that reference these findings
+        if fids:
+            AuditChecklist.query.filter(
+                AuditChecklist.linked_finding_id.in_(fids)
+            ).update({'linked_finding_id': None}, synchronize_session=False)
+            db.session.flush()
+            # Delete audit actions linked to findings
+            AuditAction.query.filter(
+                AuditAction.finding_id.in_(fids)
+            ).delete(synchronize_session=False)
+            db.session.flush()
+
+        # Delete checklist items for the schedule
+        AuditChecklist.query.filter_by(schedule_id=sid).delete(synchronize_session=False)
+        db.session.flush()
+
+        # Now delete findings
+        for f in findings:
+            db.session.delete(f)
+        db.session.flush()
+
+        db.session.delete(s)
+        db.session.commit()
+        flash(f'✓ Audit Schedule {sid} deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete {sid}: {str(e)[:120]}', 'error')
     return redirect(url_for('audit_schedule'))
 
 
 @app.route('/delete/audit-finding/<int:fid>', methods=['POST'])
 def delete_audit_finding(fid):
+    """Safe delete finding: nullify linked_finding_id in checklists, delete actions first."""
     f = AuditFinding.query.get_or_404(fid)
     schedule_id = f.schedule_id
-    db.session.delete(f)
-    db.session.commit()
-    flash('✓ Audit Finding deleted.', 'success')
+    try:
+        # Nullify checklist linked_finding_id references
+        AuditChecklist.query.filter_by(linked_finding_id=str(fid)).update(
+            {'linked_finding_id': None}, synchronize_session=False)
+        db.session.flush()
+        AuditAction.query.filter_by(finding_id=str(fid)).delete(synchronize_session=False)
+        db.session.flush()
+        db.session.delete(f)
+        db.session.commit()
+        flash('✓ Audit Finding deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete finding: {str(e)[:120]}', 'error')
     return redirect(url_for('audit_execution', sid=schedule_id))
 
 
-@app.route('/delete/investigation/<int:iid>', methods=['POST'])
+@app.route('/delete/investigation/<iid>', methods=['POST'])
 def delete_investigation(iid):
     inv = Investigation.query.get_or_404(iid)
     db.session.delete(inv)
     db.session.commit()
     flash('✓ Investigation deleted.', 'success')
-    return redirect(url_for('investigation_list'))
+    return redirect('/investigations')
 
 
 @app.route('/delete/training/<int:tid>', methods=['POST'])
@@ -2907,12 +2988,32 @@ def edit_audit_plan(pid):
 def delete_audit_plan(pid):
     p = AuditPlan.query.get_or_404(pid)
     year = p.year
-    # Remove linked schedules first
-    for s in p.schedules:
-        db.session.delete(s)
-    db.session.delete(p)
-    db.session.commit()
-    flash(f'✓ Audit Plan {pid} deleted.', 'success')
+    try:
+        # Safely cascade: unlink schedules plan_id first, then delete schedules
+        schedules = AuditSchedule.query.filter_by(plan_id=pid).all() if hasattr(AuditSchedule, 'plan_id') else (p.schedules if hasattr(p, 'schedules') else [])
+        for s in schedules:
+            # Each schedule: nullify checklist linked_finding_id, delete actions/findings/checklists
+            findings = AuditFinding.query.filter_by(schedule_id=s.id).all()
+            fids = [f.id for f in findings]
+            if fids:
+                AuditChecklist.query.filter(
+                    AuditChecklist.linked_finding_id.in_(fids)
+                ).update({'linked_finding_id': None}, synchronize_session=False)
+                AuditAction.query.filter(
+                    AuditAction.finding_id.in_(fids)
+                ).delete(synchronize_session=False)
+            AuditChecklist.query.filter_by(schedule_id=s.id).delete(synchronize_session=False)
+            for f in findings:
+                db.session.delete(f)
+            db.session.flush()
+            db.session.delete(s)
+        db.session.flush()
+        db.session.delete(p)
+        db.session.commit()
+        flash(f'✓ Audit Plan {pid} deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete {pid}: {str(e)[:120]}', 'error')
     return redirect(url_for('audit_plans') + f'?year={year}')
 
 @app.route('/audit-plans/<pid>/complete', methods=['POST'])
@@ -4366,6 +4467,28 @@ def update_control(cid):
     db.session.commit()
     flash('✓ Control updated.', 'success')
     return redirect(url_for('risk_detail', rid=ctrl.risk_id))
+
+@app.route('/delete/risk/<rid>', methods=['POST'])
+def delete_risk_record(rid):
+    """Safe delete a Risk row and its controls."""
+    r = Risk.query.get_or_404(rid)
+    try:
+        # Nullify ra_rows referencing this risk
+        db.session.execute(
+            db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),
+            {'rid': rid}
+        )
+        db.session.flush()
+        Control.query.filter_by(risk_id=rid).delete(synchronize_session=False)
+        db.session.flush()
+        db.session.delete(r)
+        db.session.commit()
+        flash(f'✓ Risk {rid} deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete risk: {str(e)[:120]}', 'error')
+    return redirect(request.form.get('return_url', '/risk-register'))
+
 
 @app.route('/control/<cid>/delete', methods=['POST'])
 def delete_control(cid):
