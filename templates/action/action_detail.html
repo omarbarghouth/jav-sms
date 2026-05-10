@@ -26,6 +26,10 @@
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a href="/actions/{{ a.id }}/report" target="_blank" class="btn btn-sm" style="background:#065f46;color:#fff">🖨 Print Report</a>
     <a href="/actions" class="btn btn-outline btn-sm">← Back</a>
+    <form method="POST" action="/delete/action/{{ a.id }}" style="display:inline"
+          onsubmit="return confirm('Permanently delete Action {{ a.id }}?')">
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑 Delete</button>
+    </form>
   </div>
 </div>
 

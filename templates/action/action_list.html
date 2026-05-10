@@ -115,6 +115,10 @@
       <span class="badge {% if a.status=='Open' %}b-yellow{% elif a.status=='In Progress' %}b-blue{% elif a.status=='Overdue' %}b-red{% elif a.status=='Closed' %}b-green{% else %}b-gray{% endif %}">{{ a.status }}</span>
       <a href="/actions/{{ a.id }}" class="btn btn-nav btn-sm" style="font-size:11px">Detail →</a>
       <a href="/actions/{{ a.id }}/report" target="_blank" class="btn btn-outline btn-sm" style="font-size:11px">🖨</a>
+      <form method="POST" action="/delete/action/{{ a.id }}" style="display:inline"
+            onsubmit="return confirm('Delete Action {{ a.id }}?')">
+        <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;font-size:11px">🗑</button>
+      </form>
     </div>
   </div>
 
