@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Reports Inbox{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Reports Inbox</div>
+    <div class="page-sub">All public portal submissions · Voluntary · Confidential · Hazard · ASR</div>
+  </div>
+  {% if total_new > 0 %}
+  <div style="background:#fee2e2;color:#dc2626;border:2px solid #fca5a5;border-radius:8px;padding:10px 18px;font-weight:800;font-size:13px">
+    🔔 {{ total_new }} new report(s) awaiting review
+  </div>
+  {% endif %}
+</div>
+
+<!-- Stats -->
+<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
+  <div class="stat-card" style="border-top:3px solid #15803d"><div class="stat-val" style="color:#15803d">{{ vol|length }}</div><div class="stat-lbl">Voluntary</div></div>
+  <div class="stat-card" style="border-top:3px solid #7c3aed"><div class="stat-val" style="color:#7c3aed">{{ conf|length }}</div><div class="stat-lbl">Confidential</div></div>
+  <div class="stat-card" style="border-top:3px solid #dc2626"><div class="stat-val" style="color:#dc2626">{{ haz|length }}</div><div class="stat-lbl">Hazard Reports</div></div>
+  <div class="stat-card" style="border-top:3px solid #0f1c3f"><div class="stat-val" style="color:#0f1c3f">{{ asr|length }}</div><div class="stat-lbl">ASR Reports</div></div>
+</div>
+
+<!-- Voluntary Reports -->
+{% if vol %}
+<div class="card">
+  <div class="card-title">📋 Voluntary Safety Reports</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Ref</th><th>Reporter</th><th>Type</th><th>Location</th><th>Date</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for r in vol %}
+    <tr>
+      <td><span class="mono">{{ r.ref_number }}</span></td>
+      <td style="font-size:12px">{{ r.reporter_name or "Anonymous" }}</td>
+      <td><span class="badge b-green" style="font-size:10px">{{ r.report_type }}</span></td>
+      <td style="font-size:12px">{{ r.location }}</td>
+      <td style="font-size:11px">{{ r.date }}</td>
+      <td>
+        {% if r.status == "Submitted" %}<span class="badge b-yellow">New</span>
+        {% elif r.status == "Under Review" %}<span class="badge b-blue">In Review</span>
+        {% else %}<span class="badge b-gray">{{ r.status }}</span>{% endif %}
+      </td>
+      <td>
+        {% if r.status == "Submitted" %}
+        <form method="POST" action="/admin/reports/voluntary/{{ r.id }}/review" style="display:inline">
+          <button class="btn btn-nav btn-sm">Mark Reviewing</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+
+<!-- Confidential Reports -->
+{% if conf %}
+<div class="card" style="border-left:4px solid #7c3aed">
+  <div class="card-title" style="color:#7c3aed">🔒 Confidential Safety Reports</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Ref</th><th>Position</th><th>Type</th><th>Location</th><th>Date</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for r in conf %}
+    <tr>
+      <td><span class="mono">{{ r.ref_number }}</span></td>
+      <td style="font-size:12px">{{ r.position or "Not specified" }}</td>
+      <td><span class="badge b-purple" style="font-size:10px">{{ r.report_type }}</span></td>
+      <td style="font-size:12px">{{ r.location }}</td>
+      <td style="font-size:11px">{{ r.date }}</td>
+      <td>
+        {% if r.status == "Submitted" %}<span class="badge b-yellow">New</span>
+        {% elif r.status == "Under Review" %}<span class="badge b-blue">In Review</span>
+        {% else %}<span class="badge b-gray">{{ r.status }}</span>{% endif %}
+      </td>
+      <td>
+        {% if r.status == "Submitted" %}
+        <form method="POST" action="/admin/reports/confidential/{{ r.id }}/review" style="display:inline">
+          <button class="btn btn-nav btn-sm">Mark Reviewing</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+
+<!-- Hazard Reports -->
+{% if haz %}
+<div class="card">
+  <div class="card-title">⚠️ Hazard Reports (latest 20)</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Ref</th><th>Reporter</th><th>Location</th><th>Classification</th><th>Date</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for r in haz %}
+    <tr>
+      <td><span class="mono" style="font-size:11px">{{ r.id }}</span></td>
+      <td style="font-size:12px">{{ r.reporter or "Anonymous" }}</td>
+      <td style="font-size:12px">{{ r.location }}</td>
+      <td><span class="badge b-orange" style="font-size:10px">{{ r.classification }}</span></td>
+      <td style="font-size:11px">{{ r.date }}</td>
+      <td><span class="badge {% if r.status=="Submitted" %}b-yellow{% else %}b-blue{% endif %}" style="font-size:10px">{{ r.status }}</span></td>
+      <td><a href="/hazard-reports/{{ r.id }}" class="btn btn-nav btn-sm">Detail →</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+
+<!-- ASR Reports -->
+{% if asr %}
+<div class="card">
+  <div class="card-title">✈️ Air Safety Reports (latest 20)</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Ref</th><th>Filed By</th><th>Occurrence</th><th>Flight</th><th>Date</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for r in asr %}
+    <tr>
+      <td><span class="mono" style="font-size:11px">{{ r.id }}</span></td>
+      <td style="font-size:12px">{{ r.filed_by or "—" }}</td>
+      <td style="font-size:12px">{{ r.occurrence_type or "—" }}</td>
+      <td style="font-size:11px">{{ r.flight_number or "—" }}</td>
+      <td style="font-size:11px">{{ r.date }}</td>
+      <td><span class="badge b-blue" style="font-size:10px">{{ r.status or "Submitted" }}</span></td>
+      <td><a href="/asr/{{ r.id }}" class="btn btn-nav btn-sm">Detail →</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+
+{% if not vol and not conf and not haz and not asr %}
+<div class="card" style="text-align:center;padding:40px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:12px">📭</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy)">No reports submitted yet</div>
+  <p style="color:var(--muted);margin-top:8px">Reports submitted through the public portal will appear here.</p>
+  <a href="/portal" target="_blank" class="btn btn-nav" style="margin-top:16px">View Public Portal →</a>
+</div>
+{% endif %}
+{% endblock %}
