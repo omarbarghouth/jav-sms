@@ -1,7 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from flask import Flask, render_template, request, redirect, url_for, flash, session
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
-import os, uuid, io
+import os, uuid, io, hashlib, functools
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -110,6 +110,41 @@ def inject_globals():
     return dict(all_departments=depts, now=now, get_tolerance=get_tolerance,
                 nav_overdue=overdue, enumerate=enumerate)
 
+
+# ── Auth helpers ──────────────────────────────────────────────────────────────
+
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def check_pw(pw, hashed):
+    return hashlib.sha256(pw.encode()).hexdigest() == hashed
+
+def is_logged_in():
+    return session.get('admin_logged_in') is True
+
+def require_login(f):
+    """Decorator — redirects to login if not authenticated."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not is_logged_in():
+            return redirect(url_for('admin_login', next=request.path))
+        return f(*args, **kwargs)
+    return decorated
+
+def seed_admin():
+    """Create default admin account if no users exist."""
+    if User.query.count() == 0:
+        admin = User(
+            username     = 'admin',
+            password_hash= hash_pw('Jordan@SMS2026'),
+            full_name    = 'Safety Manager',
+            role         = 'admin',
+            is_active    = True,
+        )
+        db.session.add(admin)
+        db.session.commit()
+        print("✅ Default admin created — user: admin / pass: Jordan@SMS2026")
+
 # ─── SEED DATABASE ────────────────────────────────────────────────────────────
 def seed():
     """Database initialisation — creates tables only. No demo data."""
@@ -127,10 +162,215 @@ def seed():
             db.session.add(d)
         db.session.commit()
         print('✅ Departments seeded.')
+    seed_admin()
     print('✅ Database ready — no demo data loaded.')
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PUBLIC REPORTING PORTAL  — no login required
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @app.route('/')
+def index():
+    """Root: if logged in → admin dashboard, else → public reporting portal."""
+    if is_logged_in():
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('public_portal'))
+
+
+@app.route('/portal')
+def public_portal():
+    """Public-facing reporting portal — employees, pilots, operational staff."""
+    return render_template('portal/portal.html')
+
+
+@app.route('/portal/voluntary', methods=['GET', 'POST'])
+def portal_voluntary():
+    """Voluntary Safety Report — open to all staff."""
+    if request.method == 'POST':
+        f = request.form
+        from datetime import date as _date
+        rnum = f'VR-{_date.today().strftime("%Y%m%d")}-{VoluntaryReport.query.count()+1:03d}'
+        rpt = VoluntaryReport(
+            ref_number    = rnum,
+            reporter_name = f.get('reporter_name', '').strip() or 'Anonymous',
+            position      = f.get('position', ''),
+            department_id = int(f['department_id']) if f.get('department_id') else None,
+            date          = f.get('date', _date.today().isoformat()),
+            location      = f.get('location', ''),
+            report_type   = f.get('report_type', 'Safety Concern'),
+            description   = f.get('description', ''),
+            consequences  = f.get('consequences', ''),
+            suggestion    = f.get('suggestion', ''),
+            status        = 'Submitted',
+            is_confidential = False,
+        )
+        db.session.add(rpt)
+        db.session.commit()
+        return render_template('portal/portal_submitted.html',
+                               ref=rnum, report_type='Voluntary Safety Report')
+    return render_template('portal/portal_voluntary.html')
+
+
+@app.route('/portal/confidential', methods=['GET', 'POST'])
+def portal_confidential():
+    """Confidential Safety Report — identity protected."""
+    if request.method == 'POST':
+        f = request.form
+        from datetime import date as _date
+        rnum = f'CR-{_date.today().strftime("%Y%m%d")}-{ConfidentialReport.query.count()+1:03d}'
+        rpt = ConfidentialReport(
+            ref_number    = rnum,
+            position      = f.get('position', ''),
+            department_id = int(f['department_id']) if f.get('department_id') else None,
+            date          = f.get('date', _date.today().isoformat()),
+            location      = f.get('location', ''),
+            report_type   = f.get('report_type', 'Safety Concern'),
+            description   = f.get('description', ''),
+            consequences  = f.get('consequences', ''),
+            suggestion    = f.get('suggestion', ''),
+            status        = 'Submitted',
+        )
+        db.session.add(rpt)
+        db.session.commit()
+        return render_template('portal/portal_submitted.html',
+                               ref=rnum, report_type='Confidential Safety Report')
+    return render_template('portal/portal_confidential.html')
+
+
+@app.route('/portal/hazard', methods=['GET', 'POST'])
+def portal_hazard():
+    """Public Hazard Report form — simplified for fast submission."""
+    if request.method == 'POST':
+        # Reuse existing hazard_report POST logic
+        return hazard_report()
+    return render_template('portal/portal_hazard.html')
+
+
+@app.route('/portal/asr', methods=['GET', 'POST'])
+def portal_asr():
+    """Public ASR form — reuses existing ASR logic."""
+    if request.method == 'POST':
+        return asr_report()
+    return render_template('portal/portal_asr.html')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ADMIN LOGIN / LOGOUT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    if is_logged_in():
+        return redirect(url_for('dashboard'))
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        user = User.query.filter_by(username=username, is_active=True).first()
+        if user and check_pw(password, user.password_hash):
+            session['admin_logged_in'] = True
+            session['admin_user']      = user.username
+            session['admin_role']      = user.role
+            session['admin_name']      = user.full_name or user.username
+            session.permanent          = True
+            user.last_login            = datetime.utcnow()
+            db.session.commit()
+            next_url = request.args.get('next') or url_for('dashboard')
+            return redirect(next_url)
+        else:
+            error = 'Invalid username or password.'
+    return render_template('portal/login.html', error=error)
+
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.clear()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('public_portal'))
+
+
+@app.route('/admin/users')
+@require_login
+def admin_users():
+    """User management — admin only."""
+    if session.get('admin_role') != 'admin':
+        flash('⚠ Admin access required.', 'error')
+        return redirect(url_for('dashboard'))
+    users = User.query.order_by(User.created_at).all()
+    return render_template('portal/admin_users.html', users=users)
+
+
+@app.route('/admin/users/new', methods=['POST'])
+@require_login
+def admin_user_new():
+    if session.get('admin_role') != 'admin':
+        return redirect(url_for('dashboard'))
+    f = request.form
+    if User.query.filter_by(username=f['username']).first():
+        flash('⚠ Username already exists.', 'error')
+        return redirect(url_for('admin_users'))
+    u = User(username=f['username'], password_hash=hash_pw(f['password']),
+             full_name=f.get('full_name',''), role=f.get('role','safety_officer'),
+             is_active=True)
+    db.session.add(u); db.session.commit()
+    flash(f'✓ User {u.username} created.', 'success')
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/users/<int:uid>/toggle', methods=['POST'])
+@require_login
+def admin_user_toggle(uid):
+    if session.get('admin_role') != 'admin':
+        return redirect(url_for('dashboard'))
+    u = User.query.get_or_404(uid)
+    u.is_active = not u.is_active
+    db.session.commit()
+    flash(f'✓ User {u.username} {"activated" if u.is_active else "deactivated"}.', 'success')
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/reports')
+@require_login
+def admin_reports_inbox():
+    """Safety Admin inbox — all submitted public reports."""
+    vol   = VoluntaryReport.query.order_by(VoluntaryReport.created_at.desc()).all()
+    conf  = ConfidentialReport.query.order_by(ConfidentialReport.created_at.desc()).all()
+    haz   = HazardReport.query.order_by(HazardReport.created_at.desc()).limit(20).all()
+    asr   = ASRReport.query.order_by(ASRReport.created_at.desc()).limit(20).all()
+    total_new = (VoluntaryReport.query.filter_by(status='Submitted').count() +
+                 ConfidentialReport.query.filter_by(status='Submitted').count())
+    return render_template('portal/admin_reports.html',
+                           vol=vol, conf=conf, haz=haz, asr=asr,
+                           total_new=total_new)
+
+
+@app.route('/admin/reports/voluntary/<int:rid>/review', methods=['POST'])
+@require_login
+def vol_report_review(rid):
+    r = VoluntaryReport.query.get_or_404(rid)
+    r.status = 'Under Review'
+    db.session.commit()
+    flash('✓ Marked as Under Review.', 'success')
+    return redirect(url_for('admin_reports_inbox'))
+
+
+@app.route('/admin/reports/confidential/<int:rid>/review', methods=['POST'])
+@require_login
+def conf_report_review(rid):
+    r = ConfidentialReport.query.get_or_404(rid)
+    r.status = 'Under Review'
+    db.session.commit()
+    flash('✓ Marked as Under Review.', 'success')
+    return redirect(url_for('admin_reports_inbox'))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  INTERNAL ADMIN DASHBOARD  — login required
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/dashboard')
+@require_login
 def dashboard():
     check_overdue_actions()
     total_haz   = Hazard.query.count()
@@ -238,6 +478,7 @@ def hazard_report():
     return render_template('reporting/hazard_report.html')
 
 @app.route('/hazard-reports')
+@require_login
 def hazard_report_list():
     """All submitted hazard reports — searchable and filterable."""
     dept_f  = request.args.get('dept', '')
@@ -269,6 +510,7 @@ def hazard_report_list():
         dept_f=dept_f, cat_f=cat_f, stat_f=stat_f, q_f=q_f)
 
 @app.route('/hazard-reports/<rid>')
+@require_login
 def hazard_report_detail(rid):
     """Full detail view for a single hazard report."""
     rep    = HazardReport.query.get_or_404(rid)
@@ -349,6 +591,7 @@ def asr():
 
 # ─── Hazard Log ───────────────────────────────────────────────────────────────
 @app.route('/hazard-log')
+@require_login
 def hazard_log():
     dept_f = request.args.get('dept','')
     stat_f = request.args.get('status','')
@@ -418,6 +661,7 @@ def add_control(rid):
 
 # ─── Actions ──────────────────────────────────────────────────────────────────
 @app.route('/actions')
+@require_login
 def actions():
     """
     Centralized Action Management Dashboard.
@@ -485,6 +729,7 @@ def actions():
 
 
 @app.route('/actions/new', methods=['GET', 'POST'])
+@require_login
 def new_action():
     """Create a new action. Can be called from any page with pre-filled fields."""
     if request.method == 'POST':
@@ -563,6 +808,7 @@ def new_action():
 
 
 @app.route('/actions/<aid>/update', methods=['POST'])
+@require_login
 def update_action(aid):
     """
     Update an action status.
@@ -648,6 +894,7 @@ def update_action(aid):
 
 
 @app.route('/actions/<aid>/report')
+@require_login
 def action_report(aid):
     """Print-ready action report — full traceability."""
     a = Action.query.get_or_404(aid)
@@ -668,6 +915,7 @@ def action_report(aid):
 
 
 @app.route('/actions/dashboard')
+@require_login
 def action_dashboard():
     """Aviation Action Management Dashboard — centralized view of all action streams."""
     check_overdue_actions()
@@ -719,6 +967,7 @@ def action_dashboard():
 
 
 @app.route('/actions/<aid>')
+@require_login
 def action_detail(aid):
     """Single action detail page — shows everything linked to this action."""
     a      = Action.query.get_or_404(aid)
@@ -751,11 +1000,13 @@ def update_audit(aid):
 
 # ─── Investigations ───────────────────────────────────────────────────────────
 @app.route('/investigations')
+@require_login
 def investigations():
     all_inv = Investigation.query.order_by(Investigation.created_at.desc()).all()
     return render_template('investigation/investigation_list.html', investigations=all_inv)
 
 @app.route('/investigations/new', methods=['GET','POST'])
+@require_login
 def new_investigation():
     if request.method == 'POST':
         f = request.form
@@ -795,12 +1046,14 @@ def new_investigation():
     return render_template('investigation/investigation_form.html', hazards=hazards)
 
 @app.route('/investigations/<iid>')
+@require_login
 def investigation_detail(iid):
     inv = Investigation.query.get_or_404(iid)
     return render_template('investigation/investigation_detail.html', inv=inv)
 
 # ─── MOC ─────────────────────────────────────────────────────────────────────
 @app.route('/moc')
+@require_login
 def moc_list():
     all_moc = MOC.query.order_by(MOC.created_at.desc()).all()
     return render_template('investigation/moc_list.html', mocs=all_moc)
@@ -1438,6 +1691,7 @@ def spi_auto_update(source_type, department_id, category, year, month,
 
 
 @app.route('/spi', methods=['GET','POST'])
+@require_login
 def spi():
     """SPI Dashboard — ICAO Annex 19 §6.3 / Doc 9859 Chapter 7."""
     cur_year = datetime.now().year
@@ -1639,6 +1893,7 @@ def spi_action_report(action_id):
                            now=datetime.utcnow(), MONTHS=MONTHS)
 
 @app.route('/spi/indicators', methods=['GET','POST'])
+@require_login
 def spi_indicators():
     """Manage SPI indicator definitions."""
     if request.method == 'POST':
@@ -1701,6 +1956,7 @@ def spi_toggle_indicator(iid):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.route('/safety-promotion')
+@require_login
 def safety_promotion():
     bulletins   = SafetyBulletin.query.filter_by(status='Active').order_by(SafetyBulletin.created_at.desc()).limit(5).all()
     newsletters = SafetyNewsletter.query.filter_by(status='Published').order_by(SafetyNewsletter.created_at.desc()).limit(4).all()
@@ -1717,6 +1973,7 @@ def safety_promotion():
                            overdue_training=overdue_training, due_soon=due_soon)
 
 @app.route('/safety-promotion/bulletins')
+@require_login
 def sp_bulletins():
     status_f = request.args.get('status','')
     type_f   = request.args.get('type','')
@@ -1764,6 +2021,7 @@ def sp_bulletin_archive(bid):
     return redirect(url_for('sp_bulletins'))
 
 @app.route('/safety-promotion/newsletters')
+@require_login
 def sp_newsletters():
     newsletters = SafetyNewsletter.query.order_by(SafetyNewsletter.created_at.desc()).all()
     return render_template('spi/sp_newsletters.html', newsletters=newsletters)
@@ -1805,6 +2063,7 @@ def sp_newsletter_publish(nid):
     return redirect(url_for('sp_newsletters'))
 
 @app.route('/safety-promotion/training')
+@require_login
 def sp_training():
     """Training records list with auto status refresh."""
     dept_f   = request.args.get('dept', '')
@@ -2066,6 +2325,7 @@ def sp_training_export_xlsx():
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.route('/safety-promotion/surveys')
+@require_login
 def sp_surveys():
     surveys = SafetySurvey.query.order_by(SafetySurvey.created_at.desc()).all()
     return render_template('spi/sp_surveys.html', surveys=surveys)
@@ -2109,6 +2369,7 @@ def sp_survey_respond(sid):
     return redirect(url_for('sp_surveys'))
 
 @app.route('/safety-promotion/campaigns')
+@require_login
 def sp_campaigns():
     campaigns = SafetyCampaign.query.order_by(SafetyCampaign.created_at.desc()).all()
     return render_template('spi/sp_campaigns.html', campaigns=campaigns)
@@ -2136,6 +2397,7 @@ def sp_campaign_new():
                            now=datetime.utcnow())
 
 @app.route('/safety-promotion/lessons')
+@require_login
 def sp_lessons():
     cat_f=request.args.get('category',''); q_f=request.args.get('q','').strip()
     q = LessonLearned.query
@@ -2145,6 +2407,7 @@ def sp_lessons():
     return render_template('spi/sp_lessons.html', lessons=lessons, cat_f=cat_f, q_f=q_f)
 
 @app.route('/safety-promotion/lesson/new', methods=['GET','POST'])
+@require_login
 def sp_lesson_new():
     if request.method == 'POST':
         f = request.form
@@ -2577,6 +2840,7 @@ def delete_moc(mid):
 # ── Admin cleanup dashboard ───────────────────────────────────────────────────
 
 @app.route('/admin/cleanup')
+@require_login
 def admin_cleanup():
     counts = {
         'hazard_reports':   HazardReport.query.count(),
@@ -2599,6 +2863,7 @@ def admin_cleanup():
 
 # ─── Risk Matrix Reference ────────────────────────────────────────────────────
 @app.route('/risk-matrix')
+@require_login
 def risk_matrix():
     return render_template('risk/risk_matrix.html')
 
@@ -2686,6 +2951,7 @@ def get_checklist_template(dept_code):
 # ─── CHECKLIST TEMPLATE MANAGEMENT ──────────────────────────────────────────
 
 @app.route('/audit-checklists')
+@require_login
 def checklist_templates():
     """List all department checklist templates."""
     templates = ChecklistTemplate.query.filter_by(is_active=True).all()
@@ -2789,6 +3055,7 @@ def checklist_template_dept(dept_id):
 
 
 @app.route('/audit-findings-report')
+@require_login
 def audit_findings_report():
     """System-wide Audit Findings List Report with filters."""
     dept_f   = request.args.get('dept', '')
@@ -2832,6 +3099,7 @@ def audit_findings_report():
 
 
 @app.route('/audit-schedule-calendar')
+@require_login
 def audit_schedule_calendar():
     """Calendar view of all scheduled audits."""
     year  = int(request.args.get('year',  datetime.now().year))
@@ -2887,6 +3155,7 @@ def audit_schedule_calendar():
 
 
 @app.route('/audit-plans')
+@require_login
 def audit_plans():
     year_f     = request.args.get('year', datetime.now().year, type=int)
     dept_f     = request.args.get('dept', '', type=str)
@@ -3073,6 +3342,7 @@ def schedule_from_plan(pid):
 
 # ─── AUDIT SCHEDULE ───────────────────────────────────────────────────────────
 @app.route('/audit-schedule')
+@require_login
 def audit_schedule():
     dept_f   = request.args.get('dept', '')
     status_f = request.args.get('status', '')
@@ -3131,6 +3401,7 @@ def new_audit_schedule():
 
 # ─── AUDIT EXECUTION ─────────────────────────────────────────────────────────
 @app.route('/audit-schedule/<sid>')
+@require_login
 def audit_execution(sid):
     s = AuditSchedule.query.get_or_404(sid)
     # Group checklist by category
@@ -3296,6 +3567,7 @@ def save_checklist(sid):
     return redirect(url_for('audit_execution', sid=sid))
 
 @app.route('/audit-schedule/<sid>/close', methods=['POST'])
+@require_login
 def close_audit(sid):
     s = AuditSchedule.query.get_or_404(sid)
     # Validate: all NO checklist items must have linked findings
@@ -3681,6 +3953,7 @@ def update_audit_action(aid):
 
 # ─── AUDIT DASHBOARD (summary view) ──────────────────────────────────────────
 @app.route('/audit-dashboard')
+@require_login
 def audit_dashboard():
     total_plans     = AuditPlan.query.count()
     total_scheduled = AuditSchedule.query.count()
@@ -3725,6 +3998,7 @@ def next_seq(doc_type, dept_id, year):
 
 # ─── SAFETY POLICY ───────────────────────────────────────────────────────────
 @app.route('/safety-policy')
+@require_login
 def safety_policy():
     active  = SafetyPolicy.query.filter_by(status='Active').first()
     history = SafetyPolicy.query.filter_by(status='Archived').order_by(
@@ -3790,6 +4064,7 @@ def edit_policy(pid):
 
 # ─── SAFETY ACCOUNTABILITY (ROLES) ───────────────────────────────────────────
 @app.route('/safety-roles')
+@require_login
 def safety_roles():
     roles = SafetyRole.query.filter_by(active=True).order_by(SafetyRole.role_type).all()
     return render_template('safety_policy/roles.html', roles=roles)
@@ -3833,6 +4108,7 @@ def update_safety_role(rid):
 
 # ─── KEY SAFETY PERSONNEL ─────────────────────────────────────────────────────
 @app.route('/safety-personnel')
+@require_login
 def safety_personnel():
     personnel = SafetyPersonnel.query.filter_by(active=True).order_by(
                 SafetyPersonnel.sms_role).all()
@@ -3931,6 +4207,7 @@ def update_erp(eid):
 
 # ─── DOCUMENT CONTROL ─────────────────────────────────────────────────────────
 @app.route('/documents')
+@require_login
 def documents():
     type_f   = request.args.get('type','')
     dept_f   = request.args.get('dept','')
@@ -4353,6 +4630,7 @@ def get_srm_status(hazard):
 
 # ─── RISK REGISTER (central view — risks, not hazards) ───────────────────────
 @app.route('/risk-register')
+@require_login
 def risk_register():
     dept_f  = request.args.get('dept','')
     tol_f   = request.args.get('tolerance','')
@@ -4531,6 +4809,7 @@ def add_occurrence(hid):
 
 # ─── SRM DASHBOARD ────────────────────────────────────────────────────────────
 @app.route('/srm-dashboard')
+@require_login
 def srm_dashboard():
     all_risks   = Risk.query.all()
     total_risks = len(all_risks)
@@ -4742,6 +5021,7 @@ def new_ra():
 
 # ─── RA DETAIL (all 5 pages in one view) ────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>')
+@require_login
 def ra_detail(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     worst_i, worst_r = compute_ra_summary(ra)
@@ -5883,6 +6163,32 @@ with app.app_context():
                 ('parent_ra_id',           'VARCHAR(30)'),
                 ('next_review_date',       'VARCHAR(20)'),
                 ('assessment_date',        'VARCHAR(20)'),
+            ],
+            'voluntary_reports': [
+                ('ref_number',      'VARCHAR(30)'),
+                ('reporter_name',   'VARCHAR(100)'),
+                ('position',        'VARCHAR(100)'),
+                ('department_id',   'INTEGER'),
+                ('date',            'VARCHAR(20)'),
+                ('location',        'VARCHAR(200)'),
+                ('report_type',     'VARCHAR(50)'),
+                ('description',     'TEXT'),
+                ('consequences',    'TEXT'),
+                ('suggestion',      'TEXT'),
+                ('status',          'VARCHAR(20) DEFAULT "Submitted"'),
+                ('is_confidential', 'BOOLEAN DEFAULT 0'),
+            ],
+            'confidential_reports': [
+                ('ref_number',      'VARCHAR(30)'),
+                ('position',        'VARCHAR(100)'),
+                ('department_id',   'INTEGER'),
+                ('date',            'VARCHAR(20)'),
+                ('location',        'VARCHAR(200)'),
+                ('report_type',     'VARCHAR(50)'),
+                ('description',     'TEXT'),
+                ('consequences',    'TEXT'),
+                ('suggestion',      'TEXT'),
+                ('status',          'VARCHAR(20) DEFAULT "Submitted"'),
             ],
             'trainings': [
                 ('employee_id',        'VARCHAR(50)'),
