@@ -202,6 +202,9 @@
     <a href="/erp" class="nav-a {% if '/erp' in request.path %}active{% endif %}"><span class="nav-icon">🚨</span>Emergency Response</a>
 
   </nav>
+  <a href="/admin/cleanup" class="nav-a" style="opacity:.4;font-size:11px;border-top:1px solid rgba(255,255,255,.06)">
+    <span class="nav-icon" style="font-size:12px">🗑</span>DB Cleanup <span style="font-size:9px;opacity:.6">(Testing)</span>
+  </a>
   <div class="sb-foot"><strong>ICAO</strong> Annex 19 · Doc 9859<br><strong>IOSA</strong> Compliant · Jav/SMS/001<br>Rev 02 — {{ now.year }}</div>
 </aside>
 
