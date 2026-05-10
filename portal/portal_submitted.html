@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Report Submitted — Jordan Aviation</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#f0f2f8;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Sans',sans-serif}
+  .box{background:#fff;border-radius:14px;padding:48px 40px;max-width:480px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+  .icon{width:72px;height:72px;background:#dcfce7;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 20px}
+  h1{font-size:22px;font-weight:800;color:#0f1c3f;margin-bottom:10px}
+  p{font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:8px}
+  .ref{background:#f4f6fb;border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin:20px 0;font-size:15px;font-weight:800;color:#0f1c3f;font-family:monospace}
+  .ref span{font-size:11px;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;font-family:'IBM Plex Sans',sans-serif}
+  .btn{display:inline-block;background:#0f1c3f;color:#fff;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;margin-top:16px;margin-right:8px}
+  .btn-out{display:inline-block;border:1.5px solid #e5e7eb;color:#374151;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="icon">✓</div>
+  <h1>Report Submitted</h1>
+  <p>Thank you. Your <strong>{{ report_type }}</strong> has been received by the Safety Department.</p>
+  <p>Your report will be reviewed and appropriate action will be taken in accordance with our Non-Punitive Reporting Policy.</p>
+  <div class="ref">
+    <span>Your Reference Number</span>
+    {{ ref }}
+  </div>
+  <p style="font-size:12px">Please save this reference number for your records.</p>
+  <a href="/portal" class="btn">Submit Another Report</a>
+  <a href="/portal" class="btn-out">Return to Portal</a>
+</div>
+</body>
+</html>
