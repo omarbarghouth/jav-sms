@@ -33,6 +33,10 @@
   <div style="font-size:10px;color:var(--muted);margin-bottom:10px">{{ s.start_date or "—" }} → {{ s.end_date or "—" }}</div>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
     <a href="/safety-promotion/survey/{{ s.id }}" class="btn btn-nav btn-sm">📊 Dashboard</a>
+    <form method="POST" action="/delete/survey/{{ s.id }}" style="display:inline"
+          onsubmit="return confirm('Delete Survey {{ s.id }}?')">
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+    </form>
     {% if s.status=="Draft" %}
     <form method="POST" action="/safety-promotion/survey/{{ s.id }}/activate" style="display:inline">
       <button class="btn btn-outline btn-sm">Activate</button>

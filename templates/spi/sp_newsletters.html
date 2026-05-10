@@ -21,6 +21,10 @@
   <div style="font-size:10px;color:var(--muted);margin-bottom:10px">{{ n.author }} · {{ n.issue_date or n.created_at.strftime("%d %b %Y") }}</div>
   <div style="display:flex;gap:6px">
     <a href="/safety-promotion/newsletter/{{ n.id }}" class="btn btn-nav btn-sm">View</a>
+    <form method="POST" action="/delete/newsletter/{{ n.id }}" style="display:inline"
+          onsubmit="return confirm('Delete Newsletter {{ n.id }}?')">
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+    </form>
     {% if n.status=="Draft" %}
     <form method="POST" action="/safety-promotion/newsletter/{{ n.id }}/publish" style="display:inline">
       <button class="btn btn-outline btn-sm">Publish</button>

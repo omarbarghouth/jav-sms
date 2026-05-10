@@ -22,6 +22,10 @@
   <div style="font-size:10px;color:var(--muted);margin-bottom:10px">{{ c.start_date or "—" }} → {{ c.end_date or "—" }}</div>
   <div style="display:flex;gap:6px;margin-top:8px">
     <a href="/safety-promotion/campaign/{{ c.id }}" class="btn btn-nav btn-sm">View Details</a>
+    <form method="POST" action="/delete/campaign/{{ c.id }}" style="display:inline"
+          onsubmit="return confirm('Delete Campaign {{ c.id }}?')">
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+    </form>
     {% if c.attachment %}
     <a href="/spi/evidence/{{ c.attachment }}" target="_blank" class="btn btn-outline btn-sm">📎 Materials</a>
     {% endif %}

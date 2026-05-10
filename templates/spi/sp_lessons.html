@@ -44,6 +44,11 @@
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a href="/safety-promotion/lesson/{{ ll.id }}" class="btn btn-nav btn-sm">Read Full →</a>
       <a href="/safety-promotion/lesson/{{ ll.id }}/print" target="_blank" class="btn btn-outline btn-sm">🖨 PDF</a>
+      <form method="POST" action="/delete/lesson/{{ ll.id }}" style="display:inline"
+            onsubmit="return confirm('Delete Lesson Learned {{ ll.id }}?')">
+        <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+      </form>
+      <a href="/safety-promotion/lesson/{{ ll.id }}/print" target="_blank" class="btn btn-outline btn-sm">🖨 PDF</a>
       {% if ll.attachment %}<a href="/spi/evidence/{{ ll.attachment }}" target="_blank" class="btn btn-outline btn-sm">📎 Evidence</a>{% endif %}
       {% if ll.linked_hazard_id %}<a href="/hazard-log/{{ ll.linked_hazard_id }}" class="btn btn-outline btn-sm">⚠ Hazard</a>{% endif %}
     </div>
