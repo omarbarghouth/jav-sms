@@ -146,6 +146,10 @@
           <!-- Actions -->
           <td style="white-space:nowrap">
             <a href="/hazard-reports/{{ r.id }}" class="btn btn-nav btn-sm">View</a>
+      <form method="POST" action="/delete/hazard-report/{{ r.id }}" style="display:inline"
+            onsubmit="return confirm('Delete Hazard Report {{ r.id }}? This will also delete the linked hazard and risks.')">
+        <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+      </form>
             <a href="/hazard-reports/{{ r.id }}/print" target="_blank"
                class="btn btn-sm" style="background:#065f46;color:#fff;margin-left:4px">🖨</a>
           </td>
