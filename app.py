@@ -180,7 +180,28 @@ def hazard_report():
         hid = new_id('HAZ')
         dept_id = int(f['department_id'])
 
-        # 1. Save the Hazard Report (always, regardless of risk assessment)
+        # Resolve department name BEFORE any session operations
+        dept = Department.query.get(dept_id)
+        dept_name = dept.name if dept else ''
+
+        # 1. Create and commit Hazard FIRST (HazardReport has FK to hazards.id)
+        h = Hazard(
+            id=hid,
+            source='Hazard Report',
+            linked_report_id=rid,
+            department_id=dept_id,
+            classification=f.get('classification','Operational'),
+            type_of_activity=dept_name,
+            generic_hazard=f.get('generic_hazard') or f.get('hazard_description','')[:100],
+            specific_components=f.get('hazard_description',''),
+            consequences=f.get('consequences','To Be Assessed'),
+            status='Open',
+            owner=None
+        )
+        db.session.add(h)
+        db.session.commit()   # ← Hazard row exists in DB before report references it
+
+        # 2. Now create HazardReport safely (hazard_id FK is satisfied)
         rep = HazardReport(
             id=rid,
             department_id=dept_id,
@@ -199,26 +220,8 @@ def hazard_report():
         )
         db.session.add(rep)
 
-        # 2. Create linked Hazard record in Hazard Log
-        h = Hazard(
-            id=hid,
-            source='Hazard Report',
-            linked_report_id=rid,
-            department_id=dept_id,
-            classification=f.get('classification','Operational'),
-            type_of_activity=Department.query.get(dept_id).name if Department.query.get(dept_id) else '',
-            generic_hazard=f.get('generic_hazard') or f.get('hazard_description','')[:100],
-            specific_components=f.get('hazard_description',''),
-            consequences=f.get('consequences','To Be Assessed'),
-            status='Open',
-            owner=None
-        )
-        db.session.add(h)
-        db.session.commit()
-
-        # 3. Update report status and redirect to report detail (not RA wizard)
-        rep.status = 'Submitted'
-        h.status   = 'Under Assessment'
+        # 3. Update statuses and commit together
+        h.status = 'Under Assessment'
         db.session.commit()
 
         # Auto-update matching SPI indicators (with deduplication)
