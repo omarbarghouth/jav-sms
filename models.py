@@ -10,6 +10,61 @@ class Department(db.Model):
     name          = db.Column(db.String(100), nullable=False)
     color         = db.Column(db.String(20), default='#1e40af')
 
+class User(db.Model):
+    """Safety Admin users — protected access to internal SMS dashboard."""
+    __tablename__ = 'users'
+    id            = db.Column(db.Integer, primary_key=True)
+    username      = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+    full_name     = db.Column(db.String(100))
+    role          = db.Column(db.String(30), default='safety_officer')
+    # Roles: admin / safety_manager / safety_officer / auditor
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    is_active     = db.Column(db.Boolean, default=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login    = db.Column(db.DateTime)
+    department    = db.relationship('Department', foreign_keys=[department_id])
+
+
+class VoluntaryReport(db.Model):
+    """Voluntary safety report — open to all staff."""
+    __tablename__ = 'voluntary_reports'
+    id            = db.Column(db.Integer, primary_key=True)
+    ref_number    = db.Column(db.String(30))
+    reporter_name = db.Column(db.String(100))   # optional
+    position      = db.Column(db.String(100))
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    date          = db.Column(db.String(20))
+    location      = db.Column(db.String(200))
+    report_type   = db.Column(db.String(50))    # Safety Concern / Near Miss / Observation
+    description   = db.Column(db.Text)
+    consequences  = db.Column(db.Text)
+    suggestion    = db.Column(db.Text)
+    status        = db.Column(db.String(20), default='Submitted')
+    is_confidential = db.Column(db.Boolean, default=False)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    department    = db.relationship('Department', foreign_keys=[department_id])
+
+
+class ConfidentialReport(db.Model):
+    """Confidential safety report — identity protected."""
+    __tablename__ = 'confidential_reports'
+    id            = db.Column(db.Integer, primary_key=True)
+    ref_number    = db.Column(db.String(30))
+    # Reporter identity deliberately kept minimal
+    position      = db.Column(db.String(100))
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    date          = db.Column(db.String(20))
+    location      = db.Column(db.String(200))
+    report_type   = db.Column(db.String(50))
+    description   = db.Column(db.Text)
+    consequences  = db.Column(db.Text)
+    suggestion    = db.Column(db.Text)
+    status        = db.Column(db.String(20), default='Submitted')
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    department    = db.relationship('Department', foreign_keys=[department_id])
+
+
 class HazardReport(db.Model):
     __tablename__ = 'hazard_reports'
     id            = db.Column(db.String(30), primary_key=True)
