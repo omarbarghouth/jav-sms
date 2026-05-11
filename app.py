@@ -242,16 +242,108 @@ def portal_confidential():
 def portal_hazard():
     """Public Hazard Report form — simplified for fast submission."""
     if request.method == 'POST':
-        # Reuse existing hazard_report POST logic
-        return hazard_report()
+        f = request.form
+        dept_id_raw = f.get('department_id', '')
+        if not dept_id_raw:
+            flash('⚠ Please select a department.', 'error')
+            return render_template('portal/portal_hazard.html')
+        try:
+            dept_id = int(dept_id_raw)
+        except ValueError:
+            flash('⚠ Invalid department.', 'error')
+            return render_template('portal/portal_hazard.html')
+
+        rid = new_id('HR')
+        hid = new_id('HAZ')
+        dept = Department.query.get(dept_id)
+        dept_name = dept.name if dept else ''
+
+        try:
+            # 1. Hazard FIRST (FK constraint)
+            h = Hazard(
+                id=hid, source='Hazard Report', linked_report_id=rid,
+                department_id=dept_id, classification=f.get('classification','Operational'),
+                type_of_activity=dept_name,
+                generic_hazard=f.get('generic_hazard') or f.get('hazard_description','')[:100],
+                specific_components=f.get('hazard_description',''),
+                consequences=f.get('consequences','To Be Assessed'),
+                status='Open', owner=None
+            )
+            db.session.add(h)
+            db.session.commit()
+
+            # 2. HazardReport safely
+            rep = HazardReport(
+                id=rid, department_id=dept_id,
+                location=f.get('location',''),
+                date=f.get('date', date.today().isoformat()),
+                description=f.get('hazard_description',''),
+                classification=f.get('classification','Operational'),
+                generic_hazard=f.get('generic_hazard',''),
+                consequences=f.get('consequences',''),
+                immediate_action=f.get('immediate_action',''),
+                suggested_mitigation=f.get('suggested_mitigation',''),
+                reporter_severity=f.get('reporter_severity',''),
+                reporter=f.get('reporter','Anonymous') or 'Anonymous',
+                report_type=f.get('report_type','Hazard Report'),
+                status='Submitted', hazard_id=hid
+            )
+            db.session.add(rep)
+            h.status = 'Under Assessment'
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'⚠ Submission failed: {str(e)[:120]}', 'error')
+            return render_template('portal/portal_hazard.html')
+
+        return render_template('portal/portal_submitted.html',
+                               ref=rid, report_type='Hazard Report')
     return render_template('portal/portal_hazard.html')
 
 
 @app.route('/portal/asr', methods=['GET', 'POST'])
 def portal_asr():
-    """Public ASR form — reuses existing ASR logic."""
+    """Public ASR form — creates ASR report directly without session requirement."""
     if request.method == 'POST':
-        return asr_report()
+        f = request.form
+        dept_id_raw = f.get('department_id', '')
+        dept_id = int(dept_id_raw) if dept_id_raw else None
+        hid = new_id('HAZ')
+        aid = new_id('ASR')
+        try:
+            dept_name = Department.query.get(dept_id).name if dept_id else ''
+            # Create hazard first
+            h = Hazard(
+                id=hid, source='ASR', linked_report_id=aid,
+                department_id=dept_id,
+                classification='Operational',
+                type_of_activity=dept_name,
+                generic_hazard=f.get('occurrence_type','Air Safety Occurrence'),
+                specific_components=f.get('description',''),
+                consequences='To Be Assessed', status='Open'
+            )
+            db.session.add(h)
+            db.session.commit()
+            # Create ASR report
+            r = ASRReport(
+                id=aid, department_id=dept_id,
+                date=f.get('date', date.today().isoformat()),
+                occurrence_type=f.get('occurrence_type',''),
+                description=f.get('description',''),
+                immediate_action=f.get('immediate_action',''),
+                suggested_mitigation=f.get('suggested_mitigation',''),
+                filed_by=f.get('filed_by',''),
+                flight_number=f.get('flight_number',''),
+                status='Submitted', hazard_id=hid
+            )
+            db.session.add(r)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'⚠ Submission failed: {str(e)[:120]}', 'error')
+            return render_template('portal/portal_asr.html')
+        return render_template('portal/portal_submitted.html',
+                               ref=aid, report_type='Air Safety Report')
     return render_template('portal/portal_asr.html')
 
 
@@ -463,7 +555,12 @@ def hazard_report():
 
         # 3. Update statuses and commit together
         h.status = 'Under Assessment'
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'⚠ Report save failed: {str(e)[:120]}', 'error')
+            return render_template('reporting/hazard_report.html')
 
         # Auto-update matching SPI indicators (with deduplication)
         spi_auto_update(
