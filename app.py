@@ -488,11 +488,20 @@ def hazard_report_list():
     type_f  = request.args.get('type', '')
     q_f     = request.args.get('q', '').strip()
 
+    # Check if report_type column exists (safe for old DBs)
+    has_type_col = True
+    try:
+        HazardReport.query.filter_by(report_type='test').first()
+    except Exception:
+        has_type_col = False
+        db.session.rollback()
+
     q = HazardReport.query
     if dept_f:  q = q.filter_by(department_id=int(dept_f))
     if cat_f:   q = q.filter_by(classification=cat_f)
     if stat_f:  q = q.filter_by(status=stat_f)
-    if type_f:  q = q.filter_by(report_type=type_f)
+    if type_f and has_type_col:
+        q = q.filter_by(report_type=type_f)
     if q_f:
         q = q.filter(
             HazardReport.description.ilike(f'%{q_f}%') |
@@ -507,12 +516,19 @@ def hazard_report_list():
     under_assessment = HazardReport.query.filter_by(status='Under Assessment').count()
     actioned         = HazardReport.query.filter_by(status='Actioned').count()
     closed           = HazardReport.query.filter_by(status='Closed').count()
-    # By report type
-    cnt_hazard  = HazardReport.query.filter_by(report_type='Hazard Report').count()
-    cnt_asr     = HazardReport.query.filter_by(report_type='ASR').count()
-    cnt_vol     = HazardReport.query.filter_by(report_type='Voluntary').count()
-    cnt_conf    = HazardReport.query.filter_by(report_type='Confidential').count()
-    cnt_tech    = HazardReport.query.filter_by(report_type='Technical Log').count()
+
+    # By report type — safe fallback if column missing
+    cnt_hazard = cnt_asr = cnt_vol = cnt_conf = cnt_tech = 0
+    if has_type_col:
+        try:
+            cnt_hazard = HazardReport.query.filter_by(report_type='Hazard Report').count()
+            cnt_asr    = HazardReport.query.filter_by(report_type='ASR').count()
+            cnt_vol    = HazardReport.query.filter_by(report_type='Voluntary').count()
+            cnt_conf   = HazardReport.query.filter_by(report_type='Confidential').count()
+            cnt_tech   = HazardReport.query.filter_by(report_type='Technical Log').count()
+        except Exception:
+            db.session.rollback()
+
     return render_template('reporting/hazard_report_list.html',
         reports=reports, total=total,
         submitted=submitted, under_assessment=under_assessment,
