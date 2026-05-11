@@ -6214,6 +6214,22 @@ with app.app_context():
         # PostgreSQL: use information_schema
         from sqlalchemy import text as sa_text
         with db.engine.connect() as conn:
+            # Widen status columns that were too narrow for longer values
+            for tbl_col in [
+                ('actions',        'status',           'VARCHAR(50)'),
+                ('hazard_reports',  'status',           'VARCHAR(50)'),
+                ('hazards',         'status',           'VARCHAR(50)'),
+                ('audit_findings',  'status',           'VARCHAR(50)'),
+            ]:
+                try:
+                    conn.execute(sa_text(
+                        f'ALTER TABLE {tbl_col[0]} ALTER COLUMN {tbl_col[1]} TYPE {tbl_col[2]}'
+                    ))
+                    conn.commit()
+                except Exception:
+                    try: conn.rollback()
+                    except: pass
+
             for table, columns in migrations.items():
                 for col_name, col_def in columns:
                     try:
