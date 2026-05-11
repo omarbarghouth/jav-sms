@@ -455,6 +455,7 @@ def hazard_report():
             suggested_mitigation=f.get('suggested_mitigation',''),
             reporter_severity=f.get('reporter_severity',''),
             reporter=f.get('reporter','Anonymous') or 'Anonymous',
+            report_type=f.get('report_type','Hazard Report'),
             status='Submitted',
             hazard_id=hid
         )
@@ -480,21 +481,24 @@ def hazard_report():
 @app.route('/hazard-reports')
 @require_login
 def hazard_report_list():
-    """All submitted hazard reports — searchable and filterable."""
+    """Aviation Operational Reporting Center — all report types."""
     dept_f  = request.args.get('dept', '')
     cat_f   = request.args.get('category', '')
     stat_f  = request.args.get('status', '')
+    type_f  = request.args.get('type', '')
     q_f     = request.args.get('q', '').strip()
 
     q = HazardReport.query
     if dept_f:  q = q.filter_by(department_id=int(dept_f))
     if cat_f:   q = q.filter_by(classification=cat_f)
     if stat_f:  q = q.filter_by(status=stat_f)
+    if type_f:  q = q.filter_by(report_type=type_f)
     if q_f:
         q = q.filter(
             HazardReport.description.ilike(f'%{q_f}%') |
             HazardReport.location.ilike(f'%{q_f}%') |
-            HazardReport.generic_hazard.ilike(f'%{q_f}%')
+            HazardReport.generic_hazard.ilike(f'%{q_f}%') |
+            HazardReport.reporter.ilike(f'%{q_f}%')
         )
 
     reports = q.order_by(HazardReport.created_at.desc()).all()
@@ -503,10 +507,19 @@ def hazard_report_list():
     under_assessment = HazardReport.query.filter_by(status='Under Assessment').count()
     actioned         = HazardReport.query.filter_by(status='Actioned').count()
     closed           = HazardReport.query.filter_by(status='Closed').count()
+    # By report type
+    cnt_hazard  = HazardReport.query.filter_by(report_type='Hazard Report').count()
+    cnt_asr     = HazardReport.query.filter_by(report_type='ASR').count()
+    cnt_vol     = HazardReport.query.filter_by(report_type='Voluntary').count()
+    cnt_conf    = HazardReport.query.filter_by(report_type='Confidential').count()
+    cnt_tech    = HazardReport.query.filter_by(report_type='Technical Log').count()
     return render_template('reporting/hazard_report_list.html',
         reports=reports, total=total,
         submitted=submitted, under_assessment=under_assessment,
         actioned=actioned, closed=closed,
+        cnt_hazard=cnt_hazard, cnt_asr=cnt_asr, cnt_vol=cnt_vol,
+        cnt_conf=cnt_conf, cnt_tech=cnt_tech,
+        type_f=type_f,
         dept_f=dept_f, cat_f=cat_f, stat_f=stat_f, q_f=q_f)
 
 @app.route('/hazard-reports/<rid>')
@@ -5940,6 +5953,7 @@ with app.app_context():
             ],
             'hazard_reports': [
                 ('classification',         'VARCHAR(50) DEFAULT "Operational"'),
+                ('report_type',            'VARCHAR(30) DEFAULT "Hazard Report"'),
                 ('created_at',             'DATETIME'),
                 ('status',                 'VARCHAR(30) DEFAULT "Submitted"'),
                 ('generic_hazard',         'VARCHAR(200)'),
