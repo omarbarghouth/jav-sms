@@ -888,8 +888,17 @@ def update_action(aid):
         a.effectiveness_review = f.get('effectiveness_review', '')
         a.closed_date          = date.today().isoformat()
 
-    db.session.commit()
-    flash('✓ Action updated.', 'success')
+    try:
+        db.session.commit()
+        flash('✓ Action updated.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        # Most likely cause: column doesn't exist in live DB yet
+        err_str = str(e)
+        if 'column' in err_str.lower() and 'does not exist' in err_str.lower():
+            flash('⚠ Database schema update required. Please contact the system administrator to run migrations.', 'error')
+        else:
+            flash(f'⚠ Could not save: {err_str[:120]}', 'error')
     return redirect(return_url)
 
 
