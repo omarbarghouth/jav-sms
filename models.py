@@ -83,6 +83,7 @@ class HazardReport(db.Model):
     likelihood    = db.Column(db.Integer)
     risk_index    = db.Column(db.String(5))
     reporter      = db.Column(db.String(100), default='Anonymous')
+    report_type   = db.Column(db.String(30), default='Hazard Report')  # Hazard Report / ASR / Voluntary / Confidential / Technical Log
     status        = db.Column(db.String(30), default='Submitted')
     # Submitted / Under Assessment / Actioned / Closed
     hazard_id     = db.Column(db.String(30), db.ForeignKey('hazards.id'))
