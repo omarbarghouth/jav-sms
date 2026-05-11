@@ -6204,8 +6204,7 @@ with app.app_context():
                 ('recurrence_months',  'INTEGER'),
                 ('updated_at',         'DATETIME'),
             ],
-        }
-
+    }
 
     # Detect database type
     db_url = str(db.engine.url)
