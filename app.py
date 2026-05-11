@@ -3520,16 +3520,54 @@ def new_audit_schedule():
             status='Planned'
         )
         db.session.add(s)
-        # Auto-populate checklist
-        template = get_checklist_template(dept.code if dept else 'default')
-        for idx, (cat, ref, question) in enumerate(template):
-            item = AuditChecklist(
-                schedule_id=sid, category=cat,
-                item_ref=ref, question=question, sequence=idx
-            )
-            db.session.add(item)
+        db.session.flush()  # get sid in session before adding checklists
+
+        # Load from latest saved ChecklistTemplate for this dept+type
+        tmpl = ChecklistTemplate.query.filter_by(
+            department_id=int(f['department_id']),
+            audit_type=f['audit_type'],
+            is_active=True
+        ).order_by(ChecklistTemplate.version.desc()).first()
+
+        items_loaded = 0
+        template_source = 'default'
+        if tmpl and tmpl.items:
+            # ✓ Use the latest saved template from Checklist Manager
+            for ti in tmpl.items:
+                db.session.add(AuditChecklist(
+                    schedule_id=sid, category=ti.category,
+                    item_ref=ti.item_ref, question=ti.question,
+                    sequence=ti.sequence,
+                ))
+            items_loaded = len(tmpl.items)
+            template_source = f'{tmpl.name} (v{tmpl.version})'
+        else:
+            # Fall back to static default template
+            dept_code = dept.code if dept else 'default'
+            static = get_checklist_template(dept_code)
+            idx = 0
+            if isinstance(static, dict):
+                for cat, items in static.items():
+                    for ref, question in items:
+                        db.session.add(AuditChecklist(
+                            schedule_id=sid, category=cat,
+                            item_ref=ref, question=question, sequence=idx
+                        ))
+                        idx += 1
+            else:
+                for cat, ref, question in static:
+                    db.session.add(AuditChecklist(
+                        schedule_id=sid, category=cat,
+                        item_ref=ref, question=question, sequence=idx
+                    ))
+                    idx += 1
+            items_loaded = idx
+            template_source = 'system default'
+
+        # Store template version info on the schedule
+        s.template_version = f'{template_source}'
         db.session.commit()
-        flash(f'✓ Audit {sid} created. Checklist auto-populated.', 'success')
+        flash(f'✓ Audit {sid} created — {items_loaded} checklist items loaded from {template_source}.', 'success')
         return redirect(url_for('audit_schedule'))
     return render_template('audit/audit_schedule_form.html')
 
@@ -3598,40 +3636,66 @@ def start_audit(sid):
     s.actual_date  = date.today().isoformat()
     s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
 
-    # Auto-load checklist from latest saved department template
-    if s.department_id and not s.checklist_items:
-        from models import AuditChecklist
-        tmpl = ChecklistTemplate.query.filter_by(
+    # ── Checklist sync: reload from latest template if audit hasn't started ──
+    # Only reload if audit is still in Planned state (hasn't been started before)
+    # This preserves historical integrity for audits already In Progress
+    if s.department_id and s.status == 'Planned':
+        latest_tmpl = ChecklistTemplate.query.filter_by(
             department_id=s.department_id,
             audit_type=s.audit_type or 'Internal',
             is_active=True
-        ).first()
-        if tmpl and tmpl.items:
-            for ti in tmpl.items:
-                db.session.add(AuditChecklist(
-                    schedule_id=sid,
-                    category=ti.category,
-                    item_ref=ti.item_ref,
-                    question=ti.question,
-                    sequence=ti.sequence,
-                ))
-            db.session.flush()
-            flash(f'✓ Audit started. Loaded {len(tmpl.items)} items from {tmpl.name}.', 'success')
-        else:
-            # Fall back to static template (existing get_checklist_template logic)
-            from models import AuditChecklist as ACL
-            dept = Department.query.get(s.department_id)
-            static_tmpl = get_checklist_template(dept.code if dept else 'default')
-            for cat, items in static_tmpl.items():
-                for seq, (ref, q) in enumerate(items):
-                    db.session.add(ACL(
-                        schedule_id=sid,
-                        category=cat,
-                        item_ref=ref,
-                        question=q,
-                        sequence=seq,
+        ).order_by(ChecklistTemplate.version.desc()).first()
+
+        if latest_tmpl and latest_tmpl.items:
+            # Check if checklist needs updating (different version or empty)
+            current_version = getattr(s, 'template_version', '')
+            tmpl_version_str = f'{latest_tmpl.name} (v{latest_tmpl.version})'
+            needs_reload = (
+                not s.checklist_items or
+                current_version != tmpl_version_str
+            )
+            if needs_reload:
+                # Clear existing checklist items (stale / from old template)
+                AuditChecklist.query.filter_by(schedule_id=sid).delete()
+                db.session.flush()
+                # Load latest template snapshot
+                for ti in latest_tmpl.items:
+                    db.session.add(AuditChecklist(
+                        schedule_id=sid, category=ti.category,
+                        item_ref=ti.item_ref, question=ti.question,
+                        sequence=ti.sequence,
                     ))
-            flash('✓ Audit started. Checklist loaded from default template.', 'success')
+                s.template_version = tmpl_version_str
+                db.session.flush()
+                flash(f'✓ Audit started · Checklist refreshed from {latest_tmpl.name} (v{latest_tmpl.version}) — {len(latest_tmpl.items)} items.', 'success')
+            else:
+                flash(f'✓ Audit started · Checklist up to date (v{latest_tmpl.version}).', 'success')
+        else:
+            # No saved template — use static default only if no items exist
+            if not s.checklist_items:
+                dept = Department.query.get(s.department_id)
+                static = get_checklist_template(dept.code if dept else 'default')
+                idx = 0
+                if isinstance(static, dict):
+                    for cat, items in static.items():
+                        for ref, q in items:
+                            db.session.add(AuditChecklist(
+                                schedule_id=sid, category=cat,
+                                item_ref=ref, question=q, sequence=idx
+                            ))
+                            idx += 1
+                else:
+                    for cat, ref, q in static:
+                        db.session.add(AuditChecklist(
+                            schedule_id=sid, category=cat,
+                            item_ref=ref, question=q, sequence=idx
+                        ))
+                        idx += 1
+                flash('✓ Audit started · Checklist loaded from system default template.', 'success')
+            else:
+                flash('✓ Audit started.', 'success')
+    else:
+        flash('✓ Audit resumed.', 'success')
 
     db.session.commit()
     return redirect(url_for('audit_execution', sid=sid))
@@ -6085,6 +6149,8 @@ with app.app_context():
                 "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS owner VARCHAR(100)",
                 "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS linked_report_id VARCHAR(30)",
                 "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS department_id INTEGER",
+                "ALTER TABLE audit_schedules ADD COLUMN IF NOT EXISTS template_version VARCHAR(200)",
+                "ALTER TABLE audit_schedules ADD COLUMN IF NOT EXISTS template_id INTEGER",
                 # actions
                 "ALTER TABLE actions ADD COLUMN IF NOT EXISTS corrective_description TEXT",
                 "ALTER TABLE actions ADD COLUMN IF NOT EXISTS mitigation_description TEXT",
@@ -6316,6 +6382,10 @@ with app.app_context():
             ],
             'checklist_template_items': [
                 ('iosa_ref',    'VARCHAR(100)'),
+            ],
+            'audit_schedules': [
+                ('template_version',  'VARCHAR(200)'),
+                ('template_id',       'INTEGER'),
             ],
             'audit_checklists': [
                 ('evidence_filename',   'VARCHAR(200)'),
