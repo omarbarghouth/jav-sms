@@ -6057,6 +6057,69 @@ def ra_reassess(ra_id):
 with app.app_context():
     db.create_all()
 
+    # ── Force-run critical columns on every startup (PostgreSQL safe) ──────────
+    # Uses IF NOT EXISTS so safe to run repeatedly. Fixes live DB schema gaps.
+    try:
+        db_url = str(db.engine.url)
+        if 'postgresql' in db_url or 'postgres' in db_url:
+            from sqlalchemy import text as _t
+            _critical = [
+                # hazard_reports
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS report_type VARCHAR(30) DEFAULT 'Hazard Report'",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS classification VARCHAR(50) DEFAULT 'Operational'",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Submitted'",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS generic_hazard VARCHAR(200)",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS consequences TEXT",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS immediate_action TEXT",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS suggested_mitigation TEXT",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS reporter_severity VARCHAR(20)",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS reporter VARCHAR(100) DEFAULT 'Anonymous'",
+                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS hazard_id VARCHAR(30)",
+                # hazards
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS classification VARCHAR(50)",
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS type_of_activity VARCHAR(100)",
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS generic_hazard VARCHAR(200)",
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS specific_components TEXT",
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS consequences TEXT",
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Open'",
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS owner VARCHAR(100)",
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS linked_report_id VARCHAR(30)",
+                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS department_id INTEGER",
+                # actions
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS corrective_description TEXT",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS mitigation_description TEXT",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS safety_notes TEXT",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS safety_review_notes TEXT",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS safety_reviewer VARCHAR(100)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS implementation_date VARCHAR(20)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS evidence_filename VARCHAR(200)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS follow_up_notes TEXT",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS mitigation_status VARCHAR(30) DEFAULT 'Pending'",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS verified_by VARCHAR(100)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS verified_date VARCHAR(20)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS closure_by VARCHAR(100)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS effectiveness VARCHAR(30)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS effectiveness_review TEXT",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS closed_date VARCHAR(20)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_ref_id VARCHAR(30)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS assigned_by VARCHAR(100)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS evidence TEXT",
+                # widen status columns
+                "ALTER TABLE actions ALTER COLUMN status TYPE VARCHAR(50)",
+                "ALTER TABLE hazard_reports ALTER COLUMN status TYPE VARCHAR(50)",
+                "ALTER TABLE hazards ALTER COLUMN status TYPE VARCHAR(50)",
+            ]
+            with db.engine.connect() as _conn:
+                for _sql in _critical:
+                    try:
+                        _conn.execute(_t(_sql))
+                        _conn.commit()
+                    except Exception:
+                        try: _conn.rollback()
+                        except: pass
+    except Exception as _e:
+        print(f'Force migration warning: {_e}')
+
     # ── Safe column migration (PostgreSQL + SQLite compatible) ─────────────────
     # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
     # Safely adds any missing columns to existing live databases on Render.
