@@ -5922,17 +5922,10 @@ def ra_reassess(ra_id):
 with app.app_context():
     db.create_all()
 
-    # ── Safe column migration ─────────────────────────────────────────────────
-    # SQLite does not add new columns automatically when models change.
-    # This block safely adds any missing columns to existing databases on Render.
-    import sqlite3, os
-    db_path = os.path.join(os.path.dirname(__file__), 'sms.db')
-    if os.path.exists(db_path):
-        con = sqlite3.connect(db_path)
-        cur = con.cursor()
-
-        # Map: table_name -> [(column_name, column_definition)]
-        migrations = {
+    # ── Safe column migration (PostgreSQL + SQLite compatible) ─────────────────
+    # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
+    # Safely adds any missing columns to existing live databases on Render.
+    migrations = {
             'departments': [
                 ('color',                  'VARCHAR(20) DEFAULT "#1e40af"'),
             ],
@@ -6204,20 +6197,53 @@ with app.app_context():
             ],
         }
 
-        for table, columns in migrations.items():
-            # Get existing columns
-            try:
-                cur.execute(f'PRAGMA table_info({table})')
-                existing = {row[1] for row in cur.fetchall()}
-                for col_name, col_def in columns:
-                    if col_name not in existing:
-                        cur.execute(f'ALTER TABLE {table} ADD COLUMN {col_name} {col_def}')
-                        print(f'✅ Migration: added {table}.{col_name}')
-            except Exception as e:
-                print(f'Migration warning for {table}: {e}')
 
-        con.commit()
-        con.close()
+    # Detect database type
+    db_url = str(db.engine.url)
+    is_postgres = 'postgresql' in db_url or 'postgres' in db_url
+
+    if is_postgres:
+        # PostgreSQL: use information_schema
+        from sqlalchemy import text as sa_text
+        with db.engine.connect() as conn:
+            for table, columns in migrations.items():
+                for col_name, col_def in columns:
+                    try:
+                        result = conn.execute(sa_text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_name = :tbl AND column_name = :col"
+                        ), {'tbl': table, 'col': col_name})
+                        if result.fetchone() is None:
+                            # Column doesn't exist — add it
+                            pg_def = col_def.replace('DATETIME', 'TIMESTAMP').replace('BOOLEAN DEFAULT 0', 'BOOLEAN DEFAULT FALSE').replace('BOOLEAN DEFAULT 1', 'BOOLEAN DEFAULT TRUE')
+                            conn.execute(sa_text(
+                                f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_name} {pg_def}'
+                            ))
+                            conn.commit()
+                            print(f'✅ Migration: added {table}.{col_name}')
+                    except Exception as e:
+                        # Column may already exist or table doesn't exist yet — safe to skip
+                        try: conn.rollback()
+                        except: pass
+    else:
+        # SQLite fallback
+        import sqlite3
+        db_path = os.path.join(os.path.dirname(__file__), 'sms.db')
+        if os.path.exists(db_path):
+            con = sqlite3.connect(db_path)
+            cur = con.cursor()
+            for table, columns in migrations.items():
+                try:
+                    cur.execute(f'PRAGMA table_info({table})')
+                    existing = {row[1] for row in cur.fetchall()}
+                    for col_name, col_def in columns:
+                        if col_name not in existing:
+                            cur.execute(f'ALTER TABLE {table} ADD COLUMN {col_name} {col_def}')
+                            print(f'✅ Migration: added {table}.{col_name}')
+                except Exception as e:
+                    print(f'Migration warning for {table}: {e}')
+            con.commit()
+            con.close()
 
     seed()
 
