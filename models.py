@@ -194,7 +194,7 @@ class Action(db.Model):
     owner            = db.Column(db.String(100))
     due_date         = db.Column(db.String(20))
     priority         = db.Column(db.String(20), default='Medium')  # High / Medium / Low
-    status           = db.Column(db.String(20), default='Open')
+    status           = db.Column(db.String(50), default='Open')
     # Open / In Progress / Closed / Overdue
     # Effectiveness — only filled when closing
     effectiveness        = db.Column(db.String(30))
