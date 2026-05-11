@@ -538,7 +538,10 @@ class AuditPlan(db.Model):
     planned_week       = db.Column(db.Integer)        # 1-4 (week of month)
     status             = db.Column(db.String(20), default='Planned')
     created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    template_version   = db.Column(db.String(200))   # tracks which template version was loaded
+    template_id        = db.Column(db.Integer, db.ForeignKey('checklist_templates.id'), nullable=True)  # source template
     department         = db.relationship('Department', foreign_keys=[department_id])
+    source_template    = db.relationship('ChecklistTemplate', foreign_keys=[template_id])
     schedules          = db.relationship('AuditSchedule', backref='plan', lazy=True,
                                          cascade='all, delete-orphan')
 
@@ -564,7 +567,10 @@ class AuditSchedule(db.Model):
     closed_by          = db.Column(db.String(100))
     final_remarks      = db.Column(db.Text)
     created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    template_version   = db.Column(db.String(200))   # tracks which template version was loaded
+    template_id        = db.Column(db.Integer, db.ForeignKey('checklist_templates.id'), nullable=True)  # source template
     department         = db.relationship('Department', foreign_keys=[department_id])
+    source_template    = db.relationship('ChecklistTemplate', foreign_keys=[template_id])
     checklist_items    = db.relationship('AuditChecklist', backref='schedule', lazy=True,
                                           cascade='all, delete-orphan')
     findings           = db.relationship('AuditFinding', backref='schedule', lazy=True,
