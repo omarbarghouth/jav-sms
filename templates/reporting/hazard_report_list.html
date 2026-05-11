@@ -139,14 +139,14 @@
           'Confidential':  ('#7c3aed','b-purple','🔒'),
           'Technical Log': ('#d97706','b-yellow','🔧'),
         } %}
-        {% set tc = type_colors.get(r.report_type or 'Hazard Report', ('#374151','b-gray','📄')) %}
+        {% set tc = type_colors.get((r.report_type or 'Hazard Report'), ('#374151','b-gray','📄')) %}
         <tr>
           <td>
             <a href="/hazard-reports/{{ r.id }}" class="ctrl-num" style="font-size:10px">{{ r.id }}</a>
           </td>
           <td>
             <span class="badge {{ tc[1] }}" style="font-size:10px;gap:4px">
-              {{ tc[2] }} {{ r.report_type or 'Hazard Report' }}
+              {{ tc[2] }} {{ (r.report_type or 'Hazard Report') }}
             </span>
           </td>
           <td style="font-size:12px">
