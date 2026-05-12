@@ -2444,7 +2444,7 @@ def sp_survey_new():
             status='Draft', target_count=int(f.get('target_count',0)))
         db.session.add(s); db.session.commit()
         flash('✓ Survey created.', 'success')
-        return redirect(url_for('sp_surveys'))
+        return redirect('/safety-promotion/surveys')
     return render_template('spi/sp_survey_form.html',
                            now=datetime.utcnow())
 
@@ -2453,21 +2453,21 @@ def sp_survey_activate(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.status = 'Active'; db.session.commit()
     flash('✓ Survey activated.', 'success')
-    return redirect(url_for('sp_surveys'))
+    return redirect('/safety-promotion/surveys')
 
 @app.route('/safety-promotion/survey/<int:sid>/close', methods=['POST'])
 def sp_survey_close(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.status = 'Closed'; db.session.commit()
     flash('✓ Survey closed.', 'success')
-    return redirect(url_for('sp_surveys'))
+    return redirect('/safety-promotion/surveys')
 
 @app.route('/safety-promotion/survey/<int:sid>/respond', methods=['POST'])
 def sp_survey_respond(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.response_count = (s.response_count or 0) + 1; db.session.commit()
     flash('✓ Response recorded.', 'success')
-    return redirect(url_for('sp_surveys'))
+    return redirect('/safety-promotion/surveys')
 
 @app.route('/safety-promotion/campaigns')
 @require_login
@@ -2657,89 +2657,33 @@ def newsletter_send_email(nid):
     flash('Emailed to '+str(sent)+' recipient(s).', 'success')
     return redirect('/safety-promotion/newsletter/'+str(nid))
 
-@app.route('/safety-promotion/survey/<int:sid>/send-email', methods=['POST'])
-@require_login
-def survey_send_email(sid):
-    s = SafetySurvey.query.get_or_404(sid)
-    dept_ids = [int(d) for d in request.form.getlist('dept_ids') if d.isdigit()] or None
-    to = get_recipients(dept_ids)
-    if not to:
-        flash('No recipients.', 'warning')
-        return redirect('/safety-promotion/survey/'+str(sid))
-    url = request.host_url.rstrip('/')+'/safety-promotion/survey/'+str(sid)+'/respond-public'
-    subj = '[Safety Survey] '+s.title
-    body = ('<p>'+(s.description or '')+'</p>'
-            +'<p>Closes: <strong>'+(s.end_date or 'Open')+'</strong></p>'
-            +'<div style="text-align:center;margin:20px 0">'
-            +'<a href="'+url+'" style="background:#0f1c3f;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">Complete Survey</a></div>')
-    sent, err = send_email(to, subj, email_html(s.title,'Safety Survey',body))
-    s.target_count = max(s.target_count or 0, sent)
-    db.session.add(EmailLog(subject=subj,content_type='Survey',content_ref=str(sid),
-        sent_by=session.get('admin_name','System'),recipient_count=sent,
-        dept_filter='All',status='Sent' if not err else 'Failed',error_message=err))
-    db.session.commit()
-    flash('Survey link emailed to '+str(sent)+' recipient(s).', 'success')
-    return redirect('/safety-promotion/survey/'+str(sid))
-
-@app.route('/safety-promotion/survey/<int:sid>/respond-public', methods=['GET','POST'])
-def survey_respond_public(sid):
-    s = SafetySurvey.query.get_or_404(sid)
-    if s.status != 'Active':
-        return render_template('spi/sp_survey_closed.html', survey=s)
-    try: questions = _json_mod.loads(s.questions or '[]')
-    except: questions = []
-    if request.method == 'POST':
-        f = request.form
-        is_anon = f.get('anonymous') == 'yes'
-        answers = {str(i): f.get('q_'+str(i),'') for i in range(len(questions))}
-        db.session.add(SurveyResponse(
-            survey_id=sid,
-            respondent_name='' if is_anon else f.get('name','').strip(),
-            respondent_email='' if is_anon else f.get('email','').strip(),
-            department_id=int(f['department_id']) if f.get('department_id') else None,
-            is_anonymous=is_anon, answers=_json_mod.dumps(answers),
-            ip_address=request.remote_addr))
-        s.response_count = SurveyResponse.query.filter_by(survey_id=sid).count() + 1
-        db.session.commit()
-        return render_template('spi/sp_survey_thanks.html', survey=s)
-    return render_template('spi/sp_survey_public.html', survey=s, questions=questions)
-
-@app.route('/safety-promotion/survey/<int:sid>/responses')
-@require_login
-def survey_responses(sid):
-    s = SafetySurvey.query.get_or_404(sid)
-    responses = SurveyResponse.query.filter_by(survey_id=sid).order_by(SurveyResponse.submitted_at.desc()).all()
-    try: questions = _json_mod.loads(s.questions or '[]')
-    except: questions = []
-    dept_counts = {}
-    for r in responses:
-        k = r.department.name if r.department else 'Unknown'
-        dept_counts[k] = dept_counts.get(k, 0) + 1
-    rate = round((len(responses)/s.target_count)*100) if s.target_count else 0
-    return render_template('spi/sp_survey_responses.html',
-                           survey=s, responses=responses, questions=questions,
-                           dept_counts=dept_counts, response_rate=rate)
-
 @app.route('/safety-promotion/lesson/<int:lid>/send-email', methods=['POST'])
 @require_login
 def lesson_send_email(lid):
     ll = LessonLearned.query.get_or_404(lid)
-    to = get_recipients(None)
-    if not to:
-        flash('No recipients.', 'warning')
-        return redirect('/safety-promotion/lesson/'+str(lid))
-    subj = '[Lesson Learned] '+ll.title
-    body = ('<div style="background:#f8f9fc;border-left:4px solid #c9a84c;padding:12px;margin-bottom:12px">'
-            +'<strong>Event:</strong> '+(ll.event_description or '—')+'</div>'
-            +('<p><strong>Lesson:</strong><br>'+(ll.lesson or '').replace('\n','<br>')+'</p>' if ll.lesson else ''))
-    sent, err = send_email(to, subj, email_html(ll.title,'Lesson Learned',body))
-    db.session.add(EmailLog(subject=subj,content_type='Lesson',content_ref=str(lid),
-        sent_by=session.get('admin_name','System'),recipient_count=sent,
-        dept_filter='All',status='Sent' if not err else 'Failed',error_message=err))
-    db.session.commit()
-    flash('Emailed to '+str(sent)+' recipient(s).', 'success')
-    return redirect('/safety-promotion/lesson/'+str(lid))
-
+    recip = _get_dist_list()
+    if not recip:
+        flash('No recipients in distribution list.', 'warning')
+        return redirect(f'/safety-promotion/lesson/{lid}')
+    emails = [r.email for r in recip]
+    body = (
+        '<p><b>Category:</b> ' + (ll.category or '') +
+        ' &nbsp;&middot;&nbsp; <b>Date:</b> ' + (ll.date or '') +
+        '<br/><b>Author:</b> ' + (ll.author or 'Safety') + '</p>'
+        '<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0"/>'
+        '<p>' + (ll.description or '').replace('\n','<br/>') + '</p>'
+        + ('<p><b>Lesson:</b><br/>' + (ll.lesson or '').replace('\n','<br/>') + '</p>'
+           if ll.lesson else '')
+        + ('<p><b>Recommendations:</b><br/>' + (ll.recommendations or '').replace('\n','<br/>') + '</p>'
+           if ll.recommendations else '')
+    )
+    subject = '[Lessons Learned] ' + ll.title
+    html = _email_html(ll.title, 'Lessons Learned', body, '#15803d')
+    sent, err = _do_send(emails, subject, html)
+    _write_log('Lesson', lid, subject, sent, 'All',
+               'Sent' if not err else 'Failed', err)
+    flash(f'Lesson shared with {sent} recipients.', 'success')
+    return redirect(f'/safety-promotion/lesson/{lid}')
 @app.route('/safety-promotion/bulletin/<bid>/print')
 def sp_bulletin_print(bid):
     b = SafetyBulletin.query.get_or_404(bid)
@@ -3100,7 +3044,7 @@ def delete_survey(sid):
     db.session.delete(s)
     db.session.commit()
     flash('✓ Survey deleted.', 'success')
-    return redirect(url_for('sp_surveys'))
+    return redirect('/safety-promotion/surveys')
 
 
 @app.route('/delete/campaign/<int:cid>', methods=['POST'])
@@ -3384,8 +3328,8 @@ def sp_send_survey_email(sid):
     dept_id = request.form.get('dept_id') or None
     recip   = _get_dist_list(dept_id)
     if not recip:
-        flash('No active recipients in distribution list.', 'warning')
-        return redirect(url_for('sp_survey', sid=sid))
+        flash('⚠ No active recipients found. Please add employees to the Distribution List first at /safety-promotion/distribution', 'warning')
+        return redirect(url_for('sp_survey_detail', sid=sid))
     emails     = [r.email for r in recip]
     dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
     pub_url    = request.host_url.rstrip('/') + '/safety-promotion/survey/' + str(sid) + '/respond-public'
@@ -3404,7 +3348,7 @@ def sp_send_survey_email(sid):
     _write_log('Survey', sid, subject, sent, dept_label,
                'Sent' if not err else 'Failed', err)
     flash(f'Survey invitation sent to {sent} recipients.', 'success')
-    return redirect(url_for('sp_survey', sid=sid))
+    return redirect(url_for('sp_survey_detail', sid=sid))
 
 
 # ── Send Campaign ─────────────────────────────────────────────────────────────
@@ -3475,7 +3419,13 @@ def sp_survey_respond_public(sid):
     import json as _j
     questions = []
     try:
-        questions = _j.loads(s.questions or '[]')
+        raw = _j.loads(s.questions or '[]')
+        # Normalize: strings → dicts so template can call q.get('text')
+        for q in raw:
+            if isinstance(q, str):
+                questions.append({'text': q, 'type': 'text'})
+            elif isinstance(q, dict):
+                questions.append(q)
     except Exception:
         pass
 
@@ -3513,9 +3463,14 @@ def sp_survey_responses(sid):
 
     import json as _j
     from collections import Counter
-    questions   = []
+    questions = []
     try:
-        questions = _j.loads(s.questions or '[]')
+        raw = _j.loads(s.questions or '[]')
+        for q in raw:
+            if isinstance(q, str):
+                questions.append({'text': q, 'type': 'text'})
+            elif isinstance(q, dict):
+                questions.append(q)
     except Exception:
         pass
     dept_counts = Counter(r.department_id for r in responses if r.department_id)
