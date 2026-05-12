@@ -717,6 +717,45 @@ class AuditAction(db.Model):
 #  ICAO Annex 19 / Doc 9859 — Added as extension, existing tables unchanged
 # ═══════════════════════════════════════════════════════════════════════════════
 
+class DistributionList(db.Model):
+    __tablename__ = 'distribution_lists'
+    id            = db.Column(db.Integer, primary_key=True)
+    name          = db.Column(db.String(100))
+    email         = db.Column(db.String(200), nullable=False)
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    position      = db.Column(db.String(100))
+    is_active     = db.Column(db.Boolean, default=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    department    = db.relationship('Department', foreign_keys=[department_id])
+
+class EmailLog(db.Model):
+    __tablename__ = 'email_logs'
+    id              = db.Column(db.Integer, primary_key=True)
+    subject         = db.Column(db.String(300))
+    content_type    = db.Column(db.String(30))
+    content_ref     = db.Column(db.String(50))
+    sent_by         = db.Column(db.String(100))
+    sent_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    recipient_count = db.Column(db.Integer, default=0)
+    dept_filter     = db.Column(db.String(200))
+    status          = db.Column(db.String(20), default='Sent')
+    error_message   = db.Column(db.Text)
+
+class SurveyResponse(db.Model):
+    __tablename__ = 'survey_responses'
+    id               = db.Column(db.Integer, primary_key=True)
+    survey_id        = db.Column(db.Integer, db.ForeignKey('safety_surveys.id'))
+    respondent_name  = db.Column(db.String(100))
+    respondent_email = db.Column(db.String(200))
+    department_id    = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    is_anonymous     = db.Column(db.Boolean, default=False)
+    answers          = db.Column(db.Text)
+    submitted_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    ip_address       = db.Column(db.String(50))
+    survey           = db.relationship('SafetySurvey', foreign_keys=[survey_id],
+                                       backref=db.backref('responses', lazy=True))
+    department       = db.relationship('Department', foreign_keys=[department_id])
+
 class SafetyPolicy(db.Model):
     """Safety Policy Statement — versioned, signed by Accountable Manager."""
     __tablename__ = 'safety_policies'
