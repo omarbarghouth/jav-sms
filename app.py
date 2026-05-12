@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from openpyxl import Workbook
@@ -93,12 +93,6 @@ if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,       # test connection before using it
-    'pool_recycle': 280,         # recycle connections every 280s (< Render's 300s timeout)
-    'pool_timeout': 20,          # wait max 20s for a connection
-    'connect_args': {'connect_timeout': 10},  # TCP connect timeout 10s
-}
 app.secret_key = os.environ.get('SECRET_KEY', 'jav-sms-dev-only-change-in-prod')
 # IMPORTANT: Set a strong SECRET_KEY env var in production (Render dashboard)
 
@@ -181,18 +175,6 @@ def check_pw(pw, hashed):
 def is_logged_in():
     return session.get('admin_logged_in') is True
 
-def log_action_history(action_id, changed_by, from_status, to_status, notes='', field='status'):
-    """Write an audit trail entry for any action change."""
-    try:
-        db.session.add(ActionHistory(
-            action_id=action_id, changed_by=changed_by,
-            from_status=from_status, to_status=to_status,
-            notes=notes, field_changed=field
-        ))
-    except Exception:
-        pass  # Never crash the main operation due to history logging
-
-
 def require_login(f):
     """Decorator — redirects to login if not authenticated."""
     @functools.wraps(f)
@@ -247,147 +229,6 @@ def index():
     if is_logged_in():
         return redirect(url_for('dashboard'))
     return redirect(url_for('public_portal'))
-
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  SAG MEMBER PORTAL — separate login, separate access, outside main webapp
-#  URL: /sag-login   /sag/dashboard   /sag/action/<id>
-#  SAG members ONLY see their own assigned actions — nothing else.
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def is_sag_logged_in():
-    return session.get('sag_logged_in') is True
-
-def require_sag(f):
-    """Decorator — only SAG members can access these routes."""
-    import functools
-    @functools.wraps(f)
-    def decorated(*args, **kwargs):
-        if not is_sag_logged_in():
-            return redirect(url_for('sag_login', next=request.path))
-        return f(*args, **kwargs)
-    return decorated
-
-
-@app.route('/sag-login', methods=['GET', 'POST'])
-def sag_login():
-    """SAG Member login — separate from Safety Admin login."""
-    if is_sag_logged_in():
-        return redirect(url_for('sag_dashboard'))
-    error = None
-    if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '')
-        user = User.query.filter_by(username=username, is_active=True).first()
-        if user and check_pw(password, user.password_hash):
-            session['sag_logged_in']  = True
-            session['sag_user']       = user.username
-            session['sag_name']       = user.full_name or user.username
-            session['sag_role']       = user.sag_role or user.role
-            session['sag_dept_id']    = user.department_id
-            session.permanent         = True
-            user.last_login           = datetime.utcnow()
-            db.session.commit()
-            return redirect(url_for('sag_dashboard'))
-        else:
-            error = 'Invalid username or password.'
-    return render_template('portal/sag_login.html', error=error)
-
-
-@app.route('/sag-logout')
-def sag_logout():
-    session.pop('sag_logged_in', None)
-    session.pop('sag_user', None)
-    session.pop('sag_name', None)
-    session.pop('sag_role', None)
-    session.pop('sag_dept_id', None)
-    return redirect(url_for('sag_login'))
-
-
-@app.route('/sag/dashboard')
-@require_sag
-def sag_dashboard():
-    """SAG Member dashboard — shows ONLY actions assigned to this SAG member."""
-    check_overdue_actions()
-    username = session.get('sag_user', '')
-
-    my_actions = Action.query.filter_by(sag_member=username)                     .order_by(Action.due_date).all()
-
-    open_c     = sum(1 for a in my_actions if a.status == 'Open')
-    prog_c     = sum(1 for a in my_actions if a.status == 'In Progress')
-    overdue_c  = sum(1 for a in my_actions if a.status == 'Overdue')
-    review_c   = sum(1 for a in my_actions
-                     if a.status in ('Mitigation Implemented', 'Under Safety Review'))
-    returned_c = sum(1 for a in my_actions if a.status == 'Returned')
-    closed_c   = sum(1 for a in my_actions if a.status == 'Closed')
-
-    # Split into active vs closed
-    active_actions = [a for a in my_actions if a.status != 'Closed']
-    closed_actions = [a for a in my_actions if a.status == 'Closed'][-10:]
-
-    return render_template('portal/sag_dashboard.html',
-                           active_actions=active_actions,
-                           closed_actions=closed_actions,
-                           open_c=open_c, prog_c=prog_c,
-                           overdue_c=overdue_c, review_c=review_c,
-                           returned_c=returned_c, closed_c=closed_c)
-
-
-@app.route('/sag/action/<aid>', methods=['GET', 'POST'])
-@require_sag
-def sag_action_detail(aid):
-    """SAG member updates their assigned action — submit evidence, mitigation, for review."""
-    a = Action.query.get_or_404(aid)
-
-    # Security: SAG member can only access their own actions
-    if a.sag_member != session.get('sag_user', ''):
-        flash('⚠ This action is not assigned to you.', 'error')
-        return redirect(url_for('sag_dashboard'))
-
-    if request.method == 'POST':
-        f          = request.form
-        action_btn = f.get('action_btn', '')
-        old_status = a.status
-
-        if action_btn == 'save_progress':
-            a.corrective_description = f.get('corrective_description', a.corrective_description)
-            a.mitigation_description = f.get('mitigation_description', a.mitigation_description)
-            a.safety_notes           = f.get('safety_notes', a.safety_notes)
-            a.root_cause             = f.get('root_cause', a.root_cause)
-            a.follow_up_notes        = f.get('follow_up_notes', a.follow_up_notes)
-            a.implementation_date    = f.get('implementation_date', a.implementation_date)
-            a.mitigation_status      = f.get('mitigation_status', a.mitigation_status)
-            a.evidence               = f.get('evidence', a.evidence)
-            if a.status == 'Open':
-                a.status = 'In Progress'
-            log_action_history(aid, session['sag_user'], old_status, a.status,
-                               'Progress saved by SAG member', 'progress')
-            db.session.commit()
-            flash('✓ Progress saved.', 'success')
-
-        elif action_btn == 'submit_review':
-            a.corrective_description = f.get('corrective_description', a.corrective_description)
-            a.mitigation_description = f.get('mitigation_description', a.mitigation_description)
-            a.safety_notes           = f.get('safety_notes', a.safety_notes)
-            a.root_cause             = f.get('root_cause', a.root_cause)
-            a.implementation_date    = f.get('implementation_date', a.implementation_date)
-            a.mitigation_status      = 'Completed'
-            a.evidence               = f.get('evidence', a.evidence)
-            a.status                 = 'Mitigation Implemented'
-            log_action_history(aid, session['sag_user'], old_status,
-                               'Mitigation Implemented',
-                               'Submitted for Safety Review by SAG member', 'status')
-            db.session.commit()
-            flash('✓ Action submitted for Safety Review.', 'success')
-
-        return redirect(url_for('sag_action_detail', aid=aid))
-
-    # GET — load action detail
-    import json as _j
-    history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).limit(10).all()
-
-    return render_template('portal/sag_action_detail.html', a=a, history=history)
 
 
 @app.route('/portal')
@@ -1084,7 +925,6 @@ def update_action(aid):
     """
     a   = Action.query.get_or_404(aid)
     f   = request.form
-    old_status    = a.status   # capture before any changes for history logging
     new_status    = f.get('status', a.status)
     # Map friendly status to canonical
     # Store the actual workflow status (not mapped) — allows richer lifecycle
@@ -1155,43 +995,15 @@ def update_action(aid):
         a.effectiveness_review = f.get('effectiveness_review', '')
         a.closed_date          = date.today().isoformat()
 
-    # Update root cause if provided
-    if f.get('root_cause'):
-        a.root_cause = f.get('root_cause')
-
-    # SAG member assignment
-    if f.get('sag_member'):
-        a.sag_member = f.get('sag_member')
-
-    # Department assignment
-    if f.get('department_id'):
-        try:
-            a.department_id = int(f.get('department_id'))
-        except (ValueError, TypeError):
-            pass
-
-    # Rejection / return workflow
-    if new_status == 'Returned':
-        a.rejection_notes = f.get('rejection_notes', '')
-        a.reopen_count    = (a.reopen_count or 0) + 1
-
     try:
-        db.session.flush()
-        log_action_history(
-            a.id,
-            changed_by=session.get('admin_name', 'System'),
-            from_status=old_status,
-            to_status=new_status,
-            notes=f.get('safety_review_notes') or f.get('effectiveness_review') or '',
-            field='status'
-        )
         db.session.commit()
         flash('✓ Action updated.', 'success')
     except Exception as e:
         db.session.rollback()
+        # Most likely cause: column doesn't exist in live DB yet
         err_str = str(e)
         if 'column' in err_str.lower() and 'does not exist' in err_str.lower():
-            flash('⚠ Database schema update required — run force migration.', 'error')
+            flash('⚠ Database schema update required. Please contact the system administrator to run migrations.', 'error')
         else:
             flash(f'⚠ Could not save: {err_str[:120]}', 'error')
     return redirect(return_url)
@@ -3768,176 +3580,6 @@ def sp_survey_response_detail(sid, rid):
                            survey=s, resp=resp, qa_pairs=qa_pairs)
 
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  SAFETY GOVERNANCE — SAG PORTAL & MANAGEMENT DASHBOARD
-# ═══════════════════════════════════════════════════════════════════════════════
-
-@app.route('/sag/portal')
-@require_login
-def sag_portal():
-    """SAG Member personal dashboard — shows only actions assigned to the logged-in user."""
-    check_overdue_actions()
-    username = session.get('admin_user', '')
-    role     = session.get('admin_role', '')
-
-    # Admins and safety managers see governance view; others see their own
-    if role in ('admin', 'safety_manager'):
-        my_actions = Action.query.filter(
-            Action.status.notin_(['Closed'])
-        ).order_by(Action.due_date).all()
-        is_admin_view = True
-    else:
-        my_actions = Action.query.filter(
-            Action.sag_member == username,
-            Action.status.notin_(['Closed'])
-        ).order_by(Action.due_date).all()
-        is_admin_view = False
-
-    open_c     = sum(1 for a in my_actions if a.status == 'Open')
-    prog_c     = sum(1 for a in my_actions if a.status == 'In Progress')
-    overdue_c  = sum(1 for a in my_actions if a.status == 'Overdue')
-    review_c   = sum(1 for a in my_actions if a.status in ('Mitigation Implemented','Under Safety Review'))
-    returned_c = sum(1 for a in my_actions if a.status == 'Returned')
-
-    # Department performance (admin view)
-    dept_stats = []
-    if is_admin_view:
-        for dept in Department.query.all():
-            d_all     = Action.query.filter_by(department_id=dept.id).count()
-            d_open    = Action.query.filter_by(department_id=dept.id).filter(
-                            Action.status.notin_(['Closed'])).count()
-            d_overdue = Action.query.filter_by(department_id=dept.id, status='Overdue').count()
-            d_closed  = Action.query.filter_by(department_id=dept.id, status='Closed').count()
-            if d_all > 0:
-                closure_rate = round(d_closed / d_all * 100) if d_all else 0
-                dept_stats.append({
-                    'dept': dept, 'total': d_all, 'open': d_open,
-                    'overdue': d_overdue, 'closed': d_closed,
-                    'closure_rate': closure_rate,
-                })
-
-    # SAG members list (for assignment)
-    sag_members = User.query.filter_by(is_active=True).all()
-
-    return render_template('action/sag_portal.html',
-                           my_actions=my_actions,
-                           open_c=open_c, prog_c=prog_c,
-                           overdue_c=overdue_c, review_c=review_c,
-                           returned_c=returned_c,
-                           is_admin_view=is_admin_view,
-                           dept_stats=dept_stats,
-                           sag_members=sag_members)
-
-
-@app.route('/sag/assign/<aid>', methods=['POST'])
-@require_login
-def sag_assign(aid):
-    """Assign a SAG member and department to an action."""
-    a = Action.query.get_or_404(aid)
-    f = request.form
-    old_owner = a.sag_member
-    a.sag_member  = f.get('sag_member', '')
-    a.department_id = int(f['department_id']) if f.get('department_id') else a.department_id
-    a.priority    = f.get('priority', a.priority)
-    a.due_date    = f.get('due_date', a.due_date)
-    a.root_cause  = f.get('root_cause', a.root_cause)
-    if a.status == 'Open':
-        a.status  = 'Assigned'
-    log_action_history(
-        aid, session.get('admin_name',''),
-        old_owner or 'Unassigned', a.sag_member,
-        f'Assigned to {a.sag_member}', 'assignment'
-    )
-    db.session.commit()
-    flash(f'✓ Action {aid} assigned to {a.sag_member}.', 'success')
-    return redirect(request.form.get('return_url', url_for('sag_portal')))
-
-
-@app.route('/sag/governance')
-@require_login
-def sag_governance():
-    """Safety Governance Dashboard — full cross-module action governance view."""
-    check_overdue_actions()
-    if session.get('admin_role') not in ('admin','safety_manager','safety_officer'):
-        flash('⚠ Governance dashboard requires Safety role.', 'error')
-        return redirect(url_for('dashboard'))
-
-    # Core KPIs
-    total_open     = Action.query.filter(Action.status.notin_(['Closed'])).count()
-    overdue        = Action.query.filter_by(status='Overdue').count()
-    pending_review = Action.query.filter(
-        Action.status.in_(['Mitigation Implemented','Under Safety Review'])).count()
-    returned       = Action.query.filter_by(status='Returned').count()
-    closed_30d     = Action.query.filter(
-        Action.status=='Closed',
-        Action.closed_date >= (date.today().replace(day=1)).isoformat()
-    ).count()
-
-    # High risk open actions
-    high_risk = Action.query.filter(
-        Action.priority=='High', Action.status.notin_(['Closed'])
-    ).order_by(Action.due_date).limit(10).all()
-
-    # Pending safety reviews
-    for_review = Action.query.filter(
-        Action.status.in_(['Mitigation Implemented','Under Safety Review'])
-    ).order_by(Action.due_date).limit(15).all()
-
-    # Overdue list
-    overdue_list = Action.query.filter_by(status='Overdue').order_by(Action.due_date).limit(15).all()
-
-    # Returned / rejected
-    returned_list = Action.query.filter_by(status='Returned').order_by(Action.due_date).limit(10).all()
-
-    # Source breakdown
-    from sqlalchemy import func as sqf
-    src_data = db.session.query(Action.source, sqf.count(Action.id)).filter(
-        Action.status.notin_(['Closed'])
-    ).group_by(Action.source).order_by(sqf.count(Action.id).desc()).all()
-
-    # Department performance
-    dept_perf = []
-    for dept in Department.query.all():
-        d_total   = Action.query.filter_by(department_id=dept.id).count()
-        d_open    = Action.query.filter_by(department_id=dept.id).filter(
-                        Action.status.notin_(['Closed'])).count()
-        d_overdue = Action.query.filter_by(department_id=dept.id, status='Overdue').count()
-        d_closed  = Action.query.filter_by(department_id=dept.id, status='Closed').count()
-        if d_total > 0:
-            dept_perf.append({
-                'dept': dept, 'total': d_total, 'open': d_open,
-                'overdue': d_overdue, 'closed': d_closed,
-                'rate': round(d_closed/d_total*100) if d_total else 0,
-            })
-    dept_perf.sort(key=lambda x: x['overdue'], reverse=True)
-
-    # Unassigned actions
-    unassigned = Action.query.filter(
-        (Action.sag_member == None) | (Action.sag_member == ''),
-        Action.status.notin_(['Closed'])
-    ).order_by(Action.due_date).limit(10).all()
-
-    sag_members = User.query.filter_by(is_active=True).all()
-
-    return render_template('action/sag_governance.html',
-                           total_open=total_open, overdue=overdue,
-                           pending_review=pending_review, returned=returned,
-                           closed_30d=closed_30d,
-                           high_risk=high_risk, for_review=for_review,
-                           overdue_list=overdue_list, returned_list=returned_list,
-                           src_data=src_data, dept_perf=dept_perf,
-                           unassigned=unassigned, sag_members=sag_members)
-
-
-@app.route('/actions/<aid>/history')
-@require_login
-def action_history(aid):
-    a       = Action.query.get_or_404(aid)
-    history = ActionHistory.query.filter_by(action_id=aid)                .order_by(ActionHistory.changed_at.desc()).all()
-    return render_template('action/action_history.html', a=a, history=history)
-
-
 @app.route('/risk-matrix')
 @require_login
 def risk_matrix():
@@ -4030,11 +3672,7 @@ def get_checklist_template(dept_code):
 @require_login
 def checklist_templates():
     """List all department checklist templates."""
-    templates = (ChecklistTemplate.query
-                    .filter_by(is_active=True)
-                    .order_by(ChecklistTemplate.department_id,
-                              ChecklistTemplate.version.desc())
-                    .all())
+    templates = ChecklistTemplate.query.filter_by(is_active=True).all()
     return render_template('audit/checklist_templates.html',
                            templates=templates)
 
@@ -4053,13 +3691,12 @@ def checklist_template_dept(dept_id):
         action = request.form.get('action', 'save')
 
         if action == 'save':
-            # Deactivate all old templates for this dept+type
+            # Deactivate old templates for this dept+type
             ChecklistTemplate.query.filter_by(
                 department_id=dept_id, audit_type=audit_type
             ).update({'is_active': False})
-            db.session.flush()  # ensure deactivation commits before reading version
 
-            # Get next version number
+            # Get version number
             last = ChecklistTemplate.query.filter_by(
                 department_id=dept_id, audit_type=audit_type
             ).order_by(ChecklistTemplate.version.desc()).first()
@@ -4466,43 +4103,16 @@ def new_audit_schedule():
             status='Planned'
         )
         db.session.add(s)
-        db.session.flush()  # get sid into session before adding checklist items
-
-        # ── Always use latest active DB template (highest version) ────────────
-        db_tmpl = ChecklistTemplate.query.filter_by(
-            department_id=int(f['department_id']),
-            audit_type=f['audit_type'],
-            is_active=True
-        ).order_by(ChecklistTemplate.version.desc(),
-                   ChecklistTemplate.updated_at.desc()).first()
-
-        items_loaded = 0
-        tmpl_label   = 'system default'
-
-        if db_tmpl and db_tmpl.items:
-            for ti in sorted(db_tmpl.items, key=lambda x: x.sequence):
-                db.session.add(AuditChecklist(
-                    schedule_id=sid, category=ti.category,
-                    item_ref=ti.item_ref, question=ti.question,
-                    sequence=ti.sequence,
-                ))
-            items_loaded = len(db_tmpl.items)
-            tmpl_label   = f'{db_tmpl.name} (v{db_tmpl.version})'
-        else:
-            # No saved template yet — fall back to static default
-            static = get_checklist_template(dept.code if dept else 'default')
-            idx = 0
-            for cat, ref, question in static:
-                db.session.add(AuditChecklist(
-                    schedule_id=sid, category=cat,
-                    item_ref=ref, question=question, sequence=idx
-                ))
-                idx += 1
-            items_loaded = idx
-
+        # Auto-populate checklist
+        template = get_checklist_template(dept.code if dept else 'default')
+        for idx, (cat, ref, question) in enumerate(template):
+            item = AuditChecklist(
+                schedule_id=sid, category=cat,
+                item_ref=ref, question=question, sequence=idx
+            )
+            db.session.add(item)
         db.session.commit()
-        flash(f'✓ Audit {sid} created — {items_loaded} checklist items loaded'
-              f' from {tmpl_label}.', 'success')
+        flash(f'✓ Audit {sid} created. Checklist auto-populated.', 'success')
         return redirect(url_for('audit_schedule'))
     return render_template('audit/audit_schedule_form.html')
 
@@ -4571,50 +4181,40 @@ def start_audit(sid):
     s.actual_date  = date.today().isoformat()
     s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
 
-    # ── Checklist sync on Start Audit ────────────────────────────────────────
-    # Only sync if audit is being started fresh (Planned → In Progress).
-    # This ensures the checklist snapshot is always from the latest active template.
-    # Already In Progress audits keep their historical snapshot unchanged.
-    if s.department_id:
-        # Query latest active template — order by version DESC then updated_at DESC
-        latest = ChecklistTemplate.query.filter_by(
+    # Auto-load checklist from latest saved department template
+    if s.department_id and not s.checklist_items:
+        from models import AuditChecklist
+        tmpl = ChecklistTemplate.query.filter_by(
             department_id=s.department_id,
             audit_type=s.audit_type or 'Internal',
             is_active=True
-        ).order_by(
-            ChecklistTemplate.version.desc(),
-            ChecklistTemplate.updated_at.desc()
         ).first()
-
-        if latest and latest.items:
-            # Replace entire checklist with latest template snapshot
-            AuditChecklist.query.filter_by(schedule_id=sid).delete()
-            db.session.flush()
-            for ti in sorted(latest.items, key=lambda x: x.sequence):
+        if tmpl and tmpl.items:
+            for ti in tmpl.items:
                 db.session.add(AuditChecklist(
-                    schedule_id=sid, category=ti.category,
-                    item_ref=ti.item_ref, question=ti.question,
+                    schedule_id=sid,
+                    category=ti.category,
+                    item_ref=ti.item_ref,
+                    question=ti.question,
                     sequence=ti.sequence,
                 ))
             db.session.flush()
-            flash(f'✓ Audit started — checklist loaded from '
-                  f'{latest.name} (v{latest.version}), '
-                  f'{len(latest.items)} items.', 'success')
-        elif not s.checklist_items:
-            # No DB template and no existing items — load static default
-            dept = Department.query.get(s.department_id)
-            static = get_checklist_template(dept.code if dept else 'default')
-            idx = 0
-            for cat, ref, q in static:
-                db.session.add(AuditChecklist(
-                    schedule_id=sid, category=cat,
-                    item_ref=ref, question=q, sequence=idx
-                ))
-                idx += 1
-            db.session.flush()
-            flash('✓ Audit started — checklist loaded from system default.', 'success')
+            flash(f'✓ Audit started. Loaded {len(tmpl.items)} items from {tmpl.name}.', 'success')
         else:
-            flash('✓ Audit started.', 'success')
+            # Fall back to static template (existing get_checklist_template logic)
+            from models import AuditChecklist as ACL
+            dept = Department.query.get(s.department_id)
+            static_tmpl = get_checklist_template(dept.code if dept else 'default')
+            for cat, items in static_tmpl.items():
+                for seq, (ref, q) in enumerate(items):
+                    db.session.add(ACL(
+                        schedule_id=sid,
+                        category=cat,
+                        item_ref=ref,
+                        question=q,
+                        sequence=seq,
+                    ))
+            flash('✓ Audit started. Checklist loaded from default template.', 'success')
 
     db.session.commit()
     return redirect(url_for('audit_execution', sid=sid))
@@ -7038,10 +6638,7 @@ def ra_reassess(ra_id):
     return redirect(url_for('ra_wizard_step', hid=haz_id, step=4))
 
 with app.app_context():
-    try:
-        db.create_all()
-    except Exception as _e:
-        print(f'Warning: db.create_all() error (non-fatal): {_e}')
+    db.create_all()
 
     # ── Safe column migration (PostgreSQL + SQLite compatible) ─────────────────
     # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
@@ -7327,63 +6924,42 @@ with app.app_context():
     is_postgres = 'postgresql' in db_url or 'postgres' in db_url
 
     if is_postgres:
-        # PostgreSQL: FAST batch migration — one query per table, not per column
+        # PostgreSQL: use information_schema
         from sqlalchemy import text as sa_text
         with db.engine.connect() as conn:
-            # Set statement timeout so nothing hangs startup
-            try:
-                conn.execute(sa_text("SET statement_timeout = '8s'"))
-            except Exception:
-                pass
-
-            # Widen status columns (safe, IF NOT EXISTS equivalent via try/except)
-            for tbl, col, typ in [
-                ('actions',       'status', 'VARCHAR(50)'),
-                ('hazard_reports','status', 'VARCHAR(50)'),
-                ('hazards',       'status', 'VARCHAR(50)'),
-                ('audit_findings','status', 'VARCHAR(50)'),
+            # Widen status columns that were too narrow for longer values
+            for tbl_col in [
+                ('actions',        'status',           'VARCHAR(50)'),
+                ('hazard_reports',  'status',           'VARCHAR(50)'),
+                ('hazards',         'status',           'VARCHAR(50)'),
+                ('audit_findings',  'status',           'VARCHAR(50)'),
             ]:
                 try:
-                    conn.execute(sa_text(f'ALTER TABLE {tbl} ALTER COLUMN {col} TYPE {typ}'))
+                    conn.execute(sa_text(
+                        f'ALTER TABLE {tbl_col[0]} ALTER COLUMN {tbl_col[1]} TYPE {tbl_col[2]}'
+                    ))
                     conn.commit()
                 except Exception:
                     try: conn.rollback()
                     except: pass
 
-            # Batch: get ALL existing columns for ALL tables in ONE query
-            try:
-                tbl_names = list(migrations.keys())
-                result = conn.execute(sa_text(
-                    "SELECT table_name, column_name FROM information_schema.columns "
-                    "WHERE table_name = ANY(:tbls)"
-                ), {'tbls': tbl_names})
-                existing_cols = {}
-                for row in result:
-                    existing_cols.setdefault(row[0], set()).add(row[1])
-            except Exception:
-                existing_cols = {}
-
-            # Now add only missing columns (deduplicated per table)
             for table, columns in migrations.items():
-                seen = set()
-                table_existing = existing_cols.get(table, set())
                 for col_name, col_def in columns:
-                    if col_name in seen:
-                        continue  # skip duplicates in the migrations dict
-                    seen.add(col_name)
-                    if col_name in table_existing:
-                        continue  # already exists
                     try:
-                        pg_def = (col_def
-                            .replace('DATETIME', 'TIMESTAMP')
-                            .replace('BOOLEAN DEFAULT 0', 'BOOLEAN DEFAULT FALSE')
-                            .replace('BOOLEAN DEFAULT 1', 'BOOLEAN DEFAULT TRUE'))
-                        conn.execute(sa_text(
-                            f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_name} {pg_def}'
-                        ))
-                        conn.commit()
-                        print(f'✅ Migration: added {table}.{col_name}')
-                    except Exception:
+                        result = conn.execute(sa_text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_name = :tbl AND column_name = :col"
+                        ), {'tbl': table, 'col': col_name})
+                        if result.fetchone() is None:
+                            # Column doesn't exist — add it
+                            pg_def = col_def.replace('DATETIME', 'TIMESTAMP').replace('BOOLEAN DEFAULT 0', 'BOOLEAN DEFAULT FALSE').replace('BOOLEAN DEFAULT 1', 'BOOLEAN DEFAULT TRUE')
+                            conn.execute(sa_text(
+                                f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_name} {pg_def}'
+                            ))
+                            conn.commit()
+                            print(f'✅ Migration: added {table}.{col_name}')
+                    except Exception as e:
+                        # Column may already exist or table doesn't exist yet — safe to skip
                         try: conn.rollback()
                         except: pass
     else:

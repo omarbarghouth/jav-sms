@@ -23,7 +23,6 @@ class User(db.Model):
     is_active     = db.Column(db.Boolean, default=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     last_login    = db.Column(db.DateTime)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 
@@ -44,7 +43,6 @@ class VoluntaryReport(db.Model):
     status        = db.Column(db.String(20), default='Submitted')
     is_confidential = db.Column(db.Boolean, default=False)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 
@@ -64,7 +62,6 @@ class ConfidentialReport(db.Model):
     suggestion    = db.Column(db.Text)
     status        = db.Column(db.String(20), default='Submitted')
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 
@@ -91,7 +88,6 @@ class HazardReport(db.Model):
     # Submitted / Under Assessment / Actioned / Closed
     hazard_id     = db.Column(db.String(30), db.ForeignKey('hazards.id'))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 class ASRReport(db.Model):
@@ -227,17 +223,6 @@ class Action(db.Model):
     safety_review_date   = db.Column(db.String(20))
     implementation_date  = db.Column(db.String(20))     # when mitigation was implemented
     # People
-    department_id        = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
-    sag_member           = db.Column(db.String(100))    # assigned SAG member username
-    root_cause           = db.Column(db.Text)            # root cause analysis
-    rejection_notes      = db.Column(db.Text)            # Safety Admin rejection reason
-    reopen_count         = db.Column(db.Integer, default=0)
-    reopen_reason        = db.Column(db.Text)
-    action_type          = db.Column(db.String(20), default='Corrective')
-    completed_date       = db.Column(db.String(20))
-    linked_audit_id      = db.Column(db.String(30))
-    linked_ra_id         = db.Column(db.String(30))
-    linked_risk_id       = db.Column(db.String(30))
     assigned_by          = db.Column(db.String(100))   # who assigned the action
     closure_by           = db.Column(db.String(100))   # who confirmed closure
     verified_by          = db.Column(db.String(100))   # who verified effectiveness
@@ -246,21 +231,6 @@ class Action(db.Model):
     # Relationship to SPI indicator
     spi_indicator        = db.relationship('SPIIndicator', foreign_keys=[spi_id],
                                backref=db.backref('linked_actions', lazy=True))
-
-class ActionHistory(db.Model):
-    """Full audit trail of every action status change and update."""
-    __tablename__ = 'action_history'
-    id            = db.Column(db.Integer, primary_key=True)
-    action_id     = db.Column(db.String(30), db.ForeignKey('actions.id'), nullable=False)
-    changed_by    = db.Column(db.String(100))
-    changed_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    from_status   = db.Column(db.String(50))
-    to_status     = db.Column(db.String(50))
-    notes         = db.Column(db.Text)
-    field_changed = db.Column(db.String(50))   # e.g. 'status', 'evidence', 'mitigation'
-    action        = db.relationship('Action', backref=db.backref('history',
-                                    lazy=True, order_by='ActionHistory.changed_at.desc()'))
-
 
 class Audit(db.Model):
     __tablename__ = 'audits'
@@ -274,7 +244,6 @@ class Audit(db.Model):
     status        = db.Column(db.String(20), default='Planned')  # Planned / In Progress / Closed
     summary       = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
     findings      = db.relationship('Finding', backref='audit', lazy=True, cascade='all, delete-orphan')
 
@@ -513,7 +482,6 @@ class SafetyBulletin(db.Model):
     attachment    = db.Column(db.String(200))
     linked_hazard_id = db.Column(db.String(30), nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 class Training(db.Model):
@@ -617,7 +585,6 @@ class ChecklistTemplate(db.Model):
     is_active     = db.Column(db.Boolean, default=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
     items         = db.relationship('ChecklistTemplateItem', backref='template',
                                     lazy=True, cascade='all, delete-orphan',
@@ -759,7 +726,6 @@ class DistributionList(db.Model):
     position      = db.Column(db.String(100))
     is_active     = db.Column(db.Boolean, default=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 class EmailLog(db.Model):
@@ -823,7 +789,6 @@ class SafetyRole(db.Model):
     effective_from = db.Column(db.String(20))
     active        = db.Column(db.Boolean, default=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 class SafetyPersonnel(db.Model):
@@ -842,7 +807,6 @@ class SafetyPersonnel(db.Model):
     training_date = db.Column(db.String(20))
     active        = db.Column(db.Boolean, default=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 class ERPlan(db.Model):
@@ -889,7 +853,6 @@ class SMSDocument(db.Model):
     parent_doc_id = db.Column(db.String(50))     # previous version ID
     change_summary = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    sag_role      = db.Column(db.String(80))   # e.g. 'Flight Operations SAG Member'
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 # ═══════════════════════════════════════════════════════════════════════════════
