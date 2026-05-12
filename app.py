@@ -242,108 +242,16 @@ def portal_confidential():
 def portal_hazard():
     """Public Hazard Report form — simplified for fast submission."""
     if request.method == 'POST':
-        f = request.form
-        dept_id_raw = f.get('department_id', '')
-        if not dept_id_raw:
-            flash('⚠ Please select a department.', 'error')
-            return render_template('portal/portal_hazard.html')
-        try:
-            dept_id = int(dept_id_raw)
-        except ValueError:
-            flash('⚠ Invalid department.', 'error')
-            return render_template('portal/portal_hazard.html')
-
-        rid = new_id('HR')
-        hid = new_id('HAZ')
-        dept = Department.query.get(dept_id)
-        dept_name = dept.name if dept else ''
-
-        try:
-            # 1. Hazard FIRST (FK constraint)
-            h = Hazard(
-                id=hid, source='Hazard Report', linked_report_id=rid,
-                department_id=dept_id, classification=f.get('classification','Operational'),
-                type_of_activity=dept_name,
-                generic_hazard=f.get('generic_hazard') or f.get('hazard_description','')[:100],
-                specific_components=f.get('hazard_description',''),
-                consequences=f.get('consequences','To Be Assessed'),
-                status='Open', owner=None
-            )
-            db.session.add(h)
-            db.session.commit()
-
-            # 2. HazardReport safely
-            rep = HazardReport(
-                id=rid, department_id=dept_id,
-                location=f.get('location',''),
-                date=f.get('date', date.today().isoformat()),
-                description=f.get('hazard_description',''),
-                classification=f.get('classification','Operational'),
-                generic_hazard=f.get('generic_hazard',''),
-                consequences=f.get('consequences',''),
-                immediate_action=f.get('immediate_action',''),
-                suggested_mitigation=f.get('suggested_mitigation',''),
-                reporter_severity=f.get('reporter_severity',''),
-                reporter=f.get('reporter','Anonymous') or 'Anonymous',
-                report_type=f.get('report_type','Hazard Report'),
-                status='Submitted', hazard_id=hid
-            )
-            db.session.add(rep)
-            h.status = 'Under Assessment'
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            flash(f'⚠ Submission failed: {str(e)[:120]}', 'error')
-            return render_template('portal/portal_hazard.html')
-
-        return render_template('portal/portal_submitted.html',
-                               ref=rid, report_type='Hazard Report')
+        # Reuse existing hazard_report POST logic
+        return hazard_report()
     return render_template('portal/portal_hazard.html')
 
 
 @app.route('/portal/asr', methods=['GET', 'POST'])
 def portal_asr():
-    """Public ASR form — creates ASR report directly without session requirement."""
+    """Public ASR form — reuses existing ASR logic."""
     if request.method == 'POST':
-        f = request.form
-        dept_id_raw = f.get('department_id', '')
-        dept_id = int(dept_id_raw) if dept_id_raw else None
-        hid = new_id('HAZ')
-        aid = new_id('ASR')
-        try:
-            dept_name = Department.query.get(dept_id).name if dept_id else ''
-            # Create hazard first
-            h = Hazard(
-                id=hid, source='ASR', linked_report_id=aid,
-                department_id=dept_id,
-                classification='Operational',
-                type_of_activity=dept_name,
-                generic_hazard=f.get('occurrence_type','Air Safety Occurrence'),
-                specific_components=f.get('description',''),
-                consequences='To Be Assessed', status='Open'
-            )
-            db.session.add(h)
-            db.session.commit()
-            # Create ASR report
-            r = ASRReport(
-                id=aid, department_id=dept_id,
-                date=f.get('date', date.today().isoformat()),
-                occurrence_type=f.get('occurrence_type',''),
-                description=f.get('description',''),
-                immediate_action=f.get('immediate_action',''),
-                suggested_mitigation=f.get('suggested_mitigation',''),
-                filed_by=f.get('filed_by',''),
-                flight_number=f.get('flight_number',''),
-                status='Submitted', hazard_id=hid
-            )
-            db.session.add(r)
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            flash(f'⚠ Submission failed: {str(e)[:120]}', 'error')
-            return render_template('portal/portal_asr.html')
-        return render_template('portal/portal_submitted.html',
-                               ref=aid, report_type='Air Safety Report')
+        return asr_report()
     return render_template('portal/portal_asr.html')
 
 
@@ -555,12 +463,7 @@ def hazard_report():
 
         # 3. Update statuses and commit together
         h.status = 'Under Assessment'
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            flash(f'⚠ Report save failed: {str(e)[:120]}', 'error')
-            return render_template('reporting/hazard_report.html')
+        db.session.commit()
 
         # Auto-update matching SPI indicators (with deduplication)
         spi_auto_update(
@@ -3520,16 +3423,41 @@ def new_audit_schedule():
             status='Planned'
         )
         db.session.add(s)
-        # Auto-populate checklist
-        template = get_checklist_template(dept.code if dept else 'default')
-        for idx, (cat, ref, question) in enumerate(template):
-            item = AuditChecklist(
-                schedule_id=sid, category=cat,
-                item_ref=ref, question=question, sequence=idx
-            )
-            db.session.add(item)
+        db.session.flush()
+
+        # ── Load latest ChecklistTemplate from DB first ──────────────────────
+        db_tmpl = ChecklistTemplate.query.filter_by(
+            department_id=int(f['department_id']),
+            audit_type=f['audit_type'],
+            is_active=True
+        ).order_by(ChecklistTemplate.version.desc()).first()
+
+        items_loaded = 0
+        if db_tmpl and db_tmpl.items:
+            # Use the latest saved template from Checklist Manager
+            for ti in db_tmpl.items:
+                db.session.add(AuditChecklist(
+                    schedule_id=sid, category=ti.category,
+                    item_ref=ti.item_ref, question=ti.question,
+                    sequence=ti.sequence,
+                ))
+            items_loaded = len(db_tmpl.items)
+            tmpl_label = f'{db_tmpl.name} (v{db_tmpl.version})'
+        else:
+            # No saved template yet — fall back to static default
+            static = get_checklist_template(dept.code if dept else 'default')
+            idx = 0
+            for cat, ref, question in static:
+                db.session.add(AuditChecklist(
+                    schedule_id=sid, category=cat,
+                    item_ref=ref, question=question, sequence=idx
+                ))
+                idx += 1
+            items_loaded = idx
+            tmpl_label = 'system default'
+
         db.session.commit()
-        flash(f'✓ Audit {sid} created. Checklist auto-populated.', 'success')
+        flash(f'✓ Audit {sid} created — {items_loaded} checklist items loaded from {tmpl_label}.', 'success')
         return redirect(url_for('audit_schedule'))
     return render_template('audit/audit_schedule_form.html')
 
@@ -3598,16 +3526,22 @@ def start_audit(sid):
     s.actual_date  = date.today().isoformat()
     s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
 
-    # Auto-load checklist from latest saved department template
-    if s.department_id and not s.checklist_items:
-        from models import AuditChecklist
-        tmpl = ChecklistTemplate.query.filter_by(
+    # ── Checklist sync on Start Audit ────────────────────────────────────────
+    # Only reload checklist if audit is FIRST being started (status was Planned).
+    # This ensures new/updated checklist templates are picked up automatically,
+    # while already-running audits keep their historical snapshot.
+    if s.department_id:
+        latest = ChecklistTemplate.query.filter_by(
             department_id=s.department_id,
             audit_type=s.audit_type or 'Internal',
             is_active=True
-        ).first()
-        if tmpl and tmpl.items:
-            for ti in tmpl.items:
+        ).order_by(ChecklistTemplate.version.desc()).first()
+
+        if latest and latest.items:
+            # Always replace checklist with latest template snapshot
+            AuditChecklist.query.filter_by(schedule_id=sid).delete()
+            db.session.flush()
+            for ti in latest.items:
                 db.session.add(AuditChecklist(
                     schedule_id=sid,
                     category=ti.category,
@@ -3616,22 +3550,19 @@ def start_audit(sid):
                     sequence=ti.sequence,
                 ))
             db.session.flush()
-            flash(f'✓ Audit started. Loaded {len(tmpl.items)} items from {tmpl.name}.', 'success')
+            flash(f'✓ Audit started — checklist loaded from {latest.name} (v{latest.version}), {len(latest.items)} items.', 'success')
         else:
-            # Fall back to static template (existing get_checklist_template logic)
-            from models import AuditChecklist as ACL
-            dept = Department.query.get(s.department_id)
-            static_tmpl = get_checklist_template(dept.code if dept else 'default')
-            for cat, items in static_tmpl.items():
-                for seq, (ref, q) in enumerate(items):
-                    db.session.add(ACL(
-                        schedule_id=sid,
-                        category=cat,
-                        item_ref=ref,
-                        question=q,
-                        sequence=seq,
+            # No DB template — keep existing items or load static default
+            if not s.checklist_items:
+                dept = Department.query.get(s.department_id)
+                static = get_checklist_template(dept.code if dept else 'default')
+                for idx, (cat, ref, q) in enumerate(static):
+                    db.session.add(AuditChecklist(
+                        schedule_id=sid, category=cat,
+                        item_ref=ref, question=q, sequence=idx,
                     ))
-            flash('✓ Audit started. Checklist loaded from default template.', 'success')
+                db.session.flush()
+            flash('✓ Audit started.', 'success')
 
     db.session.commit()
     return redirect(url_for('audit_execution', sid=sid))
@@ -6056,69 +5987,6 @@ def ra_reassess(ra_id):
 
 with app.app_context():
     db.create_all()
-
-    # ── Force-run critical columns on every startup (PostgreSQL safe) ──────────
-    # Uses IF NOT EXISTS so safe to run repeatedly. Fixes live DB schema gaps.
-    try:
-        db_url = str(db.engine.url)
-        if 'postgresql' in db_url or 'postgres' in db_url:
-            from sqlalchemy import text as _t
-            _critical = [
-                # hazard_reports
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS report_type VARCHAR(30) DEFAULT 'Hazard Report'",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS classification VARCHAR(50) DEFAULT 'Operational'",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Submitted'",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS generic_hazard VARCHAR(200)",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS consequences TEXT",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS immediate_action TEXT",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS suggested_mitigation TEXT",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS reporter_severity VARCHAR(20)",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS reporter VARCHAR(100) DEFAULT 'Anonymous'",
-                "ALTER TABLE hazard_reports ADD COLUMN IF NOT EXISTS hazard_id VARCHAR(30)",
-                # hazards
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS classification VARCHAR(50)",
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS type_of_activity VARCHAR(100)",
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS generic_hazard VARCHAR(200)",
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS specific_components TEXT",
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS consequences TEXT",
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Open'",
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS owner VARCHAR(100)",
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS linked_report_id VARCHAR(30)",
-                "ALTER TABLE hazards ADD COLUMN IF NOT EXISTS department_id INTEGER",
-                # actions
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS corrective_description TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS mitigation_description TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS safety_notes TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS safety_review_notes TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS safety_reviewer VARCHAR(100)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS implementation_date VARCHAR(20)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS evidence_filename VARCHAR(200)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS follow_up_notes TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS mitigation_status VARCHAR(30) DEFAULT 'Pending'",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS verified_by VARCHAR(100)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS verified_date VARCHAR(20)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS closure_by VARCHAR(100)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS effectiveness VARCHAR(30)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS effectiveness_review TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS closed_date VARCHAR(20)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_ref_id VARCHAR(30)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS assigned_by VARCHAR(100)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS evidence TEXT",
-                # widen status columns
-                "ALTER TABLE actions ALTER COLUMN status TYPE VARCHAR(50)",
-                "ALTER TABLE hazard_reports ALTER COLUMN status TYPE VARCHAR(50)",
-                "ALTER TABLE hazards ALTER COLUMN status TYPE VARCHAR(50)",
-            ]
-            with db.engine.connect() as _conn:
-                for _sql in _critical:
-                    try:
-                        _conn.execute(_t(_sql))
-                        _conn.commit()
-                    except Exception:
-                        try: _conn.rollback()
-                        except: pass
-    except Exception as _e:
-        print(f'Force migration warning: {_e}')
 
     # ── Safe column migration (PostgreSQL + SQLite compatible) ─────────────────
     # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
