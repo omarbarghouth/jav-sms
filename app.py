@@ -233,8 +233,33 @@ def index():
 
 @app.route('/portal')
 def public_portal():
-    """Public-facing reporting portal — employees, pilots, operational staff."""
-    return render_template('portal/portal.html')
+    """Public-facing reporting portal — passes live safety content to template."""
+    from datetime import date as _date
+    bulletins   = SafetyBulletin.query.filter_by(status='Active').order_by(
+                      SafetyBulletin.created_at.desc()).limit(4).all()
+    newsletters = SafetyNewsletter.query.filter_by(status='Published').order_by(
+                      SafetyNewsletter.created_at.desc()).limit(3).all()
+    campaigns   = SafetyCampaign.query.filter_by(status='Active').order_by(
+                      SafetyCampaign.created_at.desc()).limit(4).all()
+    surveys     = SafetySurvey.query.filter_by(status='Active').order_by(
+                      SafetySurvey.created_at.desc()).limit(4).all()
+    lessons     = LessonLearned.query.order_by(
+                      LessonLearned.created_at.desc()).limit(4).all()
+    safety_messages = [
+        "Safety is everyone's responsibility — report hazards before they become incidents.",
+        "Every report you make protects your colleagues and improves our operations.",
+        "Speaking up for safety is an act of professionalism, not weakness.",
+        "Proactive hazard identification is the foundation of aviation safety.",
+        "Non-punitive reporting: your safety observations are valued and protected.",
+        "One report can prevent an accident. Your voice matters.",
+    ]
+    import hashlib
+    week_num = int(hashlib.md5(_date.today().strftime('%Y-W%V').encode()).hexdigest(), 16)
+    safety_message = safety_messages[week_num % len(safety_messages)]
+    return render_template('portal/portal.html',
+                           bulletins=bulletins, newsletters=newsletters,
+                           campaigns=campaigns, surveys=surveys,
+                           lessons=lessons, safety_message=safety_message)
 
 
 @app.route('/portal/voluntary', methods=['GET', 'POST'])
