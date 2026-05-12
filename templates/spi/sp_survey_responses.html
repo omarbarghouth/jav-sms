@@ -72,7 +72,7 @@
           <th>Submitted</th>
           <th>Type</th>
           {% for i, q in enumerate(questions) %}
-          <th style="max-width:120px;font-size:9px">{{ q.get('text','Q'+loop.index|string)[:40] }}</th>
+          <th style="max-width:120px;font-size:9px">{{ ((q.text if q is mapping else q)|string)[:40] }}</th>
           {% endfor %}
         </tr>
       </thead>
