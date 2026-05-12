@@ -7318,42 +7318,63 @@ with app.app_context():
     is_postgres = 'postgresql' in db_url or 'postgres' in db_url
 
     if is_postgres:
-        # PostgreSQL: use information_schema
+        # PostgreSQL: FAST batch migration — one query per table, not per column
         from sqlalchemy import text as sa_text
         with db.engine.connect() as conn:
-            # Widen status columns that were too narrow for longer values
-            for tbl_col in [
-                ('actions',        'status',           'VARCHAR(50)'),
-                ('hazard_reports',  'status',           'VARCHAR(50)'),
-                ('hazards',         'status',           'VARCHAR(50)'),
-                ('audit_findings',  'status',           'VARCHAR(50)'),
+            # Set statement timeout so nothing hangs startup
+            try:
+                conn.execute(sa_text("SET statement_timeout = '8s'"))
+            except Exception:
+                pass
+
+            # Widen status columns (safe, IF NOT EXISTS equivalent via try/except)
+            for tbl, col, typ in [
+                ('actions',       'status', 'VARCHAR(50)'),
+                ('hazard_reports','status', 'VARCHAR(50)'),
+                ('hazards',       'status', 'VARCHAR(50)'),
+                ('audit_findings','status', 'VARCHAR(50)'),
             ]:
                 try:
-                    conn.execute(sa_text(
-                        f'ALTER TABLE {tbl_col[0]} ALTER COLUMN {tbl_col[1]} TYPE {tbl_col[2]}'
-                    ))
+                    conn.execute(sa_text(f'ALTER TABLE {tbl} ALTER COLUMN {col} TYPE {typ}'))
                     conn.commit()
                 except Exception:
                     try: conn.rollback()
                     except: pass
 
+            # Batch: get ALL existing columns for ALL tables in ONE query
+            try:
+                tbl_names = list(migrations.keys())
+                result = conn.execute(sa_text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    "WHERE table_name = ANY(:tbls)"
+                ), {'tbls': tbl_names})
+                existing_cols = {}
+                for row in result:
+                    existing_cols.setdefault(row[0], set()).add(row[1])
+            except Exception:
+                existing_cols = {}
+
+            # Now add only missing columns (deduplicated per table)
             for table, columns in migrations.items():
+                seen = set()
+                table_existing = existing_cols.get(table, set())
                 for col_name, col_def in columns:
+                    if col_name in seen:
+                        continue  # skip duplicates in the migrations dict
+                    seen.add(col_name)
+                    if col_name in table_existing:
+                        continue  # already exists
                     try:
-                        result = conn.execute(sa_text(
-                            "SELECT column_name FROM information_schema.columns "
-                            "WHERE table_name = :tbl AND column_name = :col"
-                        ), {'tbl': table, 'col': col_name})
-                        if result.fetchone() is None:
-                            # Column doesn't exist — add it
-                            pg_def = col_def.replace('DATETIME', 'TIMESTAMP').replace('BOOLEAN DEFAULT 0', 'BOOLEAN DEFAULT FALSE').replace('BOOLEAN DEFAULT 1', 'BOOLEAN DEFAULT TRUE')
-                            conn.execute(sa_text(
-                                f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_name} {pg_def}'
-                            ))
-                            conn.commit()
-                            print(f'✅ Migration: added {table}.{col_name}')
-                    except Exception as e:
-                        # Column may already exist or table doesn't exist yet — safe to skip
+                        pg_def = (col_def
+                            .replace('DATETIME', 'TIMESTAMP')
+                            .replace('BOOLEAN DEFAULT 0', 'BOOLEAN DEFAULT FALSE')
+                            .replace('BOOLEAN DEFAULT 1', 'BOOLEAN DEFAULT TRUE'))
+                        conn.execute(sa_text(
+                            f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_name} {pg_def}'
+                        ))
+                        conn.commit()
+                        print(f'✅ Migration: added {table}.{col_name}')
+                    except Exception:
                         try: conn.rollback()
                         except: pass
     else:
