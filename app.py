@@ -3672,7 +3672,11 @@ def get_checklist_template(dept_code):
 @require_login
 def checklist_templates():
     """List all department checklist templates."""
-    templates = ChecklistTemplate.query.filter_by(is_active=True).all()
+    templates = (ChecklistTemplate.query
+                    .filter_by(is_active=True)
+                    .order_by(ChecklistTemplate.department_id,
+                              ChecklistTemplate.version.desc())
+                    .all())
     return render_template('audit/checklist_templates.html',
                            templates=templates)
 
@@ -3691,12 +3695,13 @@ def checklist_template_dept(dept_id):
         action = request.form.get('action', 'save')
 
         if action == 'save':
-            # Deactivate old templates for this dept+type
+            # Deactivate all old templates for this dept+type
             ChecklistTemplate.query.filter_by(
                 department_id=dept_id, audit_type=audit_type
             ).update({'is_active': False})
+            db.session.flush()  # ensure deactivation commits before reading version
 
-            # Get version number
+            # Get next version number
             last = ChecklistTemplate.query.filter_by(
                 department_id=dept_id, audit_type=audit_type
             ).order_by(ChecklistTemplate.version.desc()).first()
@@ -4103,16 +4108,43 @@ def new_audit_schedule():
             status='Planned'
         )
         db.session.add(s)
-        # Auto-populate checklist
-        template = get_checklist_template(dept.code if dept else 'default')
-        for idx, (cat, ref, question) in enumerate(template):
-            item = AuditChecklist(
-                schedule_id=sid, category=cat,
-                item_ref=ref, question=question, sequence=idx
-            )
-            db.session.add(item)
+        db.session.flush()  # get sid into session before adding checklist items
+
+        # ── Always use latest active DB template (highest version) ────────────
+        db_tmpl = ChecklistTemplate.query.filter_by(
+            department_id=int(f['department_id']),
+            audit_type=f['audit_type'],
+            is_active=True
+        ).order_by(ChecklistTemplate.version.desc(),
+                   ChecklistTemplate.updated_at.desc()).first()
+
+        items_loaded = 0
+        tmpl_label   = 'system default'
+
+        if db_tmpl and db_tmpl.items:
+            for ti in sorted(db_tmpl.items, key=lambda x: x.sequence):
+                db.session.add(AuditChecklist(
+                    schedule_id=sid, category=ti.category,
+                    item_ref=ti.item_ref, question=ti.question,
+                    sequence=ti.sequence,
+                ))
+            items_loaded = len(db_tmpl.items)
+            tmpl_label   = f'{db_tmpl.name} (v{db_tmpl.version})'
+        else:
+            # No saved template yet — fall back to static default
+            static = get_checklist_template(dept.code if dept else 'default')
+            idx = 0
+            for cat, ref, question in static:
+                db.session.add(AuditChecklist(
+                    schedule_id=sid, category=cat,
+                    item_ref=ref, question=question, sequence=idx
+                ))
+                idx += 1
+            items_loaded = idx
+
         db.session.commit()
-        flash(f'✓ Audit {sid} created. Checklist auto-populated.', 'success')
+        flash(f'✓ Audit {sid} created — {items_loaded} checklist items loaded'
+              f' from {tmpl_label}.', 'success')
         return redirect(url_for('audit_schedule'))
     return render_template('audit/audit_schedule_form.html')
 
@@ -4181,40 +4213,50 @@ def start_audit(sid):
     s.actual_date  = date.today().isoformat()
     s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
 
-    # Auto-load checklist from latest saved department template
-    if s.department_id and not s.checklist_items:
-        from models import AuditChecklist
-        tmpl = ChecklistTemplate.query.filter_by(
+    # ── Checklist sync on Start Audit ────────────────────────────────────────
+    # Only sync if audit is being started fresh (Planned → In Progress).
+    # This ensures the checklist snapshot is always from the latest active template.
+    # Already In Progress audits keep their historical snapshot unchanged.
+    if s.department_id:
+        # Query latest active template — order by version DESC then updated_at DESC
+        latest = ChecklistTemplate.query.filter_by(
             department_id=s.department_id,
             audit_type=s.audit_type or 'Internal',
             is_active=True
+        ).order_by(
+            ChecklistTemplate.version.desc(),
+            ChecklistTemplate.updated_at.desc()
         ).first()
-        if tmpl and tmpl.items:
-            for ti in tmpl.items:
+
+        if latest and latest.items:
+            # Replace entire checklist with latest template snapshot
+            AuditChecklist.query.filter_by(schedule_id=sid).delete()
+            db.session.flush()
+            for ti in sorted(latest.items, key=lambda x: x.sequence):
                 db.session.add(AuditChecklist(
-                    schedule_id=sid,
-                    category=ti.category,
-                    item_ref=ti.item_ref,
-                    question=ti.question,
+                    schedule_id=sid, category=ti.category,
+                    item_ref=ti.item_ref, question=ti.question,
                     sequence=ti.sequence,
                 ))
             db.session.flush()
-            flash(f'✓ Audit started. Loaded {len(tmpl.items)} items from {tmpl.name}.', 'success')
-        else:
-            # Fall back to static template (existing get_checklist_template logic)
-            from models import AuditChecklist as ACL
+            flash(f'✓ Audit started — checklist loaded from '
+                  f'{latest.name} (v{latest.version}), '
+                  f'{len(latest.items)} items.', 'success')
+        elif not s.checklist_items:
+            # No DB template and no existing items — load static default
             dept = Department.query.get(s.department_id)
-            static_tmpl = get_checklist_template(dept.code if dept else 'default')
-            for cat, items in static_tmpl.items():
-                for seq, (ref, q) in enumerate(items):
-                    db.session.add(ACL(
-                        schedule_id=sid,
-                        category=cat,
-                        item_ref=ref,
-                        question=q,
-                        sequence=seq,
-                    ))
-            flash('✓ Audit started. Checklist loaded from default template.', 'success')
+            static = get_checklist_template(dept.code if dept else 'default')
+            idx = 0
+            for cat, ref, q in static:
+                db.session.add(AuditChecklist(
+                    schedule_id=sid, category=cat,
+                    item_ref=ref, question=q, sequence=idx
+                ))
+                idx += 1
+            db.session.flush()
+            flash('✓ Audit started — checklist loaded from system default.', 'success')
+        else:
+            flash('✓ Audit started.', 'success')
 
     db.session.commit()
     return redirect(url_for('audit_execution', sid=sid))
