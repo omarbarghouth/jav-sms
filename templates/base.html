@@ -234,7 +234,6 @@
     <div class="sb-section">Overview</div>
     <a href="/dashboard" class="nav-a {% if request.path=='/dashboard' %}active{% endif %}" data-tip="Dashboard"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</span></a>
     <a href="/admin/reports" class="nav-a {% if request.path=='/admin/reports' %}active{% endif %}" data-tip="Reports Inbox"><span class="nav-icon">📬</span><span class="nav-label">Reports Inbox</span></a>
-    <a href="/sag-login" class="nav-a" data-tip="SAG Portal" style="opacity:.6"><span class="nav-icon">🛡</span><span class="nav-label">SAG Member Portal</span><span class="nav-tag-blue">EXT</span></a>
     <a href="/portal" target="_blank" class="nav-a" data-tip="Public Portal"><span class="nav-icon">🌐</span><span class="nav-label">Public Portal</span><span class="nav-tag-blue">OPEN</span></a>
 
     <div class="sb-section">Safety Reporting</div>
@@ -248,10 +247,6 @@
     <a href="/risk-assessments" class="nav-a {% if '/risk-assessments' in request.path %}active{% endif %}" data-tip="Risk Assessments"><span class="nav-icon">📝</span><span class="nav-label">Risk Assessments</span></a>
     <a href="/risk-register" class="nav-a {% if request.path=='/risk-register' %}active{% endif %}" data-tip="Risk Register"><span class="nav-icon">📊</span><span class="nav-label">Risk Register</span></a>
     <a href="/risk-matrix" class="nav-a {% if request.path=='/risk-matrix' %}active{% endif %}" data-tip="Risk Matrix"><span class="nav-icon">🎯</span><span class="nav-label">Risk Matrix</span></a>
-
-    <div class="sb-section">Safety Governance</div>
-    <a href="/sag/governance" class="nav-a {% if request.path=='/sag/governance' %}active{% endif %}" data-tip="Governance Dashboard"><span class="nav-icon">🏛</span><span class="nav-label">Governance Dashboard</span></a>
-    <a href="/sag/portal" class="nav-a {% if request.path=='/sag/portal' %}active{% endif %}" data-tip="SAG Portal"><span class="nav-icon">👤</span><span class="nav-label">SAG Portal</span></a>
 
     <div class="sb-section">Action Management</div>
     <a href="/actions/dashboard" class="nav-a {% if request.path=='/actions/dashboard' %}active{% endif %}" data-tip="Action Dashboard"><span class="nav-icon">📊</span><span class="nav-label">Action Dashboard</span></a>
@@ -285,8 +280,6 @@
     <a href="/safety-promotion/lessons" class="nav-a {% if '/lessons' in request.path %}active{% endif %}" data-tip="Lessons"><span class="nav-icon">📚</span><span class="nav-label">Lessons Learned</span></a>
     <a href="/safety-promotion/surveys" class="nav-a {% if '/surveys' in request.path %}active{% endif %}" data-tip="Surveys"><span class="nav-icon">📋</span><span class="nav-label">Safety Surveys</span></a>
     <div class="sb-sub">🎓 Training</div>
-    <a href="/safety-promotion/distribution" class="nav-a {% if request.path=="/safety-promotion/distribution" %}active{% endif %}" data-tip="Distribution"><span class="nav-icon">📧</span><span class="nav-label">Distribution List</span></a>
-    <a href="/safety-promotion/email-log" class="nav-a {% if request.path=="/safety-promotion/email-log" %}active{% endif %}" data-tip="Email Log"><span class="nav-icon">📊</span><span class="nav-label">Email Log</span></a>
     <a href="/safety-promotion/training" class="nav-a {% if '/training' in request.path and 'promotion' in request.path and not request.args.get('status') %}active{% endif %}" data-tip="Training"><span class="nav-icon">📊</span><span class="nav-label">Training Records</span></a>
     <a href="/safety-promotion/training?status=Expired" class="nav-a {% if request.args.get('status')=='Expired' and '/training' in request.path %}active{% endif %}" data-tip="Expiry"><span class="nav-icon">⚠️</span><span class="nav-label">Expiry Tracking</span></a>
     <a href="/safety-promotion/training/export/xlsx" class="nav-a" data-tip="Export Excel"><span class="nav-icon">⬇</span><span class="nav-label">Export Excel</span><span class="nav-tag-blue">XLS</span></a>
