@@ -3462,7 +3462,9 @@ def sp_survey_responses(sid):
     response_rate = round((resp_count / total_sent * 100) if total_sent > 0 else 0, 1)
 
     import json as _j
-    from collections import Counter
+    from collections import Counter, defaultdict
+
+    # Parse questions
     questions = []
     try:
         raw = _j.loads(s.questions or '[]')
@@ -3473,13 +3475,84 @@ def sp_survey_responses(sid):
                 questions.append(q)
     except Exception:
         pass
+
+    # Pre-parse answers for each response so template can display them
+    parsed_responses = []
+    for resp in responses:
+        try:
+            ans = _j.loads(resp.answers or '{}')
+        except Exception:
+            ans = {}
+        parsed_responses.append({
+            'obj':             resp,
+            'answers':         ans,
+            'answer_list':     [ans.get(str(i), '') for i in range(len(questions))],
+        })
+
+    # Department participation
     dept_counts = Counter(r.department_id for r in responses if r.department_id)
-    dept_names  = {d.id: d.name for d in Department.query.all()}
+    all_depts   = Department.query.all()
+    dept_names  = {d.id: d.name for d in all_depts}
+
+    # Question analytics: for each question, tally all answers
+    q_analytics = []
+    for i, q in enumerate(questions):
+        tally = Counter()
+        for pr in parsed_responses:
+            ans = pr['answer_list'][i]
+            if ans:
+                tally[ans] += 1
+        q_analytics.append({'question': q, 'tally': dict(tally), 'total': len(tally)})
+
+    # Timeline: responses by date
+    from collections import OrderedDict
+    timeline = Counter()
+    for r in responses:
+        if r.submitted_at:
+            timeline[r.submitted_at.strftime('%d %b')] += 1
+    timeline = dict(sorted(timeline.items()))
+
+    anon_count    = sum(1 for r in responses if r.is_anonymous)
+    tracked_count = len(responses) - anon_count
+
     return render_template('spi/sp_survey_responses.html',
-                           survey=s, responses=responses,
-                           response_rate=response_rate, questions=questions,
-                           dept_counts=dept_counts, dept_names=dept_names,
-                           total_sent=total_sent)
+                           survey=s,
+                           responses=parsed_responses,
+                           response_rate=response_rate,
+                           questions=questions,
+                           q_analytics=q_analytics,
+                           dept_counts=dept_counts,
+                           dept_names=dept_names,
+                           all_depts=all_depts,
+                           total_sent=total_sent,
+                           anon_count=anon_count,
+                           tracked_count=tracked_count,
+                           timeline=timeline)
+
+
+
+@app.route('/safety-promotion/survey/<int:sid>/response/<int:rid>')
+@require_login
+def sp_survey_response_detail(sid, rid):
+    """Individual survey response detail view."""
+    import json as _j
+    s    = SafetySurvey.query.get_or_404(sid)
+    resp = SurveyResponse.query.get_or_404(rid)
+    questions = []
+    try:
+        raw = _j.loads(s.questions or '[]')
+        for q in raw:
+            questions.append({'text': q} if isinstance(q, str) else q)
+    except Exception:
+        pass
+    try:
+        answers = _j.loads(resp.answers or '{}')
+    except Exception:
+        answers = {}
+    qa_pairs = [(questions[i], answers.get(str(i),'—'))
+                for i in range(len(questions))]
+    return render_template('spi/sp_survey_response_detail.html',
+                           survey=s, resp=resp, qa_pairs=qa_pairs)
 
 
 @app.route('/risk-matrix')
