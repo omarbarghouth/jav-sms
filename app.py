@@ -93,6 +93,12 @@ if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,       # test connection before using it
+    'pool_recycle': 280,         # recycle connections every 280s (< Render's 300s timeout)
+    'pool_timeout': 20,          # wait max 20s for a connection
+    'connect_args': {'connect_timeout': 10},  # TCP connect timeout 10s
+}
 app.secret_key = os.environ.get('SECRET_KEY', 'jav-sms-dev-only-change-in-prod')
 # IMPORTANT: Set a strong SECRET_KEY env var in production (Render dashboard)
 
@@ -7032,7 +7038,10 @@ def ra_reassess(ra_id):
     return redirect(url_for('ra_wizard_step', hid=haz_id, step=4))
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as _e:
+        print(f'Warning: db.create_all() error (non-fatal): {_e}')
 
     # ── Safe column migration (PostgreSQL + SQLite compatible) ─────────────────
     # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
