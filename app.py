@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from openpyxl import Workbook
@@ -8,6 +8,59 @@ from openpyxl.utils import get_column_letter
 from flask import send_file, make_response
 
 app = Flask(__name__)
+
+@app.template_filter('fromjson')
+def fromjson_filter(s):
+    import json
+    try: return json.loads(s or '{}')
+    except: return {}
+
+import smtplib, json as _json_mod
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+SMTP_HOST=os.environ.get('SMTP_HOST','')
+SMTP_PORT=int(os.environ.get('SMTP_PORT',587))
+SMTP_USER=os.environ.get('SMTP_USER','')
+SMTP_PASSWORD=os.environ.get('SMTP_PASSWORD','')
+SMTP_FROM=os.environ.get('SMTP_FROM','safety@jordanaviation.com')
+SMTP_FROM_NAME=os.environ.get('SMTP_FROM_NAME','Jordan Aviation Safety')
+
+def send_email(to_list, subject, html_body):
+    if not SMTP_HOST or not SMTP_USER: return len(to_list), None
+    sent=0; errs=[]
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as srv:
+            srv.starttls(); srv.login(SMTP_USER, SMTP_PASSWORD)
+            for r in to_list:
+                try:
+                    msg=MIMEMultipart('alternative')
+                    msg['Subject']=subject; msg['From']=SMTP_FROM_NAME+' <'+SMTP_FROM+'>'; msg['To']=r
+                    msg.attach(MIMEText(html_body,'html'))
+                    srv.sendmail(SMTP_FROM, r, msg.as_string()); sent+=1
+                except Exception as ex: errs.append(str(ex)[:40])
+    except Exception as ex: return 0, str(ex)
+    return sent, '; '.join(errs) if errs else None
+
+def get_recipients(dept_ids=None):
+    q=DistributionList.query.filter_by(is_active=True)
+    if dept_ids: q=q.filter(DistributionList.department_id.in_(dept_ids))
+    return [r.email for r in q.all() if r.email]
+
+def email_html(title, subtitle, body_html, ref='', dt=''):
+    ref_line = ('<div style="color:#c9a84c;font-size:11px;margin-top:6px">Ref: '+ref+' · '+dt+'</div>') if ref else ''
+    return ('<!DOCTYPE html><html><body style="background:#f0f2f8;font-family:Arial,sans-serif;padding:24px">'
+            '<table width="580" style="background:#fff;border-radius:12px;overflow:hidden;margin:0 auto">'
+            '<tr><td style="background:#0f1c3f;padding:18px 26px;border-bottom:3px solid #c9a84c">'
+            '<span style="color:#fff;font-size:14px;font-weight:800">✈ Jordan Aviation</span></td></tr>'
+            '<tr><td style="background:#0f1c3f;padding:16px 26px">'
+            '<div style="color:rgba(255,255,255,.5);font-size:10px;text-transform:uppercase;letter-spacing:1px">'+subtitle+'</div>'
+            '<div style="color:#fff;font-size:20px;font-weight:800;margin-top:4px">'+title+'</div>'
+            +ref_line+'</td></tr>'
+            '<tr><td style="padding:22px 26px;font-size:14px;color:#374151;line-height:1.7">'+body_html+'</td></tr>'
+            '<tr><td style="background:#f8f9fc;padding:12px 26px;font-size:11px;color:#9ca3af">'
+            'Jordan Aviation · Safety Management System · ICAO Annex 19</td></tr>'
+            '</table></body></html>')
+
 # Evidence file uploads
 # Upload folder: use env var override for cloud (e.g. /tmp on Render free tier)
 _default_upload = os.path.join(os.path.dirname(__file__), 'static', 'evidence')
@@ -2004,11 +2057,21 @@ def safety_promotion():
     surveys     = SafetySurvey.query.filter_by(status='Active').all()
     overdue_training = Training.query.filter_by(status='Expired').count()
     due_soon    = Training.query.filter_by(status='Due Soon').count()
+    emails_sent = EmailLog.query.count()
+    dist_count  = DistributionList.query.filter_by(is_active=True).count()
+    avg_response_rate = 0
+    surveyed = SafetySurvey.query.filter(SafetySurvey.target_count > 0).all()
+    if surveyed:
+        avg_response_rate = round(sum(
+            (s.response_count or 0) / s.target_count * 100 for s in surveyed
+        ) / len(surveyed), 1)
     return render_template('spi/safety_promotion.html',
                            bulletins=bulletins, newsletters=newsletters,
                            trainings=trainings, campaigns=campaigns,
                            lessons=lessons, surveys=surveys,
-                           overdue_training=overdue_training, due_soon=due_soon)
+                           overdue_training=overdue_training, due_soon=due_soon,
+                           emails_sent=emails_sent, dist_count=dist_count,
+                           avg_response_rate=avg_response_rate)
 
 @app.route('/safety-promotion/bulletins')
 @require_login
@@ -2471,6 +2534,212 @@ def sp_lesson_new():
 
 # ── Bulletin PDF print ────────────────────────────────────────────────────────
 
+
+@app.route('/safety-promotion/distribution')
+@require_login
+def distribution_list():
+    depts = Department.query.order_by(Department.name).all()
+    dept_f = request.args.get('dept', '')
+    q = DistributionList.query
+    if dept_f:
+        q = q.filter_by(department_id=int(dept_f))
+    recipients = q.order_by(DistributionList.name).all()
+    total = DistributionList.query.filter_by(is_active=True).count()
+    return render_template('spi/sp_distribution.html',
+                           recipients=recipients, total=total, dept_f=dept_f, depts=depts)
+
+@app.route('/safety-promotion/distribution/add', methods=['POST'])
+@require_login
+def distribution_add():
+    f = request.form
+    email = f.get('email', '').strip()
+    if not email:
+        flash('Email required.', 'error')
+        return redirect(url_for('distribution_list'))
+    if DistributionList.query.filter_by(email=email).first():
+        flash(email + ' already in list.', 'warning')
+        return redirect(url_for('distribution_list'))
+    db.session.add(DistributionList(
+        name=f.get('name','').strip(), email=email,
+        department_id=int(f['department_id']) if f.get('department_id') else None,
+        position=f.get('position','').strip(), is_active=True))
+    db.session.commit()
+    flash('Added ' + email, 'success')
+    return redirect(url_for('distribution_list'))
+
+@app.route('/safety-promotion/distribution/<int:rid>/toggle', methods=['POST'])
+@require_login
+def distribution_toggle(rid):
+    r = DistributionList.query.get_or_404(rid)
+    r.is_active = not r.is_active
+    db.session.commit()
+    flash(r.email + ' updated.', 'success')
+    return redirect(url_for('distribution_list'))
+
+@app.route('/safety-promotion/distribution/<int:rid>/delete', methods=['POST'])
+@require_login
+def distribution_delete(rid):
+    r = DistributionList.query.get_or_404(rid)
+    db.session.delete(r)
+    db.session.commit()
+    flash('Removed.', 'success')
+    return redirect(url_for('distribution_list'))
+
+@app.route('/safety-promotion/distribution/import', methods=['POST'])
+@require_login
+def distribution_import():
+    added = skipped = 0
+    for line in request.form.get('csv_text','').strip().splitlines():
+        parts = [p.strip() for p in line.split(',')]
+        if len(parts) < 2: continue
+        name, email = parts[0], parts[1]
+        if not email or DistributionList.query.filter_by(email=email).first():
+            skipped += 1; continue
+        dept_id = int(parts[2]) if len(parts)>2 and parts[2].isdigit() else None
+        db.session.add(DistributionList(name=name, email=email, department_id=dept_id,
+                                        position=parts[3] if len(parts)>3 else ''))
+        added += 1
+    db.session.commit()
+    flash('Imported ' + str(added) + ' (' + str(skipped) + ' skipped).', 'success')
+    return redirect(url_for('distribution_list'))
+
+@app.route('/safety-promotion/email-log')
+@require_login
+def email_log_list():
+    logs = EmailLog.query.order_by(EmailLog.sent_at.desc()).limit(100).all()
+    total_sent = EmailLog.query.filter_by(status='Sent').count()
+    total_recv = db.session.query(db.func.sum(EmailLog.recipient_count)).scalar() or 0
+    return render_template('spi/sp_email_log.html', logs=logs,
+                           total_sent=total_sent, total_recipients=int(total_recv))
+
+@app.route('/safety-promotion/bulletin/<bid>/send-email', methods=['POST'])
+@require_login
+def bulletin_send_email(bid):
+    b = SafetyBulletin.query.get_or_404(bid)
+    dept_ids = [int(d) for d in request.form.getlist('dept_ids') if d.isdigit()] or None
+    to = get_recipients(dept_ids)
+    if not to:
+        flash('No recipients. Add to Distribution List first.', 'warning')
+        return redirect(url_for('sp_bulletin_detail', bid=bid))
+    sev = {'Critical':'#dc2626','High':'#ea580c','Information':'#1d4ed8'}.get(b.severity,'#374151')
+    body = ('<div style="background:'+sev+';color:#fff;padding:6px 14px;border-radius:5px;font-size:12px;font-weight:700;display:inline-block;margin-bottom:12px">'
+            +b.severity.upper()+' — '+(b.bulletin_type or '')+'</div>'
+            +'<p>'+(b.content or '').replace('\n','<br>')+'</p>'
+            +('<p style="margin-top:12px"><strong>Recommendations:</strong><br>'+(b.recommendations or '').replace('\n','<br>')+'</p>' if b.recommendations else ''))
+    subj = '[Safety Bulletin] '+(b.ref_number or b.id)+' — '+b.title
+    sent, err = send_email(to, subj, email_html(b.title,'Safety Bulletin — '+(b.ref_number or b.id), body,
+                           b.ref_number or b.id, b.issue_date or b.created_at.strftime('%d %b %Y')))
+    dept_lbl = 'All' if not dept_ids else ','.join(d.name for d in Department.query.filter(Department.id.in_(dept_ids)).all())
+    db.session.add(EmailLog(subject=subj,content_type='Bulletin',content_ref=str(bid),
+        sent_by=session.get('admin_name','System'),recipient_count=sent,
+        dept_filter=dept_lbl, status='Sent' if not err else 'Failed',error_message=err))
+    db.session.commit()
+    flash('Emailed to '+str(sent)+' recipient(s).', 'success')
+    return redirect(url_for('sp_bulletin_detail', bid=bid))
+
+@app.route('/safety-promotion/newsletter/<int:nid>/send-email', methods=['POST'])
+@require_login
+def newsletter_send_email(nid):
+    n = SafetyNewsletter.query.get_or_404(nid)
+    dept_ids = [int(d) for d in request.form.getlist('dept_ids') if d.isdigit()] or None
+    to = get_recipients(dept_ids)
+    if not to:
+        flash('No recipients.', 'warning')
+        return redirect('/safety-promotion/newsletter/'+str(nid))
+    subj = '[Safety Newsletter] '+n.title
+    body = '<p>'+(n.summary or '').replace('\n','<br>')+'</p>'+('<div>'+(n.content or '').replace('\n','<br>')+'</div>' if n.content else '')
+    sent, err = send_email(to, subj, email_html(n.title,'Safety Newsletter',body))
+    dept_lbl = 'All' if not dept_ids else ','.join(d.name for d in Department.query.filter(Department.id.in_(dept_ids)).all())
+    db.session.add(EmailLog(subject=subj,content_type='Newsletter',content_ref=str(nid),
+        sent_by=session.get('admin_name','System'),recipient_count=sent,
+        dept_filter=dept_lbl,status='Sent' if not err else 'Failed',error_message=err))
+    db.session.commit()
+    flash('Emailed to '+str(sent)+' recipient(s).', 'success')
+    return redirect('/safety-promotion/newsletter/'+str(nid))
+
+@app.route('/safety-promotion/survey/<int:sid>/send-email', methods=['POST'])
+@require_login
+def survey_send_email(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    dept_ids = [int(d) for d in request.form.getlist('dept_ids') if d.isdigit()] or None
+    to = get_recipients(dept_ids)
+    if not to:
+        flash('No recipients.', 'warning')
+        return redirect('/safety-promotion/survey/'+str(sid))
+    url = request.host_url.rstrip('/')+'/safety-promotion/survey/'+str(sid)+'/respond-public'
+    subj = '[Safety Survey] '+s.title
+    body = ('<p>'+(s.description or '')+'</p>'
+            +'<p>Closes: <strong>'+(s.end_date or 'Open')+'</strong></p>'
+            +'<div style="text-align:center;margin:20px 0">'
+            +'<a href="'+url+'" style="background:#0f1c3f;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">Complete Survey</a></div>')
+    sent, err = send_email(to, subj, email_html(s.title,'Safety Survey',body))
+    s.target_count = max(s.target_count or 0, sent)
+    db.session.add(EmailLog(subject=subj,content_type='Survey',content_ref=str(sid),
+        sent_by=session.get('admin_name','System'),recipient_count=sent,
+        dept_filter='All',status='Sent' if not err else 'Failed',error_message=err))
+    db.session.commit()
+    flash('Survey link emailed to '+str(sent)+' recipient(s).', 'success')
+    return redirect('/safety-promotion/survey/'+str(sid))
+
+@app.route('/safety-promotion/survey/<int:sid>/respond-public', methods=['GET','POST'])
+def survey_respond_public(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    if s.status != 'Active':
+        return render_template('spi/sp_survey_closed.html', survey=s)
+    try: questions = _json_mod.loads(s.questions or '[]')
+    except: questions = []
+    if request.method == 'POST':
+        f = request.form
+        is_anon = f.get('anonymous') == 'yes'
+        answers = {str(i): f.get('q_'+str(i),'') for i in range(len(questions))}
+        db.session.add(SurveyResponse(
+            survey_id=sid,
+            respondent_name='' if is_anon else f.get('name','').strip(),
+            respondent_email='' if is_anon else f.get('email','').strip(),
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            is_anonymous=is_anon, answers=_json_mod.dumps(answers),
+            ip_address=request.remote_addr))
+        s.response_count = SurveyResponse.query.filter_by(survey_id=sid).count() + 1
+        db.session.commit()
+        return render_template('spi/sp_survey_thanks.html', survey=s)
+    return render_template('spi/sp_survey_public.html', survey=s, questions=questions)
+
+@app.route('/safety-promotion/survey/<int:sid>/responses')
+@require_login
+def survey_responses(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    responses = SurveyResponse.query.filter_by(survey_id=sid).order_by(SurveyResponse.submitted_at.desc()).all()
+    try: questions = _json_mod.loads(s.questions or '[]')
+    except: questions = []
+    dept_counts = {}
+    for r in responses:
+        k = r.department.name if r.department else 'Unknown'
+        dept_counts[k] = dept_counts.get(k, 0) + 1
+    rate = round((len(responses)/s.target_count)*100) if s.target_count else 0
+    return render_template('spi/sp_survey_responses.html',
+                           survey=s, responses=responses, questions=questions,
+                           dept_counts=dept_counts, response_rate=rate)
+
+@app.route('/safety-promotion/lesson/<int:lid>/send-email', methods=['POST'])
+@require_login
+def lesson_send_email(lid):
+    ll = LessonLearned.query.get_or_404(lid)
+    to = get_recipients(None)
+    if not to:
+        flash('No recipients.', 'warning')
+        return redirect('/safety-promotion/lesson/'+str(lid))
+    subj = '[Lesson Learned] '+ll.title
+    body = ('<div style="background:#f8f9fc;border-left:4px solid #c9a84c;padding:12px;margin-bottom:12px">'
+            +'<strong>Event:</strong> '+(ll.event_description or '—')+'</div>'
+            +('<p><strong>Lesson:</strong><br>'+(ll.lesson or '').replace('\n','<br>')+'</p>' if ll.lesson else ''))
+    sent, err = send_email(to, subj, email_html(ll.title,'Lesson Learned',body))
+    db.session.add(EmailLog(subject=subj,content_type='Lesson',content_ref=str(lid),
+        sent_by=session.get('admin_name','System'),recipient_count=sent,
+        dept_filter='All',status='Sent' if not err else 'Failed',error_message=err))
+    db.session.commit()
+    flash('Emailed to '+str(sent)+' recipient(s).', 'success')
+    return redirect('/safety-promotion/lesson/'+str(lid))
+
 @app.route('/safety-promotion/bulletin/<bid>/print')
 def sp_bulletin_print(bid):
     b = SafetyBulletin.query.get_or_404(bid)
@@ -2900,6 +3169,364 @@ def admin_cleanup():
 
 
 # ─── Risk Matrix Reference ────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SAFETY PROMOTION — EMAIL DISTRIBUTION & RESPONSE TRACKING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _smtp_cfg():
+    return {
+        'host': os.environ.get('SMTP_HOST',''),
+        'port': int(os.environ.get('SMTP_PORT','587')),
+        'user': os.environ.get('SMTP_USER',''),
+        'password': os.environ.get('SMTP_PASSWORD',''),
+        'from_email': os.environ.get('SMTP_FROM','safety@aviation.jo'),
+    }
+
+def _get_dist_list(dept_id=None):
+    q = DistributionList.query.filter_by(is_active=True)
+    if dept_id:
+        q = q.filter_by(department_id=int(dept_id))
+    return q.all()
+
+def _do_send(emails, subject, html):
+    cfg = _smtp_cfg()
+    if not cfg['host']:
+        return len(emails), None  # SMTP not configured — log as simulated
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    try:
+        srv = smtplib.SMTP(cfg['host'], cfg['port'])
+        srv.starttls()
+        srv.login(cfg['user'], cfg['password'])
+        sent = 0
+        for addr in emails:
+            m = MIMEMultipart('alternative')
+            m['Subject'] = subject
+            m['From']    = cfg['from_email']
+            m['To']      = addr
+            m.attach(MIMEText(html, 'html'))
+            try:
+                srv.sendmail(cfg['from_email'], [addr], m.as_string())
+                sent += 1
+            except Exception:
+                pass
+        srv.quit()
+        return sent, None
+    except Exception as e:
+        return 0, str(e)
+
+def _write_log(ctype, cref, subject, count, dept_label, status='Sent', err=None):
+    db.session.add(EmailLog(
+        content_type=ctype, content_ref=str(cref), subject=subject,
+        recipient_count=count, dept_filter=dept_label or 'All',
+        sent_by=session.get('admin_name','System'),
+        status=status, error_message=err
+    ))
+    db.session.commit()
+
+def _email_html(title, subtitle, body, color='#0f1c3f'):
+    return (
+        '<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>'
+        'body{font-family:Arial,sans-serif;background:#f0f2f8;margin:0;padding:0}'
+        '.w{max-width:620px;margin:20px auto;background:#fff;border-radius:10px;overflow:hidden}'
+        '.h{background:' + color + ';padding:22px 28px;text-align:center}'
+        '.hl{color:#c9a84c;font-size:22px;font-weight:800}'
+        '.hs{color:rgba(255,255,255,.6);font-size:11px;margin-top:3px}'
+        '.tb{background:' + color + '22;border-bottom:3px solid ' + color + ';padding:14px 28px}'
+        '.tb h1{font-size:17px;font-weight:800;color:' + color + ';margin:0}'
+        '.tb p{font-size:12px;color:#6b7280;margin:3px 0 0}'
+        '.b{padding:22px 28px;font-size:14px;color:#374151;line-height:1.7}'
+        '.f{background:#f8f9fc;padding:12px 28px;font-size:11px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb}'
+        '</style></head><body><div class="w">'
+        '<div class="h"><div class="hl">&#x2708; Jordan Aviation</div>'
+        '<div class="hs">Safety Management System</div></div>'
+        '<div class="tb"><h1>' + title + '</h1><p>' + subtitle + '</p></div>'
+        '<div class="b">' + body + '</div>'
+        '<div class="f">Jordan Aviation SMS &middot; Official Safety Communication</div>'
+        '</div></body></html>'
+    )
+
+
+# ── Distribution List ─────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/distribution')
+@require_login
+def sp_distribution():
+    recipients = DistributionList.query.order_by(DistributionList.department_id, DistributionList.name).all()
+    total = DistributionList.query.filter_by(is_active=True).count()
+    depts = Department.query.all()
+    return render_template('spi/sp_distribution.html',
+                           recipients=recipients, total=total, depts=depts)
+
+
+@app.route('/safety-promotion/distribution/add', methods=['POST'])
+@require_login
+def sp_distribution_add():
+    f = request.form
+    if not f.get('email') or not f.get('name'):
+        flash('Name and email required.', 'error')
+        return redirect(url_for('sp_distribution'))
+    if DistributionList.query.filter_by(email=f['email'].strip()).first():
+        flash(f'{f["email"]} already in distribution list.', 'warning')
+        return redirect(url_for('sp_distribution'))
+    db.session.add(DistributionList(
+        name=f['name'].strip(), email=f['email'].strip(),
+        position=f.get('position',''),
+        department_id=int(f['department_id']) if f.get('department_id') else None,
+        is_active=True,
+    ))
+    db.session.commit()
+    flash(f'+ {f["name"]} added to distribution list.', 'success')
+    return redirect(url_for('sp_distribution'))
+
+
+@app.route('/safety-promotion/distribution/<int:rid>/toggle', methods=['POST'])
+@require_login
+def sp_distribution_toggle(rid):
+    r = DistributionList.query.get_or_404(rid)
+    r.is_active = not r.is_active
+    db.session.commit()
+    flash(f'{"Activated" if r.is_active else "Deactivated"}: {r.name}', 'success')
+    return redirect(url_for('sp_distribution'))
+
+
+@app.route('/safety-promotion/distribution/<int:rid>/delete', methods=['POST'])
+@require_login
+def sp_distribution_delete(rid):
+    r = DistributionList.query.get_or_404(rid)
+    db.session.delete(r); db.session.commit()
+    flash('Recipient removed.', 'success')
+    return redirect(url_for('sp_distribution'))
+
+
+# ── Email Log ─────────────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/email-log')
+@require_login
+def sp_email_log():
+    logs             = EmailLog.query.order_by(EmailLog.sent_at.desc()).all()
+    total_sent       = sum(1 for l in logs if 'Sent' in (l.status or ''))
+    total_failed     = sum(1 for l in logs if l.status == 'Failed')
+    total_recipients = sum(l.recipient_count or 0 for l in logs)
+    return render_template('spi/sp_email_log.html',
+                           logs=logs, total_sent=total_sent,
+                           total_failed=total_failed,
+                           total_recipients=total_recipients)
+
+
+# ── Send Bulletin ─────────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/bulletin/<bid>/send-email', methods=['POST'])
+@require_login
+def sp_send_bulletin_email(bid):
+    b    = SafetyBulletin.query.get_or_404(bid)
+    dept_id = request.form.get('dept_id') or None
+    recip   = _get_dist_list(dept_id)
+    if not recip:
+        flash('No active recipients. Add employees to Distribution List first.', 'warning')
+        return redirect(url_for('sp_bulletin_detail', bid=bid))
+    emails     = [r.email for r in recip]
+    dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
+    clr        = {'Critical':'#dc2626','High':'#ea580c','Medium':'#d97706','Low':'#15803d'}.get(b.severity,'#0f1c3f')
+    body       = ('<p><b>Ref:</b> ' + (b.ref_number or b.id) + ' &nbsp;&middot;&nbsp; '
+                  '<b>Severity:</b> <span style="color:' + clr + '">' + (b.severity or '') + '</span><br/>'
+                  '<b>Issued by:</b> ' + (b.issued_by or 'Safety') + ' &nbsp;&middot;&nbsp; '
+                  '<b>Date:</b> ' + (b.issue_date or '') + '</p>'
+                  '<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0"/>'
+                  '<p>' + (b.content or '').replace('\n','<br/>') + '</p>'
+                  + ('<p><b>Recommendations:</b><br/>' + (b.recommendations or '').replace('\n','<br/>') + '</p>'
+                     if b.recommendations else ''))
+    subject    = '[Safety Bulletin] ' + b.title
+    html       = _email_html(b.title, 'Safety Bulletin ' + (b.severity or ''), body, clr)
+    sent, err  = _do_send(emails, subject, html)
+    _write_log('Bulletin', bid, subject, sent, dept_label,
+               'Sent' if not err else 'Failed', err)
+    flash(f'Bulletin emailed to {sent} recipients ({dept_label}).', 'success')
+    return redirect(url_for('sp_bulletin_detail', bid=bid))
+
+
+# ── Send Newsletter ───────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/newsletter/<int:nid>/send-email', methods=['POST'])
+@require_login
+def sp_send_newsletter_email(nid):
+    n       = SafetyNewsletter.query.get_or_404(nid)
+    dept_id = request.form.get('dept_id') or None
+    recip   = _get_dist_list(dept_id)
+    if not recip:
+        flash('No active recipients in distribution list.', 'warning')
+        return redirect(url_for('sp_newsletter_detail', nid=nid))
+    emails     = [r.email for r in recip]
+    dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
+    body       = ('<p><b>Issue:</b> ' + (n.issue_number or '') +
+                  ' &nbsp;&middot;&nbsp; <b>Date:</b> ' + (n.issue_date or '') +
+                  '<br/><b>Author:</b> ' + (n.author or 'Safety') + '</p>'
+                  + ('<p><em>' + (n.summary or '') + '</em></p>' if n.summary else '')
+                  + '<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0"/>'
+                  + '<p>' + (n.content or '').replace('\n','<br/>') + '</p>')
+    subject    = '[Safety Newsletter] ' + n.title
+    html       = _email_html(n.title, 'Safety Newsletter', body)
+    sent, err  = _do_send(emails, subject, html)
+    _write_log('Newsletter', nid, subject, sent, dept_label,
+               'Sent' if not err else 'Failed', err)
+    flash(f'Newsletter emailed to {sent} recipients.', 'success')
+    return redirect(url_for('sp_newsletter_detail', nid=nid))
+
+
+# ── Send Survey ───────────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/survey/<int:sid>/send-email', methods=['POST'])
+@require_login
+def sp_send_survey_email(sid):
+    s       = SafetySurvey.query.get_or_404(sid)
+    dept_id = request.form.get('dept_id') or None
+    recip   = _get_dist_list(dept_id)
+    if not recip:
+        flash('No active recipients in distribution list.', 'warning')
+        return redirect(url_for('sp_survey', sid=sid))
+    emails     = [r.email for r in recip]
+    dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
+    pub_url    = request.host_url.rstrip('/') + '/safety-promotion/survey/' + str(sid) + '/respond-public'
+    body       = ('<p>The Safety Department invites you to participate in this safety survey.</p>'
+                  '<p><b>' + s.title + '</b><br/>'
+                  + (s.description or '') + '</p>'
+                  + '<p><b>Deadline:</b> ' + (s.end_date or 'Open ended') + '</p>'
+                  '<p style="text-align:center;margin-top:18px">'
+                  '<a href="' + pub_url + '" style="background:#7c3aed;color:#fff;padding:11px 24px;'
+                  'border-radius:7px;font-weight:700;font-size:13px;text-decoration:none">'
+                  'Complete Survey &rarr;</a></p>')
+    subject    = '[Safety Survey] ' + s.title
+    html       = _email_html(s.title, 'Safety Survey — Your Participation Required', body, '#7c3aed')
+    sent, err  = _do_send(emails, subject, html)
+    s.target_count = (s.target_count or 0) + sent
+    _write_log('Survey', sid, subject, sent, dept_label,
+               'Sent' if not err else 'Failed', err)
+    flash(f'Survey invitation sent to {sent} recipients.', 'success')
+    return redirect(url_for('sp_survey', sid=sid))
+
+
+# ── Send Campaign ─────────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/campaign/<int:cid>/send-email', methods=['POST'])
+@require_login
+def sp_send_campaign_email(cid):
+    camp    = SafetyCampaign.query.get_or_404(cid)
+    dept_id = request.form.get('dept_id') or None
+    recip   = _get_dist_list(dept_id)
+    if not recip:
+        flash('No active recipients in distribution list.', 'warning')
+        return redirect(url_for('sp_campaign_detail', cid=cid))
+    emails     = [r.email for r in recip]
+    dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
+    body       = ('<p><b>Type:</b> ' + (camp.campaign_type or '') +
+                  ' &nbsp;&middot;&nbsp; <b>Period:</b> ' + (camp.start_date or '') +
+                  ' to ' + (camp.end_date or '') + '</p>'
+                  '<p>' + (camp.description or '').replace('\n','<br/>') + '</p>'
+                  + ('<p><b>Objectives:</b><br/>' + (camp.objectives or '').replace('\n','<br/>') + '</p>'
+                     if camp.objectives else ''))
+    subject    = '[Safety Campaign] ' + camp.title
+    html       = _email_html(camp.title, 'Safety Campaign', body, '#d97706')
+    sent, err  = _do_send(emails, subject, html)
+    _write_log('Campaign', cid, subject, sent, dept_label,
+               'Sent' if not err else 'Failed', err)
+    flash(f'Campaign emailed to {sent} recipients.', 'success')
+    return redirect(url_for('sp_campaign_detail', cid=cid))
+
+
+# ── Send Lesson ───────────────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/lesson/<int:lid>/send-email', methods=['POST'])
+@require_login
+def sp_send_lesson_email(lid):
+    ll   = LessonLearned.query.get_or_404(lid)
+    recip = _get_dist_list()
+    if not recip:
+        flash('No active recipients in distribution list.', 'warning')
+        return redirect(url_for('sp_lesson_detail', lid=lid))
+    emails = [r.email for r in recip]
+    body   = ('<p><b>Category:</b> ' + (ll.category or '') +
+              ' &nbsp;&middot;&nbsp; <b>Date:</b> ' + (ll.date or '') +
+              '<br/><b>Author:</b> ' + (ll.author or 'Safety') + '</p>'
+              '<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0"/>'
+              '<p>' + (ll.description or '').replace('\n','<br/>') + '</p>'
+              + ('<p><b>Lesson:</b><br/>' + (ll.lesson or '').replace('\n','<br/>') + '</p>'
+                 if ll.lesson else '')
+              + ('<p><b>Recommendations:</b><br/>' + (ll.recommendations or '').replace('\n','<br/>') + '</p>'
+                 if ll.recommendations else ''))
+    subject = '[Lessons Learned] ' + ll.title
+    html    = _email_html(ll.title, 'Lessons Learned', body, '#15803d')
+    sent, err = _do_send(emails, subject, html)
+    _write_log('Lesson', lid, subject, sent, 'All',
+               'Sent' if not err else 'Failed', err)
+    flash(f'Lesson emailed to {sent} recipients.', 'success')
+    return redirect(url_for('sp_lesson_detail', lid=lid))
+
+
+# ── Public Survey Response ────────────────────────────────────────────────────
+
+@app.route('/safety-promotion/survey/<int:sid>/respond-public', methods=['GET','POST'])
+def sp_survey_respond_public(sid):
+    s = SafetySurvey.query.get_or_404(sid)
+    if s.status != 'Active':
+        return render_template('spi/sp_survey_closed.html', survey=s)
+
+    import json as _j
+    questions = []
+    try:
+        questions = _j.loads(s.questions or '[]')
+    except Exception:
+        pass
+
+    if request.method == 'POST':
+        f       = request.form
+        is_anon = bool(f.get('is_anonymous'))
+        answers = {str(i): f.get('q_' + str(i), '') for i in range(len(questions))}
+        db.session.add(SurveyResponse(
+            survey_id=sid,
+            respondent_name='' if is_anon else f.get('respondent_name',''),
+            respondent_email='' if is_anon else f.get('respondent_email',''),
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            is_anonymous=is_anon,
+            answers=_j.dumps(answers),
+            ip_address=request.remote_addr,
+        ))
+        s.response_count = (s.response_count or 0) + 1
+        db.session.commit()
+        return render_template('spi/sp_survey_thanks.html', survey=s)
+
+    return render_template('spi/sp_survey_public.html', survey=s, questions=questions)
+
+
+# ── Survey Response Tracking ──────────────────────────────────────────────────
+
+@app.route('/safety-promotion/survey/<int:sid>/responses')
+@require_login
+def sp_survey_responses(sid):
+    s         = SafetySurvey.query.get_or_404(sid)
+    responses = SurveyResponse.query.filter_by(survey_id=sid)\
+                    .order_by(SurveyResponse.submitted_at.desc()).all()
+    total_sent    = s.target_count or 0
+    resp_count    = len(responses)
+    response_rate = round((resp_count / total_sent * 100) if total_sent > 0 else 0, 1)
+
+    import json as _j
+    from collections import Counter
+    questions   = []
+    try:
+        questions = _j.loads(s.questions or '[]')
+    except Exception:
+        pass
+    dept_counts = Counter(r.department_id for r in responses if r.department_id)
+    dept_names  = {d.id: d.name for d in Department.query.all()}
+    return render_template('spi/sp_survey_responses.html',
+                           survey=s, responses=responses,
+                           response_rate=response_rate, questions=questions,
+                           dept_counts=dept_counts, dept_names=dept_names,
+                           total_sent=total_sent)
+
+
 @app.route('/risk-matrix')
 @require_login
 def risk_matrix():
@@ -3423,41 +4050,16 @@ def new_audit_schedule():
             status='Planned'
         )
         db.session.add(s)
-        db.session.flush()
-
-        # ── Load latest ChecklistTemplate from DB first ──────────────────────
-        db_tmpl = ChecklistTemplate.query.filter_by(
-            department_id=int(f['department_id']),
-            audit_type=f['audit_type'],
-            is_active=True
-        ).order_by(ChecklistTemplate.version.desc()).first()
-
-        items_loaded = 0
-        if db_tmpl and db_tmpl.items:
-            # Use the latest saved template from Checklist Manager
-            for ti in db_tmpl.items:
-                db.session.add(AuditChecklist(
-                    schedule_id=sid, category=ti.category,
-                    item_ref=ti.item_ref, question=ti.question,
-                    sequence=ti.sequence,
-                ))
-            items_loaded = len(db_tmpl.items)
-            tmpl_label = f'{db_tmpl.name} (v{db_tmpl.version})'
-        else:
-            # No saved template yet — fall back to static default
-            static = get_checklist_template(dept.code if dept else 'default')
-            idx = 0
-            for cat, ref, question in static:
-                db.session.add(AuditChecklist(
-                    schedule_id=sid, category=cat,
-                    item_ref=ref, question=question, sequence=idx
-                ))
-                idx += 1
-            items_loaded = idx
-            tmpl_label = 'system default'
-
+        # Auto-populate checklist
+        template = get_checklist_template(dept.code if dept else 'default')
+        for idx, (cat, ref, question) in enumerate(template):
+            item = AuditChecklist(
+                schedule_id=sid, category=cat,
+                item_ref=ref, question=question, sequence=idx
+            )
+            db.session.add(item)
         db.session.commit()
-        flash(f'✓ Audit {sid} created — {items_loaded} checklist items loaded from {tmpl_label}.', 'success')
+        flash(f'✓ Audit {sid} created. Checklist auto-populated.', 'success')
         return redirect(url_for('audit_schedule'))
     return render_template('audit/audit_schedule_form.html')
 
@@ -3526,22 +4128,16 @@ def start_audit(sid):
     s.actual_date  = date.today().isoformat()
     s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
 
-    # ── Checklist sync on Start Audit ────────────────────────────────────────
-    # Only reload checklist if audit is FIRST being started (status was Planned).
-    # This ensures new/updated checklist templates are picked up automatically,
-    # while already-running audits keep their historical snapshot.
-    if s.department_id:
-        latest = ChecklistTemplate.query.filter_by(
+    # Auto-load checklist from latest saved department template
+    if s.department_id and not s.checklist_items:
+        from models import AuditChecklist
+        tmpl = ChecklistTemplate.query.filter_by(
             department_id=s.department_id,
             audit_type=s.audit_type or 'Internal',
             is_active=True
-        ).order_by(ChecklistTemplate.version.desc()).first()
-
-        if latest and latest.items:
-            # Always replace checklist with latest template snapshot
-            AuditChecklist.query.filter_by(schedule_id=sid).delete()
-            db.session.flush()
-            for ti in latest.items:
+        ).first()
+        if tmpl and tmpl.items:
+            for ti in tmpl.items:
                 db.session.add(AuditChecklist(
                     schedule_id=sid,
                     category=ti.category,
@@ -3550,19 +4146,22 @@ def start_audit(sid):
                     sequence=ti.sequence,
                 ))
             db.session.flush()
-            flash(f'✓ Audit started — checklist loaded from {latest.name} (v{latest.version}), {len(latest.items)} items.', 'success')
+            flash(f'✓ Audit started. Loaded {len(tmpl.items)} items from {tmpl.name}.', 'success')
         else:
-            # No DB template — keep existing items or load static default
-            if not s.checklist_items:
-                dept = Department.query.get(s.department_id)
-                static = get_checklist_template(dept.code if dept else 'default')
-                for idx, (cat, ref, q) in enumerate(static):
-                    db.session.add(AuditChecklist(
-                        schedule_id=sid, category=cat,
-                        item_ref=ref, question=q, sequence=idx,
+            # Fall back to static template (existing get_checklist_template logic)
+            from models import AuditChecklist as ACL
+            dept = Department.query.get(s.department_id)
+            static_tmpl = get_checklist_template(dept.code if dept else 'default')
+            for cat, items in static_tmpl.items():
+                for seq, (ref, q) in enumerate(items):
+                    db.session.add(ACL(
+                        schedule_id=sid,
+                        category=cat,
+                        item_ref=ref,
+                        question=q,
+                        sequence=seq,
                     ))
-                db.session.flush()
-            flash('✓ Audit started.', 'success')
+            flash('✓ Audit started. Checklist loaded from default template.', 'success')
 
     db.session.commit()
     return redirect(url_for('audit_execution', sid=sid))
@@ -5992,6 +6591,9 @@ with app.app_context():
     # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
     # Safely adds any missing columns to existing live databases on Render.
     migrations = {
+            'distribution_lists': [('name','VARCHAR(100)'),('email','VARCHAR(200)'),('department_id','INTEGER'),('position','VARCHAR(100)'),('is_active','BOOLEAN DEFAULT TRUE')],
+            'email_logs': [('subject','VARCHAR(300)'),('content_type','VARCHAR(30)'),('content_ref','VARCHAR(50)'),('sent_by','VARCHAR(100)'),('recipient_count','INTEGER DEFAULT 0'),('dept_filter','VARCHAR(200)'),('status',"VARCHAR(20) DEFAULT 'Sent'"),('error_message','TEXT')],
+            'survey_responses': [('survey_id','INTEGER'),('respondent_name','VARCHAR(100)'),('respondent_email','VARCHAR(200)'),('department_id','INTEGER'),('is_anonymous','BOOLEAN DEFAULT FALSE'),('answers','TEXT'),('ip_address','VARCHAR(50)')],
             'departments': [
                 ('color',                  'VARCHAR(20) DEFAULT "#1e40af"'),
             ],
