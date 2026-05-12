@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Survey Responses{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion/survey/{{ survey.id }}" style="color:var(--muted);font-size:13px">← Back to Survey</a></div>
+<div class="page-title">📊 Survey Responses — {{ survey.title }}</div>
+<div class="page-sub">{{ responses|length }} responses received</div>
+
+<!-- KPI cards -->
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
+  <div class="stat-card" style="--accent:#0f1c3f">
+    <div class="stat-val" style="color:#0f1c3f">{{ survey.target_count or 0 }}</div>
+    <div class="stat-lbl">Sent To</div>
+  </div>
+  <div class="stat-card" style="--accent:#15803d">
+    <div class="stat-val" style="color:#15803d">{{ responses|length }}</div>
+    <div class="stat-lbl">Responses</div>
+  </div>
+  <div class="stat-card" style="--accent:#dc2626">
+    <div class="stat-val" style="color:#dc2626">{{ (survey.target_count or 0) - responses|length }}</div>
+    <div class="stat-lbl">Pending</div>
+  </div>
+  <div class="stat-card" style="--accent:#7c3aed">
+    <div class="stat-val" style="color:#7c3aed">{{ response_rate }}%</div>
+    <div class="stat-lbl">Response Rate</div>
+  </div>
+  <div class="stat-card" style="--accent:#d97706">
+    <div class="stat-val" style="color:#d97706">{{ responses|selectattr("is_anonymous")|list|length }}</div>
+    <div class="stat-lbl">Anonymous</div>
+  </div>
+</div>
+
+<!-- Progress bar -->
+<div class="card">
+  <div class="card-title">Response Rate</div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="flex:1">
+      <div class="progress">
+        <div class="progress-bar" style="width:{{ response_rate }}%;background:{% if response_rate >= 75 %}#15803d{% elif response_rate >= 50 %}#d97706{% else %}#dc2626{% endif %}"></div>
+      </div>
+    </div>
+    <div style="font-size:18px;font-weight:800;color:var(--navy);font-family:monospace;width:50px">{{ response_rate }}%</div>
+  </div>
+</div>
+
+<!-- Department breakdown -->
+{% if dept_counts %}
+<div class="card">
+  <div class="card-title">Department Participation</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
+    {% for dept, count in dept_counts.items() %}
+    <div style="background:#f8f9fc;border-radius:8px;padding:12px 14px;border-left:3px solid #1d4ed8">
+      <div style="font-size:11px;font-weight:700;color:#374151">{{ dept }}</div>
+      <div style="font-size:22px;font-weight:800;color:#1d4ed8;font-family:monospace">{{ count }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Response list -->
+<div class="card" style="padding:0">
+  <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:700;color:var(--navy)">
+    📋 Individual Responses
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Respondent</th>
+          <th>Department</th>
+          <th>Submitted</th>
+          <th>Type</th>
+          {% for i, q in enumerate(questions) %}
+          <th style="max-width:120px;font-size:9px">{{ q.get('text','Q'+loop.index|string)[:40] }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in responses %}
+      {% set answers = {} %}
+      {% if r.answers %}
+        {% set answers = {} %}
+      {% endif %}
+      <tr>
+        <td style="font-size:11px;font-family:monospace">{{ loop.index }}</td>
+        <td style="font-size:12px">
+          {% if r.is_anonymous %}
+            <span style="color:var(--muted);font-style:italic">🔒 Anonymous</span>
+          {% else %}
+            {{ r.respondent_name or '—' }}<br>
+            <span style="font-size:10px;color:var(--muted)">{{ r.respondent_email or '' }}</span>
+          {% endif %}
+        </td>
+        <td style="font-size:11px">{{ r.department.name if r.department else '—' }}</td>
+        <td style="font-size:11px;font-family:monospace">{{ r.submitted_at.strftime("%d %b %Y %H:%M") }}</td>
+        <td>
+          {% if r.is_anonymous %}<span class="badge b-gray" style="font-size:10px">Anonymous</span>
+          {% else %}<span class="badge b-blue" style="font-size:10px">Tracked</span>{% endif %}
+        </td>
+        {% for i in range(questions|length) %}
+        <td style="font-size:11px">—</td>
+        {% endfor %}
+      </tr>
+      {% else %}
+      <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">No responses yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

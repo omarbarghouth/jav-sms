@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Email Log{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion" style="color:var(--muted);font-size:13px">← Safety Promotion</a></div>
+<div class="page-title">📊 Email Distribution Log</div>
+<div class="page-sub">Complete history of all Safety Promotion emails sent</div>
+
+<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
+  <div class="stat-card" style="--accent:#0f1c3f"><div class="stat-val" style="color:#0f1c3f">{{ total_sent }}</div><div class="stat-lbl">Emails Sent</div></div>
+  <div class="stat-card" style="--accent:#15803d"><div class="stat-val" style="color:#15803d">{{ total_recipients }}</div><div class="stat-lbl">Total Recipients</div></div>
+  <div class="stat-card" style="--accent:#7c3aed"><div class="stat-val" style="color:#7c3aed">{{ logs|length }}</div><div class="stat-lbl">Log Entries</div></div>
+</div>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Date / Time</th><th>Type</th><th>Subject</th><th>Recipients</th><th>Departments</th><th>Sent By</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for log in logs %}
+      <tr>
+        <td style="font-size:11px;font-family:monospace">{{ log.sent_at.strftime("%d %b %Y %H:%M") }}</td>
+        <td>
+          {% set icons = {'Bulletin':'⚠️','Newsletter':'📰','Survey':'📋','Campaign':'📣','Lesson':'📚'} %}
+          <span class="badge b-blue" style="font-size:10px">{{ icons.get(log.content_type,'📧') }} {{ log.content_type }}</span>
+        </td>
+        <td style="font-size:12px;max-width:240px">{{ log.subject[:60] }}{% if log.subject|length > 60 %}…{% endif %}</td>
+        <td style="font-size:13px;font-weight:700;text-align:center">{{ log.recipient_count }}</td>
+        <td style="font-size:11px;color:var(--muted)">{{ log.dept_filter or 'All' }}</td>
+        <td style="font-size:12px">{{ log.sent_by }}</td>
+        <td>
+          {% if log.status == 'Sent' %}<span class="badge b-green b-dot" style="font-size:10px">Sent</span>
+          {% elif log.status == 'Failed' %}<span class="badge b-red b-dot" style="font-size:10px">Failed</span>
+          {% else %}<span class="badge b-gray" style="font-size:10px">{{ log.status }}</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No emails sent yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

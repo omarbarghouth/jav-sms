@@ -3,6 +3,22 @@
 {% block content %}
 <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
   <a href="/safety-promotion/newsletters" style="color:var(--muted);font-size:13px">← Newsletters</a>
+  <!-- Email Distribution Panel -->
+  <div style="background:#f8f9fc;border:1px solid var(--border);border-radius:9px;padding:14px 18px;margin:0 0 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-size:12px;font-weight:700;color:var(--navy)">📧 Email Distribution:</span>
+    <form method="POST" action="/safety-promotion/newsletter/{{ n.id }}/send-email" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select name="dept_id" style="border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit">
+        <option value="">All Departments</option>
+        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm" style="background:#0f1c3f;color:#fff"
+              onclick="return confirm('Send newsletter to distribution list?')">
+        📧 Send Newsletter
+      </button>
+    </form>
+    <a href="/safety-promotion/distribution" style="font-size:11px;color:var(--muted)">Distribution List →</a>
+    <a href="/safety-promotion/email-log" style="font-size:11px;color:var(--muted)">Email Log →</a>
+  </div>
   <div style="display:flex;gap:8px">
     <a href="/safety-promotion/newsletter/{{ n.id }}/edit" class="btn btn-outline btn-sm">✏ Edit</a>
     <a href="/safety-promotion/newsletter/{{ n.id }}/print" target="_blank" class="btn btn-nav btn-sm">🖨 Print PDF</a>

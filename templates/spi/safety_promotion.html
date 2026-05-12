@@ -1,6 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Safety Promotion{% endblock %}
 {% block content %}
+
+  <!-- Email Distribution Stats -->
+  <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
+    <div class="stat-card" style="--accent:#0f1c3f">
+      <div class="stat-val" style="color:#0f1c3f">{{ emails_sent or 0 }}</div>
+      <div class="stat-lbl">Emails Sent</div>
+      <div class="stat-sub"><a href="/safety-promotion/email-log" style="color:var(--navy)">View Log →</a></div>
+    </div>
+    <div class="stat-card" style="--accent:#1d4ed8">
+      <div class="stat-val" style="color:#1d4ed8">{{ dist_count or 0 }}</div>
+      <div class="stat-lbl">Email Recipients</div>
+      <div class="stat-sub"><a href="/safety-promotion/distribution" style="color:var(--navy)">Manage →</a></div>
+    </div>
+    <div class="stat-card" style="--accent:#7c3aed">
+      <div class="stat-val" style="color:#7c3aed">{{ avg_response_rate or 0 }}%</div>
+      <div class="stat-lbl">Avg Survey Response</div>
+    </div>
+  </div>
 <div class="page-title">Safety Promotion</div>
 <div class="page-sub">ICAO Annex 19 §6.4 · Safety communication, training, and awareness management</div>
 
@@ -47,7 +65,8 @@
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="card-title" style="margin:0">🔔 Active Safety Bulletins</div>
-      <a href="/safety-promotion/bulletins" class="btn btn-outline btn-sm">View All</a>
+      <a href="/safety-promotion/distribution" class="btn btn-outline btn-sm" style="margin-bottom:14px">👥 Distribution List</a>
+  <a href="/safety-promotion/bulletins" class="btn btn-outline btn-sm">View All</a>
     </div>
     {% for b in bulletins %}
     <div style="border-left:4px solid {% if b.severity=='Critical' %}#dc2626{% elif b.severity=='High' %}#ea580c{% else %}#1d4ed8{% endif %};padding:10px 12px;background:#f8f9fc;border-radius:0 7px 7px 0;margin-bottom:8px">
