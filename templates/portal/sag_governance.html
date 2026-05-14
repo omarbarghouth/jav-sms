@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Safety Governance Dashboard{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">🏛 Safety Governance Dashboard</div>
+    <div class="page-sub">Enterprise action governance · SAG accountability · Department performance</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/sag-login" target="_blank" class="btn btn-gold btn-sm">🛡 Open SAG Portal</a>
+    <a href="/actions" class="btn btn-nav btn-sm">All Actions</a>
+  </div>
+</div>
+
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
+  <div class="stat-card" style="--accent:#dc2626"><div class="stat-val" style="color:#dc2626">{{ total_open }}</div><div class="stat-lbl">Total Open</div></div>
+  <div class="stat-card" style="--accent:#dc2626"><div class="stat-val" style="color:#dc2626">{{ overdue }}</div><div class="stat-lbl">Overdue</div></div>
+  <div class="stat-card" style="--accent:#d97706"><div class="stat-val" style="color:#d97706">{{ pending_review }}</div><div class="stat-lbl">Pending Review</div></div>
+  <div class="stat-card" style="--accent:#7c3aed"><div class="stat-val" style="color:#7c3aed">{{ returned }}</div><div class="stat-lbl">Returned</div></div>
+  <div class="stat-card" style="--accent:#15803d"><div class="stat-val" style="color:#15803d">{{ closed_month }}</div><div class="stat-lbl">Closed This Month</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+  <div class="card">
+    <div class="card-title">🏢 Department Performance</div>
+    {% if dept_perf %}
+    {% for dp in dept_perf %}
+    <div style="margin-bottom:11px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:3px">
+        <span>{{ dp.dept.name }}</span>
+        <span style="color:{% if dp.overdue>0 %}#dc2626{% else %}var(--muted){% endif %}">
+          {{ dp.open }} open{% if dp.overdue %} · <strong>{{ dp.overdue }} overdue</strong>{% endif %}
+        </span>
+      </div>
+      <div class="progress">
+        <div class="progress-bar" style="width:{{ dp.rate }}%;background:{% if dp.rate>=75 %}#15803d{% elif dp.rate>=50 %}#d97706{% else %}#dc2626{% endif %}"></div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">{{ dp.rate }}% closure rate · {{ dp.total }} total</div>
+    </div>
+    {% endfor %}
+    {% else %}<p style="color:var(--muted);font-size:12px">Assign actions to departments to see performance.</p>{% endif %}
+  </div>
+  <div class="card">
+    <div class="card-title">📋 Open Actions by Source</div>
+    {% if src_data %}
+    {% set max_c = src_data[0][1] if src_data else 1 %}
+    {% for src, cnt in src_data %}
+    <div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:3px">
+        <span>{{ src or 'Manual' }}</span><span style="font-family:monospace">{{ cnt }}</span>
+      </div>
+      <div class="progress"><div class="progress-bar" style="width:{{ (cnt/max_c*100)|round|int }}%;background:#0f1c3f"></div></div>
+    </div>
+    {% endfor %}
+    {% else %}<p style="color:var(--muted);font-size:12px">No open actions.</p>{% endif %}
+  </div>
+</div>
+
+{% if for_review %}
+<div class="card" style="border-left:4px solid #d97706;margin-bottom:14px">
+  <div class="card-title" style="color:#b45309">⏳ Pending Safety Review ({{ for_review|length }})</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Action</th><th>Description</th><th>SAG Member</th><th>Due</th><th>Status</th><th></th></tr></thead>
+    <tbody>{% for a in for_review %}<tr>
+      <td><span class="ctrl-num" style="font-size:10px">{{ a.id }}</span></td>
+      <td style="font-size:12px">{{ (a.description or '')[:50] }}</td>
+      <td style="font-size:11px">{{ a.sag_member or '—' }}</td>
+      <td style="font-size:11px;font-family:monospace">{{ a.due_date or '—' }}</td>
+      <td><span class="badge b-yellow b-dot" style="font-size:10px">{{ a.status }}</span></td>
+      <td><a href="/actions/{{ a.id }}" class="btn btn-nav btn-sm">Review →</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+
+{% if overdue_list %}
+<div class="card" style="border-left:4px solid #dc2626;margin-bottom:14px">
+  <div class="card-title" style="color:#dc2626">🚨 Overdue Actions ({{ overdue_list|length }})</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Action</th><th>Source</th><th>Description</th><th>SAG Member</th><th>Due Date</th><th>Dept</th><th></th></tr></thead>
+    <tbody>{% for a in overdue_list %}<tr class="row-danger">
+      <td><span class="ctrl-num" style="font-size:10px">{{ a.id }}</span></td>
+      <td><span class="badge b-gray" style="font-size:10px">{{ a.source or 'Manual' }}</span></td>
+      <td style="font-size:12px">{{ (a.description or '')[:45] }}</td>
+      <td style="font-size:11px;color:#dc2626;font-weight:600">{{ a.sag_member or '⚠ Unassigned' }}</td>
+      <td style="font-size:11px;font-family:monospace;color:#dc2626;font-weight:700">{{ a.due_date }}</td>
+      <td style="font-size:11px">{{ a.department.name if a.department else '—' }}</td>
+      <td><a href="/actions/{{ a.id }}" class="btn btn-sm btn-danger">Open →</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+
+{% if unassigned %}
+<div class="card" style="border-left:4px solid #6b7280;margin-bottom:14px">
+  <div class="card-title" style="color:#6b7280">⚠ Unassigned Actions ({{ unassigned|length }})</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Action</th><th>Source</th><th>Description</th><th>Priority</th><th>Due</th><th>Assign To</th></tr></thead>
+    <tbody>{% for a in unassigned %}<tr>
+      <td><span class="ctrl-num" style="font-size:10px">{{ a.id }}</span></td>
+      <td><span class="badge b-gray" style="font-size:10px">{{ a.source or 'Manual' }}</span></td>
+      <td style="font-size:12px">{{ (a.description or '')[:45] }}</td>
+      <td>{% if a.priority=='High' %}<span class="badge b-red" style="font-size:10px">{{ a.priority }}</span>
+          {% else %}<span class="badge b-gray" style="font-size:10px">{{ a.priority }}</span>{% endif %}</td>
+      <td style="font-size:11px;font-family:monospace">{{ a.due_date or '—' }}</td>
+      <td>
+        <form method="POST" action="/sag/assign/{{ a.id }}" style="display:flex;gap:6px;align-items:center">
+          <select name="sag_member" style="font-size:11px;padding:4px 7px;border:1px solid var(--border);border-radius:5px">
+            <option value="">Select SAG member…</option>
+            {% for u in sag_members %}<option value="{{ u.username }}">{{ u.full_name or u.username }}</option>{% endfor %}
+          </select>
+          <select name="department_id" style="font-size:11px;padding:4px 7px;border:1px solid var(--border);border-radius:5px">
+            <option value="">Dept…</option>
+            {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+          </select>
+          <input type="hidden" name="return_url" value="/sag/governance"/>
+          <button class="btn btn-nav btn-sm">Assign</button>
+        </form>
+      </td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+{% endblock %}
