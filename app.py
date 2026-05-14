@@ -4938,15 +4938,32 @@ def finding_detail(fid):
 
 @app.route('/audit-findings/<fid>/report')
 def finding_report(fid):
-    """Print-ready finding closure report."""
-    finding = AuditFinding.query.get_or_404(fid)
+    """Professional NCR (Non-Conformance Report) — full lifecycle."""
+    finding  = AuditFinding.query.get_or_404(fid)
     schedule = AuditSchedule.query.get(finding.schedule_id)
     evidence_file_list = [x for x in (finding.evidence_files or '').split(',') if x]
+
+    # Load linked Action (SAG workflow)
+    linked_action = None
+    action_history = []
+    if finding.linked_action_id:
+        linked_action = Action.query.get(finding.linked_action_id)
+        if linked_action:
+            action_history = ActionHistory.query.filter_by(
+                action_id=linked_action.id
+            ).order_by(ActionHistory.changed_at).all()
+
+    # NCR number = finding ref or finding id
+    ncr_number = finding.finding_ref or finding.id
+
     MONTHS = ['January','February','March','April','May','June',
               'July','August','September','October','November','December']
     return render_template('audit/finding_report.html',
                            finding=finding, schedule=schedule,
                            evidence_file_list=evidence_file_list,
+                           linked_action=linked_action,
+                           action_history=action_history,
+                           ncr_number=ncr_number,
                            now=datetime.utcnow(), MONTHS=MONTHS)
 
 
