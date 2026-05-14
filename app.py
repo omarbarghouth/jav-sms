@@ -3735,6 +3735,24 @@ def sag_action_detail(aid):
                 a.implementation_date = f.get('implementation_date')
             if f.get('mitigation_status'):
                 a.mitigation_status = f.get('mitigation_status')
+            # Handle evidence file upload
+            ev_file = request.files.get('evidence_file')
+            if ev_file and ev_file.filename:
+                try:
+                    from werkzeug.utils import secure_filename as sf
+                    import os
+                    ext = ev_file.filename.rsplit('.', 1)[-1].lower() if '.' in ev_file.filename else ''
+                    ALLOWED = {'pdf','doc','docx','xls','xlsx','png','jpg','jpeg','gif','bmp','txt','zip'}
+                    if ext in ALLOWED:
+                        fname = sf(f'evidence_{aid}_{ev_file.filename}')
+                        upload_dir = app.config.get('UPLOAD_FOLDER', 'uploads')
+                        os.makedirs(upload_dir, exist_ok=True)
+                        ev_file.save(os.path.join(upload_dir, fname))
+                        a.evidence_filename = fname
+                    else:
+                        flash(f'⚠ File type .{ext} not allowed.', 'error')
+                except Exception as _e:
+                    flash(f'⚠ File upload failed: {str(_e)[:80]}', 'error')
 
         if action_btn == 'save_progress':
             if a.status in ('Open', 'Assigned'):
