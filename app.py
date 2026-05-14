@@ -402,6 +402,8 @@ def admin_user_new():
         return redirect(url_for('admin_users'))
     u = User(username=f['username'], password_hash=hash_pw(f['password']),
              full_name=f.get('full_name',''), role=f.get('role','safety_officer'),
+             sag_role=f.get('sag_role',''),
+             department_id=int(f['department_id']) if f.get('department_id') else None,
              is_active=True)
     db.session.add(u); db.session.commit()
     flash(f'✓ User {u.username} created.', 'success')
