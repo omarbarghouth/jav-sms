@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from openpyxl import Workbook
@@ -8,59 +8,6 @@ from openpyxl.utils import get_column_letter
 from flask import send_file, make_response
 
 app = Flask(__name__)
-
-@app.template_filter('fromjson')
-def fromjson_filter(s):
-    import json
-    try: return json.loads(s or '{}')
-    except: return {}
-
-import smtplib, json as _json_mod
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-SMTP_HOST=os.environ.get('SMTP_HOST','')
-SMTP_PORT=int(os.environ.get('SMTP_PORT',587))
-SMTP_USER=os.environ.get('SMTP_USER','')
-SMTP_PASSWORD=os.environ.get('SMTP_PASSWORD','')
-SMTP_FROM=os.environ.get('SMTP_FROM','safety@jordanaviation.com')
-SMTP_FROM_NAME=os.environ.get('SMTP_FROM_NAME','Jordan Aviation Safety')
-
-def send_email(to_list, subject, html_body):
-    if not SMTP_HOST or not SMTP_USER: return len(to_list), None
-    sent=0; errs=[]
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as srv:
-            srv.starttls(); srv.login(SMTP_USER, SMTP_PASSWORD)
-            for r in to_list:
-                try:
-                    msg=MIMEMultipart('alternative')
-                    msg['Subject']=subject; msg['From']=SMTP_FROM_NAME+' <'+SMTP_FROM+'>'; msg['To']=r
-                    msg.attach(MIMEText(html_body,'html'))
-                    srv.sendmail(SMTP_FROM, r, msg.as_string()); sent+=1
-                except Exception as ex: errs.append(str(ex)[:40])
-    except Exception as ex: return 0, str(ex)
-    return sent, '; '.join(errs) if errs else None
-
-def get_recipients(dept_ids=None):
-    q=DistributionList.query.filter_by(is_active=True)
-    if dept_ids: q=q.filter(DistributionList.department_id.in_(dept_ids))
-    return [r.email for r in q.all() if r.email]
-
-def email_html(title, subtitle, body_html, ref='', dt=''):
-    ref_line = ('<div style="color:#c9a84c;font-size:11px;margin-top:6px">Ref: '+ref+' · '+dt+'</div>') if ref else ''
-    return ('<!DOCTYPE html><html><body style="background:#f0f2f8;font-family:Arial,sans-serif;padding:24px">'
-            '<table width="580" style="background:#fff;border-radius:12px;overflow:hidden;margin:0 auto">'
-            '<tr><td style="background:#0f1c3f;padding:18px 26px;border-bottom:3px solid #c9a84c">'
-            '<span style="color:#fff;font-size:14px;font-weight:800">✈ Jordan Aviation</span></td></tr>'
-            '<tr><td style="background:#0f1c3f;padding:16px 26px">'
-            '<div style="color:rgba(255,255,255,.5);font-size:10px;text-transform:uppercase;letter-spacing:1px">'+subtitle+'</div>'
-            '<div style="color:#fff;font-size:20px;font-weight:800;margin-top:4px">'+title+'</div>'
-            +ref_line+'</td></tr>'
-            '<tr><td style="padding:22px 26px;font-size:14px;color:#374151;line-height:1.7">'+body_html+'</td></tr>'
-            '<tr><td style="background:#f8f9fc;padding:12px 26px;font-size:11px;color:#9ca3af">'
-            'Jordan Aviation · Safety Management System · ICAO Annex 19</td></tr>'
-            '</table></body></html>')
-
 # Evidence file uploads
 # Upload folder: use env var override for cloud (e.g. /tmp on Render free tier)
 _default_upload = os.path.join(os.path.dirname(__file__), 'static', 'evidence')
@@ -175,18 +122,6 @@ def check_pw(pw, hashed):
 def is_logged_in():
     return session.get('admin_logged_in') is True
 
-def log_action_history(action_id, changed_by, from_status, to_status, notes='', field='status'):
-    """Write audit trail entry — never crashes the main operation."""
-    try:
-        db.session.add(ActionHistory(
-            action_id=action_id, changed_by=changed_by,
-            from_status=from_status, to_status=to_status,
-            notes=notes or '', field_changed=field
-        ))
-    except Exception:
-        pass
-
-
 def require_login(f):
     """Decorator — redirects to login if not authenticated."""
     @functools.wraps(f)
@@ -245,33 +180,8 @@ def index():
 
 @app.route('/portal')
 def public_portal():
-    """Public-facing reporting portal — passes live safety content to template."""
-    from datetime import date as _date
-    bulletins   = SafetyBulletin.query.filter_by(status='Active').order_by(
-                      SafetyBulletin.created_at.desc()).limit(4).all()
-    newsletters = SafetyNewsletter.query.filter_by(status='Published').order_by(
-                      SafetyNewsletter.created_at.desc()).limit(3).all()
-    campaigns   = SafetyCampaign.query.filter_by(status='Active').order_by(
-                      SafetyCampaign.created_at.desc()).limit(4).all()
-    surveys     = SafetySurvey.query.filter_by(status='Active').order_by(
-                      SafetySurvey.created_at.desc()).limit(4).all()
-    lessons     = LessonLearned.query.order_by(
-                      LessonLearned.created_at.desc()).limit(4).all()
-    safety_messages = [
-        "Safety is everyone's responsibility — report hazards before they become incidents.",
-        "Every report you make protects your colleagues and improves our operations.",
-        "Speaking up for safety is an act of professionalism, not weakness.",
-        "Proactive hazard identification is the foundation of aviation safety.",
-        "Non-punitive reporting: your safety observations are valued and protected.",
-        "One report can prevent an accident. Your voice matters.",
-    ]
-    import hashlib
-    week_num = int(hashlib.md5(_date.today().strftime('%Y-W%V').encode()).hexdigest(), 16)
-    safety_message = safety_messages[week_num % len(safety_messages)]
-    return render_template('portal/portal.html',
-                           bulletins=bulletins, newsletters=newsletters,
-                           campaigns=campaigns, surveys=surveys,
-                           lessons=lessons, safety_message=safety_message)
+    """Public-facing reporting portal — employees, pilots, operational staff."""
+    return render_template('portal/portal.html')
 
 
 @app.route('/portal/voluntary', methods=['GET', 'POST'])
@@ -402,8 +312,6 @@ def admin_user_new():
         return redirect(url_for('admin_users'))
     u = User(username=f['username'], password_hash=hash_pw(f['password']),
              full_name=f.get('full_name',''), role=f.get('role','safety_officer'),
-             sag_role=f.get('sag_role',''),
-             department_id=int(f['department_id']) if f.get('department_id') else None,
              is_active=True)
     db.session.add(u); db.session.commit()
     flash(f'✓ User {u.username} created.', 'success')
@@ -939,14 +847,13 @@ def update_action(aid):
     """
     a   = Action.query.get_or_404(aid)
     f   = request.form
-    old_status    = a.status   # capture before changes for history
     new_status    = f.get('status', a.status)
     # Map friendly status to canonical
     # Store the actual workflow status (not mapped) — allows richer lifecycle
     # Only map unknown values to avoid corruption
-    VALID_STATUSES = {'Open','Assigned','In Progress','Mitigation Implemented',
+    VALID_STATUSES = {'Open','In Progress','Mitigation Implemented',
                       'Under Safety Review','Effectiveness Verification',
-                      'Returned','Closed','Overdue'}
+                      'Closed','Overdue'}
     if new_status not in VALID_STATUSES:
         new_status = 'In Progress'
     effectiveness = f.get('effectiveness', '')
@@ -1010,34 +917,15 @@ def update_action(aid):
         a.effectiveness_review = f.get('effectiveness_review', '')
         a.closed_date          = date.today().isoformat()
 
-    # Save SAG governance fields if provided
-    if f.get('sag_member'):
-        a.sag_member = f.get('sag_member')
-    if f.get('department_id'):
-        try: a.department_id = int(f.get('department_id'))
-        except: pass
-    if f.get('root_cause'):
-        a.root_cause = f.get('root_cause')
-    if new_status == 'Returned':
-        a.rejection_notes = f.get('rejection_notes', '')
-        a.reopen_count = (a.reopen_count or 0) + 1
-
     try:
-        db.session.flush()
-        log_action_history(
-            a.id,
-            session.get('admin_name', session.get('sag_user', 'System')),
-            old_status, new_status,
-            f.get('safety_review_notes') or f.get('rejection_notes') or '',
-            'status'
-        )
         db.session.commit()
         flash('✓ Action updated.', 'success')
     except Exception as e:
         db.session.rollback()
+        # Most likely cause: column doesn't exist in live DB yet
         err_str = str(e)
         if 'column' in err_str.lower() and 'does not exist' in err_str.lower():
-            flash('⚠ Database schema update required.', 'error')
+            flash('⚠ Database schema update required. Please contact the system administrator to run migrations.', 'error')
         else:
             flash(f'⚠ Could not save: {err_str[:120]}', 'error')
     return redirect(return_url)
@@ -1119,34 +1007,10 @@ def action_dashboard():
 @app.route('/actions/<aid>')
 @require_login
 def action_detail(aid):
-    """Single action detail page — full source records + SAG assignment."""
-    a = Action.query.get_or_404(aid)
-
-    # Load source records based on action source + linked refs
-    hazard      = Hazard.query.get(a.hazard_id) if a.hazard_id else None
-    hazard_rep  = HazardReport.query.filter_by(hazard_id=a.hazard_id).first() if a.hazard_id else None
-    finding     = AuditFinding.query.get(a.linked_ref_id) if a.linked_ref_id and a.source == 'Audit Finding' else None
-    investigation = Investigation.query.get(a.linked_ref_id) if a.linked_ref_id and a.source == 'Investigation' else None
-    spi_ind     = SPIIndicator.query.get(a.spi_id) if a.spi_id else None
-    ra          = RiskAssessment.query.get(a.linked_ref_id) if a.linked_ref_id and a.source in ('Risk Assessment','RA') else None
-
-    # SAG members list — filtered by action's department if set
-    sag_q = User.query.filter(User.sag_role != None, User.sag_role != '', User.is_active == True)
-    if a.department_id:
-        sag_members = sag_q.filter_by(department_id=a.department_id).all()
-        if not sag_members:
-            sag_members = sag_q.all()  # fallback: show all if no match
-    else:
-        sag_members = sag_q.all()
-
-    # Action history
-    history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).limit(20).all()
-
-    return render_template('action/action_detail.html',
-        a=a, hazard=hazard, hazard_rep=hazard_rep,
-        finding=finding, investigation=investigation,
-        spi_ind=spi_ind, ra=ra,
-        sag_members=sag_members, history=history)
+    """Single action detail page — shows everything linked to this action."""
+    a      = Action.query.get_or_404(aid)
+    hazard = Hazard.query.get(a.hazard_id) if a.hazard_id else None
+    return render_template('action/action_detail.html', a=a, hazard=hazard)
 
 
 
@@ -2140,21 +2004,11 @@ def safety_promotion():
     surveys     = SafetySurvey.query.filter_by(status='Active').all()
     overdue_training = Training.query.filter_by(status='Expired').count()
     due_soon    = Training.query.filter_by(status='Due Soon').count()
-    emails_sent = EmailLog.query.count()
-    dist_count  = DistributionList.query.filter_by(is_active=True).count()
-    avg_response_rate = 0
-    surveyed = SafetySurvey.query.filter(SafetySurvey.target_count > 0).all()
-    if surveyed:
-        avg_response_rate = round(sum(
-            (s.response_count or 0) / s.target_count * 100 for s in surveyed
-        ) / len(surveyed), 1)
     return render_template('spi/safety_promotion.html',
                            bulletins=bulletins, newsletters=newsletters,
                            trainings=trainings, campaigns=campaigns,
                            lessons=lessons, surveys=surveys,
-                           overdue_training=overdue_training, due_soon=due_soon,
-                           emails_sent=emails_sent, dist_count=dist_count,
-                           avg_response_rate=avg_response_rate)
+                           overdue_training=overdue_training, due_soon=due_soon)
 
 @app.route('/safety-promotion/bulletins')
 @require_login
@@ -2527,7 +2381,7 @@ def sp_survey_new():
             status='Draft', target_count=int(f.get('target_count',0)))
         db.session.add(s); db.session.commit()
         flash('✓ Survey created.', 'success')
-        return redirect('/safety-promotion/surveys')
+        return redirect(url_for('sp_surveys'))
     return render_template('spi/sp_survey_form.html',
                            now=datetime.utcnow())
 
@@ -2536,21 +2390,21 @@ def sp_survey_activate(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.status = 'Active'; db.session.commit()
     flash('✓ Survey activated.', 'success')
-    return redirect('/safety-promotion/surveys')
+    return redirect(url_for('sp_surveys'))
 
 @app.route('/safety-promotion/survey/<int:sid>/close', methods=['POST'])
 def sp_survey_close(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.status = 'Closed'; db.session.commit()
     flash('✓ Survey closed.', 'success')
-    return redirect('/safety-promotion/surveys')
+    return redirect(url_for('sp_surveys'))
 
 @app.route('/safety-promotion/survey/<int:sid>/respond', methods=['POST'])
 def sp_survey_respond(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.response_count = (s.response_count or 0) + 1; db.session.commit()
     flash('✓ Response recorded.', 'success')
-    return redirect('/safety-promotion/surveys')
+    return redirect(url_for('sp_surveys'))
 
 @app.route('/safety-promotion/campaigns')
 @require_login
@@ -2617,156 +2471,6 @@ def sp_lesson_new():
 
 # ── Bulletin PDF print ────────────────────────────────────────────────────────
 
-
-@app.route('/safety-promotion/distribution')
-@require_login
-def distribution_list():
-    depts = Department.query.order_by(Department.name).all()
-    dept_f = request.args.get('dept', '')
-    q = DistributionList.query
-    if dept_f:
-        q = q.filter_by(department_id=int(dept_f))
-    recipients = q.order_by(DistributionList.name).all()
-    total = DistributionList.query.filter_by(is_active=True).count()
-    return render_template('spi/sp_distribution.html',
-                           recipients=recipients, total=total, dept_f=dept_f, depts=depts)
-
-@app.route('/safety-promotion/distribution/add', methods=['POST'])
-@require_login
-def distribution_add():
-    f = request.form
-    email = f.get('email', '').strip()
-    if not email:
-        flash('Email required.', 'error')
-        return redirect(url_for('distribution_list'))
-    if DistributionList.query.filter_by(email=email).first():
-        flash(email + ' already in list.', 'warning')
-        return redirect(url_for('distribution_list'))
-    db.session.add(DistributionList(
-        name=f.get('name','').strip(), email=email,
-        department_id=int(f['department_id']) if f.get('department_id') else None,
-        position=f.get('position','').strip(), is_active=True))
-    db.session.commit()
-    flash('Added ' + email, 'success')
-    return redirect(url_for('distribution_list'))
-
-@app.route('/safety-promotion/distribution/<int:rid>/toggle', methods=['POST'])
-@require_login
-def distribution_toggle(rid):
-    r = DistributionList.query.get_or_404(rid)
-    r.is_active = not r.is_active
-    db.session.commit()
-    flash(r.email + ' updated.', 'success')
-    return redirect(url_for('distribution_list'))
-
-@app.route('/safety-promotion/distribution/<int:rid>/delete', methods=['POST'])
-@require_login
-def distribution_delete(rid):
-    r = DistributionList.query.get_or_404(rid)
-    db.session.delete(r)
-    db.session.commit()
-    flash('Removed.', 'success')
-    return redirect(url_for('distribution_list'))
-
-@app.route('/safety-promotion/distribution/import', methods=['POST'])
-@require_login
-def distribution_import():
-    added = skipped = 0
-    for line in request.form.get('csv_text','').strip().splitlines():
-        parts = [p.strip() for p in line.split(',')]
-        if len(parts) < 2: continue
-        name, email = parts[0], parts[1]
-        if not email or DistributionList.query.filter_by(email=email).first():
-            skipped += 1; continue
-        dept_id = int(parts[2]) if len(parts)>2 and parts[2].isdigit() else None
-        db.session.add(DistributionList(name=name, email=email, department_id=dept_id,
-                                        position=parts[3] if len(parts)>3 else ''))
-        added += 1
-    db.session.commit()
-    flash('Imported ' + str(added) + ' (' + str(skipped) + ' skipped).', 'success')
-    return redirect(url_for('distribution_list'))
-
-@app.route('/safety-promotion/email-log')
-@require_login
-def email_log_list():
-    logs = EmailLog.query.order_by(EmailLog.sent_at.desc()).limit(100).all()
-    total_sent = EmailLog.query.filter_by(status='Sent').count()
-    total_recv = db.session.query(db.func.sum(EmailLog.recipient_count)).scalar() or 0
-    return render_template('spi/sp_email_log.html', logs=logs,
-                           total_sent=total_sent, total_recipients=int(total_recv))
-
-@app.route('/safety-promotion/bulletin/<bid>/send-email', methods=['POST'])
-@require_login
-def bulletin_send_email(bid):
-    b = SafetyBulletin.query.get_or_404(bid)
-    dept_ids = [int(d) for d in request.form.getlist('dept_ids') if d.isdigit()] or None
-    to = get_recipients(dept_ids)
-    if not to:
-        flash('No recipients. Add to Distribution List first.', 'warning')
-        return redirect(url_for('sp_bulletin_detail', bid=bid))
-    sev = {'Critical':'#dc2626','High':'#ea580c','Information':'#1d4ed8'}.get(b.severity,'#374151')
-    body = ('<div style="background:'+sev+';color:#fff;padding:6px 14px;border-radius:5px;font-size:12px;font-weight:700;display:inline-block;margin-bottom:12px">'
-            +b.severity.upper()+' — '+(b.bulletin_type or '')+'</div>'
-            +'<p>'+(b.content or '').replace('\n','<br>')+'</p>'
-            +('<p style="margin-top:12px"><strong>Recommendations:</strong><br>'+(b.recommendations or '').replace('\n','<br>')+'</p>' if b.recommendations else ''))
-    subj = '[Safety Bulletin] '+(b.ref_number or b.id)+' — '+b.title
-    sent, err = send_email(to, subj, email_html(b.title,'Safety Bulletin — '+(b.ref_number or b.id), body,
-                           b.ref_number or b.id, b.issue_date or b.created_at.strftime('%d %b %Y')))
-    dept_lbl = 'All' if not dept_ids else ','.join(d.name for d in Department.query.filter(Department.id.in_(dept_ids)).all())
-    db.session.add(EmailLog(subject=subj,content_type='Bulletin',content_ref=str(bid),
-        sent_by=session.get('admin_name','System'),recipient_count=sent,
-        dept_filter=dept_lbl, status='Sent' if not err else 'Failed',error_message=err))
-    db.session.commit()
-    flash('Emailed to '+str(sent)+' recipient(s).', 'success')
-    return redirect(url_for('sp_bulletin_detail', bid=bid))
-
-@app.route('/safety-promotion/newsletter/<int:nid>/send-email', methods=['POST'])
-@require_login
-def newsletter_send_email(nid):
-    n = SafetyNewsletter.query.get_or_404(nid)
-    dept_ids = [int(d) for d in request.form.getlist('dept_ids') if d.isdigit()] or None
-    to = get_recipients(dept_ids)
-    if not to:
-        flash('No recipients.', 'warning')
-        return redirect('/safety-promotion/newsletter/'+str(nid))
-    subj = '[Safety Newsletter] '+n.title
-    body = '<p>'+(n.summary or '').replace('\n','<br>')+'</p>'+('<div>'+(n.content or '').replace('\n','<br>')+'</div>' if n.content else '')
-    sent, err = send_email(to, subj, email_html(n.title,'Safety Newsletter',body))
-    dept_lbl = 'All' if not dept_ids else ','.join(d.name for d in Department.query.filter(Department.id.in_(dept_ids)).all())
-    db.session.add(EmailLog(subject=subj,content_type='Newsletter',content_ref=str(nid),
-        sent_by=session.get('admin_name','System'),recipient_count=sent,
-        dept_filter=dept_lbl,status='Sent' if not err else 'Failed',error_message=err))
-    db.session.commit()
-    flash('Emailed to '+str(sent)+' recipient(s).', 'success')
-    return redirect('/safety-promotion/newsletter/'+str(nid))
-
-@app.route('/safety-promotion/lesson/<int:lid>/send-email', methods=['POST'])
-@require_login
-def lesson_send_email(lid):
-    ll = LessonLearned.query.get_or_404(lid)
-    recip = _get_dist_list()
-    if not recip:
-        flash('No recipients in distribution list.', 'warning')
-        return redirect(f'/safety-promotion/lesson/{lid}')
-    emails = [r.email for r in recip]
-    body = (
-        '<p><b>Category:</b> ' + (ll.category or '') +
-        ' &nbsp;&middot;&nbsp; <b>Date:</b> ' + (ll.date or '') +
-        '<br/><b>Author:</b> ' + (ll.author or 'Safety') + '</p>'
-        '<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0"/>'
-        '<p>' + (ll.description or '').replace('\n','<br/>') + '</p>'
-        + ('<p><b>Lesson:</b><br/>' + (ll.lesson or '').replace('\n','<br/>') + '</p>'
-           if ll.lesson else '')
-        + ('<p><b>Recommendations:</b><br/>' + (ll.recommendations or '').replace('\n','<br/>') + '</p>'
-           if ll.recommendations else '')
-    )
-    subject = '[Lessons Learned] ' + ll.title
-    html = _email_html(ll.title, 'Lessons Learned', body, '#15803d')
-    sent, err = _do_send(emails, subject, html)
-    _write_log('Lesson', lid, subject, sent, 'All',
-               'Sent' if not err else 'Failed', err)
-    flash(f'Lesson shared with {sent} recipients.', 'success')
-    return redirect(f'/safety-promotion/lesson/{lid}')
 @app.route('/safety-promotion/bulletin/<bid>/print')
 def sp_bulletin_print(bid):
     b = SafetyBulletin.query.get_or_404(bid)
@@ -2993,19 +2697,11 @@ def delete_asr(aid):
 
 
 @app.route('/delete/action/<aid>', methods=['POST'])
-@require_login
 def delete_action(aid):
     a = Action.query.get_or_404(aid)
-    try:
-        # Delete child records first (FK constraint)
-        ActionHistory.query.filter_by(action_id=aid).delete(synchronize_session=False)
-        db.session.flush()
-        db.session.delete(a)
-        db.session.commit()
-        flash(f'✓ Action {aid} deleted.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'⚠ Could not delete: {str(e)[:120]}', 'error')
+    db.session.delete(a)
+    db.session.commit()
+    flash(f'✓ Action {aid} deleted.', 'success')
     return redirect(request.form.get('return_url', '/actions'))
 
 
@@ -3135,7 +2831,7 @@ def delete_survey(sid):
     db.session.delete(s)
     db.session.commit()
     flash('✓ Survey deleted.', 'success')
-    return redirect('/safety-promotion/surveys')
+    return redirect(url_for('sp_surveys'))
 
 
 @app.route('/delete/campaign/<int:cid>', methods=['POST'])
@@ -3204,680 +2900,6 @@ def admin_cleanup():
 
 
 # ─── Risk Matrix Reference ────────────────────────────────────────────────────
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  SAFETY PROMOTION — EMAIL DISTRIBUTION & RESPONSE TRACKING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _smtp_cfg():
-    return {
-        'host': os.environ.get('SMTP_HOST',''),
-        'port': int(os.environ.get('SMTP_PORT','587')),
-        'user': os.environ.get('SMTP_USER',''),
-        'password': os.environ.get('SMTP_PASSWORD',''),
-        'from_email': os.environ.get('SMTP_FROM','safety@aviation.jo'),
-    }
-
-def _get_dist_list(dept_id=None):
-    q = DistributionList.query.filter_by(is_active=True)
-    if dept_id:
-        q = q.filter_by(department_id=int(dept_id))
-    return q.all()
-
-def _do_send(emails, subject, html):
-    cfg = _smtp_cfg()
-    if not cfg['host']:
-        return len(emails), None  # SMTP not configured — log as simulated
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-    try:
-        srv = smtplib.SMTP(cfg['host'], cfg['port'])
-        srv.starttls()
-        srv.login(cfg['user'], cfg['password'])
-        sent = 0
-        for addr in emails:
-            m = MIMEMultipart('alternative')
-            m['Subject'] = subject
-            m['From']    = cfg['from_email']
-            m['To']      = addr
-            m.attach(MIMEText(html, 'html'))
-            try:
-                srv.sendmail(cfg['from_email'], [addr], m.as_string())
-                sent += 1
-            except Exception:
-                pass
-        srv.quit()
-        return sent, None
-    except Exception as e:
-        return 0, str(e)
-
-def _write_log(ctype, cref, subject, count, dept_label, status='Sent', err=None):
-    db.session.add(EmailLog(
-        content_type=ctype, content_ref=str(cref), subject=subject,
-        recipient_count=count, dept_filter=dept_label or 'All',
-        sent_by=session.get('admin_name','System'),
-        status=status, error_message=err
-    ))
-    db.session.commit()
-
-def _email_html(title, subtitle, body, color='#0f1c3f'):
-    return (
-        '<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>'
-        'body{font-family:Arial,sans-serif;background:#f0f2f8;margin:0;padding:0}'
-        '.w{max-width:620px;margin:20px auto;background:#fff;border-radius:10px;overflow:hidden}'
-        '.h{background:' + color + ';padding:22px 28px;text-align:center}'
-        '.hl{color:#c9a84c;font-size:22px;font-weight:800}'
-        '.hs{color:rgba(255,255,255,.6);font-size:11px;margin-top:3px}'
-        '.tb{background:' + color + '22;border-bottom:3px solid ' + color + ';padding:14px 28px}'
-        '.tb h1{font-size:17px;font-weight:800;color:' + color + ';margin:0}'
-        '.tb p{font-size:12px;color:#6b7280;margin:3px 0 0}'
-        '.b{padding:22px 28px;font-size:14px;color:#374151;line-height:1.7}'
-        '.f{background:#f8f9fc;padding:12px 28px;font-size:11px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb}'
-        '</style></head><body><div class="w">'
-        '<div class="h"><div class="hl">&#x2708; Jordan Aviation</div>'
-        '<div class="hs">Safety Management System</div></div>'
-        '<div class="tb"><h1>' + title + '</h1><p>' + subtitle + '</p></div>'
-        '<div class="b">' + body + '</div>'
-        '<div class="f">Jordan Aviation SMS &middot; Official Safety Communication</div>'
-        '</div></body></html>'
-    )
-
-
-# ── Distribution List ─────────────────────────────────────────────────────────
-
-@app.route('/safety-promotion/distribution')
-@require_login
-def sp_distribution():
-    recipients = DistributionList.query.order_by(DistributionList.department_id, DistributionList.name).all()
-    total = DistributionList.query.filter_by(is_active=True).count()
-    depts = Department.query.all()
-    return render_template('spi/sp_distribution.html',
-                           recipients=recipients, total=total, depts=depts)
-
-
-@app.route('/safety-promotion/distribution/add', methods=['POST'])
-@require_login
-def sp_distribution_add():
-    f = request.form
-    if not f.get('email') or not f.get('name'):
-        flash('Name and email required.', 'error')
-        return redirect(url_for('sp_distribution'))
-    if DistributionList.query.filter_by(email=f['email'].strip()).first():
-        flash(f'{f["email"]} already in distribution list.', 'warning')
-        return redirect(url_for('sp_distribution'))
-    db.session.add(DistributionList(
-        name=f['name'].strip(), email=f['email'].strip(),
-        position=f.get('position',''),
-        department_id=int(f['department_id']) if f.get('department_id') else None,
-        is_active=True,
-    ))
-    db.session.commit()
-    flash(f'+ {f["name"]} added to distribution list.', 'success')
-    return redirect(url_for('sp_distribution'))
-
-
-@app.route('/safety-promotion/distribution/<int:rid>/toggle', methods=['POST'])
-@require_login
-def sp_distribution_toggle(rid):
-    r = DistributionList.query.get_or_404(rid)
-    r.is_active = not r.is_active
-    db.session.commit()
-    flash(f'{"Activated" if r.is_active else "Deactivated"}: {r.name}', 'success')
-    return redirect(url_for('sp_distribution'))
-
-
-@app.route('/safety-promotion/distribution/<int:rid>/delete', methods=['POST'])
-@require_login
-def sp_distribution_delete(rid):
-    r = DistributionList.query.get_or_404(rid)
-    db.session.delete(r); db.session.commit()
-    flash('Recipient removed.', 'success')
-    return redirect(url_for('sp_distribution'))
-
-
-# ── Email Log ─────────────────────────────────────────────────────────────────
-
-@app.route('/safety-promotion/email-log')
-@require_login
-def sp_email_log():
-    logs             = EmailLog.query.order_by(EmailLog.sent_at.desc()).all()
-    total_sent       = sum(1 for l in logs if 'Sent' in (l.status or ''))
-    total_failed     = sum(1 for l in logs if l.status == 'Failed')
-    total_recipients = sum(l.recipient_count or 0 for l in logs)
-    return render_template('spi/sp_email_log.html',
-                           logs=logs, total_sent=total_sent,
-                           total_failed=total_failed,
-                           total_recipients=total_recipients)
-
-
-# ── Send Bulletin ─────────────────────────────────────────────────────────────
-
-@app.route('/safety-promotion/bulletin/<bid>/send-email', methods=['POST'])
-@require_login
-def sp_send_bulletin_email(bid):
-    b    = SafetyBulletin.query.get_or_404(bid)
-    dept_id = request.form.get('dept_id') or None
-    recip   = _get_dist_list(dept_id)
-    if not recip:
-        flash('No active recipients. Add employees to Distribution List first.', 'warning')
-        return redirect(url_for('sp_bulletin_detail', bid=bid))
-    emails     = [r.email for r in recip]
-    dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
-    clr        = {'Critical':'#dc2626','High':'#ea580c','Medium':'#d97706','Low':'#15803d'}.get(b.severity,'#0f1c3f')
-    body       = ('<p><b>Ref:</b> ' + (b.ref_number or b.id) + ' &nbsp;&middot;&nbsp; '
-                  '<b>Severity:</b> <span style="color:' + clr + '">' + (b.severity or '') + '</span><br/>'
-                  '<b>Issued by:</b> ' + (b.issued_by or 'Safety') + ' &nbsp;&middot;&nbsp; '
-                  '<b>Date:</b> ' + (b.issue_date or '') + '</p>'
-                  '<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0"/>'
-                  '<p>' + (b.content or '').replace('\n','<br/>') + '</p>'
-                  + ('<p><b>Recommendations:</b><br/>' + (b.recommendations or '').replace('\n','<br/>') + '</p>'
-                     if b.recommendations else ''))
-    subject    = '[Safety Bulletin] ' + b.title
-    html       = _email_html(b.title, 'Safety Bulletin ' + (b.severity or ''), body, clr)
-    sent, err  = _do_send(emails, subject, html)
-    _write_log('Bulletin', bid, subject, sent, dept_label,
-               'Sent' if not err else 'Failed', err)
-    flash(f'Bulletin emailed to {sent} recipients ({dept_label}).', 'success')
-    return redirect(url_for('sp_bulletin_detail', bid=bid))
-
-
-# ── Send Newsletter ───────────────────────────────────────────────────────────
-
-@app.route('/safety-promotion/newsletter/<int:nid>/send-email', methods=['POST'])
-@require_login
-def sp_send_newsletter_email(nid):
-    n       = SafetyNewsletter.query.get_or_404(nid)
-    dept_id = request.form.get('dept_id') or None
-    recip   = _get_dist_list(dept_id)
-    if not recip:
-        flash('No active recipients in distribution list.', 'warning')
-        return redirect(url_for('sp_newsletter_detail', nid=nid))
-    emails     = [r.email for r in recip]
-    dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
-    body       = ('<p><b>Issue:</b> ' + (n.issue_number or '') +
-                  ' &nbsp;&middot;&nbsp; <b>Date:</b> ' + (n.issue_date or '') +
-                  '<br/><b>Author:</b> ' + (n.author or 'Safety') + '</p>'
-                  + ('<p><em>' + (n.summary or '') + '</em></p>' if n.summary else '')
-                  + '<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0"/>'
-                  + '<p>' + (n.content or '').replace('\n','<br/>') + '</p>')
-    subject    = '[Safety Newsletter] ' + n.title
-    html       = _email_html(n.title, 'Safety Newsletter', body)
-    sent, err  = _do_send(emails, subject, html)
-    _write_log('Newsletter', nid, subject, sent, dept_label,
-               'Sent' if not err else 'Failed', err)
-    flash(f'Newsletter emailed to {sent} recipients.', 'success')
-    return redirect(url_for('sp_newsletter_detail', nid=nid))
-
-
-# ── Send Survey ───────────────────────────────────────────────────────────────
-
-@app.route('/safety-promotion/survey/<int:sid>/send-email', methods=['POST'])
-@require_login
-def sp_send_survey_email(sid):
-    s       = SafetySurvey.query.get_or_404(sid)
-    dept_id = request.form.get('dept_id') or None
-    recip   = _get_dist_list(dept_id)
-    if not recip:
-        flash('⚠ No active recipients found. Please add employees to the Distribution List first at /safety-promotion/distribution', 'warning')
-        return redirect(url_for('sp_survey_detail', sid=sid))
-    emails     = [r.email for r in recip]
-    dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
-    pub_url    = request.host_url.rstrip('/') + '/safety-promotion/survey/' + str(sid) + '/respond-public'
-    body       = ('<p>The Safety Department invites you to participate in this safety survey.</p>'
-                  '<p><b>' + s.title + '</b><br/>'
-                  + (s.description or '') + '</p>'
-                  + '<p><b>Deadline:</b> ' + (s.end_date or 'Open ended') + '</p>'
-                  '<p style="text-align:center;margin-top:18px">'
-                  '<a href="' + pub_url + '" style="background:#7c3aed;color:#fff;padding:11px 24px;'
-                  'border-radius:7px;font-weight:700;font-size:13px;text-decoration:none">'
-                  'Complete Survey &rarr;</a></p>')
-    subject    = '[Safety Survey] ' + s.title
-    html       = _email_html(s.title, 'Safety Survey — Your Participation Required', body, '#7c3aed')
-    sent, err  = _do_send(emails, subject, html)
-    s.target_count = (s.target_count or 0) + sent
-    _write_log('Survey', sid, subject, sent, dept_label,
-               'Sent' if not err else 'Failed', err)
-    flash(f'Survey invitation sent to {sent} recipients.', 'success')
-    return redirect(url_for('sp_survey_detail', sid=sid))
-
-
-# ── Send Campaign ─────────────────────────────────────────────────────────────
-
-@app.route('/safety-promotion/campaign/<int:cid>/send-email', methods=['POST'])
-@require_login
-def sp_send_campaign_email(cid):
-    camp    = SafetyCampaign.query.get_or_404(cid)
-    dept_id = request.form.get('dept_id') or None
-    recip   = _get_dist_list(dept_id)
-    if not recip:
-        flash('No active recipients in distribution list.', 'warning')
-        return redirect(url_for('sp_campaign_detail', cid=cid))
-    emails     = [r.email for r in recip]
-    dept_label = Department.query.get(int(dept_id)).name if dept_id else 'All'
-    body       = ('<p><b>Type:</b> ' + (camp.campaign_type or '') +
-                  ' &nbsp;&middot;&nbsp; <b>Period:</b> ' + (camp.start_date or '') +
-                  ' to ' + (camp.end_date or '') + '</p>'
-                  '<p>' + (camp.description or '').replace('\n','<br/>') + '</p>'
-                  + ('<p><b>Objectives:</b><br/>' + (camp.objectives or '').replace('\n','<br/>') + '</p>'
-                     if camp.objectives else ''))
-    subject    = '[Safety Campaign] ' + camp.title
-    html       = _email_html(camp.title, 'Safety Campaign', body, '#d97706')
-    sent, err  = _do_send(emails, subject, html)
-    _write_log('Campaign', cid, subject, sent, dept_label,
-               'Sent' if not err else 'Failed', err)
-    flash(f'Campaign emailed to {sent} recipients.', 'success')
-    return redirect(url_for('sp_campaign_detail', cid=cid))
-
-
-# ── Send Lesson ───────────────────────────────────────────────────────────────
-
-@app.route('/safety-promotion/lesson/<int:lid>/send-email', methods=['POST'])
-@require_login
-def sp_send_lesson_email(lid):
-    ll   = LessonLearned.query.get_or_404(lid)
-    recip = _get_dist_list()
-    if not recip:
-        flash('No active recipients in distribution list.', 'warning')
-        return redirect(url_for('sp_lesson_detail', lid=lid))
-    emails = [r.email for r in recip]
-    body   = ('<p><b>Category:</b> ' + (ll.category or '') +
-              ' &nbsp;&middot;&nbsp; <b>Date:</b> ' + (ll.date or '') +
-              '<br/><b>Author:</b> ' + (ll.author or 'Safety') + '</p>'
-              '<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0"/>'
-              '<p>' + (ll.description or '').replace('\n','<br/>') + '</p>'
-              + ('<p><b>Lesson:</b><br/>' + (ll.lesson or '').replace('\n','<br/>') + '</p>'
-                 if ll.lesson else '')
-              + ('<p><b>Recommendations:</b><br/>' + (ll.recommendations or '').replace('\n','<br/>') + '</p>'
-                 if ll.recommendations else ''))
-    subject = '[Lessons Learned] ' + ll.title
-    html    = _email_html(ll.title, 'Lessons Learned', body, '#15803d')
-    sent, err = _do_send(emails, subject, html)
-    _write_log('Lesson', lid, subject, sent, 'All',
-               'Sent' if not err else 'Failed', err)
-    flash(f'Lesson emailed to {sent} recipients.', 'success')
-    return redirect(url_for('sp_lesson_detail', lid=lid))
-
-
-# ── Public Survey Response ────────────────────────────────────────────────────
-
-@app.route('/safety-promotion/survey/<int:sid>/respond-public', methods=['GET','POST'])
-def sp_survey_respond_public(sid):
-    s = SafetySurvey.query.get_or_404(sid)
-    if s.status != 'Active':
-        return render_template('spi/sp_survey_closed.html', survey=s)
-
-    import json as _j
-    questions = []
-    try:
-        raw = _j.loads(s.questions or '[]')
-        # Normalize: strings → dicts so template can call q.get('text')
-        for q in raw:
-            if isinstance(q, str):
-                questions.append({'text': q, 'type': 'text'})
-            elif isinstance(q, dict):
-                questions.append(q)
-    except Exception:
-        pass
-
-    if request.method == 'POST':
-        f       = request.form
-        is_anon = bool(f.get('is_anonymous'))
-        answers = {str(i): f.get('q_' + str(i), '') for i in range(len(questions))}
-        db.session.add(SurveyResponse(
-            survey_id=sid,
-            respondent_name='' if is_anon else f.get('respondent_name',''),
-            respondent_email='' if is_anon else f.get('respondent_email',''),
-            department_id=int(f['department_id']) if f.get('department_id') else None,
-            is_anonymous=is_anon,
-            answers=_j.dumps(answers),
-            ip_address=request.remote_addr,
-        ))
-        s.response_count = (s.response_count or 0) + 1
-        db.session.commit()
-        return render_template('spi/sp_survey_thanks.html', survey=s)
-
-    return render_template('spi/sp_survey_public.html', survey=s, questions=questions)
-
-
-# ── Survey Response Tracking ──────────────────────────────────────────────────
-
-@app.route('/safety-promotion/survey/<int:sid>/responses')
-@require_login
-def sp_survey_responses(sid):
-    s         = SafetySurvey.query.get_or_404(sid)
-    responses = SurveyResponse.query.filter_by(survey_id=sid)\
-                    .order_by(SurveyResponse.submitted_at.desc()).all()
-    total_sent    = s.target_count or 0
-    resp_count    = len(responses)
-    response_rate = round((resp_count / total_sent * 100) if total_sent > 0 else 0, 1)
-
-    import json as _j
-    from collections import Counter, defaultdict
-
-    # Parse questions
-    questions = []
-    try:
-        raw = _j.loads(s.questions or '[]')
-        for q in raw:
-            if isinstance(q, str):
-                questions.append({'text': q, 'type': 'text'})
-            elif isinstance(q, dict):
-                questions.append(q)
-    except Exception:
-        pass
-
-    # Pre-parse answers for each response so template can display them
-    parsed_responses = []
-    for resp in responses:
-        try:
-            ans = _j.loads(resp.answers or '{}')
-        except Exception:
-            ans = {}
-        parsed_responses.append({
-            'obj':             resp,
-            'answers':         ans,
-            'answer_list':     [ans.get(str(i), '') for i in range(len(questions))],
-        })
-
-    # Department participation
-    dept_counts = Counter(r.department_id for r in responses if r.department_id)
-    all_depts   = Department.query.all()
-    dept_names  = {d.id: d.name for d in all_depts}
-
-    # Question analytics: for each question, tally all answers
-    q_analytics = []
-    for i, q in enumerate(questions):
-        tally = Counter()
-        for pr in parsed_responses:
-            ans = pr['answer_list'][i]
-            if ans:
-                tally[ans] += 1
-        q_analytics.append({'question': q, 'tally': dict(tally), 'total': len(tally)})
-
-    # Timeline: responses by date
-    from collections import OrderedDict
-    timeline = Counter()
-    for r in responses:
-        if r.submitted_at:
-            timeline[r.submitted_at.strftime('%d %b')] += 1
-    timeline = dict(sorted(timeline.items()))
-
-    anon_count    = sum(1 for r in responses if r.is_anonymous)
-    tracked_count = len(responses) - anon_count
-
-    return render_template('spi/sp_survey_responses.html',
-                           survey=s,
-                           responses=parsed_responses,
-                           response_rate=response_rate,
-                           questions=questions,
-                           q_analytics=q_analytics,
-                           dept_counts=dept_counts,
-                           dept_names=dept_names,
-                           all_depts=all_depts,
-                           total_sent=total_sent,
-                           anon_count=anon_count,
-                           tracked_count=tracked_count,
-                           timeline=timeline)
-
-
-
-@app.route('/safety-promotion/survey/<int:sid>/response/<int:rid>')
-@require_login
-def sp_survey_response_detail(sid, rid):
-    """Individual survey response detail view."""
-    import json as _j
-    s    = SafetySurvey.query.get_or_404(sid)
-    resp = SurveyResponse.query.get_or_404(rid)
-    questions = []
-    try:
-        raw = _j.loads(s.questions or '[]')
-        for q in raw:
-            questions.append({'text': q} if isinstance(q, str) else q)
-    except Exception:
-        pass
-    try:
-        answers = _j.loads(resp.answers or '{}')
-    except Exception:
-        answers = {}
-    qa_pairs = [(questions[i], answers.get(str(i),'—'))
-                for i in range(len(questions))]
-    return render_template('spi/sp_survey_response_detail.html',
-                           survey=s, resp=resp, qa_pairs=qa_pairs)
-
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  SAG PORTAL — Separate login, separate access, same PostgreSQL database
-#  /sag-login  /sag/dashboard  /sag/action/<id>
-#  SAG members see ONLY their own assigned actions — nothing else.
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def is_sag_logged_in():
-    return session.get('sag_logged_in') is True
-
-def require_sag(f):
-    import functools
-    @functools.wraps(f)
-    def decorated(*args, **kwargs):
-        if not is_sag_logged_in():
-            return redirect(url_for('sag_login', next=request.path))
-        return f(*args, **kwargs)
-    return decorated
-
-
-@app.route('/sag-login', methods=['GET', 'POST'])
-def sag_login():
-    if is_sag_logged_in():
-        return redirect(url_for('sag_dashboard'))
-    error = None
-    if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '')
-        user = User.query.filter_by(username=username, is_active=True).first()
-        if user and check_pw(password, user.password_hash):
-            session['sag_logged_in'] = True
-            session['sag_user']      = user.username
-            session['sag_name']      = user.full_name or user.username
-            session['sag_role']      = user.sag_role or user.role
-            session['sag_dept_id']   = user.department_id
-            session.permanent        = True
-            user.last_login = datetime.utcnow()
-            db.session.commit()
-            return redirect(url_for('sag_dashboard'))
-        error = 'Invalid username or password.'
-    return render_template('portal/sag_login.html', error=error)
-
-
-@app.route('/sag-logout')
-def sag_logout():
-    for k in ['sag_logged_in','sag_user','sag_name','sag_role','sag_dept_id']:
-        session.pop(k, None)
-    return redirect(url_for('sag_login'))
-
-
-@app.route('/sag/dashboard')
-@require_sag
-def sag_dashboard():
-    check_overdue_actions()
-    username = session.get('sag_user', '')
-    my_actions = Action.query.filter_by(sag_member=username)                     .order_by(Action.due_date).all()
-    open_c     = sum(1 for a in my_actions if a.status == 'Open')
-    prog_c     = sum(1 for a in my_actions if a.status == 'In Progress')
-    overdue_c  = sum(1 for a in my_actions if a.status == 'Overdue')
-    review_c   = sum(1 for a in my_actions
-                     if a.status in ('Mitigation Implemented','Under Safety Review'))
-    returned_c = sum(1 for a in my_actions if a.status == 'Returned')
-    closed_c   = sum(1 for a in my_actions if a.status == 'Closed')
-    active_actions = [a for a in my_actions if a.status != 'Closed']
-    closed_actions = [a for a in my_actions if a.status == 'Closed'][-10:]
-    return render_template('portal/sag_dashboard.html',
-                           active_actions=active_actions,
-                           closed_actions=closed_actions,
-                           open_c=open_c, prog_c=prog_c,
-                           overdue_c=overdue_c, review_c=review_c,
-                           returned_c=returned_c, closed_c=closed_c)
-
-
-@app.route('/sag/action/<aid>', methods=['GET', 'POST'])
-@require_sag
-def sag_action_detail(aid):
-    a = Action.query.get_or_404(aid)
-    if a.sag_member != session.get('sag_user', ''):
-        flash('⚠ This action is not assigned to you.', 'error')
-        return redirect(url_for('sag_dashboard'))
-
-    if request.method == 'POST':
-        f          = request.form
-        action_btn = f.get('action_btn', '')
-        old_status = a.status
-
-        if action_btn in ('save_progress', 'submit_review'):
-            a.corrective_description = f.get('corrective_description', a.corrective_description or '')
-            a.mitigation_description = f.get('mitigation_description', a.mitigation_description or '')
-            a.safety_notes           = f.get('safety_notes', a.safety_notes or '')
-            a.root_cause             = f.get('root_cause', a.root_cause or '')
-            a.follow_up_notes        = f.get('follow_up_notes', a.follow_up_notes or '')
-            a.evidence               = f.get('evidence', a.evidence or '')
-            if f.get('implementation_date'):
-                a.implementation_date = f.get('implementation_date')
-            if f.get('mitigation_status'):
-                a.mitigation_status = f.get('mitigation_status')
-            # Handle evidence file upload
-            ev_file = request.files.get('evidence_file')
-            if ev_file and ev_file.filename:
-                try:
-                    from werkzeug.utils import secure_filename as sf
-                    import os
-                    ext = ev_file.filename.rsplit('.', 1)[-1].lower() if '.' in ev_file.filename else ''
-                    ALLOWED = {'pdf','doc','docx','xls','xlsx','png','jpg','jpeg','gif','bmp','txt','zip'}
-                    if ext in ALLOWED:
-                        fname = sf(f'evidence_{aid}_{ev_file.filename}')
-                        upload_dir = app.config.get('UPLOAD_FOLDER', 'uploads')
-                        os.makedirs(upload_dir, exist_ok=True)
-                        ev_file.save(os.path.join(upload_dir, fname))
-                        a.evidence_filename = fname
-                    else:
-                        flash(f'⚠ File type .{ext} not allowed.', 'error')
-                except Exception as _e:
-                    flash(f'⚠ File upload failed: {str(_e)[:80]}', 'error')
-
-        if action_btn == 'save_progress':
-            if a.status in ('Open', 'Assigned'):
-                a.status = 'In Progress'
-            log_action_history(aid, session['sag_user'], old_status, a.status,
-                               'Progress saved by SAG member', 'progress')
-            db.session.commit()
-            flash('✓ Progress saved successfully.', 'success')
-
-        elif action_btn == 'submit_review':
-            a.mitigation_status = 'Completed'
-            a.status = 'Mitigation Implemented'
-            log_action_history(aid, session['sag_user'], old_status,
-                               'Mitigation Implemented',
-                               'Submitted for Safety Review by ' + session.get('sag_name','SAG'),
-                               'status')
-            db.session.commit()
-            flash('✓ Action submitted for Safety Review. Awaiting Safety Department approval.', 'success')
-
-        return redirect(url_for('sag_action_detail', aid=aid))
-
-    # Load full source records for SAG member visibility
-    hazard_rep    = HazardReport.query.filter_by(hazard_id=a.hazard_id).first() if a.hazard_id else None
-    finding       = AuditFinding.query.get(a.linked_ref_id) if a.linked_ref_id and a.source == 'Audit Finding' else None
-    investigation = Investigation.query.get(a.linked_ref_id) if a.linked_ref_id and a.source == 'Investigation' else None
-    spi_ind       = SPIIndicator.query.get(a.spi_id) if a.spi_id else None
-    ra            = RiskAssessment.query.get(a.linked_ref_id) if a.linked_ref_id and a.source in ('Risk Assessment','RA') else None
-
-    history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).limit(15).all()
-    return render_template('portal/sag_action_detail.html',
-        a=a, history=history,
-        hazard_rep=hazard_rep, finding=finding,
-        investigation=investigation, spi_ind=spi_ind, ra=ra)
-
-
-# ── SAG Governance Dashboard (Safety Admin view inside main SMS) ───────────────
-
-@app.route('/sag/governance')
-@require_login
-def sag_governance():
-    check_overdue_actions()
-    total_open     = Action.query.filter(Action.status.notin_(['Closed'])).count()
-    overdue        = Action.query.filter_by(status='Overdue').count()
-    pending_review = Action.query.filter(
-        Action.status.in_(['Mitigation Implemented','Under Safety Review'])).count()
-    returned       = Action.query.filter_by(status='Returned').count()
-    closed_month   = Action.query.filter(
-        Action.status=='Closed',
-        Action.closed_date >= date.today().replace(day=1).isoformat()
-    ).count()
-    high_risk = Action.query.filter(
-        Action.priority=='High', Action.status.notin_(['Closed'])
-    ).order_by(Action.due_date).limit(10).all()
-    for_review = Action.query.filter(
-        Action.status.in_(['Mitigation Implemented','Under Safety Review'])
-    ).order_by(Action.due_date).limit(15).all()
-    overdue_list = Action.query.filter_by(status='Overdue').order_by(Action.due_date).limit(15).all()
-    returned_list = Action.query.filter_by(status='Returned').order_by(Action.due_date).limit(10).all()
-    unassigned = Action.query.filter(
-        (Action.sag_member == None) | (Action.sag_member == ''),
-        Action.status.notin_(['Closed'])
-    ).order_by(Action.due_date).limit(10).all()
-    from sqlalchemy import func as sqf
-    src_data = db.session.query(Action.source, sqf.count(Action.id)).filter(
-        Action.status.notin_(['Closed'])
-    ).group_by(Action.source).order_by(sqf.count(Action.id).desc()).all()
-    dept_perf = []
-    for dept in Department.query.all():
-        d_total   = Action.query.filter_by(department_id=dept.id).count()
-        d_open    = Action.query.filter_by(department_id=dept.id).filter(
-                        Action.status.notin_(['Closed'])).count()
-        d_overdue = Action.query.filter_by(department_id=dept.id, status='Overdue').count()
-        d_closed  = Action.query.filter_by(department_id=dept.id, status='Closed').count()
-        if d_total > 0:
-            dept_perf.append({'dept': dept, 'total': d_total, 'open': d_open,
-                              'overdue': d_overdue, 'closed': d_closed,
-                              'rate': round(d_closed/d_total*100)})
-    dept_perf.sort(key=lambda x: x['overdue'], reverse=True)
-    sag_members = User.query.filter_by(is_active=True).all()
-    return render_template('action/sag_governance.html',
-                           total_open=total_open, overdue=overdue,
-                           pending_review=pending_review, returned=returned,
-                           closed_month=closed_month,
-                           high_risk=high_risk, for_review=for_review,
-                           overdue_list=overdue_list, returned_list=returned_list,
-                           unassigned=unassigned, src_data=src_data,
-                           dept_perf=dept_perf, sag_members=sag_members)
-
-
-@app.route('/sag/assign/<aid>', methods=['POST'])
-@require_login
-def sag_assign(aid):
-    a = Action.query.get_or_404(aid)
-    old_owner = a.sag_member or 'Unassigned'
-    a.sag_member    = request.form.get('sag_member', '')
-    a.department_id = int(request.form['department_id']) if request.form.get('department_id') else a.department_id
-    a.priority      = request.form.get('priority', a.priority)
-    a.due_date      = request.form.get('due_date', a.due_date)
-    a.root_cause    = request.form.get('root_cause', a.root_cause)
-    if a.status == 'Open':
-        a.status = 'Assigned'
-    log_action_history(aid, session.get('admin_name','Admin'),
-                       old_owner, a.sag_member,
-                       f'Assigned to {a.sag_member}', 'assignment')
-    db.session.commit()
-    flash(f'✓ Action {aid} assigned to {a.sag_member}.', 'success')
-    return redirect(request.form.get('return_url', url_for('sag_governance')))
-
-
-@app.route('/actions/<aid>/history')
-@require_login
-def action_history_view(aid):
-    a       = Action.query.get_or_404(aid)
-    history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).all()
-    return render_template('action/action_history.html', a=a, history=history)
-
-
 @app.route('/risk-matrix')
 @require_login
 def risk_matrix():
@@ -4455,19 +3477,10 @@ def audit_execution(sid):
         # Effectiveness is optional — don't block closure on it
         all_verified = True
 
-    # A finding is OK if Closed, or its linked SAG Action is Closed
-    def finding_ok(f):
-        if f.status == 'Closed': return True
-        if f.linked_action_id:
-            la = Action.query.get(f.linked_action_id)
-            return la is not None and la.status == 'Closed'
-        return False
-    findings_ready = all(finding_ok(f) for f in s.findings) if s.findings else True
-
-    # CAN CLOSE: checklist complete + all findings closed/resolved
+    # CAN CLOSE: checklist complete + all findings closed
     can_close = (
         all_no_have_findings and
-        findings_ready and
+        all_findings_closed and
         all_actions_closed
     )
 
@@ -4479,8 +3492,7 @@ def audit_execution(sid):
         all_findings_closed=all_findings_closed,
         all_findings_actioned=all_findings_actioned,
         all_actions_closed=all_actions_closed,
-        all_verified=all_verified,
-        today_date=date.today().isoformat())
+        all_verified=all_verified)
 
 @app.route('/audit-schedule/<sid>/start', methods=['POST'])
 def start_audit(sid):
@@ -4603,48 +3615,33 @@ def close_audit(sid):
         refs = ', '.join(i.item_ref or f'item {i.id}' for i in no_without[:3])
         flash(f'✗ Cannot close: {len(no_without)} checklist NO item(s) still need findings ({refs}).', 'error')
         return redirect(url_for('audit_execution', sid=sid))
-    # Validate: all findings must be Closed OR their linked SAG Action is Closed
+    # Validate: all findings must be Closed OR have closed AuditActions
     if s.findings:
         for finding in s.findings:
-            if finding.status == 'Closed':
-                continue  # already closed — OK
-
-            # Check linked main Action (SAG workflow)
-            linked_act = None
-            if finding.linked_action_id:
-                linked_act = Action.query.get(finding.linked_action_id)
-
-            if linked_act and linked_act.status == 'Closed':
-                # SAG action is closed — auto-close the finding too
-                finding.status = 'Closed'
-                finding.closure_date = date.today().isoformat()
-                finding.closure_notes = f'Auto-closed: linked action {linked_act.id} was closed.'
-                continue
-
-            # Check legacy AuditActions
-            if finding.actions:
-                open_act = [a for a in finding.actions if a.status != 'Closed']
-                if open_act:
-                    flash(f'✗ Cannot close: Finding {finding.finding_ref} — '
-                          f'{len(open_act)} action(s) not yet closed.', 'error')
+            if finding.status != 'Closed':
+                # Allow if all AuditActions are closed (legacy workflow)
+                if finding.actions:
+                    open_actions = [a for a in finding.actions if a.status != 'Closed']
+                    if open_actions:
+                        flash(f'✗ Cannot close: Finding {finding.finding_ref} — '
+                              f'{len(open_actions)} action(s) not yet closed.', 'error')
+                        return redirect(url_for('audit_execution', sid=sid))
+                else:
+                    flash(f'✗ Cannot close: Finding {finding.finding_ref} is not yet Closed '
+                          f'(current status: {finding.status}).', 'error')
                     return redirect(url_for('audit_execution', sid=sid))
-            else:
-                flash(f'✗ Cannot close: Finding {finding.finding_ref} is not Closed '
-                      f'(status: {finding.status}). Close the linked action in the SAG portal first.', 'error')
-                return redirect(url_for('audit_execution', sid=sid))
-    s.status          = 'Completed'
-    s.closure_date    = date.today().isoformat()
-    s.closed_by       = request.form.get('closed_by', 'Safety Manager')
-    s.final_remarks   = request.form.get('final_remarks', '')
+    s.status        = 'Completed'
+    s.closure_date  = date.today().isoformat()
+    s.closed_by     = request.form.get('closed_by', 'Safety Manager')
+    s.final_remarks = request.form.get('final_remarks', '')
     s.closing_meeting = request.form.get('closing_meeting', date.today().isoformat())
-    # Save additional review fields if columns exist
-    try:
-        s.audit_result      = request.form.get('audit_result', 'Satisfactory')
-        s.followup_required = request.form.get('followup_required', 'No')
-    except Exception:
-        pass
     db.session.commit()
-    flash(f'✓ Audit {sid} closed by Safety Department. Final report available.', 'success')
+    flash(f'✓ Audit {sid} closed and marked Completed.', 'success')
+    return redirect(url_for('audit_execution', sid=sid))
+    s.final_remarks = request.form.get('final_remarks', '')
+    s.closing_meeting = request.form.get('closing_meeting', date.today().isoformat())
+    db.session.commit()
+    flash(f'✓ Audit {sid} closed successfully. All conditions met.', 'success')
     return redirect(url_for('audit_execution', sid=sid))
 
 
@@ -4755,42 +3752,8 @@ def finding_detail(fid):
             finding.assigned_dept = f.get('assigned_dept', '')
             finding.assigned_date = datetime.now().strftime('%Y-%m-%d')
             finding.status = 'Assigned'
-
-            # Auto-create or update a linked Action assigned to the SAG member
-            sag_user = f.get('sag_member', '')
-            dept_id  = int(f['department_id']) if f.get('department_id') else None
-            if sag_user:
-                # Check if action already linked
-                existing_act = Action.query.filter_by(
-                    linked_ref_id=fid, source='Audit Finding').first()
-                if existing_act:
-                    existing_act.sag_member   = sag_user
-                    existing_act.department_id = dept_id
-                    existing_act.status = 'Assigned'
-                else:
-                    new_act = Action(
-                        id=new_id('ACT'),
-                        source='Audit Finding',
-                        description=f'CAP: {(finding.description or "")[:100]}',
-                        owner=finding.assigned_to or sag_user,
-                        due_date=finding.cap_due_date or '',
-                        priority='High' if finding.severity=='Major' else 'Medium',
-                        status='Assigned',
-                        linked_ref_id=fid,
-                        sag_member=sag_user,
-                        department_id=dept_id,
-                        assigned_by=session.get('admin_name','Admin'),
-                    )
-                    db.session.add(new_act)
-                    db.session.flush()
-                    finding.linked_action_id = new_act.id
-                    log_action_history(new_act.id, session.get('admin_name','Admin'),
-                                       'New', 'Assigned',
-                                       f'Created from Audit Finding {fid}', 'assignment')
-
             db.session.commit()
-            flash(f'✓ Finding {fid} assigned to {finding.assigned_to}'
-                  + (f' · Action routed to SAG member {sag_user}' if sag_user else '') + '.', 'success')
+            flash(f'✓ Finding {fid} assigned to {finding.assigned_to}.', 'success')
 
         elif action == 'submit_root_cause':
             finding.root_cause           = f.get('root_cause', '')
@@ -4824,6 +3787,7 @@ def finding_detail(fid):
             finding.status = 'CAP Submitted'
             # Auto-create Action in main Action module if not already done
             if not finding.linked_action_id and f.get('create_action') == 'yes':
+                from models import Action
                 aid = new_id('ACT')
                 a = Action(
                     id=aid, source='Audit',
@@ -4872,6 +3836,7 @@ def finding_detail(fid):
             finding.status = 'Closed'
             # Update linked Action to Closed
             if finding.linked_action_id:
+                from models import Action
                 la = Action.query.get(finding.linked_action_id)
                 if la:
                     la.status = 'Closed'
@@ -4921,60 +3886,56 @@ def finding_detail(fid):
     # Linked Action
     linked_action = None
     if finding.linked_action_id:
+        from models import Action
         linked_action = Action.query.get(finding.linked_action_id)
-
-    # SAG members for assignment panel
-    sag_members = User.query.filter(
-        User.sag_role != None, User.sag_role != '', User.is_active == True
-    ).all()
 
     return render_template('audit/finding_detail.html',
                            finding=finding, schedule=schedule,
                            evidence_file_list=evidence_file_list,
                            linked_action=linked_action,
-                           sag_members=sag_members,
                            now=datetime.utcnow())
 
 
 @app.route('/audit-findings/<fid>/report')
 def finding_report(fid):
-    """Professional NCR (Non-Conformance Report) — full lifecycle."""
+    """Dynamic NCR Report — full lifecycle from DB."""
     finding  = AuditFinding.query.get_or_404(fid)
-    schedule = AuditSchedule.query.get(finding.schedule_id)
-    evidence_file_list = [x for x in (finding.evidence_files or '').split(',') if x]
-
-    # Load linked Action (SAG workflow)
-    linked_action = None
+    schedule = AuditSchedule.query.get(finding.schedule_id) if finding.schedule_id else None
+    evidence_file_list = [x.strip() for x in (finding.evidence_files or '').split(',') if x.strip()]
+    checklist_item = getattr(finding, 'source_checklist_item', None)
+    if not checklist_item and finding.schedule_id:
+        checklist_item = AuditChecklist.query.filter_by(linked_finding_id=str(fid)).first()
+    linked_action  = Action.query.get(finding.linked_action_id) if finding.linked_action_id else None
     action_history = []
-    if finding.linked_action_id:
-        linked_action = Action.query.get(finding.linked_action_id)
-        if linked_action:
-            action_history = ActionHistory.query.filter_by(
-                action_id=linked_action.id
-            ).order_by(ActionHistory.changed_at).all()
-
-    # NCR number = finding ref or finding id
+    sag_user = None
+    if linked_action:
+        action_history = ActionHistory.query.filter_by(action_id=linked_action.id)                             .order_by(ActionHistory.changed_at).all()
+        sag_user = User.query.filter_by(username=linked_action.sag_member).first() if linked_action.sag_member else None
+    dept = None
+    if schedule and schedule.department_id:
+        dept = Department.query.get(schedule.department_id)
+    elif linked_action and linked_action.department_id:
+        dept = Department.query.get(linked_action.department_id)
+    action_evidence_files = [linked_action.evidence_filename] if linked_action and linked_action.evidence_filename else []
     ncr_number = finding.finding_ref or finding.id
-
     MONTHS = ['January','February','March','April','May','June',
               'July','August','September','October','November','December']
     return render_template('audit/finding_report.html',
-                           finding=finding, schedule=schedule,
-                           evidence_file_list=evidence_file_list,
-                           linked_action=linked_action,
-                           action_history=action_history,
-                           ncr_number=ncr_number,
-                           now=datetime.utcnow(), MONTHS=MONTHS)
+                           finding=finding, schedule=schedule, dept=dept,
+                           checklist_item=checklist_item,
+                           linked_action=linked_action, action_history=action_history,
+                           sag_user=sag_user, evidence_file_list=evidence_file_list,
+                           action_evidence_files=action_evidence_files,
+                           ncr_number=ncr_number, now=datetime.utcnow(), MONTHS=MONTHS)
 
 
 @app.route('/audit-schedule/<sid>/final-report')
 def audit_final_report(sid):
-    """Full Final Audit Report — all findings + closures."""
+    """Enterprise Aviation Final Audit & NCR/CAPA Report Package."""
     schedule = AuditSchedule.query.get_or_404(sid)
-    plan = AuditPlan.query.get(schedule.plan_id) if schedule.plan_id else None
-    findings = AuditFinding.query.filter_by(schedule_id=sid).all()
-    # Overdue check
-    from datetime import date
+    plan     = AuditPlan.query.get(schedule.plan_id) if schedule.plan_id else None
+    findings = AuditFinding.query.filter_by(schedule_id=sid)                   .order_by(AuditFinding.finding_ref).all()
+    checklist_items = AuditChecklist.query.filter_by(schedule_id=sid)                          .order_by(AuditChecklist.category, AuditChecklist.sequence).all()
     for f in findings:
         if f.cap_due_date and f.status not in ('Closed','Accepted'):
             try:
@@ -4982,10 +3943,42 @@ def audit_final_report(sid):
                     f.status = 'Overdue'; f.cap_status = 'Overdue'
             except Exception: pass
     db.session.commit()
-    all_closed  = all(f.status == 'Closed' for f in findings) if findings else False
+    finding_data = []
+    for f in findings:
+        la = Action.query.get(f.linked_action_id) if f.linked_action_id else None
+        hist = []; sag_user = None
+        cl_item = getattr(f, 'source_checklist_item', None)
+        if not cl_item:
+            cl_item = AuditChecklist.query.filter_by(linked_finding_id=str(f.id)).first()
+        ev_files = [x.strip() for x in (f.evidence_files or '').split(',') if x.strip()]
+        act_ev   = [la.evidence_filename] if la and la.evidence_filename else []
+        if la:
+            hist     = ActionHistory.query.filter_by(action_id=la.id)                           .order_by(ActionHistory.changed_at).all()
+            sag_user = User.query.filter_by(username=la.sag_member).first() if la.sag_member else None
+        finding_data.append({'finding':f,'action':la,'history':hist,
+                              'sag_user':sag_user,'cl_item':cl_item,
+                              'ev_files':ev_files,'act_ev':act_ev})
+    total=len(findings); closed=sum(1 for f in findings if f.status=='Closed')
+    open_f=sum(1 for f in findings if f.status not in ('Closed','Accepted'))
+    overdue=sum(1 for f in findings if f.status=='Overdue')
+    major=sum(1 for f in findings if f.severity=='Major')
+    minor=sum(1 for f in findings if f.severity=='Minor')
+    critical=sum(1 for f in findings if f.severity=='Critical')
+    observation=sum(1 for f in findings if f.severity=='Observation')
+    cl_total=len(checklist_items); cl_yes=sum(1 for i in checklist_items if i.response=='Yes')
+    cl_no=sum(1 for i in checklist_items if i.response=='No')
+    cl_na=sum(1 for i in checklist_items if i.response=='N/A')
+    compliance_pct=round((cl_yes/cl_total*100) if cl_total>0 else 0)
+    dept=Department.query.get(schedule.department_id) if schedule.department_id else None
+    all_closed=(closed==total) if total>0 else True
     return render_template('audit/audit_final_report.html',
-                           schedule=schedule, plan=plan, findings=findings,
-                           all_closed=all_closed, now=datetime.utcnow())
+                           schedule=schedule, plan=plan, dept=dept,
+                           findings=findings, finding_data=finding_data,
+                           checklist_items=checklist_items, all_closed=all_closed,
+                           total=total, closed=closed, open_f=open_f, overdue=overdue,
+                           major=major, minor=minor, critical=critical, observation=observation,
+                           cl_total=cl_total, cl_yes=cl_yes, cl_no=cl_no, cl_na=cl_na,
+                           compliance_pct=compliance_pct, now=datetime.utcnow())
 
 
 # ─── AUDIT ACTIONS ────────────────────────────────────────────────────────────
@@ -7021,9 +6014,6 @@ with app.app_context():
     # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
     # Safely adds any missing columns to existing live databases on Render.
     migrations = {
-            'distribution_lists': [('name','VARCHAR(100)'),('email','VARCHAR(200)'),('department_id','INTEGER'),('position','VARCHAR(100)'),('is_active','BOOLEAN DEFAULT TRUE')],
-            'email_logs': [('subject','VARCHAR(300)'),('content_type','VARCHAR(30)'),('content_ref','VARCHAR(50)'),('sent_by','VARCHAR(100)'),('recipient_count','INTEGER DEFAULT 0'),('dept_filter','VARCHAR(200)'),('status',"VARCHAR(20) DEFAULT 'Sent'"),('error_message','TEXT')],
-            'survey_responses': [('survey_id','INTEGER'),('respondent_name','VARCHAR(100)'),('respondent_email','VARCHAR(200)'),('department_id','INTEGER'),('is_anonymous','BOOLEAN DEFAULT FALSE'),('answers','TEXT'),('ip_address','VARCHAR(50)')],
             'departments': [
                 ('color',                  'VARCHAR(20) DEFAULT "#1e40af"'),
             ],
@@ -7315,28 +6305,6 @@ with app.app_context():
                     conn.execute(sa_text(
                         f'ALTER TABLE {tbl_col[0]} ALTER COLUMN {tbl_col[1]} TYPE {tbl_col[2]}'
                     ))
-                    conn.commit()
-                except Exception:
-                    try: conn.rollback()
-                    except: pass
-
-            # Add SAG governance columns and action_history table
-            for _sql in [
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS sag_member VARCHAR(100)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS department_id INTEGER",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS root_cause TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS rejection_notes TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS reopen_count INTEGER DEFAULT 0",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'Corrective'",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_audit_id VARCHAR(30)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_ra_id VARCHAR(30)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_risk_id VARCHAR(30)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS assigned_by VARCHAR(100)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS sag_role VARCHAR(80)",
-                "CREATE TABLE IF NOT EXISTS action_history (id SERIAL PRIMARY KEY, action_id VARCHAR(30) REFERENCES actions(id) ON DELETE CASCADE, changed_by VARCHAR(100), changed_at TIMESTAMP DEFAULT NOW(), from_status VARCHAR(50), to_status VARCHAR(50), notes TEXT, field_changed VARCHAR(50) DEFAULT 'status')",
-            ]:
-                try:
-                    conn.execute(sa_text(_sql))
                     conn.commit()
                 except Exception:
                     try: conn.rollback()
