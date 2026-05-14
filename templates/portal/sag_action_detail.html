@@ -109,6 +109,51 @@ a{text-decoration:none;color:inherit}
     <div>
       <form method="POST">
 
+        {% if finding or hazard_rep or investigation or spi_ind or ra %}
+        <div class="card" style="border-left:3px solid #1d4ed8;margin-bottom:14px">
+          <div class="ct" style="color:#1d4ed8">📋 Source Record — {{ a.source or 'Linked Record' }}</div>
+          <style>.sfl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:3px}.sfv{font-size:13px;color:#374151;font-weight:500}.sg2{display:grid;grid-template-columns:1fr 1fr;gap:11px}.stxt{background:#f4f6fb;border-radius:7px;padding:10px;font-size:13px;color:#374151;line-height:1.6}</style>
+          {% if finding %}
+          <div class="sg2">
+            <div><div class="sfl">Finding Ref</div><div class="sfv mono">{{ finding.finding_ref or finding.id }}</div></div>
+            <div><div class="sfl">Severity</div><div class="sfv">{% if finding.severity=='Major' %}<span class="badge br">Major</span>{% elif finding.severity=='Minor' %}<span class="badge by">Minor</span>{% else %}<span class="badge bx">{{ finding.severity or "—" }}</span>{% endif %}</div></div>
+            <div><div class="sfl">Category</div><div class="sfv">{{ finding.category or "—" }}</div></div>
+            <div><div class="sfl">Standard</div><div class="sfv mono">{{ finding.standard_ref or "—" }}</div></div>
+            <div style="grid-column:span 2"><div class="sfl">Finding Description</div><div class="stxt">{{ finding.description or "—" }}</div></div>
+            {% if finding.requirement %}<div style="grid-column:span 2"><div class="sfl">Requirement</div><div style="font-size:12px;color:#374151">{{ finding.requirement }}</div></div>{% endif %}
+          </div>
+          {% endif %}
+          {% if hazard_rep %}
+          <div class="sg2">
+            <div><div class="sfl">Report ID</div><div class="sfv mono">{{ hazard_rep.id }}</div></div>
+            <div><div class="sfl">Classification</div><div class="sfv">{{ hazard_rep.classification or "—" }}</div></div>
+            <div><div class="sfl">Location</div><div class="sfv">{{ hazard_rep.location or "—" }}</div></div>
+            <div><div class="sfl">Date</div><div class="sfv mono">{{ hazard_rep.date or "—" }}</div></div>
+            <div style="grid-column:span 2"><div class="sfl">Hazard Description</div><div class="stxt" style="border-left:3px solid #dc2626;border-radius:0 7px 7px 0">{{ hazard_rep.description or "—" }}</div></div>
+            {% if hazard_rep.consequences %}<div style="grid-column:span 2"><div class="sfl">Consequences</div><div style="font-size:12px;color:#374151">{{ hazard_rep.consequences }}</div></div>{% endif %}
+            {% if hazard_rep.immediate_action %}<div style="grid-column:span 2"><div class="sfl">Immediate Action</div><div style="font-size:12px;color:#374151">{{ hazard_rep.immediate_action }}</div></div>{% endif %}
+          </div>
+          {% endif %}
+          {% if investigation %}
+          <div class="sg2">
+            <div><div class="sfl">Investigation ID</div><div class="sfv mono">{{ investigation.id }}</div></div>
+            <div><div class="sfl">Date</div><div class="sfv mono">{{ investigation.date_of_occurrence or "—" }}</div></div>
+            <div><div class="sfl">Investigator</div><div class="sfv">{{ investigation.investigator or "—" }}</div></div>
+            <div style="grid-column:span 2"><div class="sfl">Description</div><div class="stxt">{{ investigation.description or "—" }}</div></div>
+            {% if investigation.why1 %}<div style="grid-column:span 2"><div class="sfl">Root Cause (5-Why)</div><div style="font-size:12px;color:#374151;line-height:2">{% for why in [investigation.why1,investigation.why2,investigation.why3,investigation.why4,investigation.why5] if why %}<div style="padding:3px 0;border-bottom:1px solid #f3f4f6">Why {{ loop.index }}: {{ why }}</div>{% endfor %}</div></div>{% endif %}
+          </div>
+          {% endif %}
+          {% if spi_ind %}
+          <div class="sg2">
+            <div><div class="sfl">SPI Indicator</div><div class="sfv mono">{{ spi_ind.ref_code }}</div></div>
+            <div><div class="sfl">Alert Level</div><div class="sfv"><span class="badge {% if a.spi_alert_level=='L3' %}br{% elif a.spi_alert_level=='L2' %}by{% else %}bb{% endif %}">{{ a.spi_alert_level or "L1" }} Alert</span></div></div>
+            <div><div class="sfl">Indicator</div><div class="sfv">{{ spi_ind.name or "—" }}</div></div>
+            <div><div class="sfl">Period</div><div class="sfv mono">{% if a.spi_alert_month %}{{ a.spi_alert_month }}/{{ a.spi_alert_year }}{% else %}—{% endif %}</div></div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
         <div class="card">
           <div class="ct">📋 Action Information</div>
           <div class="g2">
