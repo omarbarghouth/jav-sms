@@ -944,9 +944,9 @@ def update_action(aid):
     # Map friendly status to canonical
     # Store the actual workflow status (not mapped) — allows richer lifecycle
     # Only map unknown values to avoid corruption
-    VALID_STATUSES = {'Open','In Progress','Mitigation Implemented',
+    VALID_STATUSES = {'Open','Assigned','In Progress','Mitigation Implemented',
                       'Under Safety Review','Effectiveness Verification',
-                      'Closed','Overdue'}
+                      'Returned','Closed','Overdue'}
     if new_status not in VALID_STATUSES:
         new_status = 'In Progress'
     effectiveness = f.get('effectiveness', '')
@@ -1119,10 +1119,34 @@ def action_dashboard():
 @app.route('/actions/<aid>')
 @require_login
 def action_detail(aid):
-    """Single action detail page — shows everything linked to this action."""
-    a      = Action.query.get_or_404(aid)
-    hazard = Hazard.query.get(a.hazard_id) if a.hazard_id else None
-    return render_template('action/action_detail.html', a=a, hazard=hazard)
+    """Single action detail page — full source records + SAG assignment."""
+    a = Action.query.get_or_404(aid)
+
+    # Load source records based on action source + linked refs
+    hazard      = Hazard.query.get(a.hazard_id) if a.hazard_id else None
+    hazard_rep  = HazardReport.query.filter_by(hazard_id=a.hazard_id).first() if a.hazard_id else None
+    finding     = AuditFinding.query.get(a.linked_ref_id) if a.linked_ref_id and a.source == 'Audit Finding' else None
+    investigation = Investigation.query.get(a.linked_ref_id) if a.linked_ref_id and a.source == 'Investigation' else None
+    spi_ind     = SPIIndicator.query.get(a.spi_id) if a.spi_id else None
+    ra          = RiskAssessment.query.get(a.linked_ref_id) if a.linked_ref_id and a.source in ('Risk Assessment','RA') else None
+
+    # SAG members list — filtered by action's department if set
+    sag_q = User.query.filter(User.sag_role != None, User.sag_role != '', User.is_active == True)
+    if a.department_id:
+        sag_members = sag_q.filter_by(department_id=a.department_id).all()
+        if not sag_members:
+            sag_members = sag_q.all()  # fallback: show all if no match
+    else:
+        sag_members = sag_q.all()
+
+    # Action history
+    history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).limit(20).all()
+
+    return render_template('action/action_detail.html',
+        a=a, hazard=hazard, hazard_rep=hazard_rep,
+        finding=finding, investigation=investigation,
+        spi_ind=spi_ind, ra=ra,
+        sag_members=sag_members, history=history)
 
 
 
@@ -3732,8 +3756,18 @@ def sag_action_detail(aid):
 
         return redirect(url_for('sag_action_detail', aid=aid))
 
+    # Load full source records for SAG member visibility
+    hazard_rep    = HazardReport.query.filter_by(hazard_id=a.hazard_id).first() if a.hazard_id else None
+    finding       = AuditFinding.query.get(a.linked_ref_id) if a.linked_ref_id and a.source == 'Audit Finding' else None
+    investigation = Investigation.query.get(a.linked_ref_id) if a.linked_ref_id and a.source == 'Investigation' else None
+    spi_ind       = SPIIndicator.query.get(a.spi_id) if a.spi_id else None
+    ra            = RiskAssessment.query.get(a.linked_ref_id) if a.linked_ref_id and a.source in ('Risk Assessment','RA') else None
+
     history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).limit(15).all()
-    return render_template('portal/sag_action_detail.html', a=a, history=history)
+    return render_template('portal/sag_action_detail.html',
+        a=a, history=history,
+        hazard_rep=hazard_rep, finding=finding,
+        investigation=investigation, spi_ind=spi_ind, ra=ra)
 
 
 # ── SAG Governance Dashboard (Safety Admin view inside main SMS) ───────────────
