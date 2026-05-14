@@ -21,6 +21,7 @@ class User(db.Model):
     # Roles: admin / safety_manager / safety_officer / auditor
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     is_active     = db.Column(db.Boolean, default=True)
+    sag_role      = db.Column(db.String(80))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     last_login    = db.Column(db.DateTime)
     department    = db.relationship('Department', foreign_keys=[department_id])
@@ -228,9 +229,35 @@ class Action(db.Model):
     verified_by          = db.Column(db.String(100))   # who verified effectiveness
     verified_date        = db.Column(db.String(20))
     created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+    # SAG governance fields
+    sag_member           = db.Column(db.String(100))   # assigned SAG member username
+    department_id        = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    root_cause           = db.Column(db.Text)
+    rejection_notes      = db.Column(db.Text)
+    reopen_count         = db.Column(db.Integer, default=0)
+    action_type          = db.Column(db.String(20), default='Corrective')
+    linked_audit_id      = db.Column(db.String(30))
+    linked_ra_id         = db.Column(db.String(30))
+    linked_risk_id       = db.Column(db.String(30))
+    assigned_by          = db.Column(db.String(100))
     # Relationship to SPI indicator
     spi_indicator        = db.relationship('SPIIndicator', foreign_keys=[spi_id],
                                backref=db.backref('linked_actions', lazy=True))
+
+class ActionHistory(db.Model):
+    """Full audit trail of every action change."""
+    __tablename__ = 'action_history'
+    id            = db.Column(db.Integer, primary_key=True)
+    action_id     = db.Column(db.String(30), db.ForeignKey('actions.id'), nullable=False)
+    changed_by    = db.Column(db.String(100))
+    changed_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    from_status   = db.Column(db.String(50))
+    to_status     = db.Column(db.String(50))
+    notes         = db.Column(db.Text)
+    field_changed = db.Column(db.String(50), default='status')
+    action        = db.relationship('Action', backref=db.backref('history',
+                        lazy=True, order_by='ActionHistory.changed_at.desc()'))
+
 
 class Audit(db.Model):
     __tablename__ = 'audits'
@@ -583,6 +610,7 @@ class ChecklistTemplate(db.Model):
     name          = db.Column(db.String(100))
     version       = db.Column(db.Integer, default=1)
     is_active     = db.Column(db.Boolean, default=True)
+    sag_role      = db.Column(db.String(80))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     department    = db.relationship('Department', foreign_keys=[department_id])
@@ -725,6 +753,7 @@ class DistributionList(db.Model):
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     position      = db.Column(db.String(100))
     is_active     = db.Column(db.Boolean, default=True)
+    sag_role      = db.Column(db.String(80))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     department    = db.relationship('Department', foreign_keys=[department_id])
 
