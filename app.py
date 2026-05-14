@@ -185,7 +185,29 @@ def index():
 @app.route('/portal')
 def public_portal():
     """Public-facing reporting portal — employees, pilots, operational staff."""
-    return render_template('portal/portal.html')
+    import hashlib as _hs
+    from datetime import date as _d
+    _msgs = [
+        "Report hazards before they become incidents — your report can save lives.",
+        "Safety is everyone's responsibility — never leave a hazard unreported.",
+        "A Just Culture means you can report freely without fear of punishment.",
+        "Every report you make improves safety for everyone at Jordan Aviation.",
+        "Your anonymous report today could prevent a serious incident tomorrow.",
+    ]
+    _week = int(_hs.md5(_d.today().strftime('%Y-%W').encode()).hexdigest(), 16)
+    safety_message = _msgs[_week % len(_msgs)]
+    try:
+        bulletins   = SafetyBulletin.query.filter_by(status='Active')                          .order_by(SafetyBulletin.created_at.desc()).limit(5).all()
+        newsletters = SafetyNewsletter.query.filter_by(status='Published')                          .order_by(SafetyNewsletter.created_at.desc()).limit(3).all()
+        surveys     = SafetySurvey.query.filter_by(status='Active').all()
+        campaigns   = SafetyCampaign.query.filter_by(status='Active').limit(3).all()
+        lessons     = LessonLearned.query.filter_by(status='Published')                          .order_by(LessonLearned.created_at.desc()).limit(3).all()
+    except Exception:
+        bulletins = newsletters = surveys = campaigns = lessons = []
+    return render_template('portal/portal.html',
+                           safety_message=safety_message,
+                           bulletins=bulletins, newsletters=newsletters,
+                           surveys=surveys, campaigns=campaigns, lessons=lessons)
 
 
 @app.route('/portal/voluntary', methods=['GET', 'POST'])
