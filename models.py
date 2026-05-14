@@ -229,8 +229,7 @@ class Action(db.Model):
     verified_by          = db.Column(db.String(100))   # who verified effectiveness
     verified_date        = db.Column(db.String(20))
     created_at           = db.Column(db.DateTime, default=datetime.utcnow)
-    # SAG governance fields
-    sag_member           = db.Column(db.String(100))   # assigned SAG member username
+    sag_member           = db.Column(db.String(100))
     department_id        = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     root_cause           = db.Column(db.Text)
     rejection_notes      = db.Column(db.Text)
@@ -245,7 +244,6 @@ class Action(db.Model):
                                backref=db.backref('linked_actions', lazy=True))
 
 class ActionHistory(db.Model):
-    """Full audit trail of every action change."""
     __tablename__ = 'action_history'
     id            = db.Column(db.Integer, primary_key=True)
     action_id     = db.Column(db.String(30), db.ForeignKey('actions.id'), nullable=False)
@@ -565,6 +563,8 @@ class AuditPlan(db.Model):
     planned_week       = db.Column(db.Integer)        # 1-4 (week of month)
     status             = db.Column(db.String(20), default='Planned')
     created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    audit_result       = db.Column(db.String(80))   # Satisfactory / Unsatisfactory etc.
+    followup_required  = db.Column(db.String(10))   # Yes / No
     department         = db.relationship('Department', foreign_keys=[department_id])
     schedules          = db.relationship('AuditSchedule', backref='plan', lazy=True,
                                          cascade='all, delete-orphan')
@@ -591,6 +591,8 @@ class AuditSchedule(db.Model):
     closed_by          = db.Column(db.String(100))
     final_remarks      = db.Column(db.Text)
     created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    audit_result       = db.Column(db.String(80))   # Satisfactory / Unsatisfactory etc.
+    followup_required  = db.Column(db.String(10))   # Yes / No
     department         = db.relationship('Department', foreign_keys=[department_id])
     checklist_items    = db.relationship('AuditChecklist', backref='schedule', lazy=True,
                                           cascade='all, delete-orphan')
@@ -739,51 +741,21 @@ class AuditAction(db.Model):
     effectiveness_notes  = db.Column(db.Text)
     reopen_reason        = db.Column(db.Text)
     created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+    sag_member           = db.Column(db.String(100))
+    department_id        = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    root_cause           = db.Column(db.Text)
+    rejection_notes      = db.Column(db.Text)
+    reopen_count         = db.Column(db.Integer, default=0)
+    action_type          = db.Column(db.String(20), default='Corrective')
+    linked_audit_id      = db.Column(db.String(30))
+    linked_ra_id         = db.Column(db.String(30))
+    linked_risk_id       = db.Column(db.String(30))
+    assigned_by          = db.Column(db.String(100))
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SAFETY POLICY & OBJECTIVES MODULE — COMPONENT 1 OF SMS
 #  ICAO Annex 19 / Doc 9859 — Added as extension, existing tables unchanged
 # ═══════════════════════════════════════════════════════════════════════════════
-
-class DistributionList(db.Model):
-    __tablename__ = 'distribution_lists'
-    id            = db.Column(db.Integer, primary_key=True)
-    name          = db.Column(db.String(100))
-    email         = db.Column(db.String(200), nullable=False)
-    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
-    position      = db.Column(db.String(100))
-    is_active     = db.Column(db.Boolean, default=True)
-    sag_role      = db.Column(db.String(80))
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
-
-class EmailLog(db.Model):
-    __tablename__ = 'email_logs'
-    id              = db.Column(db.Integer, primary_key=True)
-    subject         = db.Column(db.String(300))
-    content_type    = db.Column(db.String(30))
-    content_ref     = db.Column(db.String(50))
-    sent_by         = db.Column(db.String(100))
-    sent_at         = db.Column(db.DateTime, default=datetime.utcnow)
-    recipient_count = db.Column(db.Integer, default=0)
-    dept_filter     = db.Column(db.String(200))
-    status          = db.Column(db.String(20), default='Sent')
-    error_message   = db.Column(db.Text)
-
-class SurveyResponse(db.Model):
-    __tablename__ = 'survey_responses'
-    id               = db.Column(db.Integer, primary_key=True)
-    survey_id        = db.Column(db.Integer, db.ForeignKey('safety_surveys.id'))
-    respondent_name  = db.Column(db.String(100))
-    respondent_email = db.Column(db.String(200))
-    department_id    = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
-    is_anonymous     = db.Column(db.Boolean, default=False)
-    answers          = db.Column(db.Text)
-    submitted_at     = db.Column(db.DateTime, default=datetime.utcnow)
-    ip_address       = db.Column(db.String(50))
-    survey           = db.relationship('SafetySurvey', foreign_keys=[survey_id],
-                                       backref=db.backref('responses', lazy=True))
-    department       = db.relationship('Department', foreign_keys=[department_id])
 
 class SafetyPolicy(db.Model):
     """Safety Policy Statement — versioned, signed by Accountable Manager."""
