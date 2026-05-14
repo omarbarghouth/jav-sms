@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
-from models import db, Department, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from openpyxl import Workbook
@@ -174,6 +174,18 @@ def check_pw(pw, hashed):
 
 def is_logged_in():
     return session.get('admin_logged_in') is True
+
+def log_action_history(action_id, changed_by, from_status, to_status, notes='', field='status'):
+    """Write audit trail entry — never crashes the main operation."""
+    try:
+        db.session.add(ActionHistory(
+            action_id=action_id, changed_by=changed_by,
+            from_status=from_status, to_status=to_status,
+            notes=notes or '', field_changed=field
+        ))
+    except Exception:
+        pass
+
 
 def require_login(f):
     """Decorator — redirects to login if not authenticated."""
@@ -925,6 +937,7 @@ def update_action(aid):
     """
     a   = Action.query.get_or_404(aid)
     f   = request.form
+    old_status    = a.status   # capture before changes for history
     new_status    = f.get('status', a.status)
     # Map friendly status to canonical
     # Store the actual workflow status (not mapped) — allows richer lifecycle
@@ -995,15 +1008,34 @@ def update_action(aid):
         a.effectiveness_review = f.get('effectiveness_review', '')
         a.closed_date          = date.today().isoformat()
 
+    # Save SAG governance fields if provided
+    if f.get('sag_member'):
+        a.sag_member = f.get('sag_member')
+    if f.get('department_id'):
+        try: a.department_id = int(f.get('department_id'))
+        except: pass
+    if f.get('root_cause'):
+        a.root_cause = f.get('root_cause')
+    if new_status == 'Returned':
+        a.rejection_notes = f.get('rejection_notes', '')
+        a.reopen_count = (a.reopen_count or 0) + 1
+
     try:
+        db.session.flush()
+        log_action_history(
+            a.id,
+            session.get('admin_name', session.get('sag_user', 'System')),
+            old_status, new_status,
+            f.get('safety_review_notes') or f.get('rejection_notes') or '',
+            'status'
+        )
         db.session.commit()
         flash('✓ Action updated.', 'success')
     except Exception as e:
         db.session.rollback()
-        # Most likely cause: column doesn't exist in live DB yet
         err_str = str(e)
         if 'column' in err_str.lower() and 'does not exist' in err_str.lower():
-            flash('⚠ Database schema update required. Please contact the system administrator to run migrations.', 'error')
+            flash('⚠ Database schema update required.', 'error')
         else:
             flash(f'⚠ Could not save: {err_str[:120]}', 'error')
     return redirect(return_url)
@@ -3578,6 +3610,210 @@ def sp_survey_response_detail(sid, rid):
                 for i in range(len(questions))]
     return render_template('spi/sp_survey_response_detail.html',
                            survey=s, resp=resp, qa_pairs=qa_pairs)
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SAG PORTAL — Separate login, separate access, same PostgreSQL database
+#  /sag-login  /sag/dashboard  /sag/action/<id>
+#  SAG members see ONLY their own assigned actions — nothing else.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def is_sag_logged_in():
+    return session.get('sag_logged_in') is True
+
+def require_sag(f):
+    import functools
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not is_sag_logged_in():
+            return redirect(url_for('sag_login', next=request.path))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/sag-login', methods=['GET', 'POST'])
+def sag_login():
+    if is_sag_logged_in():
+        return redirect(url_for('sag_dashboard'))
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        user = User.query.filter_by(username=username, is_active=True).first()
+        if user and check_pw(password, user.password_hash):
+            session['sag_logged_in'] = True
+            session['sag_user']      = user.username
+            session['sag_name']      = user.full_name or user.username
+            session['sag_role']      = user.sag_role or user.role
+            session['sag_dept_id']   = user.department_id
+            session.permanent        = True
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            return redirect(url_for('sag_dashboard'))
+        error = 'Invalid username or password.'
+    return render_template('portal/sag_login.html', error=error)
+
+
+@app.route('/sag-logout')
+def sag_logout():
+    for k in ['sag_logged_in','sag_user','sag_name','sag_role','sag_dept_id']:
+        session.pop(k, None)
+    return redirect(url_for('sag_login'))
+
+
+@app.route('/sag/dashboard')
+@require_sag
+def sag_dashboard():
+    check_overdue_actions()
+    username = session.get('sag_user', '')
+    my_actions = Action.query.filter_by(sag_member=username)                     .order_by(Action.due_date).all()
+    open_c     = sum(1 for a in my_actions if a.status == 'Open')
+    prog_c     = sum(1 for a in my_actions if a.status == 'In Progress')
+    overdue_c  = sum(1 for a in my_actions if a.status == 'Overdue')
+    review_c   = sum(1 for a in my_actions
+                     if a.status in ('Mitigation Implemented','Under Safety Review'))
+    returned_c = sum(1 for a in my_actions if a.status == 'Returned')
+    closed_c   = sum(1 for a in my_actions if a.status == 'Closed')
+    active_actions = [a for a in my_actions if a.status != 'Closed']
+    closed_actions = [a for a in my_actions if a.status == 'Closed'][-10:]
+    return render_template('portal/sag_dashboard.html',
+                           active_actions=active_actions,
+                           closed_actions=closed_actions,
+                           open_c=open_c, prog_c=prog_c,
+                           overdue_c=overdue_c, review_c=review_c,
+                           returned_c=returned_c, closed_c=closed_c)
+
+
+@app.route('/sag/action/<aid>', methods=['GET', 'POST'])
+@require_sag
+def sag_action_detail(aid):
+    a = Action.query.get_or_404(aid)
+    if a.sag_member != session.get('sag_user', ''):
+        flash('⚠ This action is not assigned to you.', 'error')
+        return redirect(url_for('sag_dashboard'))
+
+    if request.method == 'POST':
+        f          = request.form
+        action_btn = f.get('action_btn', '')
+        old_status = a.status
+
+        if action_btn in ('save_progress', 'submit_review'):
+            a.corrective_description = f.get('corrective_description', a.corrective_description or '')
+            a.mitigation_description = f.get('mitigation_description', a.mitigation_description or '')
+            a.safety_notes           = f.get('safety_notes', a.safety_notes or '')
+            a.root_cause             = f.get('root_cause', a.root_cause or '')
+            a.follow_up_notes        = f.get('follow_up_notes', a.follow_up_notes or '')
+            a.evidence               = f.get('evidence', a.evidence or '')
+            if f.get('implementation_date'):
+                a.implementation_date = f.get('implementation_date')
+            if f.get('mitigation_status'):
+                a.mitigation_status = f.get('mitigation_status')
+
+        if action_btn == 'save_progress':
+            if a.status in ('Open', 'Assigned'):
+                a.status = 'In Progress'
+            log_action_history(aid, session['sag_user'], old_status, a.status,
+                               'Progress saved by SAG member', 'progress')
+            db.session.commit()
+            flash('✓ Progress saved successfully.', 'success')
+
+        elif action_btn == 'submit_review':
+            a.mitigation_status = 'Completed'
+            a.status = 'Mitigation Implemented'
+            log_action_history(aid, session['sag_user'], old_status,
+                               'Mitigation Implemented',
+                               'Submitted for Safety Review by ' + session.get('sag_name','SAG'),
+                               'status')
+            db.session.commit()
+            flash('✓ Action submitted for Safety Review. Awaiting Safety Department approval.', 'success')
+
+        return redirect(url_for('sag_action_detail', aid=aid))
+
+    history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).limit(15).all()
+    return render_template('portal/sag_action_detail.html', a=a, history=history)
+
+
+# ── SAG Governance Dashboard (Safety Admin view inside main SMS) ───────────────
+
+@app.route('/sag/governance')
+@require_login
+def sag_governance():
+    check_overdue_actions()
+    total_open     = Action.query.filter(Action.status.notin_(['Closed'])).count()
+    overdue        = Action.query.filter_by(status='Overdue').count()
+    pending_review = Action.query.filter(
+        Action.status.in_(['Mitigation Implemented','Under Safety Review'])).count()
+    returned       = Action.query.filter_by(status='Returned').count()
+    closed_month   = Action.query.filter(
+        Action.status=='Closed',
+        Action.closed_date >= date.today().replace(day=1).isoformat()
+    ).count()
+    high_risk = Action.query.filter(
+        Action.priority=='High', Action.status.notin_(['Closed'])
+    ).order_by(Action.due_date).limit(10).all()
+    for_review = Action.query.filter(
+        Action.status.in_(['Mitigation Implemented','Under Safety Review'])
+    ).order_by(Action.due_date).limit(15).all()
+    overdue_list = Action.query.filter_by(status='Overdue').order_by(Action.due_date).limit(15).all()
+    returned_list = Action.query.filter_by(status='Returned').order_by(Action.due_date).limit(10).all()
+    unassigned = Action.query.filter(
+        (Action.sag_member == None) | (Action.sag_member == ''),
+        Action.status.notin_(['Closed'])
+    ).order_by(Action.due_date).limit(10).all()
+    from sqlalchemy import func as sqf
+    src_data = db.session.query(Action.source, sqf.count(Action.id)).filter(
+        Action.status.notin_(['Closed'])
+    ).group_by(Action.source).order_by(sqf.count(Action.id).desc()).all()
+    dept_perf = []
+    for dept in Department.query.all():
+        d_total   = Action.query.filter_by(department_id=dept.id).count()
+        d_open    = Action.query.filter_by(department_id=dept.id).filter(
+                        Action.status.notin_(['Closed'])).count()
+        d_overdue = Action.query.filter_by(department_id=dept.id, status='Overdue').count()
+        d_closed  = Action.query.filter_by(department_id=dept.id, status='Closed').count()
+        if d_total > 0:
+            dept_perf.append({'dept': dept, 'total': d_total, 'open': d_open,
+                              'overdue': d_overdue, 'closed': d_closed,
+                              'rate': round(d_closed/d_total*100)})
+    dept_perf.sort(key=lambda x: x['overdue'], reverse=True)
+    sag_members = User.query.filter_by(is_active=True).all()
+    return render_template('action/sag_governance.html',
+                           total_open=total_open, overdue=overdue,
+                           pending_review=pending_review, returned=returned,
+                           closed_month=closed_month,
+                           high_risk=high_risk, for_review=for_review,
+                           overdue_list=overdue_list, returned_list=returned_list,
+                           unassigned=unassigned, src_data=src_data,
+                           dept_perf=dept_perf, sag_members=sag_members)
+
+
+@app.route('/sag/assign/<aid>', methods=['POST'])
+@require_login
+def sag_assign(aid):
+    a = Action.query.get_or_404(aid)
+    old_owner = a.sag_member or 'Unassigned'
+    a.sag_member    = request.form.get('sag_member', '')
+    a.department_id = int(request.form['department_id']) if request.form.get('department_id') else a.department_id
+    a.priority      = request.form.get('priority', a.priority)
+    a.due_date      = request.form.get('due_date', a.due_date)
+    a.root_cause    = request.form.get('root_cause', a.root_cause)
+    if a.status == 'Open':
+        a.status = 'Assigned'
+    log_action_history(aid, session.get('admin_name','Admin'),
+                       old_owner, a.sag_member,
+                       f'Assigned to {a.sag_member}', 'assignment')
+    db.session.commit()
+    flash(f'✓ Action {aid} assigned to {a.sag_member}.', 'success')
+    return redirect(request.form.get('return_url', url_for('sag_governance')))
+
+
+@app.route('/actions/<aid>/history')
+@require_login
+def action_history_view(aid):
+    a       = Action.query.get_or_404(aid)
+    history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).all()
+    return render_template('action/action_history.html', a=a, history=history)
 
 
 @app.route('/risk-matrix')
@@ -6938,6 +7174,28 @@ with app.app_context():
                     conn.execute(sa_text(
                         f'ALTER TABLE {tbl_col[0]} ALTER COLUMN {tbl_col[1]} TYPE {tbl_col[2]}'
                     ))
+                    conn.commit()
+                except Exception:
+                    try: conn.rollback()
+                    except: pass
+
+            # Add SAG governance columns and action_history table
+            for _sql in [
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS sag_member VARCHAR(100)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS department_id INTEGER",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS root_cause TEXT",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS rejection_notes TEXT",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS reopen_count INTEGER DEFAULT 0",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'Corrective'",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_audit_id VARCHAR(30)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_ra_id VARCHAR(30)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_risk_id VARCHAR(30)",
+                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS assigned_by VARCHAR(100)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS sag_role VARCHAR(80)",
+                "CREATE TABLE IF NOT EXISTS action_history (id SERIAL PRIMARY KEY, action_id VARCHAR(30) REFERENCES actions(id) ON DELETE CASCADE, changed_by VARCHAR(100), changed_at TIMESTAMP DEFAULT NOW(), from_status VARCHAR(50), to_status VARCHAR(50), notes TEXT, field_changed VARCHAR(50) DEFAULT 'status')",
+            ]:
+                try:
+                    conn.execute(sa_text(_sql))
                     conn.commit()
                 except Exception:
                     try: conn.rollback()
