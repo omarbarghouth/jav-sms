@@ -4730,8 +4730,42 @@ def finding_detail(fid):
             finding.assigned_dept = f.get('assigned_dept', '')
             finding.assigned_date = datetime.now().strftime('%Y-%m-%d')
             finding.status = 'Assigned'
+
+            # Auto-create or update a linked Action assigned to the SAG member
+            sag_user = f.get('sag_member', '')
+            dept_id  = int(f['department_id']) if f.get('department_id') else None
+            if sag_user:
+                # Check if action already linked
+                existing_act = Action.query.filter_by(
+                    linked_ref_id=fid, source='Audit Finding').first()
+                if existing_act:
+                    existing_act.sag_member   = sag_user
+                    existing_act.department_id = dept_id
+                    existing_act.status = 'Assigned'
+                else:
+                    new_act = Action(
+                        id=new_id('ACT'),
+                        source='Audit Finding',
+                        description=f'CAP: {(finding.description or "")[:100]}',
+                        owner=finding.assigned_to or sag_user,
+                        due_date=finding.cap_due_date or '',
+                        priority='High' if finding.severity=='Major' else 'Medium',
+                        status='Assigned',
+                        linked_ref_id=fid,
+                        sag_member=sag_user,
+                        department_id=dept_id,
+                        assigned_by=session.get('admin_name','Admin'),
+                    )
+                    db.session.add(new_act)
+                    db.session.flush()
+                    finding.linked_action_id = new_act.id
+                    log_action_history(new_act.id, session.get('admin_name','Admin'),
+                                       'New', 'Assigned',
+                                       f'Created from Audit Finding {fid}', 'assignment')
+
             db.session.commit()
-            flash(f'✓ Finding {fid} assigned to {finding.assigned_to}.', 'success')
+            flash(f'✓ Finding {fid} assigned to {finding.assigned_to}'
+                  + (f' · Action routed to SAG member {sag_user}' if sag_user else '') + '.', 'success')
 
         elif action == 'submit_root_cause':
             finding.root_cause           = f.get('root_cause', '')
@@ -4765,7 +4799,6 @@ def finding_detail(fid):
             finding.status = 'CAP Submitted'
             # Auto-create Action in main Action module if not already done
             if not finding.linked_action_id and f.get('create_action') == 'yes':
-                from models import Action
                 aid = new_id('ACT')
                 a = Action(
                     id=aid, source='Audit',
@@ -4814,7 +4847,6 @@ def finding_detail(fid):
             finding.status = 'Closed'
             # Update linked Action to Closed
             if finding.linked_action_id:
-                from models import Action
                 la = Action.query.get(finding.linked_action_id)
                 if la:
                     la.status = 'Closed'
@@ -4864,13 +4896,18 @@ def finding_detail(fid):
     # Linked Action
     linked_action = None
     if finding.linked_action_id:
-        from models import Action
         linked_action = Action.query.get(finding.linked_action_id)
+
+    # SAG members for assignment panel
+    sag_members = User.query.filter(
+        User.sag_role != None, User.sag_role != '', User.is_active == True
+    ).all()
 
     return render_template('audit/finding_detail.html',
                            finding=finding, schedule=schedule,
                            evidence_file_list=evidence_file_list,
                            linked_action=linked_action,
+                           sag_members=sag_members,
                            now=datetime.utcnow())
 
 
