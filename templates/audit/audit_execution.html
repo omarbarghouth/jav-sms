@@ -344,20 +344,80 @@
       </div>
 
       {% if can_close and s.status == 'In Progress' %}
+      <!-- Safety Department Review & Close Form -->
+      <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:6px">
+          ✓ All closure requirements met — Safety Department review required to close
+        </div>
+        <div style="font-size:12px;color:#374151">
+          Complete the safety review below and close the audit officially.
+        </div>
+      </div>
       <form method="POST" action="/audit-schedule/{{ s.id }}/close">
-        <div class="fg"><label>Final Remarks</label>
-          <textarea name="final_remarks" rows="3" placeholder="Overall audit conclusion and recommendations…"></textarea></div>
-        <div class="fg"><label>Closed By</label>
-          <input type="text" name="closed_by" placeholder="Lead Auditor name"/></div>
-        <button type="submit" class="btn btn-nav" style="background:#15803d">🔒 Close Audit</button>
+        <div class="sec">Safety Department Final Review</div>
+        <div class="g2">
+          <div class="fg">
+            <label>Safety Reviewer *</label>
+            <input type="text" name="closed_by" required placeholder="Safety Manager name"/>
+          </div>
+          <div class="fg">
+            <label>Closing Meeting Date</label>
+            <input type="date" name="closing_meeting" value="{{ today_date }}"/>
+          </div>
+        </div>
+        <div class="fg">
+          <label>Overall Audit Conclusion *</label>
+          <textarea name="final_remarks" rows="3" required
+                    placeholder="Summarise the overall audit outcome, key findings addressed, and safety improvements achieved…"></textarea>
+        </div>
+        <div class="g2">
+          <div class="fg">
+            <label>Audit Result</label>
+            <select name="audit_result">
+              <option value="Satisfactory">Satisfactory</option>
+              <option value="Satisfactory with Observations">Satisfactory with Observations</option>
+              <option value="Unsatisfactory">Unsatisfactory</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Follow-up Required?</label>
+            <select name="followup_required">
+              <option value="No">No — Audit complete</option>
+              <option value="Yes">Yes — Follow-up audit scheduled</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-nav" style="background:#15803d;margin-top:4px"
+                onclick="return confirm('Close this audit?
+
+This action is final. The audit will be marked Completed.')">
+          🔒 Close Audit & Generate Final Report
+        </button>
       </form>
       {% elif s.status == 'Completed' %}
-      <div style="font-size:13px;color:#15803d;font-weight:700">
-        ✓ Audit closed on {{ s.closure_date or '—' }} by {{ s.closed_by or '—' }}
+      <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:14px 16px">
+        <div style="font-size:13px;font-weight:800;color:#15803d;margin-bottom:8px">
+          ✓ Audit Completed
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
+          <div><span style="color:#6b7280">Closed by:</span> <strong>{{ s.closed_by or '—' }}</strong></div>
+          <div><span style="color:#6b7280">Closed on:</span> <strong>{{ s.closure_date or '—' }}</strong></div>
+          {% if s.closing_meeting %}<div><span style="color:#6b7280">Closing meeting:</span> <strong>{{ s.closing_meeting }}</strong></div>{% endif %}
+          {% if s.audit_result %}<div><span style="color:#6b7280">Result:</span> <strong>{{ s.audit_result }}</strong></div>{% endif %}
+        </div>
+        {% if s.final_remarks %}
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #bbf7d0">
+          <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Conclusion</div>
+          <p style="font-size:12px;color:#374151;line-height:1.6">{{ s.final_remarks }}</p>
+        </div>
+        {% endif %}
+        <div style="margin-top:12px">
+          <a href="/audit-schedule/{{ s.id }}/final-report" target="_blank"
+             class="btn btn-sm" style="background:#065f46;color:#fff">
+            📋 View Final Audit Report
+          </a>
+        </div>
       </div>
-      {% if s.final_remarks %}
-      <p style="font-size:12px;color:#374151;margin-top:8px">{{ s.final_remarks }}</p>
-      {% endif %}
       {% else %}
       <p style="font-size:12px;color:var(--muted)">Resolve all requirements above before closing.</p>
       {% endif %}
