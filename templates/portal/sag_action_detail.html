@@ -107,7 +107,7 @@ a{text-decoration:none;color:inherit}
 
     <!-- Main form -->
     <div>
-      <form method="POST">
+      <form method="POST" enctype="multipart/form-data">
 
         {% if finding or hazard_rep or investigation or spi_ind or ra %}
         <div class="card" style="border-left:3px solid #1d4ed8;margin-bottom:14px">
@@ -221,10 +221,32 @@ a{text-decoration:none;color:inherit}
           <div class="fg">
             <label>Evidence Description</label>
             <textarea name="evidence" rows="3"
-                      placeholder="Describe evidence — e.g. 'Revised SOP-GR-004 v2.0', 'Training records updated', 'Photos taken 2026-05-15'…">{{ a.evidence or '' }}</textarea>
+                      placeholder="Describe your evidence — e.g. 'Revised SOP-GR-004 v2.0 attached', 'Training records updated in LMMS', 'Photos of corrected area taken 2026-05-15'…">{{ a.evidence or '' }}</textarea>
           </div>
+          <div class="fg">
+            <label>Upload Evidence File</label>
+            <input type="file" name="evidence_file"
+                   accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.bmp,.txt,.zip"
+                   style="border:1.5px solid var(--border);border-radius:7px;padding:8px 12px;background:#fafbfe;font-size:13px;width:100%;cursor:pointer"/>
+            <span style="font-size:10.5px;color:#6b7280;margin-top:2px">
+              Accepted: PDF, Word, Excel, Images, ZIP · Max 10MB
+            </span>
+          </div>
+          {% if a.evidence_filename %}
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <span style="font-size:18px">📄</span>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#15803d">Current Evidence File</div>
+              <div style="font-size:12px;color:#374151">{{ a.evidence_filename }}</div>
+            </div>
+            <a href="/uploads/{{ a.evidence_filename }}" target="_blank"
+               class="btn btn-sm" style="margin-left:auto;background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;font-size:11px">
+              View File →
+            </a>
+          </div>
+          {% endif %}
           <div style="background:#f4f6fb;border:1px solid #e5e7eb;border-radius:8px;padding:11px 14px;font-size:12px;color:#374151">
-            📋 <strong>Guidance:</strong> Revised SOPs, training completions, work orders, photos, test results, meeting minutes.
+            📋 <strong>Evidence examples:</strong> Revised SOPs · Training completion certificates · Corrective work orders · Photographs · Test results · Meeting minutes · Sign-off sheets
           </div>
         </div>
 
