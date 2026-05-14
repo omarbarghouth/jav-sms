@@ -4455,10 +4455,19 @@ def audit_execution(sid):
         # Effectiveness is optional — don't block closure on it
         all_verified = True
 
-    # CAN CLOSE: checklist complete + all findings closed
+    # A finding is OK if Closed, or its linked SAG Action is Closed
+    def finding_ok(f):
+        if f.status == 'Closed': return True
+        if f.linked_action_id:
+            la = Action.query.get(f.linked_action_id)
+            return la is not None and la.status == 'Closed'
+        return False
+    findings_ready = all(finding_ok(f) for f in s.findings) if s.findings else True
+
+    # CAN CLOSE: checklist complete + all findings closed/resolved
     can_close = (
         all_no_have_findings and
-        all_findings_closed and
+        findings_ready and
         all_actions_closed
     )
 
@@ -4594,21 +4603,35 @@ def close_audit(sid):
         refs = ', '.join(i.item_ref or f'item {i.id}' for i in no_without[:3])
         flash(f'✗ Cannot close: {len(no_without)} checklist NO item(s) still need findings ({refs}).', 'error')
         return redirect(url_for('audit_execution', sid=sid))
-    # Validate: all findings must be Closed OR have closed AuditActions
+    # Validate: all findings must be Closed OR their linked SAG Action is Closed
     if s.findings:
         for finding in s.findings:
-            if finding.status != 'Closed':
-                # Allow if all AuditActions are closed (legacy workflow)
-                if finding.actions:
-                    open_actions = [a for a in finding.actions if a.status != 'Closed']
-                    if open_actions:
-                        flash(f'✗ Cannot close: Finding {finding.finding_ref} — '
-                              f'{len(open_actions)} action(s) not yet closed.', 'error')
-                        return redirect(url_for('audit_execution', sid=sid))
-                else:
-                    flash(f'✗ Cannot close: Finding {finding.finding_ref} is not yet Closed '
-                          f'(current status: {finding.status}).', 'error')
+            if finding.status == 'Closed':
+                continue  # already closed — OK
+
+            # Check linked main Action (SAG workflow)
+            linked_act = None
+            if finding.linked_action_id:
+                linked_act = Action.query.get(finding.linked_action_id)
+
+            if linked_act and linked_act.status == 'Closed':
+                # SAG action is closed — auto-close the finding too
+                finding.status = 'Closed'
+                finding.closure_date = date.today().isoformat()
+                finding.closure_notes = f'Auto-closed: linked action {linked_act.id} was closed.'
+                continue
+
+            # Check legacy AuditActions
+            if finding.actions:
+                open_act = [a for a in finding.actions if a.status != 'Closed']
+                if open_act:
+                    flash(f'✗ Cannot close: Finding {finding.finding_ref} — '
+                          f'{len(open_act)} action(s) not yet closed.', 'error')
                     return redirect(url_for('audit_execution', sid=sid))
+            else:
+                flash(f'✗ Cannot close: Finding {finding.finding_ref} is not Closed '
+                      f'(status: {finding.status}). Close the linked action in the SAG portal first.', 'error')
+                return redirect(url_for('audit_execution', sid=sid))
     s.status          = 'Completed'
     s.closure_date    = date.today().isoformat()
     s.closed_by       = request.form.get('closed_by', 'Safety Manager')
