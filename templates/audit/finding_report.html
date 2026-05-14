@@ -2,160 +2,450 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Finding Closure Report — {{ finding.id }}</title>
+<title>NCR {{ ncr_number }} — Jordan Aviation</title>
 <style>
-  @page { size: A4 portrait; margin: 20mm 18mm; }
-  @media print { .no-print { display:none!important; } body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:Arial,sans-serif; font-size:10pt; color:#111; background:#fff; }
-  .print-btn { position:fixed;top:12px;right:12px;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer; }
-  .doc-header { display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:14px; }
-  .logo { font-size:20px;font-weight:900;color:#0f1c3f; } .logo span { color:#c9a84c; }
-  .doc-title h1 { font-size:14pt;font-weight:900;color:#0f1c3f;text-align:center; }
-  .doc-title p { font-size:9pt;color:#555;text-align:center;margin-top:2px; }
-  .ref-box { background:#0f1c3f;color:#c9a84c;font-family:monospace;font-size:13pt;font-weight:900;padding:4px 12px;border-radius:5px;display:inline-block;margin-bottom:10px; }
-  .sec-title { background:#0f1c3f;color:#fff;font-weight:700;font-size:10pt;padding:5px 12px;margin:14px 0 6px;border-radius:4px; }
-  .sec-yellow { background:#fef9c3;color:#b45309;border-left:4px solid #d97706;padding:5px 12px;margin:14px 0 6px;font-weight:700; }
-  .sec-red { background:#fee2e2;color:#dc2626;border-left:4px solid #dc2626;padding:5px 12px;margin:14px 0 6px;font-weight:700; }
-  .sec-green { background:#dcfce7;color:#15803d;border-left:4px solid #15803d;padding:5px 12px;margin:14px 0 6px;font-weight:700; }
-  .info-table { width:100%;border-collapse:collapse;margin-bottom:10px; }
-  .info-table td { border:1px solid #d1d5db;padding:7px 10px;font-size:9.5pt; }
-  .info-table .lbl { background:#f4f6fb;font-weight:700;color:#374151;width:150px; }
-  .text-box { border:1px solid #d1d5db;padding:10px 12px;min-height:40px;font-size:10pt;line-height:1.7;background:#fafbfe;margin-bottom:10px; }
-  .progress-bar { height:10px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:6px 0; }
-  .progress-fill { height:100%;border-radius:99px; }
-  .status-pill { padding:2px 10px;border-radius:4px;font-size:9.5pt;font-weight:700;border:1px solid;display:inline-block; }
-  .pill-green { background:#dcfce7;color:#15803d;border-color:#bbf7d0; }
-  .pill-yellow { background:#fef9c3;color:#b45309;border-color:#fde68a; }
-  .pill-red { background:#fee2e2;color:#dc2626;border-color:#fca5a5; }
-  .pill-blue { background:#dbeafe;color:#1d4ed8;border-color:#93c5fd; }
-  .sig-table { width:100%;border-collapse:collapse;margin-top:14px; }
-  .sig-table th { background:#0f1c3f;color:#fff;padding:7px 10px;text-align:left;border:1px solid #1a2d5a;font-size:9.5pt; }
-  .sig-table td { border:1px solid #d1d5db;padding:14px 10px; }
-  .sig-table .role { background:#f4f6fb;font-weight:700;width:130px; }
-  .sig-line { border-bottom:1px solid #9ca3af;height:26px; }
-  .footer { border-top:1px solid #d1d5db;margin-top:14px;padding-top:6px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between; }
+@page { size: A4 portrait; margin: 15mm 15mm 15mm 15mm; }
+@media print {
+  .no-print { display:none!important; }
+  body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .page-break { page-break-before: always; }
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:Arial,sans-serif; font-size:9.5pt; color:#111; background:#fff; line-height:1.4; }
+
+/* Print button */
+.no-print { position:fixed; top:14px; right:14px; display:flex; gap:8px; z-index:999; }
+.btn-print { background:#0f1c3f;color:#fff;border:none;padding:9px 20px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer; }
+.btn-back  { background:#fff;color:#0f1c3f;border:2px solid #0f1c3f;padding:9px 20px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block; }
+
+/* Document header */
+.doc-wrap { max-width: 180mm; margin: 0 auto; }
+.doc-header-table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+.doc-header-table td { border:2px solid #0f1c3f; padding:6px 10px; vertical-align:middle; }
+.logo-cell { width:28mm; text-align:center; }
+.logo-box { width:44px; height:44px; background:#0f1c3f; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; color:#c9a84c; font-size:20px; font-weight:900; }
+.dept-cell { text-align:center; }
+.dept-cell .dept-title { font-size:12pt; font-weight:900; color:#0f1c3f; }
+.dept-cell .doc-type  { font-size:14pt; font-weight:900; color:#0f1c3f; margin-top:4px; }
+.ref-cell { text-align:right; font-size:8pt; color:#555; }
+
+/* Section headers */
+.sec-hdr { background:#0f1c3f; color:#fff; font-weight:700; font-size:9.5pt; padding:5px 10px; margin:12px 0 0; }
+.sec-hdr-gold { background:#c9a84c; color:#0f1c3f; font-weight:700; font-size:9.5pt; padding:5px 10px; margin:12px 0 0; }
+.sec-hdr-green { background:#15803d; color:#fff; font-weight:700; font-size:9.5pt; padding:5px 10px; margin:12px 0 0; }
+.sec-hdr-red   { background:#dc2626; color:#fff; font-weight:700; font-size:9.5pt; padding:5px 10px; margin:12px 0 0; }
+.sec-hdr-blue  { background:#1d4ed8; color:#fff; font-weight:700; font-size:9.5pt; padding:5px 10px; margin:12px 0 0; }
+.sec-hdr-purple{ background:#7c3aed; color:#fff; font-weight:700; font-size:9.5pt; padding:5px 10px; margin:12px 0 0; }
+
+/* Info table */
+.info-tbl { width:100%; border-collapse:collapse; }
+.info-tbl td { border:1px solid #9ca3af; padding:5px 8px; font-size:9pt; vertical-align:top; }
+.info-tbl .lbl { background:#f4f6fb; font-weight:700; color:#374151; white-space:nowrap; width:38mm; }
+.info-tbl .lbl2 { background:#f4f6fb; font-weight:700; color:#374151; white-space:nowrap; width:35mm; }
+
+/* Text box */
+.txt-box { border:1px solid #9ca3af; padding:8px 10px; min-height:30px; font-size:9.5pt; line-height:1.7; background:#fafbfe; margin:0; }
+.txt-box-yellow { border:1px solid #fde68a; padding:8px 10px; min-height:30px; background:#fffbeb; line-height:1.7; margin:0; }
+
+/* Level checkboxes */
+.level-row { display:flex; gap:20px; align-items:center; padding:6px 8px; border:1px solid #9ca3af; background:#fafbfe; }
+.chk-box { width:13px; height:13px; border:1.5px solid #374151; display:inline-block; margin-right:4px; text-align:center; line-height:11px; font-size:10pt; font-weight:900; }
+.chk-checked { background:#0f1c3f; color:#fff; border-color:#0f1c3f; }
+
+/* Status pill */
+.pill { padding:1px 8px; border-radius:3px; font-size:8.5pt; font-weight:700; display:inline-block; }
+.pill-green  { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+.pill-yellow { background:#fef9c3; color:#92400e; border:1px solid #fde68a; }
+.pill-red    { background:#fee2e2; color:#dc2626; border:1px solid #fca5a5; }
+.pill-blue   { background:#dbeafe; color:#1d4ed8; border:1px solid #bfdbfe; }
+.pill-purple { background:#f3e8ff; color:#7c3aed; border:1px solid #e9d5ff; }
+
+/* Signature row */
+.sig-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:6px; }
+.sig-box { border:1px solid #9ca3af; padding:8px; min-height:36px; }
+.sig-label { font-size:8pt; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+
+/* Footer */
+.doc-footer { border-top:1.5px solid #0f1c3f; margin-top:14px; padding-top:6px; display:flex; justify-content:space-between; font-size:7.5pt; color:#6b7280; }
+
+/* Timeline */
+.timeline { border-left:3px solid #0f1c3f; margin-left:8px; padding-left:12px; }
+.tl-item { position:relative; margin-bottom:8px; }
+.tl-item::before { content:''; position:absolute; left:-18px; top:4px; width:10px; height:10px; border-radius:50%; background:#0f1c3f; }
+.tl-date { font-size:8pt; color:#6b7280; font-weight:700; }
+.tl-text { font-size:9pt; color:#374151; }
+
+/* Evidence */
+.ev-item { display:flex; align-items:center; gap:8px; padding:5px 8px; border:1px solid #e5e7eb; border-radius:4px; margin-bottom:5px; background:#f9fafb; }
 </style>
 </head>
 <body>
-<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
 
-<div class="doc-header">
-  <div class="logo">JORDAN<span>AVIATION</span></div>
-  <div class="doc-title">
-    <h1>Audit Finding Closure Report</h1>
-    <p>Corrective Action Plan &amp; Closure Verification</p>
-  </div>
-  <div style="text-align:right;font-size:8.5pt;color:#555;line-height:1.8">
-    Finding: <strong>{{ finding.id }}</strong><br>
-    Ref: <strong>{{ finding.finding_ref }}</strong><br>
-    Status: <strong>{{ finding.status }}</strong><br>
-    Generated: {{ now.strftime('%d %b %Y') }}
-  </div>
+<div class="no-print">
+  <a href="/audit-findings/{{ finding.id }}" class="btn-back">← Back to Finding</a>
+  <button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
 </div>
 
-<div class="ref-box">{{ finding.id }}</div>
+<div class="doc-wrap">
 
-<!-- Section 1: Finding Details -->
-<div class="sec-title">FINDING DETAILS</div>
-<table class="info-table">
-  <tr><td class="lbl">Finding Reference</td><td><strong>{{ finding.finding_ref }}</strong></td>
-      <td class="lbl">Audit</td><td>{{ finding.schedule_id }}</td></tr>
-  <tr><td class="lbl">Category</td><td>{{ finding.category or '—' }}</td>
-      <td class="lbl">Severity</td>
-      <td><span class="status-pill {% if finding.severity=='Major' %}pill-red{% elif finding.severity=='Minor' %}pill-yellow{% else %}pill-blue{% endif %}">{{ finding.severity or '—' }}</span></td></tr>
-  <tr><td class="lbl">Standard Reference</td><td colspan="3"><code>{{ finding.standard_ref or '—' }}</code></td></tr>
-  <tr><td class="lbl">Requirement</td><td colspan="3">{{ finding.requirement or '—' }}</td></tr>
-  <tr><td class="lbl">Description</td><td colspan="3">{{ finding.description or '—' }}</td></tr>
-  <tr><td class="lbl">Auditor Evidence</td><td colspan="3">{{ finding.evidence or '—' }}</td></tr>
-  <tr><td class="lbl">Assigned To</td><td>{{ finding.assigned_to or '—' }}</td>
-      <td class="lbl">Department</td><td>{{ finding.assigned_dept or '—' }}</td></tr>
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- DOCUMENT HEADER -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<table class="doc-header-table">
+  <tr>
+    <td class="logo-cell" rowspan="2" style="width:28mm">
+      <div class="logo-box">✈</div>
+      <div style="font-size:7pt;font-weight:900;color:#0f1c3f;margin-top:4px">JORDAN<br>AVIATION</div>
+    </td>
+    <td class="dept-cell">
+      <div class="dept-title">Safety Department</div>
+      <div class="doc-type">Non-Conformance Report (NCR)</div>
+    </td>
+    <td class="ref-cell" style="width:38mm;font-size:8pt">
+      <div>Doc No: JAV/Q-GEN/102</div>
+      <div>Issue: 02 / Rev 01</div>
+      <div>Date: {% if finding.created_at %}{{ finding.created_at.strftime('%b-%Y') }}{% else %}—{% endif %}</div>
+    </td>
+  </tr>
 </table>
 
-<!-- Section 2: Root Cause -->
-<div class="sec-title">A. ROOT CAUSE ANALYSIS (Auditee)</div>
-<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Root Cause:</div>
-<div class="text-box">{{ finding.root_cause or 'Not yet submitted.' }}</div>
-{% if finding.investigation_notes %}
-<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Investigation Notes:</div>
-<div class="text-box">{{ finding.investigation_notes }}</div>
-{% endif %}
-{% if finding.contributing_factors %}
-<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Contributing Factors:</div>
-<div class="text-box">{{ finding.contributing_factors }}</div>
-{% endif %}
-
-<!-- Section 3: Corrective Actions -->
-<div class="sec-title">B. CORRECTIVE ACTIONS (Auditee)</div>
-<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Immediate Corrective Action:</div>
-<div class="text-box">{{ finding.immediate_action or 'Not yet submitted.' }}</div>
-{% if finding.longterm_action %}
-<div style="font-size:9pt;font-weight:700;color:#374151;margin-bottom:3px">Long-term Corrective Action:</div>
-<div class="text-box">{{ finding.longterm_action }}</div>
-{% endif %}
-
-<!-- Section 4: CAP -->
-<div class="sec-title">C. CORRECTIVE ACTION PLAN (CAP)</div>
-<table class="info-table">
-  <tr><td class="lbl">Responsible Person</td><td><strong>{{ finding.cap_responsible or '—' }}</strong></td>
-      <td class="lbl">Due Date</td><td>{{ finding.cap_due_date or '—' }}</td></tr>
-  <tr><td class="lbl">CAP Status</td>
-      <td><span class="status-pill {% if finding.cap_status=='Completed' %}pill-green{% elif finding.cap_status=='Overdue' %}pill-red{% elif finding.cap_status=='In Progress' %}pill-blue{% else %}pill-yellow{% endif %}">{{ finding.cap_status or 'Pending' }}</span></td>
-      <td class="lbl">Completion</td><td><strong>{{ finding.cap_completion_pct or 0 }}%</strong>
-        <div class="progress-bar"><div class="progress-fill" style="width:{{ finding.cap_completion_pct or 0 }}%;background:{% if (finding.cap_completion_pct or 0)==100 %}#15803d{% else %}#1d4ed8{% endif %}"></div></div>
-      </td></tr>
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 1 — AUDIT / INSPECTION DETAILS -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr">Part 1: Audit / Inspection Details (SMS Use)</div>
+<table class="info-tbl">
+  <tr>
+    <td class="lbl">Audit No.</td>
+    <td>{{ schedule.id if schedule else '—' }}</td>
+    <td class="lbl">Audited Area / Department</td>
+    <td>{{ (schedule.department.name if schedule and schedule.department else '') or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Audit Date</td>
+    <td>{{ schedule.scheduled_date if schedule else '—' }}</td>
+    <td class="lbl">Audit Type</td>
+    <td>
+      <span class="chk-box {% if schedule and schedule.audit_type=='Internal' %}chk-checked{% endif %}">{% if schedule and schedule.audit_type=='Internal' %}✓{% endif %}</span> Scheduled &nbsp;
+      <span class="chk-box {% if schedule and schedule.audit_type=='Unscheduled' %}chk-checked{% endif %}">{% if schedule and schedule.audit_type=='Unscheduled' %}✓{% endif %}</span> Unscheduled
+    </td>
+  </tr>
+  <tr>
+    <td class="lbl">Audit Title / Scope</td>
+    <td colspan="3">{{ (schedule.scope if schedule else '') or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Lead Auditor</td>
+    <td>{{ (schedule.lead_auditor if schedule else '') or '—' }}</td>
+    <td class="lbl">Responsible Manager</td>
+    <td>{{ finding.assigned_to or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Finding Date</td>
+    <td>{{ finding.created_at.strftime('%d/%m/%Y') if finding.created_at else '—' }}</td>
+    <td class="lbl">Closure Date</td>
+    <td>{{ finding.closure_date or '—' }}</td>
+  </tr>
 </table>
 
-<!-- Section 5: Evidence -->
-{% if evidence_file_list %}
-<div class="sec-title">D. EVIDENCE FILES</div>
-{% for fname in evidence_file_list %}
-<div style="padding:5px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;margin-bottom:4px;font-size:9.5pt;color:#15803d">
-  📎 {{ fname.split('_',1)[-1] if '_' in fname else fname }}
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 2 — FINDING DETAILS -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr">Part 2: Finding Details (SMS Use)</div>
+<table class="info-tbl">
+  <tr>
+    <td class="lbl">NCR No.</td>
+    <td style="font-weight:700;font-size:10pt">{{ ncr_number }}</td>
+    <td class="lbl">Finding Ref</td>
+    <td style="font-weight:700">{{ finding.finding_ref or finding.id }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Reference(s)</td>
+    <td colspan="3">{{ finding.standard_ref or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Requirement</td>
+    <td colspan="3">{{ finding.requirement or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Category</td>
+    <td>{{ finding.category or '—' }}</td>
+    <td class="lbl">Assigned Dept</td>
+    <td>{{ finding.assigned_dept or '—' }}</td>
+  </tr>
+</table>
+<div style="font-weight:700;font-size:8.5pt;color:#374151;margin:6px 0 2px;padding:0 2px">Finding Description</div>
+<div class="txt-box">{{ finding.description or '—' }}</div>
+
+{% if finding.evidence %}
+<div style="font-weight:700;font-size:8.5pt;color:#374151;margin:6px 0 2px;padding:0 2px">Auditor Evidence / Observation</div>
+<div class="txt-box">{{ finding.evidence }}</div>
+{% endif %}
+
+<div style="margin-top:8px">
+  <div style="font-weight:700;font-size:8.5pt;color:#374151;margin-bottom:4px">Level of Finding:</div>
+  <div class="level-row">
+    <span><span class="chk-box {% if finding.severity=='Minor' %}chk-checked{% endif %}">{% if finding.severity=='Minor' %}✓{% endif %}</span> Level 1 (Minor)</span>
+    <span><span class="chk-box {% if finding.severity=='Major' %}chk-checked{% endif %}">{% if finding.severity=='Major' %}✓{% endif %}</span> Level 2 (Major)</span>
+    <span><span class="chk-box {% if finding.severity=='Critical' %}chk-checked{% endif %}">{% if finding.severity=='Critical' %}✓{% endif %}</span> Level 3 (Critical)</span>
+    <span><span class="chk-box {% if finding.severity=='Observation' %}chk-checked{% endif %}">{% if finding.severity=='Observation' %}✓{% endif %}</span> Observation</span>
+  </div>
 </div>
-{% endfor %}
+<table class="info-tbl" style="margin-top:6px">
+  <tr>
+    <td class="lbl">Due Date</td>
+    <td>{{ finding.cap_due_date or '—' }}</td>
+    <td class="lbl">Status</td>
+    <td>
+      {% if finding.status == 'Closed' %}<span class="pill pill-green">✓ CLOSED</span>
+      {% elif finding.status == 'Under Safety Review' %}<span class="pill pill-blue">UNDER REVIEW</span>
+      {% elif finding.status == 'Assigned' %}<span class="pill pill-yellow">ASSIGNED</span>
+      {% else %}<span class="pill pill-red">{{ finding.status|upper }}</span>{% endif %}
+    </td>
+  </tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 3 — SAG / CAP ASSIGNMENT -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr-gold">Part 3: Corrective Action Plan (CAP) — Assignment</div>
+<table class="info-tbl">
+  <tr>
+    <td class="lbl">Responsible Person</td>
+    <td>{{ finding.cap_responsible or finding.assigned_to or '—' }}</td>
+    <td class="lbl">CAP Due Date</td>
+    <td>{{ finding.cap_due_date or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Assigned SAG Member</td>
+    <td>{{ (linked_action.sag_member if linked_action else '') or '—' }}</td>
+    <td class="lbl">Action Reference</td>
+    <td style="font-family:monospace;font-weight:700">{{ linked_action.id if linked_action else '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Department</td>
+    <td>{{ (linked_action.department.name if linked_action and linked_action.department else '') or finding.assigned_dept or '—' }}</td>
+    <td class="lbl">Priority</td>
+    <td>
+      {% if linked_action %}
+        {% if linked_action.priority=='High' %}<span class="pill pill-red">High</span>
+        {% elif linked_action.priority=='Medium' %}<span class="pill pill-yellow">Medium</span>
+        {% else %}<span class="pill" style="background:#f9fafb;color:#374151;border:1px solid #e5e7eb">{{ linked_action.priority }}</span>{% endif %}
+      {% else %}—{% endif %}
+    </td>
+  </tr>
+  {% if finding.cap_description %}
+  <tr>
+    <td class="lbl">CAP Description</td>
+    <td colspan="3">{{ finding.cap_description }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+<div class="page-break"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 4 — ROOT CAUSE ANALYSIS -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr-red">Part 4: Root Cause Analysis (Auditee Use)</div>
+<table class="info-tbl">
+  <tr>
+    <td class="lbl">Root Cause Analysis / Description</td>
+    <td>
+      {% set rca = (linked_action.root_cause if linked_action and linked_action.root_cause else '') or finding.root_cause or '' %}
+      {{ rca or 'Not yet submitted.' }}
+    </td>
+  </tr>
+  {% if finding.contributing_factors %}
+  <tr>
+    <td class="lbl">Contributing Factors</td>
+    <td>{{ finding.contributing_factors }}</td>
+  </tr>
+  {% endif %}
+  {% if finding.investigation_notes %}
+  <tr>
+    <td class="lbl">Investigation Notes</td>
+    <td>{{ finding.investigation_notes }}</td>
+  </tr>
+  {% endif %}
+  <tr>
+    <td class="lbl">Responsible Manager / Person</td>
+    <td>{{ finding.cap_responsible or finding.assigned_to or '—' }}</td>
+  </tr>
+  {% if finding.root_cause_submitted_at %}
+  <tr>
+    <td class="lbl">RCA Submitted Date</td>
+    <td>{{ finding.root_cause_submitted_at.strftime('%d/%m/%Y') }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 5 — IMMEDIATE CORRECTIVE ACTION -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr-red">Part 5: Immediate Corrective Action / Containment</div>
+<div class="txt-box" style="min-height:45px">
+  {{ finding.immediate_action or (linked_action.corrective_description[:300] if linked_action and linked_action.corrective_description else 'Not yet submitted.') }}
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 6 — CORRECTIVE ACTION & MITIGATION -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr-blue">Part 6: Corrective Action & Long-term Mitigation</div>
+<div style="font-weight:700;font-size:8.5pt;color:#374151;margin:6px 0 2px">Corrective Action Taken:</div>
+<div class="txt-box" style="min-height:40px">
+  {{ (linked_action.corrective_description if linked_action and linked_action.corrective_description else '') or finding.longterm_action or 'Not yet submitted.' }}
+</div>
+{% if linked_action and linked_action.mitigation_description %}
+<div style="font-weight:700;font-size:8.5pt;color:#374151;margin:6px 0 2px">Mitigation Description:</div>
+<div class="txt-box" style="min-height:35px">{{ linked_action.mitigation_description }}</div>
+{% endif %}
+{% if linked_action and linked_action.safety_notes %}
+<div style="font-weight:700;font-size:8.5pt;color:#374151;margin:6px 0 2px">Safety Improvement Notes:</div>
+<div class="txt-box" style="min-height:30px">{{ linked_action.safety_notes }}</div>
+{% endif %}
+<table class="info-tbl" style="margin-top:6px">
+  <tr>
+    <td class="lbl">Implementation Date</td>
+    <td>{{ (linked_action.implementation_date if linked_action else '') or '—' }}</td>
+    <td class="lbl">Mitigation Status</td>
+    <td>{{ (linked_action.mitigation_status if linked_action else '') or '—' }}</td>
+  </tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 7 — EVIDENCE -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr-green">Part 7: Evidence & Supporting Documents</div>
+{% set ev_text = (linked_action.evidence if linked_action and linked_action.evidence else '') or '' %}
+{% set ev_file = (linked_action.evidence_filename if linked_action and linked_action.evidence_filename else '') or '' %}
+{% if ev_text or ev_file or evidence_file_list %}
+  {% if ev_text %}
+  <div class="txt-box" style="min-height:35px">{{ ev_text }}</div>
+  {% endif %}
+  {% if ev_file %}
+  <div class="ev-item">📄 <strong>Uploaded File:</strong> {{ ev_file }}</div>
+  {% endif %}
+  {% for f in evidence_file_list %}
+  <div class="ev-item">📎 {{ f }}</div>
+  {% endfor %}
+{% else %}
+<div class="txt-box" style="color:#9ca3af">No evidence uploaded yet.</div>
+{% endif %}
+{% if linked_action and linked_action.follow_up_notes %}
+<div style="font-weight:700;font-size:8.5pt;color:#374151;margin:6px 0 2px">Follow-up / Monitoring Notes:</div>
+<div class="txt-box">{{ linked_action.follow_up_notes }}</div>
 {% endif %}
 
-<!-- Section 6: Safety Review -->
-{% if finding.review_notes or finding.reviewed_by %}
-<div class="sec-title">E. SAFETY REVIEW</div>
-<table class="info-table">
-  <tr><td class="lbl">Reviewed By</td><td>{{ finding.reviewed_by or '—' }}</td>
-      <td class="lbl">Review Date</td><td>{{ finding.review_date or '—' }}</td></tr>
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 8 — SAFETY REVIEW & VERIFICATION -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr-purple">Part 8: Safety Review & Verification</div>
+<table class="info-tbl">
+  <tr>
+    <td class="lbl">Reviewed By</td>
+    <td>{{ finding.reviewed_by or '—' }}</td>
+    <td class="lbl">Review Date</td>
+    <td>{{ finding.review_date or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Review Notes</td>
+    <td colspan="3">{{ finding.review_notes or '—' }}</td>
+  </tr>
+  {% if linked_action and linked_action.safety_review_notes %}
+  <tr>
+    <td class="lbl">Safety Review Comments</td>
+    <td colspan="3">{{ linked_action.safety_review_notes }}</td>
+  </tr>
+  {% endif %}
+  <tr>
+    <td class="lbl">Effectiveness</td>
+    <td>{{ (linked_action.effectiveness if linked_action else '') or '—' }}</td>
+    <td class="lbl">Action Status</td>
+    <td>
+      {% if linked_action %}
+        {% if linked_action.status == 'Closed' %}<span class="pill pill-green">✓ CLOSED</span>
+        {% elif linked_action.status == 'Under Safety Review' %}<span class="pill pill-blue">UNDER REVIEW</span>
+        {% else %}<span class="pill pill-yellow">{{ linked_action.status }}</span>{% endif %}
+      {% else %}—{% endif %}
+    </td>
+  </tr>
 </table>
-{% if finding.review_notes %}
-<div class="text-box">{{ finding.review_notes }}</div>
-{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 9 — AUDIT TRAIL -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+{% if action_history %}
+<div class="sec-hdr">Part 9: Action Audit Trail</div>
+<div class="timeline" style="margin-top:8px">
+  {% for h in action_history %}
+  <div class="tl-item">
+    <div class="tl-date">{{ h.changed_at.strftime('%d %b %Y %H:%M') if h.changed_at else '—' }} — {{ h.changed_by or '—' }}</div>
+    <div class="tl-text">
+      {% if h.from_status %}{{ h.from_status }} → {% endif %}<strong>{{ h.to_status or '—' }}</strong>
+      {% if h.notes %} · {{ h.notes[:80] }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
 {% endif %}
 
-<!-- Section 7: Closure -->
-<div class="sec-title">F. CLOSURE VERIFICATION</div>
-<table class="info-table">
-  <tr><td class="lbl">Status</td>
-      <td><span class="status-pill {% if finding.status=='Closed' %}pill-green{% else %}pill-yellow{% endif %}">{{ finding.status }}</span></td>
-      <td class="lbl">Closure Date</td><td>{{ finding.closure_date or 'Pending' }}</td></tr>
-  <tr><td class="lbl">Verified By</td><td>{{ finding.closure_verified_by or '—' }}</td>
-      <td class="lbl">Signature Date</td><td>{{ finding.sig_date or '—' }}</td></tr>
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PART 10 — FINAL CLOSURE -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="sec-hdr-green">Part 10: Final Closure & Approval</div>
+<table class="info-tbl">
+  <tr>
+    <td class="lbl">Closure Status</td>
+    <td>
+      {% if finding.status == 'Closed' %}<span class="pill pill-green">✓ CLOSED</span>
+      {% else %}<span class="pill pill-yellow">{{ finding.status }}</span>{% endif %}
+    </td>
+    <td class="lbl">Closure Date</td>
+    <td style="font-weight:700">{{ finding.closure_date or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Closure Verified By</td>
+    <td>{{ finding.closure_verified_by or '—' }}</td>
+    <td class="lbl">Effectiveness</td>
+    <td>{{ (linked_action.effectiveness if linked_action else '') or '—' }}</td>
+  </tr>
+  {% if finding.closure_notes %}
+  <tr>
+    <td class="lbl">Closure Notes</td>
+    <td colspan="3">{{ finding.closure_notes }}</td>
+  </tr>
+  {% endif %}
 </table>
-{% if finding.closure_notes %}
-<div class="text-box">{{ finding.closure_notes }}</div>
-{% endif %}
 
 <!-- Signatures -->
-<div class="sec-title">SIGNATORIES</div>
-<table class="sig-table">
-  <thead><tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:90px">Date</th></tr></thead>
-  <tbody>
-    <tr><td class="role">Dept Manager</td><td>{{ finding.sig_dept_manager or '' }}</td><td>Responsible Manager</td><td><div class="sig-line"></div></td><td></td></tr>
-    <tr><td class="role">Auditor</td><td>{{ finding.sig_auditor or '' }}</td><td>Lead Auditor</td><td><div class="sig-line"></div></td><td></td></tr>
-    <tr><td class="role">Safety Manager</td><td>{{ finding.sig_safety_manager or '' }}</td><td>Safety Department</td><td><div class="sig-line"></div></td><td></td></tr>
-  </tbody>
-</table>
-
-<div class="footer">
-  <span>Jav/SMS/Audit · {{ now.strftime('%d %b %Y') }}</span>
-  <span>Audit Finding Closure Report</span>
-  <span>{{ finding.id }}</span>
+<div style="margin-top:12px">
+  <div style="font-weight:700;font-size:8.5pt;color:#374151;margin-bottom:6px">Signatures & Authorizations:</div>
+  <div class="sig-row">
+    <div class="sig-box">
+      <div class="sig-label">Department Manager</div>
+      <div style="font-size:9pt;font-weight:700;margin-top:6px">{{ finding.sig_dept_manager or '&nbsp;' }}</div>
+      <div style="font-size:7.5pt;color:#6b7280;margin-top:18px;border-top:1px solid #e5e7eb;padding-top:3px">Signature / Date</div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-label">Lead Auditor</div>
+      <div style="font-size:9pt;font-weight:700;margin-top:6px">{{ (finding.sig_auditor or (schedule.lead_auditor if schedule else '')) or '&nbsp;' }}</div>
+      <div style="font-size:7.5pt;color:#6b7280;margin-top:18px;border-top:1px solid #e5e7eb;padding-top:3px">Signature / Date</div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-label">Safety Manager</div>
+      <div style="font-size:9pt;font-weight:700;margin-top:6px">{{ finding.sig_safety_manager or '&nbsp;' }}</div>
+      <div style="font-size:7.5pt;color:#6b7280;margin-top:18px;border-top:1px solid #e5e7eb;padding-top:3px">Signature / Date</div>
+    </div>
+  </div>
 </div>
+
+<!-- Document footer -->
+<div class="doc-footer">
+  <span>JAV/Q-GEN/102</span>
+  <span>ISSUE 02 / REV 01 · {{ now.strftime('%B-%Y') }}</span>
+  <span>NCR {{ ncr_number }} — PAGE 1 OF 2</span>
+</div>
+
+</div><!-- end doc-wrap -->
 </body>
 </html>
