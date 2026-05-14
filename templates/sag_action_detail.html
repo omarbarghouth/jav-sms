@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{{ a.id }} — SAG Action</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:#eef0f6;color:#111827;font-size:14px;min-height:100vh}
+a{text-decoration:none;color:inherit}
+.sag-hdr{background:#0f1c3f;border-bottom:3px solid #c9a84c}
+.sag-hdr-in{max-width:1000px;margin:0 auto;padding:13px 22px;display:flex;align-items:center;gap:12px}
+.sag-logo{width:36px;height:36px;background:linear-gradient(135deg,#c9a84c,#a8832a);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.sag-ttl{color:#fff;font-size:13px;font-weight:800}
+.sag-sub{color:rgba(255,255,255,.5);font-size:10px;margin-top:1px}
+.user-area{margin-left:auto;display:flex;align-items:center;gap:10px}
+.user-name{color:rgba(255,255,255,.8);font-size:12px;font-weight:700}
+.user-role{background:rgba(201,168,76,.15);color:#c9a84c;border:1px solid rgba(201,168,76,.3);padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700}
+.lnk{color:rgba(255,255,255,.45);font-size:11px;padding:5px 10px;border:1px solid rgba(255,255,255,.15);border-radius:5px;transition:.15s}
+.lnk:hover{color:#fff;border-color:rgba(255,255,255,.4)}
+.wrap{max-width:1000px;margin:0 auto;padding:26px 22px}
+.page-title{font-size:21px;font-weight:800;color:#0f1c3f;letter-spacing:-.3px;margin-bottom:4px}
+.page-sub{color:#6b7280;font-size:12.5px;margin-bottom:18px}
+.card{background:#fff;border-radius:9px;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(15,28,63,.05);padding:18px;margin-bottom:14px}
+.ct{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#0f1c3f;margin-bottom:12px;display:flex;align-items:center;gap:9px}
+.ct::after{content:'';flex:1;height:1px;background:#e5e7eb}
+.badge{display:inline-flex;align-items:center;border-radius:5px;padding:2px 8px;font-size:10.5px;font-weight:700;white-space:nowrap}
+.br{background:#fff0f0;color:#dc2626;border:1px solid #fecaca}
+.by{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
+.bg{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.bb{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.bp{background:#faf5ff;color:#7c3aed;border:1px solid #e9d5ff}
+.bn{background:#0f1c3f;color:#fff;border:1px solid #1a2d5a}
+.bx{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb}
+.bd::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;display:inline-block;margin-right:3px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 17px;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;border:none;font-family:inherit;transition:.13s;white-space:nowrap}
+.btn-n{background:#0f1c3f;color:#fff}.btn-n:hover{background:#1a2d5a}
+.btn-s{background:#15803d;color:#fff}.btn-s:hover{background:#166534}
+.btn-o{background:#fff;color:#0f1c3f;border:1.5px solid #d1d5db}.btn-o:hover{border-color:#0f1c3f}
+.btn-sm{padding:5px 11px;font-size:11px;border-radius:6px}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.fg label{font-size:10px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.5px}
+.fg input,.fg select,.fg textarea{border:1.5px solid #e5e7eb;border-radius:7px;padding:9px 12px;background:#fafbfe;font-family:inherit;font-size:13px;width:100%;transition:.13s;color:#111827}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:#0f1c3f;outline:none;background:#fff;box-shadow:0 0 0 3px rgba(15,28,63,.06)}
+.fg textarea{resize:vertical;min-height:80px;line-height:1.6}
+.sec{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#0f1c3f;padding:8px 0 6px;border-bottom:2px solid #c9a84c;margin:16px 0 12px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.mono{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:#0f1c3f}
+.flash-s{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;padding:10px 14px;border-radius:7px;font-size:12.5px;font-weight:600;margin-bottom:14px}
+.flash-e{background:#fff5f5;color:#dc2626;border:1px solid #fca5a5;padding:10px 14px;border-radius:7px;font-size:12.5px;font-weight:600;margin-bottom:14px}
+.alert-r{background:#fff5f5;border:2px solid #fca5a5;border-radius:8px;padding:13px 16px;margin-bottom:16px;color:#dc2626;font-size:13px}
+.alert-b{background:#eff6ff;border:2px solid #bfdbfe;border-radius:8px;padding:13px 16px;margin-bottom:16px;color:#1d4ed8;font-size:13px}
+.alert-g{background:#f0fdf4;border:2px solid #bbf7d0;border-radius:8px;padding:13px 16px;margin-bottom:16px;color:#15803d;font-size:13px}
+@media(max-width:700px){.g2{grid-template-columns:1fr}.wrap{padding:14px}}
+</style>
+</head>
+<body>
+
+<div class="sag-hdr">
+  <div class="sag-hdr-in">
+    <div class="sag-logo">🛡</div>
+    <div><div class="sag-ttl">SAG Member Portal</div><div class="sag-sub">Safety Action Group · Jordan Aviation</div></div>
+    <div class="user-area">
+      <a href="/sag/dashboard" class="lnk">← Dashboard</a>
+      <div>
+        <div class="user-name">{{ session.get('sag_name') }}</div>
+        <div class="user-role">{{ session.get('sag_role','SAG') }}</div>
+      </div>
+      <a href="/sag-logout" class="lnk">Logout</a>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat,msg in msgs %}
+  <div class="{{ 'flash-s' if cat=='success' else 'flash-e' }}">{{ '✓' if cat=='success' else '⚠' }} {{ msg }}</div>
+  {% endfor %}{% endwith %}
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:18px">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span class="mono" style="font-size:13px">{{ a.id }}</span>
+        {% if a.priority=='High' %}<span class="badge br">High Priority</span>
+        {% elif a.priority=='Medium' %}<span class="badge by">Medium Priority</span>
+        {% else %}<span class="badge bx">{{ a.priority }}</span>{% endif %}
+        {% set sc = {'Open':'bb','Assigned':'bn','In Progress':'bb','Overdue':'br','Returned':'by','Mitigation Implemented':'bp','Under Safety Review':'bp','Closed':'bg'} %}
+        <span class="badge bd {{ sc.get(a.status,'bx') }}">{{ a.status }}</span>
+      </div>
+      <div class="page-title">{{ a.description or 'Action Detail' }}</div>
+      <div class="page-sub">Source: {{ a.source or 'Manual' }} · Due: {{ a.due_date or 'Not set' }} · Dept: {{ a.department.name if a.department else '—' }}</div>
+    </div>
+  </div>
+
+  {% if a.status == 'Returned' %}
+  <div class="alert-r"><strong style="display:block;margin-bottom:4px">⚠ Returned by Safety Department</strong>{{ a.rejection_notes or 'Additional action required. Please review and resubmit.' }}</div>
+  {% endif %}
+  {% if a.status == 'Under Safety Review' %}
+  <div class="alert-b"><strong style="display:block;margin-bottom:4px">📋 Under Safety Department Review</strong>Your submission is being reviewed. You will be notified of the outcome.</div>
+  {% endif %}
+  {% if a.status == 'Closed' %}
+  <div class="alert-g"><strong>✓ This action is Closed.</strong> Closed on {{ a.closed_date or '—' }} · Effectiveness: {{ a.effectiveness or 'Pending' }}</div>
+  {% endif %}
+
+  <div style="display:grid;grid-template-columns:1fr 290px;gap:14px">
+
+    <!-- Main form -->
+    <div>
+      <form method="POST" enctype="multipart/form-data">
+
+        {% if finding or hazard_rep or investigation or spi_ind or ra %}
+        <div class="card" style="border-left:3px solid #1d4ed8;margin-bottom:14px">
+          <div class="ct" style="color:#1d4ed8">📋 Source Record — {{ a.source or 'Linked Record' }}</div>
+          <style>.sfl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:3px}.sfv{font-size:13px;color:#374151;font-weight:500}.sg2{display:grid;grid-template-columns:1fr 1fr;gap:11px}.stxt{background:#f4f6fb;border-radius:7px;padding:10px;font-size:13px;color:#374151;line-height:1.6}</style>
+          {% if finding %}
+          <div class="sg2">
+            <div><div class="sfl">Finding Ref</div><div class="sfv mono">{{ finding.finding_ref or finding.id }}</div></div>
+            <div><div class="sfl">Severity</div><div class="sfv">{% if finding.severity=='Major' %}<span class="badge br">Major</span>{% elif finding.severity=='Minor' %}<span class="badge by">Minor</span>{% else %}<span class="badge bx">{{ finding.severity or "—" }}</span>{% endif %}</div></div>
+            <div><div class="sfl">Category</div><div class="sfv">{{ finding.category or "—" }}</div></div>
+            <div><div class="sfl">Standard</div><div class="sfv mono">{{ finding.standard_ref or "—" }}</div></div>
+            <div style="grid-column:span 2"><div class="sfl">Finding Description</div><div class="stxt">{{ finding.description or "—" }}</div></div>
+            {% if finding.requirement %}<div style="grid-column:span 2"><div class="sfl">Requirement</div><div style="font-size:12px;color:#374151">{{ finding.requirement }}</div></div>{% endif %}
+          </div>
+          {% endif %}
+          {% if hazard_rep %}
+          <div class="sg2">
+            <div><div class="sfl">Report ID</div><div class="sfv mono">{{ hazard_rep.id }}</div></div>
+            <div><div class="sfl">Classification</div><div class="sfv">{{ hazard_rep.classification or "—" }}</div></div>
+            <div><div class="sfl">Location</div><div class="sfv">{{ hazard_rep.location or "—" }}</div></div>
+            <div><div class="sfl">Date</div><div class="sfv mono">{{ hazard_rep.date or "—" }}</div></div>
+            <div style="grid-column:span 2"><div class="sfl">Hazard Description</div><div class="stxt" style="border-left:3px solid #dc2626;border-radius:0 7px 7px 0">{{ hazard_rep.description or "—" }}</div></div>
+            {% if hazard_rep.consequences %}<div style="grid-column:span 2"><div class="sfl">Consequences</div><div style="font-size:12px;color:#374151">{{ hazard_rep.consequences }}</div></div>{% endif %}
+            {% if hazard_rep.immediate_action %}<div style="grid-column:span 2"><div class="sfl">Immediate Action</div><div style="font-size:12px;color:#374151">{{ hazard_rep.immediate_action }}</div></div>{% endif %}
+          </div>
+          {% endif %}
+          {% if investigation %}
+          <div class="sg2">
+            <div><div class="sfl">Investigation ID</div><div class="sfv mono">{{ investigation.id }}</div></div>
+            <div><div class="sfl">Date</div><div class="sfv mono">{{ investigation.date_of_occurrence or "—" }}</div></div>
+            <div><div class="sfl">Investigator</div><div class="sfv">{{ investigation.investigator or "—" }}</div></div>
+            <div style="grid-column:span 2"><div class="sfl">Description</div><div class="stxt">{{ investigation.description or "—" }}</div></div>
+            {% if investigation.why1 %}<div style="grid-column:span 2"><div class="sfl">Root Cause (5-Why)</div><div style="font-size:12px;color:#374151;line-height:2">{% for why in [investigation.why1,investigation.why2,investigation.why3,investigation.why4,investigation.why5] if why %}<div style="padding:3px 0;border-bottom:1px solid #f3f4f6">Why {{ loop.index }}: {{ why }}</div>{% endfor %}</div></div>{% endif %}
+          </div>
+          {% endif %}
+          {% if spi_ind %}
+          <div class="sg2">
+            <div><div class="sfl">SPI Indicator</div><div class="sfv mono">{{ spi_ind.ref_code }}</div></div>
+            <div><div class="sfl">Alert Level</div><div class="sfv"><span class="badge {% if a.spi_alert_level=='L3' %}br{% elif a.spi_alert_level=='L2' %}by{% else %}bb{% endif %}">{{ a.spi_alert_level or "L1" }} Alert</span></div></div>
+            <div><div class="sfl">Indicator</div><div class="sfv">{{ spi_ind.name or "—" }}</div></div>
+            <div><div class="sfl">Period</div><div class="sfv mono">{% if a.spi_alert_month %}{{ a.spi_alert_month }}/{{ a.spi_alert_year }}{% else %}—{% endif %}</div></div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="card">
+          <div class="ct">📋 Action Information</div>
+          <div class="g2">
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Action ID</div>
+              <div style="font-size:13px;font-weight:700;color:#0f1c3f">{{ a.id }}</div>
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Source</div>
+              <div style="font-size:13px">{{ a.source or '—' }}</div>
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Due Date</div>
+              <div style="font-size:13px;font-family:monospace;{{ 'color:#dc2626;font-weight:700' if a.status=='Overdue' else '' }}">{{ a.due_date or '—' }}</div>
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Priority</div>
+              <div style="font-size:13px">{{ a.priority }}</div>
+            </div>
+          </div>
+          {% if a.hazard_id %}<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f3f4f6;font-size:12px;color:#374151"><strong>Linked Hazard:</strong> {{ a.hazard_id }}</div>{% endif %}
+          {% if a.linked_ref_id %}<div style="margin-top:4px;font-size:12px;color:#374151"><strong>Linked Record:</strong> {{ a.linked_ref_id }}</div>{% endif %}
+        </div>
+
+        <div class="card">
+          <div class="ct">🔧 Corrective Action & Implementation</div>
+          <div class="sec">Root Cause Analysis</div>
+          <div class="fg">
+            <label>Root Cause</label>
+            <textarea name="root_cause" rows="3" placeholder="What was the root cause of this hazard or finding?">{{ a.root_cause or '' }}</textarea>
+          </div>
+          <div class="sec">Corrective Action Taken</div>
+          <div class="fg">
+            <label>Corrective Action *</label>
+            <textarea name="corrective_description" rows="4" {% if a.status not in ('Closed','Under Safety Review') %}required{% endif %}
+                      placeholder="Describe the corrective action taken to address the root cause…">{{ a.corrective_description or '' }}</textarea>
+          </div>
+          <div class="fg">
+            <label>Mitigation Description</label>
+            <textarea name="mitigation_description" rows="3"
+                      placeholder="Describe mitigation / control measures applied…">{{ a.mitigation_description or '' }}</textarea>
+          </div>
+          <div class="fg">
+            <label>Safety Improvement Notes</label>
+            <textarea name="safety_notes" rows="2" placeholder="How does this improve safety performance?">{{ a.safety_notes or '' }}</textarea>
+          </div>
+          <div class="g2">
+            <div class="fg">
+              <label>Implementation Date</label>
+              <input type="date" name="implementation_date" value="{{ a.implementation_date or '' }}"/>
+            </div>
+            <div class="fg">
+              <label>Mitigation Status</label>
+              <select name="mitigation_status">
+                {% for s in ['Pending','In Progress','Completed'] %}
+                <option {% if a.mitigation_status==s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ct">📎 Evidence & Supporting Documents</div>
+          <div class="fg">
+            <label>Evidence Description</label>
+            <textarea name="evidence" rows="3"
+                      placeholder="Describe your evidence — e.g. 'Revised SOP-GR-004 v2.0 attached', 'Training records updated in LMMS', 'Photos of corrected area taken 2026-05-15'…">{{ a.evidence or '' }}</textarea>
+          </div>
+          <div class="fg">
+            <label>Upload Evidence File</label>
+            <input type="file" name="evidence_file"
+                   accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.bmp,.txt,.zip"
+                   style="border:1.5px solid var(--border);border-radius:7px;padding:8px 12px;background:#fafbfe;font-size:13px;width:100%;cursor:pointer"/>
+            <span style="font-size:10.5px;color:#6b7280;margin-top:2px">
+              Accepted: PDF, Word, Excel, Images, ZIP · Max 10MB
+            </span>
+          </div>
+          {% if a.evidence_filename %}
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <span style="font-size:18px">📄</span>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#15803d">Current Evidence File</div>
+              <div style="font-size:12px;color:#374151">{{ a.evidence_filename }}</div>
+            </div>
+            <a href="/uploads/{{ a.evidence_filename }}" target="_blank"
+               class="btn btn-sm" style="margin-left:auto;background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;font-size:11px">
+              View File →
+            </a>
+          </div>
+          {% endif %}
+          <div style="background:#f4f6fb;border:1px solid #e5e7eb;border-radius:8px;padding:11px 14px;font-size:12px;color:#374151">
+            📋 <strong>Evidence examples:</strong> Revised SOPs · Training completion certificates · Corrective work orders · Photographs · Test results · Meeting minutes · Sign-off sheets
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ct">📊 Follow-up & Monitoring</div>
+          <div class="fg">
+            <label>Follow-up / Monitoring Notes</label>
+            <textarea name="follow_up_notes" rows="3" placeholder="How will effectiveness be monitored after implementation?">{{ a.follow_up_notes or '' }}</textarea>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div style="display:flex;gap:11px;flex-wrap:wrap;margin-top:4px">
+          {% if a.status not in ('Closed','Under Safety Review') %}
+          <button type="submit" name="action_btn" value="save_progress" class="btn btn-o">
+            💾 Save Progress
+          </button>
+          {% endif %}
+          {% if a.status in ('Open','In Progress','Returned','Assigned','Overdue') %}
+          <button type="submit" name="action_btn" value="submit_review" class="btn btn-s"
+                  onclick="return confirm('Submit for Safety Review?\n\nEnsure all evidence and corrective details are complete.')">
+            ✅ Submit for Safety Review →
+          </button>
+          {% endif %}
+          {% if a.status == 'Closed' %}
+          <div class="alert-g" style="margin:0">✓ Closed — no further action required.</div>
+          {% elif a.status == 'Under Safety Review' %}
+          <div class="alert-b" style="margin:0">📋 Awaiting Safety Department review.</div>
+          {% endif %}
+        </div>
+
+      </form>
+    </div>
+
+    <!-- Right sidebar -->
+    <div>
+      <div class="card">
+        <div class="ct">📍 Lifecycle</div>
+        {% set steps = [('Open / Assigned', 0), ('In Progress', 2), ('Implemented', 4), ('Safety Review', 6), ('Closed', 8)] %}
+        {% set order = ['Open','Assigned','In Progress','Mitigation Implemented','Under Safety Review','Closed'] %}
+        {% set cur_idx = order.index(a.status) if a.status in order else 0 %}
+        {% for label, threshold in steps %}
+        <div style="display:flex;align-items:center;gap:9px;padding:6px 0">
+          <div style="width:23px;height:23px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;
+            {% if cur_idx > threshold %}background:#0f1c3f;color:#c9a84c;
+            {% elif cur_idx == threshold or (threshold==0 and a.status=='Assigned') %}background:#c9a84c;color:#0f1c3f;
+            {% else %}background:#e5e7eb;color:#9ca3af;{% endif %}">
+            {{ loop.index }}
+          </div>
+          <div style="font-size:12px;font-weight:{% if cur_idx==threshold %}800{% else %}500{% endif %};color:{% if cur_idx==threshold %}#0f1c3f{% else %}#6b7280{% endif %}">
+            {{ label }}
+          </div>
+        </div>
+        {% if not loop.last %}<div style="width:2px;height:9px;background:#e5e7eb;margin-left:10px"></div>{% endif %}
+        {% endfor %}
+      </div>
+
+      {% if history %}
+      <div class="card">
+        <div class="ct">📜 Recent History</div>
+        {% for h in history[:8] %}
+        <div style="margin-bottom:9px;padding-bottom:9px;border-bottom:1px solid #f3f4f6">
+          <div style="font-size:11px;font-weight:700;color:#374151">{{ h.to_status or '—' }}</div>
+          <div style="font-size:10px;color:#9ca3af">
+            {{ h.changed_by or '—' }} · {{ h.changed_at.strftime('%d %b %H:%M') if h.changed_at else '—' }}
+          </div>
+          {% if h.notes %}<div style="font-size:10.5px;color:#6b7280;font-style:italic">{{ h.notes[:55] }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if a.corrective_description or a.evidence %}
+      <div class="card">
+        <div class="ct">📎 Current Evidence</div>
+        {% if a.implementation_date %}
+        <div style="font-size:12px;margin-bottom:8px"><strong>Implemented:</strong> <span style="font-family:monospace">{{ a.implementation_date }}</span></div>
+        {% endif %}
+        {% if a.evidence %}
+        <div style="background:#f4f6fb;border-radius:7px;padding:10px;font-size:12px;color:#374151">
+          {{ a.evidence[:200] }}{% if a.evidence|length > 200 %}…{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
