@@ -1,229 +1,400 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<title>Final Audit Report — {{ schedule.id }}</title>
+<meta charset="UTF-8"/><title>Final Audit Report — {{ schedule.id }}</title>
 <style>
-  @page { size: A4 portrait; margin: 18mm 16mm; }
-  @media print { .no-print { display:none!important; } body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:Arial,sans-serif; font-size:9.5pt; color:#111; background:#fff; }
-  .print-btn { position:fixed;top:12px;right:12px;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer; }
-  .doc-header { display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:14px; }
-  .logo { font-size:20px;font-weight:900;color:#0f1c3f; } .logo span { color:#c9a84c; }
-  .sec-title { background:#0f1c3f;color:#fff;font-weight:700;font-size:10pt;padding:5px 12px;margin:14px 0 6px;border-radius:3px; }
-  .finding-header { background:#f4f6fb;border:1px solid #d1d5db;padding:8px 12px;margin:10px 0 4px;border-radius:4px;display:flex;align-items:center;gap:10px;page-break-inside:avoid; }
-  .info-table { width:100%;border-collapse:collapse;margin-bottom:8px; }
-  .info-table td { border:1px solid #d1d5db;padding:6px 9px;font-size:9pt; }
-  .info-table .lbl { background:#f4f6fb;font-weight:700;color:#374151;width:130px; }
-  .text-box { border:1px solid #d1d5db;padding:8px 10px;font-size:9.5pt;line-height:1.6;background:#fafbfe;margin-bottom:8px; }
-  .status-pill { padding:2px 8px;border-radius:4px;font-size:9pt;font-weight:700;border:1px solid; }
-  .pill-green { background:#dcfce7;color:#15803d;border-color:#bbf7d0; }
-  .pill-yellow { background:#fef9c3;color:#b45309;border-color:#fde68a; }
-  .pill-red { background:#fee2e2;color:#dc2626;border-color:#fca5a5; }
-  .pill-blue { background:#dbeafe;color:#1d4ed8;border-color:#93c5fd; }
-  .progress-bar { height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden;display:inline-block;width:80px;vertical-align:middle; }
-  .sig-table { width:100%;border-collapse:collapse;margin-top:12px; }
-  .sig-table th { background:#0f1c3f;color:#fff;padding:6px 10px;text-align:left;font-size:9pt; }
-  .sig-table td { border:1px solid #d1d5db;padding:14px 10px; }
-  .sig-table .role { background:#f4f6fb;font-weight:700;width:120px; }
-  .footer { border-top:1px solid #d1d5db;margin-top:12px;padding-top:6px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between; }
-  .finding-block { border:1px solid #d1d5db;border-radius:6px;padding:12px;margin-bottom:14px;page-break-inside:avoid; }
-  .severity-major { border-left:4px solid #dc2626; }
-  .severity-minor { border-left:4px solid #d97706; }
-  .severity-obs { border-left:4px solid #6b7280; }
+@page{size:A4 portrait;margin:13mm}
+@media print{.np{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pgbrk{page-break-before:always}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:9pt;color:#111;background:#fff;line-height:1.45}
+.np{position:fixed;top:12px;right:12px;display:flex;gap:8px;z-index:999}
+.bp{background:#0f1c3f;color:#fff;border:none;padding:9px 20px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
+.bk{background:#fff;color:#0f1c3f;border:2px solid #0f1c3f;padding:9px 20px;border-radius:7px;font-size:13px;font-weight:700;text-decoration:none;display:inline-block}
+.w{max-width:184mm;margin:0 auto}
+.cv{min-height:250mm;display:flex;flex-direction:column;border:2px solid #0f1c3f}
+.cv-top{background:#0f1c3f;padding:22px 24px;text-align:center}
+.cv-logo{color:#c9a84c;font-size:32px;font-weight:900;margin-bottom:4px}
+.cv-airline{color:#fff;font-size:15pt;font-weight:900}
+.cv-dept{color:rgba(255,255,255,.6);font-size:10pt;margin-top:3px}
+.cv-mid{padding:28px 24px;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.cv-band{width:100%;background:#c9a84c;padding:10px;margin:16px 0}
+.cv-band-txt{font-size:15pt;font-weight:900;color:#0f1c3f}
+.cv-doc-type{font-size:20pt;font-weight:900;color:#0f1c3f;margin-bottom:6px}
+.cv-tbl{width:100%;border-collapse:collapse;margin:14px 0}
+.cv-tbl td{border:1px solid #9ca3af;padding:7px 11px;font-size:9.5pt;text-align:left}
+.cv-tbl .cl{background:#f0f2f8;font-weight:700;color:#374151;width:42mm}
+.cv-bot{background:#f0f2f8;padding:10px 16px;border-top:2px solid #0f1c3f;font-size:7.5pt;color:#555;text-align:center;line-height:1.7}
+.sh{padding:5px 10px;font-weight:700;font-size:9.5pt;margin:12px 0 0;color:#fff}
+.sh-n{background:#0f1c3f}.sh-r{background:#dc2626}.sh-v{background:#15803d}.sh-d{background:#374151}
+.it{width:100%;border-collapse:collapse}
+.it td{border:1px solid #9ca3af;padding:5px 8px;font-size:8.5pt;vertical-align:top}
+.lb{background:#f0f2f8;font-weight:700;color:#374151;white-space:nowrap;width:40mm}
+.lb2{background:#f0f2f8;font-weight:700;color:#374151;white-space:nowrap;width:36mm}
+.tb{border:1px solid #9ca3af;padding:6px 9px;min-height:28px;font-size:9pt;line-height:1.65;background:#fafbfe}
+.tb-y{border:1px solid #fde68a;padding:6px 9px;min-height:28px;background:#fffbeb;line-height:1.65}
+.tb-g{border:1px solid #bbf7d0;padding:6px 9px;min-height:28px;background:#f0fdf4;line-height:1.65}
+.tb-r{border:1px solid #fca5a5;padding:6px 9px;min-height:28px;background:#fff5f5;line-height:1.65}
+.na{color:#9ca3af;font-style:italic}
+.ls{font-size:8pt;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.3px;margin:5px 0 2px}
+.pill{padding:1px 7px;border-radius:3px;font-size:8pt;font-weight:700;display:inline-block}
+.pg{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+.py{background:#fef9c3;color:#92400e;border:1px solid #fde68a}
+.pr{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+.pb{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe}
+.cl-tbl{width:100%;border-collapse:collapse}
+.cl-tbl th{background:#0f1c3f;color:#fff;padding:5px 7px;font-size:8pt;font-weight:700;text-align:left;border:1px solid #1a2d5a;white-space:nowrap}
+.cl-tbl td{border:1px solid #9ca3af;padding:4px 7px;font-size:8.5pt;vertical-align:top}
+.cl-tbl tr:nth-child(even) td{background:#f9fafb}
+.rno{background:#fee2e2;color:#dc2626;font-weight:700;padding:1px 6px;border-radius:3px;font-size:8pt;display:inline-block}
+.ryes{background:#dcfce7;color:#15803d;font-weight:700;padding:1px 6px;border-radius:3px;font-size:8pt;display:inline-block}
+.rna{background:#f3f4f6;color:#6b7280;font-weight:700;padding:1px 6px;border-radius:3px;font-size:8pt;display:inline-block}
+.kpi-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0}
+.kpi{border:1px solid #e5e7eb;border-radius:5px;padding:8px 10px;text-align:center;background:#f9fafb}
+.kpi-v{font-size:16pt;font-weight:900}.kpi-l{font-size:7.5pt;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.pbar{height:9px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:3px 0}
+.pbf{height:100%;border-radius:99px}
+.ncr-div{border:2px solid #0f1c3f;margin-top:14px;border-radius:4px;overflow:hidden}
+.ncr-hdr{background:#0f1c3f;color:#fff;padding:7px 12px;display:flex;justify-content:space-between;align-items:center}
+.ncr-ref{font-size:10.5pt;font-weight:900;font-family:monospace;color:#c9a84c}
+.sub-sh{background:#e8ecf4;color:#0f1c3f;font-weight:700;font-size:8.5pt;padding:4px 10px;border-top:1px solid #d1d5db}
+.tl{border-left:2px solid #0f1c3f;margin-left:5px;padding-left:9px;margin-top:4px}
+.tl-dot{position:relative;margin-bottom:6px}
+.tl-dot::before{content:'';position:absolute;left:-14px;top:3px;width:8px;height:8px;border-radius:50%;background:#0f1c3f}
+.tl-d{font-size:7.5pt;color:#6b7280;font-weight:700}
+.tl-t{font-size:8.5pt;color:#374151}
+.ev{display:flex;align-items:center;gap:6px;padding:4px 7px;border:1px solid #e5e7eb;border-radius:3px;margin-bottom:3px;background:#f9fafb;font-size:8.5pt}
+.sig-g{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:7px}
+.sig-b{border:1px solid #9ca3af;padding:7px 9px;min-height:40px}
+.sig-l{font-size:7pt;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.sig-v{font-size:9pt;font-weight:700;color:#0f1c3f;min-height:14px}
+.sig-ln{margin-top:18px;border-top:1px solid #e5e7eb;padding-top:2px;font-size:6.5pt;color:#9ca3af}
+.footer{border-top:1.5px solid #0f1c3f;margin-top:10px;padding-top:5px;display:flex;justify-content:space-between;font-size:7pt;color:#6b7280}
 </style>
 </head>
 <body>
-<button class="print-btn no-print" onclick="window.print()">🖨 Print Final Report</button>
+<div class="np">
+  <a href="/audit-schedule/{{ schedule.id }}" class="bk">&#8592; Back to Audit</a>
+  <button class="bp" onclick="window.print()">&#128424; Print / Export PDF</button>
+</div>
+<div class="w">
 
-<div class="doc-header">
-  <div class="logo">JORDAN<span>AVIATION</span></div>
-  <div style="text-align:center">
-    <h1 style="font-size:15pt;font-weight:900;color:#0f1c3f">FINAL AUDIT REPORT</h1>
-    <p style="font-size:9pt;color:#555;margin-top:2px">Safety Management System — Audit Closure Document</p>
+<!-- COVER PAGE -->
+<div class="cv">
+  <div class="cv-top">
+    <div class="cv-logo">&#x2708;</div>
+    <div class="cv-airline">Jordan Aviation</div>
+    <div class="cv-dept">Safety &amp; Quality Management Department</div>
   </div>
-  <div style="text-align:right;font-size:8.5pt;color:#555;line-height:1.8">
-    <strong>{{ schedule.id }}</strong><br>
-    Generated: {{ now.strftime('%d %b %Y') }}<br>
-    Status: <strong>{% if all_closed %}CLOSED{% else %}OPEN / IN PROGRESS{% endif %}</strong>
+  <div class="cv-mid">
+    <div class="cv-doc-type">Final Audit Report Package</div>
+    <div style="font-size:11pt;color:#6b7280;margin-bottom:14px">Audit + NCR + CAPA Compliance Documentation</div>
+    <div class="cv-band"><div class="cv-band-txt">{{ schedule.scope or (plan.title if plan else schedule.id) }}</div></div>
+    <table class="cv-tbl">
+      <tr><td class="cl">Audit Number</td><td style="font-weight:700;font-size:10.5pt">{{ schedule.id }}</td>
+          <td class="cl">Audit Type</td><td>{{ schedule.audit_type or "—" }}</td></tr>
+      <tr><td class="cl">Audit Date</td><td>{{ schedule.scheduled_date or "—" }}</td>
+          <td class="cl">Report Date</td><td>{{ now.strftime("%d %B %Y") }}</td></tr>
+      <tr><td class="cl">Audited Department</td><td>{{ dept.name if dept else "—" }}</td>
+          <td class="cl">Report Status</td>
+          <td>{% if all_closed %}<span class="pill pg">&#10003; FINAL &#8212; CLOSED</span>{% else %}<span class="pill py">INTERIM &#8212; IN PROGRESS</span>{% endif %}</td></tr>
+      <tr><td class="cl">Lead Auditor</td><td>{{ schedule.lead_auditor or "—" }}</td>
+          <td class="cl">Responsible Manager</td><td>{{ (findings[0].assigned_to if findings else "") or "—" }}</td></tr>
+      <tr><td class="cl">Total Findings</td><td style="font-weight:700;color:#dc2626">{{ total }}</td>
+          <td class="cl">Compliance Rate</td>
+          <td style="font-weight:700;color:{% if compliance_pct>=80 %}#15803d{% elif compliance_pct>=60 %}#d97706{% else %}#dc2626{% endif %}">{{ compliance_pct }}%</td></tr>
+      <tr><td class="cl">Audit Closure</td>
+          <td colspan="3">{{ schedule.closure_date or "—" }}{% if schedule.closed_by %} &#183; Closed by: {{ schedule.closed_by }}{% endif %}</td></tr>
+    </table>
+    <div style="font-size:8pt;color:#9ca3af;margin-top:10px;font-style:italic">Report Classification: INTERNAL &#8212; SAFETY SENSITIVE</div>
+  </div>
+  <div class="cv-bot">
+    Jordan Aviation Safety Management System &#183; JAV/Q-GEN/102 &#183; Issue 02/Rev 01<br>
+    CONFIDENTIAL &#8212; For Authorized Personnel Only &#183; Generated: {{ now.strftime("%d/%m/%Y %H:%M") }} UTC
   </div>
 </div>
+<div class="pgbrk"></div>
 
-<!-- Audit Summary -->
-<div class="sec-title">AUDIT INFORMATION</div>
-<table class="info-table">
-  <tr><td class="lbl">Audit Reference</td><td><strong>{{ schedule.id }}</strong></td>
-      <td class="lbl">Audit Type</td><td>{{ schedule.audit_type or '—' }}</td></tr>
-  <tr><td class="lbl">Scheduled Date</td><td>{{ schedule.scheduled_date or '—' }}</td>
-      <td class="lbl">Lead Auditor</td><td>{{ schedule.lead_auditor or '—' }}</td></tr>
-  <tr><td class="lbl">Scope</td><td colspan="3">{{ schedule.scope or '—' }}</td></tr>
-  <tr><td class="lbl">Objectives</td><td colspan="3">{{ schedule.objectives or '—' }}</td></tr>
-  <tr><td class="lbl">Status</td>
-      <td>{% if all_closed %}<span class="status-pill pill-green">Fully Closed</span>{% else %}<span class="status-pill pill-yellow">In Progress ({{ findings|selectattr('status','eq','Closed')|list|length }}/{{ findings|length }} closed)</span>{% endif %}</td>
-      <td class="lbl">Total Findings</td><td><strong>{{ findings|length }}</strong></td></tr>
+<!-- SECTION 2: EXECUTIVE SUMMARY -->
+<div class="sh sh-n">Section 2: Audit Executive Summary</div>
+<table class="it" style="margin-bottom:8px">
+  <tr><td class="lb">Audit Number</td><td style="font-weight:700">{{ schedule.id }}</td><td class="lb2">Audit Type</td><td>{{ schedule.audit_type or "—" }}</td></tr>
+  <tr><td class="lb">Audit Date</td><td>{{ schedule.scheduled_date or "—" }}</td><td class="lb2">Closing Date</td><td>{{ schedule.closure_date or "In Progress" }}</td></tr>
+  <tr><td class="lb">Lead Auditor</td><td>{{ schedule.lead_auditor or "—" }}</td><td class="lb2">Audited Department</td><td>{{ dept.name if dept else "—" }}</td></tr>
+  <tr><td class="lb">Audit Scope</td><td colspan="3">{{ schedule.scope or "—" }}</td></tr>
+  {% if schedule.final_remarks %}<tr><td class="lb">Audit Conclusion</td><td colspan="3">{{ schedule.final_remarks }}</td></tr>{% endif %}
+  {% if schedule.audit_result %}<tr><td class="lb">Audit Result</td><td colspan="3">
+    {% if schedule.audit_result=="Satisfactory" %}<span class="pill pg">&#10003; {{ schedule.audit_result }}</span>
+    {% elif schedule.audit_result=="Unsatisfactory" %}<span class="pill pr">&#10007; {{ schedule.audit_result }}</span>
+    {% else %}<span class="pill py">{{ schedule.audit_result }}</span>{% endif %}
+  </td></tr>{% endif %}
 </table>
-
-{% if schedule.summary %}
-<div class="sec-title">AUDIT SUMMARY</div>
-<div class="text-box">{{ schedule.summary }}</div>
+<div class="kpi-g">
+  <div class="kpi"><div class="kpi-v" style="color:#0f1c3f">{{ cl_total }}</div><div class="kpi-l">Checklist Items</div></div>
+  <div class="kpi"><div class="kpi-v" style="color:#15803d">{{ cl_yes }}</div><div class="kpi-l">Satisfactory</div></div>
+  <div class="kpi"><div class="kpi-v" style="color:#dc2626">{{ cl_no }}</div><div class="kpi-l">Unsatisfactory</div></div>
+  <div class="kpi"><div class="kpi-v" style="color:{% if compliance_pct>=80 %}#15803d{% elif compliance_pct>=60 %}#d97706{% else %}#dc2626{% endif %}">{{ compliance_pct }}%</div><div class="kpi-l">Compliance</div></div>
+</div>
+<div class="kpi-g" style="margin-top:6px">
+  <div class="kpi"><div class="kpi-v" style="color:#374151">{{ total }}</div><div class="kpi-l">Total NCRs</div></div>
+  <div class="kpi"><div class="kpi-v" style="color:#dc2626">{{ critical+major }}</div><div class="kpi-l">Major/Critical</div></div>
+  <div class="kpi"><div class="kpi-v" style="color:#15803d">{{ closed }}</div><div class="kpi-l">Closed</div></div>
+  <div class="kpi"><div class="kpi-v" style="color:#d97706">{{ open_f }}</div><div class="kpi-l">Open</div></div>
+</div>
+{% if cl_total>0 %}
+<div style="margin-top:8px">
+  <div class="ls">Overall Compliance Rate</div>
+  <div class="pbar"><div class="pbf" style="width:{{ compliance_pct }}%;background:{% if compliance_pct>=80 %}#15803d{% elif compliance_pct>=60 %}#d97706{% else %}#dc2626{% endif %}"></div></div>
+  <div style="display:flex;justify-content:space-between;font-size:7.5pt;color:#6b7280;margin-top:2px"><span>0%</span><span style="font-weight:700;color:#0f1c3f">{{ compliance_pct }}% Compliant</span><span>100%</span></div>
+</div>
 {% endif %}
+<div class="pgbrk"></div>
 
-<!-- Findings Summary Table -->
-<div class="sec-title">FINDINGS SUMMARY</div>
-<table class="info-table">
-  <thead>
-    <tr style="background:#0f1c3f;color:#fff">
-      <th style="padding:7px 10px;border:1px solid #1a2d5a;font-size:9pt">Ref</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Severity</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Description</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Assigned To</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">CAP Due</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Progress</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Status</th>
-    </tr>
-  </thead>
+<!-- SECTION 3: CHECKLIST -->
+<div class="sh sh-n">Section 3: Audit Checklist Results</div>
+{% if checklist_items %}
+{% for cat in checklist_items|map(attribute="category")|list|unique %}
+<div style="background:#e8ecf4;color:#0f1c3f;font-weight:700;font-size:8.5pt;padding:4px 9px;margin:8px 0 0;border-top:2px solid #0f1c3f">{{ cat }}</div>
+<table class="cl-tbl">
+  <thead><tr><th style="width:16mm">Ref</th><th>Checklist Question</th><th style="width:18mm;text-align:center">Response</th><th style="width:40mm">Comment / Evidence</th><th style="width:18mm;text-align:center">Finding</th></tr></thead>
   <tbody>
-    {% for f in findings %}
-    <tr>
-      <td style="font-weight:700;font-family:monospace;font-size:9pt">{{ f.finding_ref }}</td>
-      <td><span class="status-pill {% if f.severity=='Major' %}pill-red{% elif f.severity=='Minor' %}pill-yellow{% else %}pill-blue{% endif %}" style="font-size:8pt">{{ f.severity }}</span></td>
-      <td style="max-width:200px;font-size:9pt">{{ (f.description or '')[:80] }}</td>
-      <td style="font-size:9pt">{{ f.assigned_to or '—' }}</td>
-      <td style="font-size:9pt">{{ f.cap_due_date or '—' }}</td>
-      <td><div class="progress-bar"><div style="height:100%;width:{{ f.cap_completion_pct or 0 }}%;background:{% if (f.cap_completion_pct or 0)==100 %}#15803d{% else %}#1d4ed8{% endif %}"></div></div> <span style="font-size:8.5pt">{{ f.cap_completion_pct or 0 }}%</span></td>
-      <td><span class="status-pill {% if f.status=='Closed' %}pill-green{% elif f.status=='Overdue' %}pill-red{% else %}pill-yellow{% endif %}" style="font-size:8pt">{{ f.status }}</span></td>
-    </tr>
-    {% endfor %}
+  {% for item in checklist_items if item.category==cat %}
+  <tr>
+    <td style="font-family:monospace;font-weight:700;font-size:8pt;color:#0f1c3f">{{ item.item_ref }}</td>
+    <td style="font-size:8.5pt;line-height:1.5">{{ item.question }}</td>
+    <td style="text-align:center">
+      {% if item.response=="Yes" %}<span class="ryes">YES</span>
+      {% elif item.response=="No" %}<span class="rno">NO</span>
+      {% elif item.response=="N/A" %}<span class="rna">N/A</span>
+      {% else %}<span style="color:#9ca3af;font-size:8pt">&#8212;</span>{% endif %}
+    </td>
+    <td style="font-size:8pt;color:#374151">{{ item.comment or "" }}{% if item.evidence %}<br/><em style="color:#6b7280">{{ item.evidence }}</em>{% endif %}</td>
+    <td style="text-align:center;font-size:8pt">
+      {% if item.linked_finding %}<span style="font-family:monospace;font-weight:700;color:#dc2626;font-size:8pt">{{ item.linked_finding.finding_ref or item.linked_finding.id }}</span>
+      {% else %}&#8212;{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
   </tbody>
 </table>
-
-<!-- Checklist NO items traceability -->
-{% set no_items = [] %}
-{% for f in findings %}
-  {% if f.source_checklist_item %}
-    {% set _ = no_items.append(f) %}
-  {% endif %}
 {% endfor %}
-{% if no_items %}
-<div class="sec-title">CHECKLIST NON-CONFORMANCES</div>
-<table class="info-table">
-  <thead>
-    <tr style="background:#0f1c3f;color:#fff">
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Checklist Point</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Question</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Finding Ref</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Evidence</th>
-      <th style="padding:7px 10px;border:1px solid #1a2d5a">Status</th>
-    </tr>
-  </thead>
+{% else %}<div class="tb" style="color:#9ca3af">No checklist items recorded.</div>{% endif %}
+<div class="pgbrk"></div>
+
+<!-- SECTION 4: FINDINGS REGISTER -->
+<div class="sh sh-r">Section 4: Audit Findings Register</div>
+{% if findings %}
+<table class="cl-tbl" style="margin-top:0">
+  <thead><tr><th style="width:14mm">NCR No.</th><th>Finding Description</th><th style="width:18mm;text-align:center">Severity</th><th style="width:22mm">Reference</th><th style="width:18mm">Department</th><th style="width:18mm;text-align:center">Status</th><th style="width:18mm">Due Date</th></tr></thead>
   <tbody>
-    {% for f in no_items %}
-    {% set ci = f.source_checklist_item %}
-    <tr>
-      <td style="font-family:monospace;font-size:9pt;font-weight:700">{{ ci.item_ref if ci else '—' }}</td>
-      <td style="font-size:9pt">{{ (ci.question or '')[:80] if ci else '—' }}</td>
-      <td style="font-family:monospace;font-size:9pt;font-weight:700">{{ f.finding_ref }}</td>
-      <td style="font-size:8.5pt">
-        {% if ci and ci.evidence_filename %}
-        📎 {{ ci.evidence_filename.split('_',1)[-1] if '_' in ci.evidence_filename else ci.evidence_filename }}
-        {% elif ci and ci.comment %}
-        {{ ci.comment[:40] }}
-        {% else %}—{% endif %}
-      </td>
-      <td><span class="status-pill {% if f.status=='Closed' %}pill-green{% elif f.status=='Overdue' %}pill-red{% else %}pill-yellow{% endif %}" style="font-size:8pt">{{ f.status }}</span></td>
-    </tr>
-    {% endfor %}
+  {% for f in findings %}
+  <tr>
+    <td style="font-family:monospace;font-weight:700;font-size:8.5pt;color:#0f1c3f">{{ f.finding_ref or f.id }}</td>
+    <td style="font-size:8.5pt;line-height:1.5">{{ (f.description or "")[:100] }}{% if f.description and f.description|length>100 %}&#8230;{% endif %}</td>
+    <td style="text-align:center">
+      {% if f.severity in ("Critical","Major") %}<span class="pill pr" style="font-size:7.5pt">{{ f.severity }}</span>
+      {% elif f.severity=="Minor" %}<span class="pill py" style="font-size:7.5pt">Minor</span>
+      {% else %}<span class="pill pb" style="font-size:7.5pt">{{ f.severity or "Obs" }}</span>{% endif %}
+    </td>
+    <td style="font-size:7.5pt;font-family:monospace">{{ (f.standard_ref or "")[:25] }}</td>
+    <td style="font-size:8pt">{{ f.assigned_dept or "&#8212;" }}</td>
+    <td style="text-align:center">
+      {% if f.status=="Closed" %}<span class="pill pg" style="font-size:7.5pt">Closed</span>
+      {% elif f.status=="Overdue" %}<span class="pill pr" style="font-size:7.5pt">Overdue</span>
+      {% else %}<span class="pill py" style="font-size:7.5pt">{{ f.status }}</span>{% endif %}
+    </td>
+    <td style="font-size:8pt;font-family:monospace">{{ f.cap_due_date or "&#8212;" }}</td>
+  </tr>
+  {% endfor %}
   </tbody>
 </table>
-{% endif %}
+{% else %}<div class="tb" style="color:#15803d;margin-top:4px">&#10003; No findings. Audit fully compliant.</div>{% endif %}
+<div class="pgbrk"></div>
 
-<!-- Detailed Findings -->
-<div class="sec-title">DETAILED FINDINGS WITH CLOSURE INFORMATION</div>
-{% for f in findings %}
-<div class="finding-block {% if f.severity=='Major' %}severity-major{% elif f.severity=='Minor' %}severity-minor{% else %}severity-obs{% endif %}">
-  <div class="finding-header">
-    <strong style="font-size:11pt;color:#0f1c3f;font-family:monospace">{{ f.finding_ref }}</strong>
-    <span class="status-pill {% if f.severity=='Major' %}pill-red{% elif f.severity=='Minor' %}pill-yellow{% else %}pill-blue{% endif %}" style="font-size:8.5pt">{{ f.severity }}</span>
-    <span style="font-size:9pt;flex:1;color:#374151">{{ (f.description or '')[:100] }}</span>
-    <span class="status-pill {% if f.status=='Closed' %}pill-green{% elif f.status=='Overdue' %}pill-red{% else %}pill-yellow{% endif %}" style="font-size:8.5pt">{{ f.status }}</span>
+<!-- SECTION 5: NCR REPORTS -->
+<div class="sh sh-n">Section 5: Non-Conformance Reports (NCR)</div>
+{% for fd in finding_data %}
+{% set f=fd.finding %}{% set la=fd.action %}{% set su=fd.sag_user %}{% set ci=fd.cl_item %}
+<div class="ncr-div" style="margin-top:14px">
+  <div class="ncr-hdr">
+    <div><span class="ncr-ref">NCR {{ f.finding_ref or f.id }}</span>
+    <span style="margin-left:10px;font-size:9pt;color:rgba(255,255,255,.85)">{{ (f.description or "")[:65] }}{% if f.description and f.description|length>65 %}&#8230;{% endif %}</span></div>
+    {% if f.status=="Closed" %}<span class="pill pg" style="font-size:8pt">&#10003; CLOSED</span>
+    {% elif f.status=="Overdue" %}<span class="pill pr" style="font-size:8pt">OVERDUE</span>
+    {% else %}<span class="pill py" style="font-size:8pt">{{ f.status|upper }}</span>{% endif %}
   </div>
-
-  <table class="info-table">
-    <tr><td class="lbl">Standard Ref</td><td><code>{{ f.standard_ref or '—' }}</code></td>
-        <td class="lbl">Assigned To</td><td>{{ f.assigned_to or '—' }} / {{ f.assigned_dept or '—' }}</td></tr>
-    <tr><td class="lbl">Requirement</td><td colspan="3">{{ f.requirement or '—' }}</td></tr>
-    <tr><td class="lbl">Description</td><td colspan="3">{{ f.description or '—' }}</td></tr>
-    <tr><td class="lbl">Auditor Evidence</td><td colspan="3">{{ f.evidence or '—' }}</td></tr>
-  </table>
-
-  {% if f.root_cause %}
-  <div style="font-size:9pt;font-weight:700;color:#374151;margin:6px 0 2px">Root Cause:</div>
-  <div class="text-box" style="min-height:30px">{{ f.root_cause }}</div>
-  {% endif %}
-
-  {% if f.immediate_action %}
-  <div style="font-size:9pt;font-weight:700;color:#374151;margin:6px 0 2px">Immediate Corrective Action:</div>
-  <div class="text-box" style="min-height:28px">{{ f.immediate_action }}</div>
-  {% endif %}
-
-  {% if f.longterm_action %}
-  <div style="font-size:9pt;font-weight:700;color:#374151;margin:6px 0 2px">Long-term Action:</div>
-  <div class="text-box" style="min-height:28px">{{ f.longterm_action }}</div>
-  {% endif %}
-
-  <table class="info-table" style="margin-top:6px">
-    <tr><td class="lbl">CAP Responsible</td><td>{{ f.cap_responsible or '—' }}</td>
-        <td class="lbl">CAP Due Date</td><td>{{ f.cap_due_date or '—' }}</td></tr>
-    <tr><td class="lbl">CAP Status</td>
-        <td><span class="status-pill {% if f.cap_status=='Completed' %}pill-green{% elif f.cap_status=='Overdue' %}pill-red{% else %}pill-blue{% endif %}" style="font-size:8.5pt">{{ f.cap_status or 'Pending' }}</span></td>
-        <td class="lbl">Completion</td><td><strong>{{ f.cap_completion_pct or 0 }}%</strong></td></tr>
-    {% if f.status == 'Closed' %}
-    <tr><td class="lbl">Closure Date</td><td>{{ f.closure_date or '—' }}</td>
-        <td class="lbl">Verified By</td><td>{{ f.closure_verified_by or '—' }}</td></tr>
-    <tr><td class="lbl">Closure Notes</td><td colspan="3">{{ f.closure_notes or '—' }}</td></tr>
-    {% endif %}
-  </table>
-
-  {% if f.evidence_files %}
-  <div style="font-size:8.5pt;color:#374151;margin-top:6px">
-    <strong>Evidence Files:</strong>
-    {% for ef in f.evidence_files.split(',') if ef %}
-    <span style="background:#f0fdf4;border:1px solid #bbf7d0;padding:2px 7px;border-radius:3px;color:#15803d;font-size:8pt;margin-left:4px">📎 {{ ef.split('_',1)[-1] if '_' in ef else ef }}</span>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <!-- Per-finding signature line -->
-  {% if f.status == 'Closed' %}
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;padding-top:8px;border-top:1px solid #e5e7eb">
-    {% for role, name in [('Dept Manager', f.sig_dept_manager),('Auditor', f.sig_auditor),('Safety Manager', f.sig_safety_manager)] %}
-    <div style="font-size:8.5pt">
-      <div style="color:#6b7280">{{ role }}</div>
-      <strong>{{ name or '—' }}</strong>
-      <div style="border-bottom:1px solid #9ca3af;height:16px;margin-top:4px"></div>
+  <div>
+    <div class="sub-sh">A. NCR Header</div>
+    <table class="it">
+      <tr><td class="lb">NCR Number</td><td style="font-weight:700">{{ f.finding_ref or f.id }}</td><td class="lb2">Audit Ref</td><td>{{ schedule.id }}</td></tr>
+      <tr><td class="lb">Department</td><td>{{ f.assigned_dept or "&#8212;" }}</td><td class="lb2">Lead Auditor</td><td>{{ schedule.lead_auditor or "&#8212;" }}</td></tr>
+      <tr><td class="lb">Responsible Manager</td><td>{{ f.assigned_to or "&#8212;" }}</td><td class="lb2">Date Issued</td><td>{{ f.created_at.strftime("%d/%m/%Y") if f.created_at else "&#8212;" }}</td></tr>
+      <tr><td class="lb">Due Date</td><td style="font-weight:700">{{ f.cap_due_date or "&#8212;" }}</td><td class="lb2">Category</td><td>{{ f.category or "&#8212;" }}</td></tr>
+    </table>
+    <div class="sub-sh">B. Non-Conformance Details</div>
+    {% if ci %}<div style="background:#fff8f8;border-left:3px solid #dc2626;padding:5px 9px;font-size:8.5pt;margin:4px 0">
+      <span style="font-weight:700;color:#dc2626;font-family:monospace">{{ ci.item_ref }}</span>
+      <span style="margin-left:8px">{{ ci.question }}</span>
+      <span class="rno" style="margin-left:8px">{{ ci.response }}</span>
+      {% if ci.comment %}<div style="margin-top:3px;color:#6b7280;font-size:8pt">Comment: {{ ci.comment }}</div>{% endif %}
+    </div>{% endif %}
+    <div class="ls">Full Non-Conformance Statement</div>
+    <div class="tb-r" style="min-height:36px">{{ f.description or '<span class="na">&#8212;</span>' }}</div>
+    {% if f.evidence %}<div class="ls">Objective Evidence</div><div class="tb" style="min-height:24px">{{ f.evidence }}</div>{% endif %}
+    <table class="it" style="margin-top:4px">
+      <tr><td class="lb">Reference(s)</td><td>{{ f.standard_ref or "&#8212;" }}</td><td class="lb2">Severity</td>
+          <td>{% if f.severity in ("Major","Critical") %}<span class="pill pr">{{ f.severity }}</span>
+              {% elif f.severity=="Minor" %}<span class="pill py">Minor</span>
+              {% else %}<span class="pill pb">{{ f.severity or "&#8212;" }}</span>{% endif %}</td></tr>
+      <tr><td class="lb">Requirement</td><td colspan="3">{{ f.requirement or "&#8212;" }}</td></tr>
+    </table>
+    <div class="sub-sh">C. Root Cause Analysis</div>
+    <div class="ls">Root Cause Description</div>
+    <div class="tb-y" style="min-height:36px">
+      {% set rca=(la.root_cause if la and la.root_cause else "") or f.root_cause or "" %}
+      {% if rca %}{{ rca }}{% else %}<span class="na">Not yet submitted.</span>{% endif %}
     </div>
-    {% endfor %}
+    {% if f.contributing_factors %}<div class="ls">Contributing Factors</div><div class="tb" style="min-height:24px">{{ f.contributing_factors }}</div>{% endif %}
+    <div class="sub-sh">D. Immediate Corrective Action / Containment</div>
+    <div class="tb" style="min-height:30px">{{ f.immediate_action or '<span class="na">Not yet submitted.</span>' }}</div>
+    <div class="sub-sh">E. Corrective Action &amp; Mitigation</div>
+    <div class="ls">Corrective Action Taken</div>
+    <div class="tb" style="min-height:36px">
+      {% set ca=(la.corrective_description if la and la.corrective_description else "") or f.longterm_action or "" %}
+      {% if ca %}{{ ca }}{% else %}<span class="na">Not yet submitted.</span>{% endif %}
+    </div>
+    {% if la and la.mitigation_description %}<div class="ls">Mitigation</div><div class="tb" style="min-height:24px">{{ la.mitigation_description }}</div>{% endif %}
+    {% if la and la.safety_notes %}<div class="ls">Safety Improvement Notes</div><div class="tb" style="min-height:22px">{{ la.safety_notes }}</div>{% endif %}
+    <div class="sub-sh">F. Corrective Action Plan (CAP)</div>
+    <table class="it">
+      <tr><td class="lb">Responsible Person</td><td>{{ f.cap_responsible or f.assigned_to or "&#8212;" }}</td><td class="lb2">CAP Due Date</td><td style="font-weight:700">{{ f.cap_due_date or "&#8212;" }}</td></tr>
+      <tr><td class="lb">Assigned SAG Member</td>
+          <td style="font-weight:700">{{ (su.full_name or la.sag_member) if la and la.sag_member else "&#8212;" }}
+          {% if su and su.sag_role %}<span style="font-weight:400;font-size:7.5pt;color:#6b7280"> &#183; {{ su.sag_role }}</span>{% endif %}</td>
+          <td class="lb2">Action Reference</td><td style="font-family:monospace;font-weight:700">{{ la.id if la else "&#8212;" }}</td></tr>
+      <tr><td class="lb">CAP Status</td>
+          <td>{% if f.cap_status=="Completed" %}<span class="pill pg">{{ f.cap_status }}</span>
+              {% elif f.cap_status=="Overdue" %}<span class="pill pr">{{ f.cap_status }}</span>
+              {% else %}<span class="pill py">{{ f.cap_status or "&#8212;" }}</span>{% endif %}</td>
+          <td class="lb2">Completion</td>
+          <td><div style="display:flex;align-items:center;gap:5px">
+            <div class="pbar" style="flex:1;height:7px"><div class="pbf" style="width:{{ f.cap_completion_pct or 0 }}%;background:{% if (f.cap_completion_pct or 0)>=100 %}#15803d{% elif (f.cap_completion_pct or 0)>=50 %}#d97706{% else %}#dc2626{% endif %}"></div></div>
+            <span style="font-weight:700;font-size:8pt">{{ f.cap_completion_pct or 0 }}%</span>
+          </div></td></tr>
+      {% if la %}<tr><td class="lb">Implementation Date</td><td>{{ la.implementation_date or "&#8212;" }}</td><td class="lb2">Mitigation Status</td><td>{{ la.mitigation_status or "&#8212;" }}</td></tr>{% endif %}
+    </table>
+    <div class="sub-sh">G. SAG Implementation &amp; Progress</div>
+    {% if fd.history %}<div class="tl">{% for h in fd.history %}
+      <div class="tl-dot">
+        <div class="tl-d">{{ h.changed_at.strftime("%d %b %Y  %H:%M") if h.changed_at else "&#8212;" }} &#183; {{ h.changed_by or "&#8212;" }}</div>
+        <div class="tl-t">{% if h.from_status and h.from_status!=h.to_status %}{{ h.from_status }} &#8594; {% endif %}<strong>{{ h.to_status or "&#8212;" }}</strong>{% if h.notes %}<span style="color:#6b7280"> &#183; {{ h.notes[:80] }}</span>{% endif %}</div>
+      </div>
+    {% endfor %}</div>
+    {% else %}<div style="color:#9ca3af;font-size:8.5pt;padding:5px 0;font-style:italic">No history recorded.</div>{% endif %}
+    <div class="sub-sh">H. Evidence</div>
+    {% set ev_text=(la.evidence if la and la.evidence else "") or "" %}
+    {% if ev_text %}<div class="ls">Evidence Description</div><div style="border:1px solid #bbf7d0;padding:6px 9px;background:#f0fdf4;font-size:9pt;line-height:1.65">{{ ev_text }}</div>{% endif %}
+    {% if fd.act_ev or fd.ev_files %}
+    <div class="ls" style="margin-top:4px">Uploaded Files</div>
+    {% for ef in fd.act_ev %}<div class="ev">&#128196; <strong>{{ ef }}</strong></div>{% endfor %}
+    {% for ef in fd.ev_files %}<div class="ev">&#128206; {{ ef }}</div>{% endfor %}
+    {% elif not ev_text %}<div style="color:#9ca3af;font-size:8.5pt;padding:4px 0;font-style:italic">No evidence uploaded.</div>{% endif %}
+    <div class="sub-sh">I. Safety Review &amp; Verification</div>
+    <table class="it">
+      <tr><td class="lb">Reviewed By</td><td>{{ f.reviewed_by or "&#8212;" }}</td><td class="lb2">Review Date</td><td>{{ f.review_date or "&#8212;" }}</td></tr>
+      <tr><td class="lb">Review Notes</td><td colspan="3">
+        {% set rn=f.review_notes or (la.safety_review_notes if la else "") or "" %}
+        {% if rn %}{{ rn }}{% else %}<span class="na">Not yet reviewed.</span>{% endif %}
+      </td></tr>
+      <tr><td class="lb">Effectiveness</td>
+          <td>{% set eff=(la.effectiveness if la else "") or "&#8212;" %}
+              {% if eff=="Effective" %}<span class="pill pg">&#10003; Effective</span>
+              {% elif eff=="Ineffective" %}<span class="pill pr">&#10007; Ineffective</span>
+              {% else %}{{ eff }}{% endif %}</td>
+          <td class="lb2">Action Status</td>
+          <td>{% if la %}{% if la.status=="Closed" %}<span class="pill pg">&#10003; CLOSED</span>
+              {% else %}<span class="pill py">{{ la.status }}</span>{% endif %}{% else %}&#8212;{% endif %}</td></tr>
+    </table>
+    <div class="sub-sh">J. Final Closure</div>
+    <table class="it">
+      <tr><td class="lb">Closure Status</td>
+          <td>{% if f.status=="Closed" %}<span class="pill pg">&#10003; CLOSED</span>{% else %}<span class="pill py">{{ f.status }}</span>{% endif %}</td>
+          <td class="lb2">Closure Date</td><td style="font-weight:700">{{ f.closure_date or "&#8212;" }}</td></tr>
+      <tr><td class="lb">Closure Verified By</td><td>{{ f.closure_verified_by or "&#8212;" }}</td><td class="lb2">Closure Notes</td><td>{{ f.closure_notes or "&#8212;" }}</td></tr>
+    </table>
+    <div class="sig-g" style="margin:6px 6px 8px">
+      <div class="sig-b"><div class="sig-l">Dept. Manager</div><div class="sig-v">{{ f.sig_dept_manager or "" }}</div><div class="sig-ln">Signature / Date</div></div>
+      <div class="sig-b"><div class="sig-l">Lead Auditor</div><div class="sig-v">{{ f.sig_auditor or schedule.lead_auditor or "" }}</div><div class="sig-ln">Signature / Date</div></div>
+      <div class="sig-b"><div class="sig-l">Safety Manager</div><div class="sig-v">{{ f.sig_safety_manager or f.closure_verified_by or "" }}</div><div class="sig-ln">Signature / Date</div></div>
+    </div>
   </div>
-  {% endif %}
 </div>
+{% if not loop.last %}<div class="pgbrk"></div>{% endif %}
 {% endfor %}
+{% if not findings %}<div class="tb" style="color:#15803d;margin-top:6px">&#10003; No findings. Audit compliant.</div>{% endif %}
+<div class="pgbrk"></div>
 
-<!-- Final Signatures -->
-<div class="sec-title">FINAL REPORT SIGNATURES</div>
-<table class="sig-table">
-  <thead><tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:90px">Date</th></tr></thead>
-  <tbody>
-    <tr><td class="role">Lead Auditor</td><td>{{ schedule.lead_auditor or '' }}</td><td>Lead Auditor</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
-    <tr><td class="role">Safety Manager</td><td></td><td>Safety Department</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
-    <tr><td class="role">Accountable Mgr</td><td></td><td>Accountable Manager</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
-  </tbody>
+<!-- SECTION 6: MANAGEMENT SUMMARY -->
+<div class="sh sh-n">Section 6: Management Summary &amp; Analytics</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px">
+  <div><div class="ls">Findings by Severity</div>
+    <table class="it">
+      <tr><td class="lb">Critical</td><td style="font-weight:700;color:#dc2626">{{ critical }}</td></tr>
+      <tr><td class="lb">Major (Level 2)</td><td style="font-weight:700;color:#ea580c">{{ major }}</td></tr>
+      <tr><td class="lb">Minor (Level 1)</td><td style="font-weight:700;color:#d97706">{{ minor }}</td></tr>
+      <tr><td class="lb">Observations</td><td style="font-weight:700;color:#1d4ed8">{{ observation }}</td></tr>
+      <tr><td class="lb">Total NCRs</td><td style="font-weight:700">{{ total }}</td></tr>
+    </table>
+  </div>
+  <div><div class="ls">Closure Status</div>
+    <table class="it">
+      <tr><td class="lb">Closed</td><td style="font-weight:700;color:#15803d">{{ closed }}</td></tr>
+      <tr><td class="lb">Open</td><td style="font-weight:700;color:#d97706">{{ open_f }}</td></tr>
+      <tr><td class="lb">Overdue</td><td style="font-weight:700;color:#dc2626">{{ overdue }}</td></tr>
+      <tr><td class="lb">Closure Rate</td><td style="font-weight:700;color:{% if total>0 and closed==total %}#15803d{% else %}#d97706{% endif %}">{{ ((closed/total*100)|round|int if total>0 else 0) }}%</td></tr>
+    </table>
+  </div>
+</div>
+<div style="margin-top:10px"><div class="ls">Checklist Performance</div>
+  <table class="it">
+    <tr><td class="lb">Total Items</td><td>{{ cl_total }}</td><td class="lb2">Satisfactory</td><td style="color:#15803d;font-weight:700">{{ cl_yes }}</td></tr>
+    <tr><td class="lb">Unsatisfactory</td><td style="color:#dc2626;font-weight:700">{{ cl_no }}</td><td class="lb2">Not Applicable</td><td>{{ cl_na }}</td></tr>
+    <tr><td class="lb">Overall Compliance</td><td colspan="3">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="pbar" style="flex:1;height:10px"><div class="pbf" style="width:{{ compliance_pct }}%;background:{% if compliance_pct>=80 %}#15803d{% elif compliance_pct>=60 %}#d97706{% else %}#dc2626{% endif %}"></div></div>
+        <span style="font-weight:700;font-size:10pt;color:{% if compliance_pct>=80 %}#15803d{% elif compliance_pct>=60 %}#d97706{% else %}#dc2626{% endif %}">{{ compliance_pct }}%</span>
+      </div>
+    </td></tr>
+  </table>
+</div>
+{% if schedule.final_remarks %}<div class="ls" style="margin-top:8px">Audit Conclusion</div><div class="tb-g" style="min-height:35px">{{ schedule.final_remarks }}</div>{% endif %}
+<div class="pgbrk"></div>
+
+<!-- SECTION 7: APPROVAL -->
+<div class="sh sh-n">Section 7: Final Approval &amp; Signatures</div>
+<table class="it" style="margin-top:6px;margin-bottom:12px">
+  <tr><td class="lb">Audit Number</td><td>{{ schedule.id }}</td><td class="lb2">Report Date</td><td>{{ now.strftime("%d %B %Y") }}</td></tr>
+  <tr><td class="lb">Audit Status</td><td colspan="3">{% if all_closed %}<span class="pill pg">&#10003; COMPLETED &amp; CLOSED</span>{% else %}<span class="pill py">IN PROGRESS</span>{% endif %}</td></tr>
+  <tr><td class="lb">Total NCRs</td><td>{{ total }}</td><td class="lb2">All Closed</td>
+      <td>{% if all_closed %}<span class="pill pg">&#10003; Yes</span>{% else %}<span class="pill pr">No &#8212; {{ open_f }} remaining</span>{% endif %}</td></tr>
 </table>
-
-<div class="footer">
-  <span>Jav/SMS/Audit · {{ now.strftime('%d %b %Y') }}</span>
-  <span>Final Audit Report — ICAO Annex 19</span>
-  <span>{{ schedule.id }}</span>
+<div class="sig-g" style="margin-bottom:12px">
+  <div class="sig-b" style="min-height:60px"><div class="sig-l">Lead Auditor</div><div class="sig-v">{{ schedule.lead_auditor or "" }}</div><div class="sig-ln">Name &#183; Signature &#183; Date</div></div>
+  <div class="sig-b" style="min-height:60px"><div class="sig-l">Safety Manager</div><div class="sig-v">{{ schedule.closed_by or "" }}</div><div class="sig-ln">Name &#183; Signature &#183; Date</div></div>
+  <div class="sig-b" style="min-height:60px"><div class="sig-l">Responsible Manager</div><div class="sig-v">{{ (findings[0].assigned_to if findings else "") or "" }}</div><div class="sig-ln">Name &#183; Signature &#183; Date</div></div>
+</div>
+<div class="sig-g">
+  <div class="sig-b" style="min-height:60px"><div class="sig-l">SAG Representative</div><div class="sig-v">&nbsp;</div><div class="sig-ln">Name &#183; Signature &#183; Date</div></div>
+  <div class="sig-b" style="min-height:60px"><div class="sig-l">QA / Compliance Approval</div><div class="sig-v">&nbsp;</div><div class="sig-ln">Name &#183; Signature &#183; Date</div></div>
+  <div class="sig-b" style="min-height:60px"><div class="sig-l">Director of Safety</div><div class="sig-v">&nbsp;</div><div class="sig-ln">Name &#183; Signature &#183; Date</div></div>
+</div>
+<div class="footer" style="margin-top:14px">
+  <span>Jordan Aviation SMS &#183; JAV/Q-GEN/102 &#183; Issue 02/Rev 01</span>
+  <span>Audit: {{ schedule.id }} &#183; Final Report Package</span>
+  <span>Generated: {{ now.strftime("%d/%m/%Y %H:%M") }}</span>
+</div>
+<div style="text-align:center;font-size:7pt;color:#9ca3af;margin-top:4px;border-top:1px solid #e5e7eb;padding-top:4px">
+  CONFIDENTIAL &#8212; SAFETY SENSITIVE &#8212; FOR AUTHORIZED PERSONNEL ONLY
+</div>
 </div>
 </body>
 </html>
