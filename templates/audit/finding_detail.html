@@ -298,8 +298,38 @@
   </div>
   {% endif %}
 
+  <!-- SAG member banner — shown when finding routed to SAG portal -->
+  {% if finding.status in ('Assigned','Root Cause Submitted','Returned for Revision') and linked_action and linked_action.sag_member %}
+  <div style="background:#fffbeb;border:2px solid #fde68a;border-radius:10px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;gap:14px">
+    <span style="font-size:28px">🛡</span>
+    <div>
+      <div style="font-size:13px;font-weight:800;color:#92400e;margin-bottom:4px">
+        Routed to SAG Member Portal
+      </div>
+      <div style="font-size:12px;color:#b45309">
+        This finding has been assigned to <strong>{{ linked_action.sag_member }}</strong> via the SAG Portal.
+        The SAG member is responsible for submitting root cause, corrective action, mitigation and evidence
+        directly through their portal at <strong>/sag-login</strong>.
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:#78350f">
+        Action Reference: <strong>{{ linked_action.id }}</strong> · Status: <strong>{{ linked_action.status }}</strong>
+        {% if linked_action.corrective_description %}
+         · <span style="color:#15803d">✓ Corrective action submitted</span>
+        {% else %}
+         · <span style="color:#dc2626">⏳ Awaiting SAG implementation</span>
+        {% endif %}
+      </div>
+    </div>
+    <a href="/actions/{{ linked_action.id }}" target="_blank"
+       class="btn btn-sm btn-outline" style="margin-left:auto;white-space:nowrap;font-size:11px">
+      View Action →
+    </a>
+  </div>
+  {% endif %}
+
   <!-- 2. Submit Root Cause + Corrective Action (Auditee) -->
-  {% if finding.status in ('Assigned','Returned for Revision') %}
+  <!-- Hidden if SAG member assigned — SAG member handles this in their portal -->
+  {% if finding.status in ('Assigned','Returned for Revision') and not (linked_action and linked_action.sag_member) %}
   <div class="card">
     <div class="card-title">Step 2 — Auditee: Root Cause &amp; Corrective Actions</div>
     <form method="POST">
@@ -322,7 +352,8 @@
   {% endif %}
 
   <!-- 3. Submit CAP + Evidence (Auditee) -->
-  {% if finding.status in ('Root Cause Submitted','Returned for Revision') %}
+  <!-- Hidden if SAG member assigned — SAG member handles this in their portal -->
+  {% if finding.status in ('Root Cause Submitted','Returned for Revision') and not (linked_action and linked_action.sag_member) %}
   <div class="card">
     <div class="card-title">Step 3 — Auditee: Corrective Action Plan &amp; Evidence</div>
     <form method="POST" enctype="multipart/form-data">
