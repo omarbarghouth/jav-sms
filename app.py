@@ -2993,11 +2993,19 @@ def delete_asr(aid):
 
 
 @app.route('/delete/action/<aid>', methods=['POST'])
+@require_login
 def delete_action(aid):
     a = Action.query.get_or_404(aid)
-    db.session.delete(a)
-    db.session.commit()
-    flash(f'✓ Action {aid} deleted.', 'success')
+    try:
+        # Delete child records first (FK constraint)
+        ActionHistory.query.filter_by(action_id=aid).delete(synchronize_session=False)
+        db.session.flush()
+        db.session.delete(a)
+        db.session.commit()
+        flash(f'✓ Action {aid} deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete: {str(e)[:120]}', 'error')
     return redirect(request.form.get('return_url', '/actions'))
 
 
