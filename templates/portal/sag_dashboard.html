@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SAG Dashboard — Jordan Aviation</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:#eef0f6;color:#111827;font-size:14px;min-height:100vh}
+a{text-decoration:none;color:inherit}
+.sag-hdr{background:#0f1c3f;border-bottom:3px solid #c9a84c}
+.sag-hdr-in{max-width:1000px;margin:0 auto;padding:13px 22px;display:flex;align-items:center;gap:12px}
+.sag-logo{width:36px;height:36px;background:linear-gradient(135deg,#c9a84c,#a8832a);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.sag-ttl{color:#fff;font-size:13px;font-weight:800}
+.sag-sub{color:rgba(255,255,255,.5);font-size:10px;margin-top:1px}
+.user-area{margin-left:auto;display:flex;align-items:center;gap:10px}
+.user-name{color:rgba(255,255,255,.8);font-size:12px;font-weight:700}
+.user-role{background:rgba(201,168,76,.15);color:#c9a84c;border:1px solid rgba(201,168,76,.3);padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700}
+.lnk{color:rgba(255,255,255,.45);font-size:11px;padding:5px 10px;border:1px solid rgba(255,255,255,.15);border-radius:5px;transition:.15s}
+.lnk:hover{color:#fff;border-color:rgba(255,255,255,.4)}
+.wrap{max-width:1000px;margin:0 auto;padding:26px 22px}
+.page-title{font-size:21px;font-weight:800;color:#0f1c3f;letter-spacing:-.3px;margin-bottom:4px}
+.page-sub{color:#6b7280;font-size:12.5px;margin-bottom:18px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:11px;margin-bottom:20px}
+.sc{background:#fff;border-radius:9px;border:1px solid #e5e7eb;padding:14px;border-top:3px solid var(--a,#e5e7eb);box-shadow:0 1px 4px rgba(15,28,63,.05)}
+.sv{font-size:27px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--a,#0f1c3f);margin-bottom:4px}
+.sl{font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.card{background:#fff;border-radius:9px;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(15,28,63,.05);padding:18px;margin-bottom:14px}
+.ct{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#0f1c3f;margin-bottom:12px;display:flex;align-items:center;gap:9px}
+.ct::after{content:'';flex:1;height:1px;background:#e5e7eb}
+.badge{display:inline-flex;align-items:center;border-radius:5px;padding:2px 8px;font-size:10.5px;font-weight:700;white-space:nowrap}
+.br{background:#fff0f0;color:#dc2626;border:1px solid #fecaca}
+.by{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
+.bg{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.bb{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.bp{background:#faf5ff;color:#7c3aed;border:1px solid #e9d5ff}
+.bn{background:#0f1c3f;color:#fff;border:1px solid #1a2d5a}
+.bx{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb}
+.bd::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;display:inline-block;margin-right:3px}
+.tbl-w{overflow-x:auto;border-radius:8px;border:1px solid #e5e7eb}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{background:#f3f5fa;color:#374151;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:10px 14px;text-align:left;border-bottom:2px solid #e5e7eb;white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid #f2f4f8;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#f8f9fd}
+.rd td{background:#fff8f8!important}
+.ry td{background:#fffbeb!important}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 17px;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;border:none;font-family:inherit;transition:.13s;white-space:nowrap}
+.btn-n{background:#0f1c3f;color:#fff}
+.btn-n:hover{background:#1a2d5a}
+.btn-sm{padding:5px 11px;font-size:11px;border-radius:6px}
+.mono{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:#0f1c3f}
+.flash-s{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;padding:10px 14px;border-radius:7px;font-size:12.5px;font-weight:600;margin-bottom:14px}
+.flash-e{background:#fff5f5;color:#dc2626;border:1px solid #fca5a5;padding:10px 14px;border-radius:7px;font-size:12.5px;font-weight:600;margin-bottom:14px}
+@media(max-width:680px){.stat-grid{grid-template-columns:repeat(3,1fr)}.wrap{padding:14px}}
+</style>
+</head>
+<body>
+<div class="sag-hdr">
+  <div class="sag-hdr-in">
+    <div class="sag-logo">🛡</div>
+    <div><div class="sag-ttl">SAG Member Portal</div><div class="sag-sub">Safety Action Group · Jordan Aviation</div></div>
+    <div class="user-area">
+      <div>
+        <div class="user-name">{{ session.get('sag_name','SAG Member') }}</div>
+        <div class="user-role">{{ session.get('sag_role','SAG Member') }}</div>
+      </div>
+      <a href="/sag-logout" class="lnk">Logout</a>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat,msg in msgs %}
+  <div class="{{ 'flash-s' if cat=='success' else 'flash-e' }}">{{ '✓' if cat=='success' else '⚠' }} {{ msg }}</div>
+  {% endfor %}{% endwith %}
+
+  <div class="page-title">My SAG Actions</div>
+  <div class="page-sub">Actions assigned to you · Implement · Upload evidence · Submit for Safety Review</div>
+
+  <div class="stat-grid">
+    <div class="sc" style="--a:#dc2626"><div class="sv">{{ open_c }}</div><div class="sl">Open</div></div>
+    <div class="sc" style="--a:#1d4ed8"><div class="sv">{{ prog_c }}</div><div class="sl">In Progress</div></div>
+    <div class="sc" style="--a:#dc2626"><div class="sv">{{ overdue_c }}</div><div class="sl">Overdue</div></div>
+    <div class="sc" style="--a:#d97706"><div class="sv">{{ review_c }}</div><div class="sl">In Review</div></div>
+    <div class="sc" style="--a:#7c3aed"><div class="sv">{{ returned_c }}</div><div class="sl">Returned</div></div>
+    <div class="sc" style="--a:#15803d"><div class="sv">{{ closed_c }}</div><div class="sl">Closed</div></div>
+  </div>
+
+  {% if active_actions %}
+  <div class="card" style="padding:0">
+    <div style="padding:13px 17px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+      <div class="ct" style="margin:0">Active Actions</div>
+      <span style="font-size:12px;color:#6b7280">{{ active_actions|length }} action(s)</span>
+    </div>
+    <div class="tbl-w" style="border:none;border-radius:0">
+      <table>
+        <thead><tr><th>ID</th><th>Source</th><th>Description</th><th>Priority</th><th>Due Date</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for a in active_actions %}
+        {% set row_class = 'rd' if a.status=='Overdue' else ('ry' if a.status=='Returned' else '') %}
+        <tr class="{{ row_class }}">
+          <td><span class="mono">{{ a.id }}</span></td>
+          <td><span class="badge bx" style="font-size:10px">{{ a.source or 'Manual' }}</span></td>
+          <td style="max-width:200px;font-size:12px">{{ (a.description or '')[:55] }}{% if a.description and a.description|length>55 %}…{% endif %}</td>
+          <td>
+            {% if a.priority=='High' %}<span class="badge br" style="font-size:10px">{{ a.priority }}</span>
+            {% elif a.priority=='Medium' %}<span class="badge by" style="font-size:10px">{{ a.priority }}</span>
+            {% else %}<span class="badge bx" style="font-size:10px">{{ a.priority }}</span>{% endif %}
+          </td>
+          <td style="font-size:11px;font-family:monospace;{{ 'color:#dc2626;font-weight:700' if a.status=='Overdue' else '' }}">{{ a.due_date or '—' }}</td>
+          <td>
+            {% set sc = {'Open':'bb','Assigned':'bn','In Progress':'bb','Overdue':'br','Returned':'by','Mitigation Implemented':'bp','Under Safety Review':'bp','Closed':'bg'} %}
+            <span class="badge bd {{ sc.get(a.status,'bx') }}" style="font-size:10px">{{ a.status }}</span>
+          </td>
+          <td><a href="/sag/action/{{ a.id }}" class="btn btn-n btn-sm">Open →</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:48px;background:#fff;border-radius:9px;border:2px dashed #e5e7eb">
+    <div style="font-size:40px;margin-bottom:10px">✅</div>
+    <div style="font-size:15px;font-weight:800;color:#0f1c3f;margin-bottom:6px">No open actions</div>
+    <div style="font-size:13px;color:#6b7280">All your assigned actions are complete.</div>
+  </div>
+  {% endif %}
+
+  {% if closed_actions %}
+  <div class="card" style="padding:0;margin-top:12px">
+    <div style="padding:13px 17px;border-bottom:1px solid #e5e7eb"><div class="ct" style="margin:0">Recent Closed Actions</div></div>
+    <div class="tbl-w" style="border:none;border-radius:0">
+      <table>
+        <thead><tr><th>ID</th><th>Description</th><th>Closed</th><th>Effectiveness</th></tr></thead>
+        <tbody>
+        {% for a in closed_actions %}
+        <tr>
+          <td><span class="mono">{{ a.id }}</span></td>
+          <td style="font-size:12px">{{ (a.description or '')[:55] }}</td>
+          <td style="font-size:11px;font-family:monospace">{{ a.closed_date or '—' }}</td>
+          <td>
+            {% if a.effectiveness=='Effective' %}<span class="badge bg" style="font-size:10px">✓ Effective</span>
+            {% elif a.effectiveness %}<span class="badge by" style="font-size:10px">{{ a.effectiveness }}</span>
+            {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>
