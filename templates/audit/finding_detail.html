@@ -30,7 +30,7 @@
   <div>
     <div style="font-size:13px;font-weight:800;color:{{ sc }}">{{ finding.status }}</div>
     <div style="font-size:11px;color:var(--muted)">
-      {% if finding.assigned_to %}Assigned to: <strong>{{ finding.assigned_to }}</strong> ({{ finding.assigned_dept or '—' }}){% endif %}
+      {% if finding.assigned_to %}Assigned to: <strong>{{ finding.assigned_to }}</strong> ({{ finding.assigned_dept or '—' }}){% if linked_action and linked_action.sag_member %} · 🛡 SAG: <strong>{{ linked_action.sag_member }}</strong>{% endif %}{% endif %}
       {% if finding.cap_due_date %} · CAP Due: <strong>{{ finding.cap_due_date }}</strong>{% endif %}
       {% if finding.cap_completion_pct %} · Progress: <strong>{{ finding.cap_completion_pct }}%</strong>{% endif %}
     </div>
@@ -260,17 +260,40 @@
 
   <!-- 1. Assign (Auditor) -->
   {% if finding.status in ('Open',) %}
-  <div class="card">
-    <div class="card-title">Step 1 — Assign Finding to Auditee</div>
+  <div class="card" style="border-left:4px solid #c9a84c">
+    <div class="card-title">Step 1 — Assign Finding & Route to SAG Member</div>
     <form method="POST">
       <input type="hidden" name="form_action" value="assign"/>
-      <div class="g2">
-        <div class="fg"><label>Responsible Person *</label>
-          <input type="text" name="assigned_to" required placeholder="e.g. Ground Ops Manager"/></div>
-        <div class="fg"><label>Department</label>
-          <input type="text" name="assigned_dept" placeholder="e.g. Ground Operations"/></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="fg">
+          <label>Responsible Person *</label>
+          <input type="text" name="assigned_to" required placeholder="e.g. Ground Ops Manager"/>
+        </div>
+        <div class="fg">
+          <label>Department</label>
+          <input type="text" name="assigned_dept" placeholder="e.g. Ground Operations"/>
+        </div>
+        <div class="fg">
+          <label>🛡 Assign to SAG Member</label>
+          <select name="sag_member" style="border:1.5px solid var(--border);border-radius:7px;padding:8px 12px;font-size:13px;font-family:inherit;background:#fafbfe;width:100%">
+            <option value="">— No SAG Assignment —</option>
+            {% for u in sag_members %}
+            <option value="{{ u.username }}">{{ u.full_name or u.username }} · {{ u.sag_role }}</option>
+            {% endfor %}
+          </select>
+          <span style="font-size:10px;color:#6b7280">SAG member will receive this finding as an action in their portal</span>
+        </div>
+        <div class="fg">
+          <label>SAG Department</label>
+          <select name="department_id" style="border:1.5px solid var(--border);border-radius:7px;padding:8px 12px;font-size:13px;font-family:inherit;background:#fafbfe;width:100%">
+            <option value="">— Select Department —</option>
+            {% for d in all_departments %}
+            <option value="{{ d.id }}">{{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
-      <button type="submit" class="btn btn-nav">Assign Finding →</button>
+      <button type="submit" class="btn btn-nav">Assign Finding & Route to SAG →</button>
     </form>
   </div>
   {% endif %}
