@@ -4938,62 +4938,33 @@ def finding_detail(fid):
 
 @app.route('/audit-findings/<fid>/report')
 def finding_report(fid):
-    """Dynamic NCR (Non-Conformance Report) — pulls full lifecycle from DB."""
+    """Professional NCR (Non-Conformance Report) — full lifecycle."""
     finding  = AuditFinding.query.get_or_404(fid)
-    schedule = AuditSchedule.query.get(finding.schedule_id) if finding.schedule_id else None
-    evidence_file_list = [x.strip() for x in (finding.evidence_files or '').split(',') if x.strip()]
+    schedule = AuditSchedule.query.get(finding.schedule_id)
+    evidence_file_list = [x for x in (finding.evidence_files or '').split(',') if x]
 
-    # ── Source checklist item (what triggered the finding) ────────────────
-    checklist_item = getattr(finding, 'source_checklist_item', None)
-    if not checklist_item and finding.schedule_id:
-        # fallback: find by linked_finding_id
-        checklist_item = AuditChecklist.query.filter_by(
-            linked_finding_id=str(fid)).first()
-
-    # ── Linked Action (SAG workflow) ──────────────────────────────────────
-    linked_action  = Action.query.get(finding.linked_action_id) if finding.linked_action_id else None
+    # Load linked Action (SAG workflow)
+    linked_action = None
     action_history = []
-    if linked_action:
-        action_history = ActionHistory.query.filter_by(
-            action_id=linked_action.id
-        ).order_by(ActionHistory.changed_at).all()
+    if finding.linked_action_id:
+        linked_action = Action.query.get(finding.linked_action_id)
+        if linked_action:
+            action_history = ActionHistory.query.filter_by(
+                action_id=linked_action.id
+            ).order_by(ActionHistory.changed_at).all()
 
-    # ── SAG member user info ──────────────────────────────────────────────
-    sag_user = None
-    if linked_action and linked_action.sag_member:
-        sag_user = User.query.filter_by(username=linked_action.sag_member).first()
-
-    # ── Department info ───────────────────────────────────────────────────
-    dept = None
-    if schedule and schedule.department_id:
-        dept = Department.query.get(schedule.department_id)
-    elif linked_action and linked_action.department_id:
-        dept = Department.query.get(linked_action.department_id)
-
-    # ── Evidence from linked action ───────────────────────────────────────
-    action_evidence_files = []
-    if linked_action and linked_action.evidence_filename:
-        action_evidence_files = [linked_action.evidence_filename]
-
-    # ── NCR number ────────────────────────────────────────────────────────
+    # NCR number = finding ref or finding id
     ncr_number = finding.finding_ref or finding.id
 
     MONTHS = ['January','February','March','April','May','June',
               'July','August','September','October','November','December']
-
     return render_template('audit/finding_report.html',
-                           finding=finding,
-                           schedule=schedule,
-                           dept=dept,
-                           checklist_item=checklist_item,
+                           finding=finding, schedule=schedule,
+                           evidence_file_list=evidence_file_list,
                            linked_action=linked_action,
                            action_history=action_history,
-                           sag_user=sag_user,
-                           evidence_file_list=evidence_file_list,
-                           action_evidence_files=action_evidence_files,
                            ncr_number=ncr_number,
-                           now=datetime.utcnow(),
-                           MONTHS=MONTHS)
+                           now=datetime.utcnow(), MONTHS=MONTHS)
 
 
 @app.route('/audit-schedule/<sid>/final-report')
