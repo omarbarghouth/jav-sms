@@ -39,6 +39,26 @@
           {% for r in ["safety_officer","safety_manager","auditor","admin"] %}
           <option>{{ r }}</option>{% endfor %}
         </select></div>
+      <div class="fg"><label>SAG Role</label>
+        <select name="sag_role">
+          <option value="">— Not a SAG Member —</option>
+          <option value="Flight Operations SAG Member">Flight Operations SAG Member</option>
+          <option value="Ground Operations SAG Member">Ground Operations SAG Member</option>
+          <option value="Maintenance SAG Member">Maintenance SAG Member</option>
+          <option value="OCC SAG Member">OCC SAG Member</option>
+          <option value="Cabin Crew SAG Member">Cabin Crew SAG Member</option>
+          <option value="Quality/Audit SAG Member">Quality/Audit SAG Member</option>
+          <option value="Engineering SAG Member">Engineering SAG Member</option>
+        </select>
+        <span style="font-size:10px;color:#6b7280;margin-top:2px">SAG members can login at /sag-login to manage their assigned actions</span>
+      </div>
+      <div class="fg"><label>Department</label>
+        <select name="department_id">
+          <option value="">— Select Department —</option>
+          {% for d in all_departments %}
+          <option value="{{ d.id }}">{{ d.name }}</option>
+          {% endfor %}
+        </select></div>
       <button type="submit" class="btn btn-nav" style="width:100%">+ Add User</button>
     </form>
   </div>
