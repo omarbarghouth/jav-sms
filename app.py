@@ -4470,7 +4470,8 @@ def audit_execution(sid):
         all_findings_closed=all_findings_closed,
         all_findings_actioned=all_findings_actioned,
         all_actions_closed=all_actions_closed,
-        all_verified=all_verified)
+        all_verified=all_verified,
+        today_date=date.today().isoformat())
 
 @app.route('/audit-schedule/<sid>/start', methods=['POST'])
 def start_audit(sid):
@@ -4608,18 +4609,19 @@ def close_audit(sid):
                     flash(f'✗ Cannot close: Finding {finding.finding_ref} is not yet Closed '
                           f'(current status: {finding.status}).', 'error')
                     return redirect(url_for('audit_execution', sid=sid))
-    s.status        = 'Completed'
-    s.closure_date  = date.today().isoformat()
-    s.closed_by     = request.form.get('closed_by', 'Safety Manager')
-    s.final_remarks = request.form.get('final_remarks', '')
+    s.status          = 'Completed'
+    s.closure_date    = date.today().isoformat()
+    s.closed_by       = request.form.get('closed_by', 'Safety Manager')
+    s.final_remarks   = request.form.get('final_remarks', '')
     s.closing_meeting = request.form.get('closing_meeting', date.today().isoformat())
+    # Save additional review fields if columns exist
+    try:
+        s.audit_result      = request.form.get('audit_result', 'Satisfactory')
+        s.followup_required = request.form.get('followup_required', 'No')
+    except Exception:
+        pass
     db.session.commit()
-    flash(f'✓ Audit {sid} closed and marked Completed.', 'success')
-    return redirect(url_for('audit_execution', sid=sid))
-    s.final_remarks = request.form.get('final_remarks', '')
-    s.closing_meeting = request.form.get('closing_meeting', date.today().isoformat())
-    db.session.commit()
-    flash(f'✓ Audit {sid} closed successfully. All conditions met.', 'success')
+    flash(f'✓ Audit {sid} closed by Safety Department. Final report available.', 'success')
     return redirect(url_for('audit_execution', sid=sid))
 
 
