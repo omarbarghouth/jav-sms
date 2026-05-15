@@ -590,6 +590,8 @@ class AuditSchedule(db.Model):
     closure_date       = db.Column(db.String(20))
     closed_by          = db.Column(db.String(100))
     final_remarks      = db.Column(db.Text)
+    audit_result       = db.Column(db.String(80))
+    followup_required  = db.Column(db.String(10))
     created_at         = db.Column(db.DateTime, default=datetime.utcnow)
     department         = db.relationship('Department', foreign_keys=[department_id])
     checklist_items    = db.relationship('AuditChecklist', backref='schedule', lazy=True,
