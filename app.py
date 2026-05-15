@@ -7423,6 +7423,8 @@ with app.app_context():
                 "ALTER TABLE actions ADD COLUMN IF NOT EXISTS assigned_by VARCHAR(100)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS sag_role VARCHAR(80)",
                 "ALTER TABLE audit_schedules ADD COLUMN IF NOT EXISTS audit_result VARCHAR(80)",
+                "ALTER TABLE audit_findings ADD COLUMN IF NOT EXISTS finding_title VARCHAR(200)",
+                "ALTER TABLE audit_findings ADD COLUMN IF NOT EXISTS immediate_action TEXT",
                 "ALTER TABLE audit_schedules ADD COLUMN IF NOT EXISTS followup_required VARCHAR(10)",
                 "CREATE TABLE IF NOT EXISTS action_history (id SERIAL PRIMARY KEY, action_id VARCHAR(30) REFERENCES actions(id) ON DELETE CASCADE, changed_by VARCHAR(100), changed_at TIMESTAMP DEFAULT NOW(), from_status VARCHAR(50), to_status VARCHAR(50), notes TEXT, field_changed VARCHAR(50) DEFAULT 'status')",
             ]:
@@ -7433,23 +7435,39 @@ with app.app_context():
                     try: conn.rollback()
                     except: pass
 
+            # FAST BATCH: get all existing columns in ONE query
+            try:
+                conn.execute(sa_text("SET statement_timeout='6s'"))
+                tbl_names = list(migrations.keys())
+                result = conn.execute(sa_text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    "WHERE table_name = ANY(:tbls)"
+                ), {'tbls': tbl_names})
+                existing_cols = {}
+                for row in result:
+                    existing_cols.setdefault(row[0], set()).add(row[1])
+            except Exception:
+                existing_cols = {}
+
+            # Only ALTER for truly missing columns
             for table, columns in migrations.items():
+                seen = set()
+                table_existing = existing_cols.get(table, set())
                 for col_name, col_def in columns:
+                    if col_name in seen or col_name in table_existing:
+                        seen.add(col_name); continue
+                    seen.add(col_name)
                     try:
-                        result = conn.execute(sa_text(
-                            "SELECT column_name FROM information_schema.columns "
-                            "WHERE table_name = :tbl AND column_name = :col"
-                        ), {'tbl': table, 'col': col_name})
-                        if result.fetchone() is None:
-                            # Column doesn't exist — add it
-                            pg_def = col_def.replace('DATETIME', 'TIMESTAMP').replace('BOOLEAN DEFAULT 0', 'BOOLEAN DEFAULT FALSE').replace('BOOLEAN DEFAULT 1', 'BOOLEAN DEFAULT TRUE')
-                            conn.execute(sa_text(
-                                f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_name} {pg_def}'
-                            ))
-                            conn.commit()
-                            print(f'✅ Migration: added {table}.{col_name}')
-                    except Exception as e:
-                        # Column may already exist or table doesn't exist yet — safe to skip
+                        pg_def = (col_def
+                            .replace('DATETIME', 'TIMESTAMP')
+                            .replace('BOOLEAN DEFAULT 0', 'BOOLEAN DEFAULT FALSE')
+                            .replace('BOOLEAN DEFAULT 1', 'BOOLEAN DEFAULT TRUE'))
+                        conn.execute(sa_text(
+                            f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_name} {pg_def}'
+                        ))
+                        conn.commit()
+                        print(f'✅ Migration: added {table}.{col_name}')
+                    except Exception:
                         try: conn.rollback()
                         except: pass
     else:
