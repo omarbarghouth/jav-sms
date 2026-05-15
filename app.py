@@ -93,6 +93,10 @@ if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+_db_opts = {'pool_pre_ping': True, 'pool_recycle': 280, 'pool_timeout': 20}
+if 'postgresql' in _db_url or 'postgres' in _db_url:
+    _db_opts['connect_args'] = {'connect_timeout': 10}
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _db_opts
 app.secret_key = os.environ.get('SECRET_KEY', 'jav-sms-dev-only-change-in-prod')
 # IMPORTANT: Set a strong SECRET_KEY env var in production (Render dashboard)
 
@@ -4938,54 +4942,131 @@ def finding_detail(fid):
 
 @app.route('/audit-findings/<fid>/report')
 def finding_report(fid):
-    """Professional NCR (Non-Conformance Report) — full lifecycle."""
-    finding  = AuditFinding.query.get_or_404(fid)
-    schedule = AuditSchedule.query.get(finding.schedule_id)
-    evidence_file_list = [x for x in (finding.evidence_files or '').split(',') if x]
-
-    # Load linked Action (SAG workflow)
-    linked_action = None
-    action_history = []
-    if finding.linked_action_id:
-        linked_action = Action.query.get(finding.linked_action_id)
-        if linked_action:
-            action_history = ActionHistory.query.filter_by(
-                action_id=linked_action.id
-            ).order_by(ActionHistory.changed_at).all()
-
-    # NCR number = finding ref or finding id
-    ncr_number = finding.finding_ref or finding.id
-
-    MONTHS = ['January','February','March','April','May','June',
-              'July','August','September','October','November','December']
-    return render_template('audit/finding_report.html',
-                           finding=finding, schedule=schedule,
-                           evidence_file_list=evidence_file_list,
-                           linked_action=linked_action,
-                           action_history=action_history,
-                           ncr_number=ncr_number,
-                           now=datetime.utcnow(), MONTHS=MONTHS)
+    """Dynamic NCR Report — safe, fully defensive, full lifecycle."""
+    try:
+        finding  = AuditFinding.query.get_or_404(fid)
+        schedule = AuditSchedule.query.get(finding.schedule_id) if finding.schedule_id else None
+        evidence_file_list = [x.strip() for x in (finding.evidence_files or '').split(',') if x.strip()]
+        checklist_item = None
+        try:
+            checklist_item = AuditChecklist.query.filter_by(linked_finding_id=str(fid)).first()
+        except Exception: pass
+        linked_action  = None
+        action_history = []
+        sag_user       = None
+        action_evidence_files = []
+        if finding.linked_action_id:
+            try:
+                linked_action = Action.query.get(finding.linked_action_id)
+                if linked_action:
+                    action_history = ActionHistory.query.filter_by(
+                        action_id=linked_action.id).order_by(ActionHistory.changed_at).all()
+                    if linked_action.sag_member:
+                        sag_user = User.query.filter_by(username=linked_action.sag_member).first()
+                    if linked_action.evidence_filename:
+                        action_evidence_files = [linked_action.evidence_filename]
+            except Exception: pass
+        dept = None
+        try:
+            if schedule and schedule.department_id:
+                dept = Department.query.get(schedule.department_id)
+        except Exception: pass
+        ncr_number = finding.finding_ref or finding.id
+        MONTHS = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December']
+        return render_template('audit/finding_report.html',
+                               finding=finding, schedule=schedule, dept=dept,
+                               checklist_item=checklist_item,
+                               linked_action=linked_action, action_history=action_history,
+                               sag_user=sag_user, evidence_file_list=evidence_file_list,
+                               action_evidence_files=action_evidence_files,
+                               ncr_number=ncr_number, now=datetime.utcnow(), MONTHS=MONTHS)
+    except Exception as _e:
+        import traceback; traceback.print_exc()
+        return f"<h2>NCR Report Error</h2><pre>{_e}</pre><p><a href='/audit-findings/{fid}'>← Back to Finding</a></p>", 500
 
 
 @app.route('/audit-schedule/<sid>/final-report')
 def audit_final_report(sid):
-    """Full Final Audit Report — all findings + closures."""
-    schedule = AuditSchedule.query.get_or_404(sid)
-    plan = AuditPlan.query.get(schedule.plan_id) if schedule.plan_id else None
-    findings = AuditFinding.query.filter_by(schedule_id=sid).all()
-    # Overdue check
-    from datetime import date
-    for f in findings:
-        if f.cap_due_date and f.status not in ('Closed','Accepted'):
+    """Enterprise Aviation Final Audit & NCR/CAPA Report Package — safe rendering."""
+    try:
+        schedule = AuditSchedule.query.get_or_404(sid)
+        plan     = AuditPlan.query.get(schedule.plan_id) if schedule.plan_id else None
+        findings = AuditFinding.query.filter_by(schedule_id=sid)                       .order_by(AuditFinding.finding_ref).all()
+        checklist_items = []
+        try:
+            checklist_items = AuditChecklist.query.filter_by(schedule_id=sid)                                  .order_by(AuditChecklist.category, AuditChecklist.sequence).all()
+        except Exception: pass
+        # Safe overdue check
+        for f in findings:
+            if f.cap_due_date and f.status not in ('Closed','Accepted'):
+                try:
+                    if date.today() > date.fromisoformat(f.cap_due_date):
+                        f.status = 'Overdue'; f.cap_status = 'Overdue'
+                except Exception: pass
+        try: db.session.commit()
+        except Exception: db.session.rollback()
+        # Build finding_data safely — each item fully defensive
+        finding_data = []
+        for f in findings:
+            la = None; hist = []; sag_user = None; cl_item = None
+            ev_files = []; act_ev = []
             try:
-                if date.today() > date.fromisoformat(f.cap_due_date):
-                    f.status = 'Overdue'; f.cap_status = 'Overdue'
+                if f.linked_action_id:
+                    la = Action.query.get(f.linked_action_id)
             except Exception: pass
-    db.session.commit()
-    all_closed  = all(f.status == 'Closed' for f in findings) if findings else False
-    return render_template('audit/audit_final_report.html',
-                           schedule=schedule, plan=plan, findings=findings,
-                           all_closed=all_closed, now=datetime.utcnow())
+            try:
+                cl_item = AuditChecklist.query.filter_by(linked_finding_id=str(f.id)).first()
+            except Exception: pass
+            try:
+                ev_files = [x.strip() for x in (f.evidence_files or '').split(',') if x.strip()]
+            except Exception: pass
+            if la:
+                try:
+                    hist = ActionHistory.query.filter_by(action_id=la.id)                               .order_by(ActionHistory.changed_at).all()
+                except Exception: pass
+                try:
+                    if la.sag_member:
+                        sag_user = User.query.filter_by(username=la.sag_member).first()
+                except Exception: pass
+                try:
+                    if la.evidence_filename:
+                        act_ev = [la.evidence_filename]
+                except Exception: pass
+            finding_data.append({'finding':f,'action':la,'history':hist,
+                                  'sag_user':sag_user,'cl_item':cl_item,
+                                  'ev_files':ev_files,'act_ev':act_ev})
+        # Analytics — all safe
+        total       = len(findings)
+        closed      = sum(1 for f in findings if f.status=='Closed')
+        open_f      = sum(1 for f in findings if f.status not in ('Closed','Accepted'))
+        overdue     = sum(1 for f in findings if f.status=='Overdue')
+        major       = sum(1 for f in findings if (f.severity or '')=='Major')
+        minor       = sum(1 for f in findings if (f.severity or '')=='Minor')
+        critical    = sum(1 for f in findings if (f.severity or '')=='Critical')
+        observation = sum(1 for f in findings if (f.severity or '')=='Observation')
+        cl_total    = len(checklist_items)
+        cl_yes      = sum(1 for i in checklist_items if i.response=='Yes')
+        cl_no       = sum(1 for i in checklist_items if i.response=='No')
+        cl_na       = sum(1 for i in checklist_items if i.response=='N/A')
+        compliance_pct = round((cl_yes/cl_total*100) if cl_total>0 else 0)
+        dept = None
+        try:
+            if schedule.department_id:
+                dept = Department.query.get(schedule.department_id)
+        except Exception: pass
+        all_closed = (closed==total) if total>0 else True
+        return render_template('audit/audit_final_report.html',
+                               schedule=schedule, plan=plan, dept=dept,
+                               findings=findings, finding_data=finding_data,
+                               checklist_items=checklist_items, all_closed=all_closed,
+                               total=total, closed=closed, open_f=open_f, overdue=overdue,
+                               major=major, minor=minor, critical=critical, observation=observation,
+                               cl_total=cl_total, cl_yes=cl_yes, cl_no=cl_no, cl_na=cl_na,
+                               compliance_pct=compliance_pct, now=datetime.utcnow())
+    except Exception as _e:
+        import traceback; traceback.print_exc()
+        return f"<h2>Final Report Error</h2><pre>{_e}</pre><p><a href='/audit-schedule/{sid}'>← Back to Audit</a></p>", 500
 
 
 # ─── AUDIT ACTIONS ────────────────────────────────────────────────────────────
@@ -7015,7 +7096,10 @@ def ra_reassess(ra_id):
     return redirect(url_for('ra_wizard_step', hid=haz_id, step=4))
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as _e:
+        print(f'Warning: db.create_all() skipped: {_e}')
 
     # ── Safe column migration (PostgreSQL + SQLite compatible) ─────────────────
     # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
@@ -7333,6 +7417,8 @@ with app.app_context():
                 "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_risk_id VARCHAR(30)",
                 "ALTER TABLE actions ADD COLUMN IF NOT EXISTS assigned_by VARCHAR(100)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS sag_role VARCHAR(80)",
+                "ALTER TABLE audit_schedules ADD COLUMN IF NOT EXISTS audit_result VARCHAR(80)",
+                "ALTER TABLE audit_schedules ADD COLUMN IF NOT EXISTS followup_required VARCHAR(10)",
                 "CREATE TABLE IF NOT EXISTS action_history (id SERIAL PRIMARY KEY, action_id VARCHAR(30) REFERENCES actions(id) ON DELETE CASCADE, changed_by VARCHAR(100), changed_at TIMESTAMP DEFAULT NOW(), from_status VARCHAR(50), to_status VARCHAR(50), notes TEXT, field_changed VARCHAR(50) DEFAULT 'status')",
             ]:
                 try:
