@@ -474,42 +474,131 @@ def conf_report_review(rid):
 @require_login
 def dashboard():
     check_overdue_actions()
+    from sqlalchemy import func as sqf
+
+    # ── HAZARDS & REPORTS ─────────────────────────────────────────────────────
     total_haz   = Hazard.query.count()
     open_haz    = Hazard.query.filter_by(status='Open').count()
     intol       = Risk.query.filter_by(initial_tolerance='INTOLERABLE').count()
-    open_act    = Action.query.filter(Action.status.in_(['Open','In Progress','Overdue'])).count()
-    overdue_act = Action.query.filter_by(status='Overdue').count()
     asr_cnt     = ASRReport.query.count()
-    audit_cnt   = AuditSchedule.query.count()
-    moc_cnt     = MOC.query.count()
     inv_cnt     = Investigation.query.count()
-    doc_cnt     = SMSDocument.query.filter_by(status='Approved').count()
-    spi_alerts  = 0
+    hr_cnt      = HazardReport.query.count()
+
+    # ── ACTIONS ───────────────────────────────────────────────────────────────
+    open_act        = Action.query.filter(Action.status.in_(['Open','In Progress','Overdue'])).count()
+    overdue_act     = Action.query.filter_by(status='Overdue').count()
+    pending_review  = Action.query.filter(
+                          Action.status.in_(['Mitigation Implemented','Under Safety Review'])).count()
+    closed_act      = Action.query.filter_by(status='Closed').count()
+    total_act       = Action.query.count()
+    closure_rate    = round(closed_act / total_act * 100) if total_act > 0 else 0
+    unassigned_act  = Action.query.filter(
+                          (Action.sag_member == None) | (Action.sag_member == ''),
+                          Action.status.notin_(['Closed'])).count()
+
+    # ── AUDITS ────────────────────────────────────────────────────────────────
+    audit_cnt       = AuditSchedule.query.count()
+    active_audits   = AuditSchedule.query.filter_by(status='In Progress').count()
+    open_findings   = AuditFinding.query.filter(
+                          AuditFinding.status.notin_(['Closed','Accepted'])).count()
+    closed_findings = AuditFinding.query.filter_by(status='Closed').count()
+    total_findings  = AuditFinding.query.count()
+    finding_close_rate = round(closed_findings / total_findings * 100) if total_findings > 0 else 0
+    major_findings  = AuditFinding.query.filter_by(severity='Major').filter(
+                          AuditFinding.status.notin_(['Closed'])).count()
+    critical_findings = AuditFinding.query.filter_by(severity='Critical').filter(
+                          AuditFinding.status.notin_(['Closed'])).count()
+
+    # ── SPI ───────────────────────────────────────────────────────────────────
+    spi_alerts = spi_l2 = spi_l3 = 0
     for ind in SPIIndicator.query.all():
         recent = SPIData.query.filter_by(spi_id=ind.id).order_by(
                  SPIData.year.desc(), SPIData.month.desc()).first()
-        if recent and ind.alert_l1 and recent.rate and recent.rate >= ind.alert_l1:
-            spi_alerts += 1
-    recent_haz = Hazard.query.order_by(Hazard.created_at.desc()).limit(6).all()
-    recent_act = Action.query.filter(
-                 Action.status != 'Closed').order_by(Action.created_at.desc()).limit(5).all()
-    # Audit plan alerts for dashboard
+        if recent and recent.rate:
+            if ind.alert_l3 and recent.rate >= ind.alert_l3: spi_l3 += 1; spi_alerts += 1
+            elif ind.alert_l2 and recent.rate >= ind.alert_l2: spi_l2 += 1; spi_alerts += 1
+            elif ind.alert_l1 and recent.rate >= ind.alert_l1: spi_alerts += 1
+
+    # ── SAFETY PROMOTION ─────────────────────────────────────────────────────
+    try:
+        active_surveys    = SafetySurvey.query.filter_by(status='Active').count()
+        active_bulletins  = SafetyBulletin.query.filter_by(status='Active').count()
+        active_campaigns  = SafetyCampaign.query.filter_by(status='Active').count()
+    except Exception:
+        active_surveys = active_bulletins = active_campaigns = 0
+
+    # ── OTHER ─────────────────────────────────────────────────────────────────
+    moc_cnt     = MOC.query.count()
+    doc_cnt     = SMSDocument.query.filter_by(status='Approved').count()
+    ra_open     = RiskAssessment.query.filter(
+                      RiskAssessment.status.notin_(['Closed','Approved'])).count()
+
+    # ── RECENT RECORDS ────────────────────────────────────────────────────────
+    recent_haz      = Hazard.query.order_by(Hazard.created_at.desc()).limit(5).all()
+    recent_act      = Action.query.filter(Action.status != 'Closed')                          .order_by(Action.created_at.desc()).limit(6).all()
+    overdue_actions = Action.query.filter_by(status='Overdue')                          .order_by(Action.due_date).limit(8).all()
+    pending_review_list = Action.query.filter(
+                          Action.status.in_(['Mitigation Implemented','Under Safety Review']))                          .order_by(Action.due_date).limit(6).all()
+    critical_act    = Action.query.filter_by(priority='High')                          .filter(Action.status.notin_(['Closed'])).limit(6).all()
+    recent_findings = AuditFinding.query.filter(
+                          AuditFinding.status.notin_(['Closed']))                          .order_by(AuditFinding.created_at.desc()).limit(5).all()
+
+    # ── DEPT ANALYTICS ────────────────────────────────────────────────────────
+    dept_perf = []
+    for dept in Department.query.all():
+        d_total   = Action.query.filter_by(department_id=dept.id).count()
+        d_open    = Action.query.filter_by(department_id=dept.id)                        .filter(Action.status.notin_(['Closed'])).count()
+        d_overdue = Action.query.filter_by(department_id=dept.id, status='Overdue').count()
+        d_closed  = Action.query.filter_by(department_id=dept.id, status='Closed').count()
+        if d_total > 0:
+            dept_perf.append({
+                'dept': dept, 'total': d_total, 'open': d_open,
+                'overdue': d_overdue, 'closed': d_closed,
+                'rate': round(d_closed / d_total * 100)
+            })
+    dept_perf.sort(key=lambda x: x['overdue'], reverse=True)
+
+    # ── SEVERITY BREAKDOWN ────────────────────────────────────────────────────
+    sev_data = {
+        'Critical': AuditFinding.query.filter_by(severity='Critical').count(),
+        'Major':    AuditFinding.query.filter_by(severity='Major').count(),
+        'Minor':    AuditFinding.query.filter_by(severity='Minor').count(),
+        'Obs':      AuditFinding.query.filter_by(severity='Observation').count(),
+    }
+
+    # ── AUDIT PLAN ALERTS ─────────────────────────────────────────────────────
     now_month = datetime.now().month
     now_year  = datetime.now().year
-    plan_this_month = AuditPlan.query.filter_by(
-        year=now_year, month=now_month).filter(
-        AuditPlan.status != 'Completed').all()
+    plan_this_month = AuditPlan.query.filter_by(year=now_year, month=now_month)                          .filter(AuditPlan.status != 'Completed').all()
     plan_overdue = AuditPlan.query.filter(
-        AuditPlan.year == now_year,
-        AuditPlan.month < now_month,
-        AuditPlan.month != None,
-        AuditPlan.status != 'Completed').all()
+        AuditPlan.year == now_year, AuditPlan.month < now_month,
+        AuditPlan.month != None, AuditPlan.status != 'Completed').all()
+
     return render_template('dashboard/dashboard.html',
+        # Hazards
         total_haz=total_haz, open_haz=open_haz, intol=intol,
-        open_act=open_act, overdue_act=overdue_act,
-        asr_cnt=asr_cnt, audit_cnt=audit_cnt, moc_cnt=moc_cnt,
-        inv_cnt=inv_cnt, doc_cnt=doc_cnt, spi_alerts=spi_alerts,
+        asr_cnt=asr_cnt, hr_cnt=hr_cnt,
+        # Actions
+        open_act=open_act, overdue_act=overdue_act, pending_review=pending_review,
+        closed_act=closed_act, total_act=total_act, closure_rate=closure_rate,
+        unassigned_act=unassigned_act,
+        # Audits
+        audit_cnt=audit_cnt, active_audits=active_audits,
+        open_findings=open_findings, total_findings=total_findings,
+        finding_close_rate=finding_close_rate,
+        major_findings=major_findings, critical_findings=critical_findings,
+        # SPI
+        spi_alerts=spi_alerts, spi_l2=spi_l2, spi_l3=spi_l3,
+        # Safety Promotion
+        active_surveys=active_surveys, active_bulletins=active_bulletins,
+        active_campaigns=active_campaigns,
+        # Other
+        moc_cnt=moc_cnt, doc_cnt=doc_cnt, inv_cnt=inv_cnt, ra_open=ra_open,
+        # Lists
         recent_haz=recent_haz, recent_act=recent_act,
+        overdue_actions=overdue_actions, pending_review_list=pending_review_list,
+        critical_act=critical_act, recent_findings=recent_findings,
+        dept_perf=dept_perf, sev_data=sev_data,
         plan_this_month=plan_this_month, plan_overdue=plan_overdue)
 
 # ─── Hazard Report ────────────────────────────────────────────────────────────
