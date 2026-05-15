@@ -150,9 +150,10 @@
                      background:{% if item.response=='No' %}#fff8f8{% else %}#fff{% endif %}"/>
           </div>
 
-          <!-- Evidence upload (shown for all, mandatory highlight for NO) -->
+          <!-- NO expanded form: evidence + full finding details -->
           <div id="ev-row-{{ item.id }}" style="{% if item.response != 'No' %}display:none{% endif %}">
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:5px">
+            <!-- Evidence upload -->
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:5px;margin-bottom:8px">
               <input type="file" name="evidence_file_{{ item.id }}"
                      accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg,.gif"
                      style="font-size:11px;font-family:inherit;border:1px solid #fca5a5;
@@ -164,6 +165,54 @@
               </a>
               {% endif %}
             </div>
+
+            <!-- ── Finding Detail Form (expanded when NO selected) ───────── -->
+            {% if not item.linked_finding_id %}
+            <div style="background:#fff8f8;border:1.5px solid #fca5a5;border-radius:8px;padding:12px 14px;margin-top:4px">
+              <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#dc2626;margin-bottom:10px">
+                ⚠ Finding Details — Complete for NCR Generation
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+                <div>
+                  <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Finding Title *</div>
+                  <input type="text" name="finding_title_{{ item.id }}"
+                         placeholder="e.g. FOD Inspection Non-Compliance"
+                         style="width:100%;border:1px solid #fca5a5;border-radius:5px;padding:6px 8px;font-size:12px;background:#fff"/>
+                </div>
+                <div>
+                  <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Severity</div>
+                  <select name="finding_severity_{{ item.id }}"
+                          style="width:100%;border:1px solid #fca5a5;border-radius:5px;padding:6px 8px;font-size:12px;background:#fff">
+                    <option value="Minor">Minor — Level 1</option>
+                    <option value="Major">Major — Level 2</option>
+                    <option value="Critical">Critical — Level 3</option>
+                    <option value="Observation">Observation</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-bottom:8px">
+                <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Full Finding Description *</div>
+                <textarea name="finding_desc_{{ item.id }}" rows="3"
+                          placeholder="Detailed operational description of the non-conformance observed. Include location, time, conditions, personnel involved…"
+                          style="width:100%;border:1px solid #fca5a5;border-radius:5px;padding:6px 8px;font-size:12px;resize:vertical;background:#fff;font-family:inherit"></textarea>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div>
+                  <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Objective Evidence</div>
+                  <input type="text" name="finding_evidence_{{ item.id }}"
+                         placeholder="Observed factual evidence (photos, records reviewed, direct observation)"
+                         style="width:100%;border:1px solid #e5e7eb;border-radius:5px;padding:6px 8px;font-size:12px;background:#fff"/>
+                </div>
+                <div>
+                  <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px">Regulatory / SOP Reference</div>
+                  <input type="text" name="finding_require_{{ item.id }}"
+                         value="{{ item.item_ref or '' }}"
+                         placeholder="e.g. SMSM 6.3.2, SOP-GR-004, IOSA GRH 1.1.1"
+                         style="width:100%;border:1px solid #e5e7eb;border-radius:5px;padding:6px 8px;font-size:12px;background:#fff"/>
+                </div>
+              </div>
+            </div>
+            {% endif %}
           </div>
 
           <!-- Linked finding badge (if Finding was auto-created) -->
