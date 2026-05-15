@@ -57,6 +57,8 @@
   <div class="card">
     <div class="card-title">Finding Details (Auditor)</div>
     <table style="font-size:13px;width:100%">
+      <tr><td style="color:var(--muted);padding:5px 0;width:140px">Finding Title</td>
+          <td style="font-weight:700">{{ finding.finding_title or '—' }}</td></tr>
       <tr><td style="color:var(--muted);padding:5px 0;width:140px">Finding Ref</td>
           <td><strong>{{ finding.finding_ref }}</strong></td></tr>
       <tr><td style="color:var(--muted);padding:5px 0">Category</td>
@@ -335,6 +337,10 @@
     <form method="POST">
       <input type="hidden" name="form_action" value="submit_root_cause"/>
       <div class="sec">A. Root Cause Analysis</div>
+      <div class="fg"><label>Finding Title (Short Summary)</label>
+        <input type="text" name="finding_title" value="{{ finding.finding_title or '' }}"
+               placeholder="e.g. Ramp SOP Non-Compliance — Stand 204" style="border:1.5px solid var(--border);border-radius:7px;padding:8px 12px;font-size:13px;font-family:inherit;width:100%"/>
+      </div>
       <div class="fg"><label>Root Cause Description *</label>
         <textarea name="root_cause" required rows="3" placeholder="What is the root cause of this finding?">{{ finding.root_cause or '' }}</textarea></div>
       <div class="fg"><label>Investigation Notes</label>

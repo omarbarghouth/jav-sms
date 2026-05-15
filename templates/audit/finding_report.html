@@ -208,8 +208,12 @@ body{ font-family:Arial,sans-serif; font-size:9.5pt; color:#111; background:#fff
 </div>
 {% endif %}
 
-<div class="lbl-sm" style="margin-top:7px">Finding Description</div>
-<div class="tb-r" style="min-height:45px">{{ finding.description or '<span class="na">Not entered.</span>' }}</div>
+{% if finding.finding_title %}
+<div class="lbl-sm" style="margin-top:7px">Finding Title</div>
+<div style="font-size:11pt;font-weight:800;color:#dc2626;padding:5px 0;margin-bottom:4px">{{ finding.finding_title }}</div>
+{% endif %}
+<div class="lbl-sm" style="margin-top:7px">Full Finding Description</div>
+<div class="tb-r" style="min-height:45px">{% if finding.description %}{{ finding.description }}{% else %}<span class="na">Not entered.</span>{% endif %}</div>
 
 {% if finding.evidence %}
 <div class="lbl-sm">Auditor Objective Evidence / Observation</div>
@@ -348,8 +352,11 @@ body{ font-family:Arial,sans-serif; font-size:9.5pt; color:#111; background:#fff
 <div class="sh sh-red">Part 5: Immediate Corrective Action / Containment</div>
 <div class="tb" style="min-height:40px">
   {% set imm = finding.immediate_action or '' %}
+  {% if not imm and linked_action %}
+    {% set imm = linked_action.corrective_description or '' %}
+  {% endif %}
   {% if imm %}{{ imm }}
-  {% else %}<span class="na">Not yet submitted.</span>{% endif %}
+  {% else %}<span class="na">Pending SAG member submission.</span>{% endif %}
 </div>
 
 <!-- ═══════════════ PART 6: CORRECTIVE ACTION & MITIGATION ═════════════════ -->
