@@ -503,7 +503,7 @@ def dashboard():
                           AuditFinding.status.notin_(['Closed','Accepted'])).count()
     closed_findings = AuditFinding.query.filter_by(status='Closed').count()
     total_findings  = AuditFinding.query.count()
-    finding_close_rate = round(closed_findings / total_findings * 100) if total_findings > 0 else 0
+    finding_close_rate = round(closed_findings / total_findings * 100) if total_findings > 0 else 100
     major_findings  = AuditFinding.query.filter_by(severity='Major').filter(
                           AuditFinding.status.notin_(['Closed'])).count()
     critical_findings = AuditFinding.query.filter_by(severity='Critical').filter(
@@ -520,12 +520,16 @@ def dashboard():
             elif ind.alert_l1 and recent.rate >= ind.alert_l1: spi_alerts += 1
 
     # ── SAFETY PROMOTION ─────────────────────────────────────────────────────
+    active_surveys = active_bulletins = active_campaigns = 0
     try:
-        active_surveys    = SafetySurvey.query.filter_by(status='Active').count()
-        active_bulletins  = SafetyBulletin.query.filter_by(status='Active').count()
-        active_campaigns  = SafetyCampaign.query.filter_by(status='Active').count()
-    except Exception:
-        active_surveys = active_bulletins = active_campaigns = 0
+        active_surveys = SafetySurvey.query.filter_by(status='Active').count()
+    except Exception: pass
+    try:
+        active_bulletins = SafetyBulletin.query.filter_by(status='Active').count()
+    except Exception: pass
+    try:
+        active_campaigns = SafetyCampaign.query.filter_by(status='Active').count()
+    except Exception: pass
 
     # ── OTHER ─────────────────────────────────────────────────────────────────
     moc_cnt     = MOC.query.count()
