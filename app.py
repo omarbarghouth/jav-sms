@@ -355,8 +355,207 @@ def portal_asr():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  ADMIN LOGIN / LOGOUT
+#  MOBILE REPORTING PORTAL  (PWA-style aviation reporting)
 # ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/mobile')
+def mobile_home():
+    return render_template('mobile/mobile_home.html')
+
+
+@app.route('/mobile/hazard', methods=['GET', 'POST'])
+def mobile_hazard():
+    departments = Department.query.all()
+    if request.method == 'POST':
+        f = request.form
+        from datetime import date as _d
+        err = None
+        try:
+            # 1. Create Hazard record
+            haz = Hazard(
+                id             = new_id('HAZ'),
+                source         = 'Mobile Report',
+                classification = f.get('classification', 'Operational'),
+                generic_hazard = f.get('hazard_title', 'Mobile Report'),
+                specific_components = f.get('hazard_description', ''),
+                consequences   = f.get('consequences', ''),
+                status         = 'Open',
+                department_id  = int(f['dept_id']) if f.get('dept_id','').isdigit() else None,
+            )
+            db.session.add(haz)
+            db.session.flush()
+            # 2. Create HazardReport record
+            rep = HazardReport(
+                id             = new_id('HR'),
+                hazard_id      = haz.id,
+                department_id  = int(f['dept_id']) if f.get('dept_id','').isdigit() else None,
+                date           = f.get('occurrence_date', _d.today().isoformat()),
+                location       = f.get('location', ''),
+                description    = f.get('hazard_description', ''),
+                classification = f.get('classification', 'Operational'),
+                generic_hazard = f.get('hazard_title', ''),
+                consequences   = f.get('consequences', ''),
+                immediate_action = f.get('immediate_action', ''),
+                suggested_mitigation = f.get('suggested_mitigation', ''),
+                reporter       = f.get('reporter_name', '') or 'Anonymous',
+                reporter_severity = 'Medium',
+                status         = 'Submitted',
+            )
+            db.session.add(rep)
+            # 3. Handle photo upload
+            photo = request.files.get('photo')
+            if photo and photo.filename:
+                try:
+                    from werkzeug.utils import secure_filename as _sf
+                    import os
+                    ext = photo.filename.rsplit('.', 1)[-1].lower() if '.' in photo.filename else ''
+                    if ext in {'jpg','jpeg','png','gif','pdf','heic','bmp'}:
+                        fname = _sf(f'mobile_{rep.id}_{photo.filename}')
+                        updir = app.config.get('UPLOAD_FOLDER', 'uploads')
+                        os.makedirs(updir, exist_ok=True)
+                        photo.save(os.path.join(updir, fname))
+                except Exception:
+                    pass
+            db.session.commit()
+            return redirect(url_for('mobile_submitted', rtype='hazard', rid=rep.id))
+        except Exception as e:
+            db.session.rollback()
+            err = str(e)[:120]
+    else:
+        err = None
+    return render_template('mobile/mobile_hazard.html', departments=departments, error=err)
+
+
+@app.route('/mobile/asr', methods=['GET', 'POST'])
+def mobile_asr():
+    if request.method == 'POST':
+        f = request.form
+        from datetime import date as _d
+        err = None
+        try:
+            asr_id  = new_id('ASR')
+            # Build event description with any dynamic category extras
+            ev_desc = f.get('event_description', '')
+            extras  = [f'{k.replace("extra_","").replace("_"," ").title()}: {v}'
+                       for k,v in f.items() if k.startswith('extra_') and v]
+            if extras:
+                sep = chr(10)*2 + '--- Category Details ---' + chr(10)
+                ev_desc += sep + chr(10).join(extras)
+            rep = ASRReport(
+                id               = asr_id,
+                report_type      = f.get('report_type', 'Voluntary'),
+                occurrence_type  = f.get('event_category', ''),
+                captain          = f.get('reporter_name', ''),
+                captain_staff_no = f.get('staff_number', ''),
+                date             = f.get('occurrence_date', _d.today().isoformat()),
+                time_local       = f.get('time_local', ''),
+                time_utc         = f.get('time_utc', ''),
+                flight_no        = f.get('flight_number', ''),
+                route_from       = f.get('route_from', ''),
+                route_to         = f.get('route_to', ''),
+                diverted_to      = f.get('diversion_airport', ''),
+                squawk           = f.get('squawk', ''),
+                aircraft_type    = f.get('aircraft_type', ''),
+                registration     = f.get('registration', ''),
+                pax              = int(f['pax'])        if f.get('pax','').isdigit()            else None,
+                crew             = int(f['crew'])       if f.get('crew','').isdigit()           else None,
+                altitude_ft      = int(f['altitude'])   if f.get('altitude','').isdigit()       else None,
+                flight_phase     = f.get('flight_phase', ''),
+                weather_wind     = f.get('weather_wind', ''),
+                weather_vis_rvr  = f.get('visibility', ''),
+                weather_clouds   = f.get('clouds', ''),
+                weather_temp_c   = int(f['temperature']) if f.get('temperature','').lstrip('-').isdigit() else None,
+                weather_qnh      = int(f['qnh'])        if f.get('qnh','').isdigit()            else None,
+                runway           = f.get('runway', ''),
+                runway_state     = f.get('runway_condition', ''),
+                event_description= ev_desc,
+                action_taken     = f.get('immediate_actions', ''),
+                severity         = f.get('severity_level', 'C'),
+            )
+            db.session.add(rep)
+            db.session.commit()
+            return redirect(url_for('mobile_submitted', rtype='asr', rid=asr_id))
+        except Exception as e:
+            db.session.rollback()
+            err = str(e)[:120]
+        return render_template('mobile/mobile_asr.html', error=err)
+    return render_template('mobile/mobile_asr.html', error=None)
+
+
+@app.route('/mobile/confidential', methods=['GET', 'POST'])
+def mobile_confidential():
+    departments = Department.query.all()
+    if request.method == 'POST':
+        f = request.form
+        from datetime import date as _d
+        err = None
+        try:
+            from datetime import datetime as _dt
+            seq  = ConfidentialReport.query.count() + 1
+            ref  = 'CR-SMS-{:02d}'.format(seq)
+            rep  = ConfidentialReport(
+                ref_number    = ref,
+                date          = f.get('occurrence_date', _d.today().isoformat()),
+                location      = f.get('location', ''),
+                description   = f.get('description', ''),
+                consequences  = f.get('consequences', ''),
+                suggestion    = f.get('suggestion', ''),
+                department_id = int(f['dept_id']) if f.get('dept_id','').isdigit() else None,
+                position      = f.get('reporter_position', ''),
+                report_type   = 'Confidential',
+                status        = 'Submitted',
+            )
+            db.session.add(rep)
+            db.session.commit()
+            return redirect(url_for('mobile_submitted', rtype='confidential', rid=ref))
+        except Exception as e:
+            db.session.rollback()
+            err = str(e)[:120]
+    else:
+        err = None
+    return render_template('mobile/mobile_confidential.html', departments=departments, error=err)
+
+
+@app.route('/mobile/voluntary', methods=['GET', 'POST'])
+def mobile_voluntary():
+    departments = Department.query.all()
+    if request.method == 'POST':
+        f = request.form
+        from datetime import date as _d
+        err = None
+        try:
+            seq  = VoluntaryReport.query.count() + 1
+            ref  = 'VR-SMS-{:02d}'.format(seq)
+            rep  = VoluntaryReport(
+                ref_number    = ref,
+                date          = f.get('occurrence_date', _d.today().isoformat()),
+                location      = f.get('location', ''),
+                description   = f.get('description', ''),
+                consequences  = f.get('consequences', ''),
+                suggestion    = f.get('suggestion', ''),
+                reporter_name = f.get('reporter_name', '') or 'Anonymous',
+                position      = f.get('reporter_position', ''),
+                department_id = int(f['dept_id']) if f.get('dept_id','').isdigit() else None,
+                report_type   = 'Voluntary',
+                status        = 'Submitted',
+            )
+            db.session.add(rep)
+            db.session.commit()
+            return redirect(url_for('mobile_submitted', rtype='voluntary', rid=ref))
+        except Exception as e:
+            db.session.rollback()
+            err = str(e)[:120]
+    else:
+        err = None
+    return render_template('mobile/mobile_voluntary.html', departments=departments, error=err)
+
+
+@app.route('/mobile/submitted')
+def mobile_submitted():
+    return render_template('mobile/mobile_submitted.html',
+                           rtype=request.args.get('rtype','report'),
+                           rid=request.args.get('rid',''))
+
 
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
