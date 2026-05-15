@@ -3979,12 +3979,19 @@ def get_checklist_template(dept_code):
 @require_login
 def checklist_templates():
     """List all department checklist templates."""
-    templates = ChecklistTemplate.query.filter_by(is_active=True).all()
+    try:
+        templates = ChecklistTemplate.query.filter_by(is_active=True).all()
+    except Exception:
+        try:
+            templates = ChecklistTemplate.query.all()
+        except Exception:
+            templates = []
     return render_template('audit/checklist_templates.html',
                            templates=templates)
 
 
 @app.route('/audit-checklists/<int:dept_id>', methods=['GET','POST'])
+@require_login
 def checklist_template_dept(dept_id):
     """
     Editable checklist template for a specific department.
@@ -4059,13 +4066,19 @@ def checklist_template_dept(dept_id):
         return redirect(url_for('checklist_template_dept',
                                 dept_id=dept_id, audit_type=audit_type))
 
-    # GET — load active template
-    tmpl = ChecklistTemplate.query.filter_by(
-        department_id=dept_id, audit_type=audit_type, is_active=True
-    ).first()
-    all_versions = ChecklistTemplate.query.filter_by(
-        department_id=dept_id, audit_type=audit_type
-    ).order_by(ChecklistTemplate.version.desc()).all()
+    # GET — load active template (safe for PostgreSQL)
+    try:
+        tmpl = ChecklistTemplate.query.filter_by(
+            department_id=dept_id, audit_type=audit_type, is_active=True
+        ).first()
+    except Exception:
+        tmpl = None
+    try:
+        all_versions = ChecklistTemplate.query.filter_by(
+            department_id=dept_id, audit_type=audit_type
+        ).order_by(ChecklistTemplate.version.desc()).all()
+    except Exception:
+        all_versions = []
     # Group by category for display
     grouped = {}
     if tmpl:

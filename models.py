@@ -612,7 +612,6 @@ class ChecklistTemplate(db.Model):
     name          = db.Column(db.String(100))
     version       = db.Column(db.Integer, default=1)
     is_active     = db.Column(db.Boolean, default=True)
-    sag_role      = db.Column(db.String(80))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     department    = db.relationship('Department', foreign_keys=[department_id])
