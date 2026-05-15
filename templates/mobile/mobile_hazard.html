@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#0a1628"/>
+<title>Hazard Report</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>:root{--bg:#0a1628;--bg2:#111f3a;--card:#1a2846;--border:#2a3a5c;
+--gold:#c9a84c;--gold2:#a8832a;--text:#f0f4ff;--muted:rgba(240,244,255,.5);
+--red:#ef4444;--green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,sans-serif;
+ background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.5}
+a{text-decoration:none;color:inherit}
+.hdr{background:var(--bg2);border-bottom:2px solid var(--gold);padding:13px 18px;
+ display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;
+ -webkit-backdrop-filter:blur(10px)}
+.hdr-logo{width:34px;height:34px;background:linear-gradient(135deg,var(--gold),var(--gold2));
+ border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.hdr-ttl{font-size:13px;font-weight:800;letter-spacing:.2px}
+.hdr-sub{font-size:10px;color:var(--muted);margin-top:1px}
+.back{margin-left:auto;color:var(--muted);font-size:12px;padding:6px 12px;
+ border:1px solid var(--border);border-radius:7px;transition:.15s}
+.wrap{max-width:480px;margin:0 auto;padding:16px 16px 60px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.card-ttl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;
+ color:var(--gold);margin-bottom:12px}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.fg label{font-size:11px;font-weight:700;color:rgba(240,244,255,.65);
+ text-transform:uppercase;letter-spacing:.4px}
+.fg input,.fg select,.fg textarea{background:rgba(255,255,255,.06);
+ border:1.5px solid var(--border);border-radius:9px;padding:13px 14px;
+ color:var(--text);font-size:15px;font-family:inherit;width:100%;
+ -webkit-appearance:none;appearance:none;transition:.15s;line-height:1.4}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--gold);
+ outline:none;background:rgba(255,255,255,.09);box-shadow:0 0 0 3px rgba(201,168,76,.12)}
+.fg textarea{resize:vertical;min-height:90px;line-height:1.6}
+.fg select option{background:#1a2846;color:var(--text)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.pills{display:flex;flex-wrap:wrap;gap:7px}
+.pill{padding:9px 14px;border:1.5px solid var(--border);border-radius:99px;
+ font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;
+ transition:.15s;background:transparent;-webkit-user-select:none;user-select:none}
+.pill.sel{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.12)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;
+ font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;
+ transition:.15s;background:transparent;-webkit-user-select:none;user-select:none}
+.chip.sel{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,.1)}
+.dyn{background:rgba(255,255,255,.02);border:1px solid rgba(201,168,76,.2);
+ border-radius:10px;padding:14px;margin-top:8px;display:none}
+.dyn.on{display:block}
+.dyn-ttl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;
+ color:var(--gold);margin-bottom:10px}
+.steps{display:flex;gap:4px;margin-bottom:16px}
+.step{flex:1;height:3px;background:var(--border);border-radius:99px;transition:.3s}
+.step.done{background:var(--gold)}.step.cur{background:rgba(201,168,76,.5)}
+.pg{display:none}.pg.on{display:block}
+.btn-next{width:100%;padding:15px;border:none;border-radius:10px;
+ background:var(--gold);color:#0a1628;font-size:15px;font-weight:800;
+ cursor:pointer;font-family:inherit;margin-top:6px;transition:.15s}
+.btn-prev{width:100%;padding:15px;border:2px solid var(--border);border-radius:10px;
+ background:transparent;color:var(--muted);font-size:15px;font-weight:700;
+ cursor:pointer;font-family:inherit;margin-top:6px;transition:.15s}
+.btn-submit{width:100%;padding:16px;border:none;border-radius:12px;
+ background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0a1628;
+ font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;
+ box-shadow:0 4px 20px rgba(201,168,76,.3);transition:.15s;margin-top:8px}
+.btn-submit:active{transform:scale(.98)}
+.err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);
+ border-radius:8px;padding:11px 14px;color:var(--red);font-size:13px;margin-bottom:12px}
+.info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);
+ border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(240,244,255,.8);line-height:1.7}
+.anon-row{display:flex;align-items:center;justify-content:space-between;
+ padding:12px 0;border-top:1px solid var(--border);margin-top:4px}
+.anon-lbl{font-size:13px;font-weight:700}
+.anon-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.tog{width:44px;height:26px;background:var(--border);border-radius:99px;
+ cursor:pointer;position:relative;transition:.2s;border:none;flex-shrink:0}
+.tog.on{background:var(--green)}
+.tog::after{content:"";width:20px;height:20px;background:#fff;border-radius:50%;
+ position:absolute;top:3px;left:3px;transition:.2s}
+.tog.on::after{transform:translateX(18px)}</style>
+</head><body><div class="hdr">
+  <div class="hdr-logo">&#x26A0;&#xFE0F;</div>
+  <div><div class="hdr-ttl">Hazard Report</div><div class="hdr-sub">Jordan Aviation SMS</div></div>
+  <a href="/mobile" class="back">&#8592; Back</a>
+</div>
+<div class="wrap">
+  <div style="font-size:19px;font-weight:900;margin-bottom:4px">Report a Hazard</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Describe the unsafe condition or potential risk. Anonymous reporting supported.</div>
+  {% if error %}<div class="err">&#x26A0; {{ error }}</div>{% endif %}
+  <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:9px 13px;font-size:11px;color:rgba(240,244,255,.8);margin-bottom:14px">
+    &#x1F6E1; Non-Punitive &middot; Your report is protected &middot; Anonymous submission supported
+  </div>
+  <form method="POST" enctype="multipart/form-data">
+    <div class="card">
+      <div class="card-ttl">A. Hazard Information</div>
+      <div class="fg"><label>Hazard Title *</label>
+        <input type="text" name="hazard_title" required placeholder="Brief title of the hazard" autocomplete="off"/></div>
+      <div class="fg"><label>Hazard Description *</label>
+        <textarea name="hazard_description" required placeholder="Describe the unsafe condition in detail. What did you observe? Where exactly? When?"></textarea></div>
+      <div class="g2">
+        <div class="fg"><label>Location</label>
+          <input type="text" name="location" placeholder="Gate, Stand, Area..."/></div>
+        <div class="fg"><label>Date</label>
+          <input type="date" name="occurrence_date"/></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Time</label>
+          <input type="time" name="occurrence_time"/></div>
+        <div class="fg"><label>Flight No. (optional)</label>
+          <input type="text" name="flight_number" placeholder="RJ 110"/></div>
+      </div>
+      <div class="fg"><label>Classification</label>
+        <select name="classification">
+          <option value="Operational">Operational</option>
+          <option value="Technical">Technical</option>
+          <option value="Environmental">Environmental</option>
+          <option value="Human Factors">Human Factors</option>
+          <option value="Security">Security</option>
+          <option value="Ground Operations">Ground Operations</option>
+          <option value="Other">Other</option>
+        </select></div>
+      <div class="fg"><label>Department</label>
+        <select name="dept_id">
+          <option value="">&#8212; Select Department &#8212;</option>
+          {% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+        </select></div>
+      <div class="fg"><label>Potential Consequences</label>
+        <input type="text" name="consequences" placeholder="What could happen if not addressed?"/></div>
+      <div class="fg"><label>Immediate Action Taken</label>
+        <input type="text" name="immediate_action" placeholder="Any immediate action taken?"/></div>
+      <div class="fg"><label>Suggested Mitigation</label>
+        <input type="text" name="suggested_mitigation" placeholder="How should this be fixed?"/></div>
+    </div>
+    <div class="card">
+      <div class="card-ttl">B. Evidence (Optional)</div>
+      <div class="fg"><label>Upload Photo / Document</label>
+        <input type="file" name="photo" accept="image/*,.pdf"
+          style="color:var(--muted);font-size:13px;padding:10px 14px;border:1.5px solid var(--border);border-radius:9px;background:rgba(255,255,255,.04);width:100%"/>
+        <span style="font-size:11px;color:var(--muted)">Photo, screenshot or PDF &middot; Max 10MB</span></div>
+    </div>
+    <div class="card">
+      <div class="card-ttl">C. Reporter (Optional)</div>
+      <div class="anon-row">
+        <div><div class="anon-lbl">Submit Anonymously</div>
+        <div class="anon-sub">Identity will not be recorded</div></div>
+        <button type="button" class="tog" id="anon-tog" onclick="toggleAnon(this)"></button>
+      </div>
+      <div id="rep-fields">
+        <div class="fg" style="margin-top:12px"><label>Your Name</label>
+          <input type="text" name="reporter_name" id="rep-name" placeholder="Full name (optional)"/></div>
+        <div class="g2">
+          <div class="fg"><label>Position</label>
+            <input type="text" name="reporter_position" placeholder="e.g. Ground Ops"/></div>
+          <div class="fg"><label>Contact</label>
+            <input type="text" name="reporter_contact" placeholder="Ext. or email"/></div>
+        </div>
+      </div>
+    </div>
+    <button type="submit" class="btn-submit">&#x2705; Submit Hazard Report</button>
+  </form>
+</div>
+<script>
+function toggleAnon(btn){
+  btn.classList.toggle('on');
+  var anon=btn.classList.contains('on');
+  document.getElementById('rep-fields').style.opacity=anon?'0.3':'1';
+  document.getElementById('rep-name').value=anon?'Anonymous':'';
+}
+</script>
+</body></html>

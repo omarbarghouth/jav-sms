@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#0a1628"/>
+<title>Safety Reporting Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>:root{--bg:#0a1628;--bg2:#111f3a;--card:#1a2846;--border:#2a3a5c;
+--gold:#c9a84c;--gold2:#a8832a;--text:#f0f4ff;--muted:rgba(240,244,255,.5);
+--red:#ef4444;--green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,sans-serif;
+ background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.5}
+a{text-decoration:none;color:inherit}
+.hdr{background:var(--bg2);border-bottom:2px solid var(--gold);padding:13px 18px;
+ display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;
+ -webkit-backdrop-filter:blur(10px)}
+.hdr-logo{width:34px;height:34px;background:linear-gradient(135deg,var(--gold),var(--gold2));
+ border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.hdr-ttl{font-size:13px;font-weight:800;letter-spacing:.2px}
+.hdr-sub{font-size:10px;color:var(--muted);margin-top:1px}
+.back{margin-left:auto;color:var(--muted);font-size:12px;padding:6px 12px;
+ border:1px solid var(--border);border-radius:7px;transition:.15s}
+.wrap{max-width:480px;margin:0 auto;padding:16px 16px 60px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.card-ttl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;
+ color:var(--gold);margin-bottom:12px}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.fg label{font-size:11px;font-weight:700;color:rgba(240,244,255,.65);
+ text-transform:uppercase;letter-spacing:.4px}
+.fg input,.fg select,.fg textarea{background:rgba(255,255,255,.06);
+ border:1.5px solid var(--border);border-radius:9px;padding:13px 14px;
+ color:var(--text);font-size:15px;font-family:inherit;width:100%;
+ -webkit-appearance:none;appearance:none;transition:.15s;line-height:1.4}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--gold);
+ outline:none;background:rgba(255,255,255,.09);box-shadow:0 0 0 3px rgba(201,168,76,.12)}
+.fg textarea{resize:vertical;min-height:90px;line-height:1.6}
+.fg select option{background:#1a2846;color:var(--text)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.pills{display:flex;flex-wrap:wrap;gap:7px}
+.pill{padding:9px 14px;border:1.5px solid var(--border);border-radius:99px;
+ font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;
+ transition:.15s;background:transparent;-webkit-user-select:none;user-select:none}
+.pill.sel{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.12)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;
+ font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;
+ transition:.15s;background:transparent;-webkit-user-select:none;user-select:none}
+.chip.sel{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,.1)}
+.dyn{background:rgba(255,255,255,.02);border:1px solid rgba(201,168,76,.2);
+ border-radius:10px;padding:14px;margin-top:8px;display:none}
+.dyn.on{display:block}
+.dyn-ttl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;
+ color:var(--gold);margin-bottom:10px}
+.steps{display:flex;gap:4px;margin-bottom:16px}
+.step{flex:1;height:3px;background:var(--border);border-radius:99px;transition:.3s}
+.step.done{background:var(--gold)}.step.cur{background:rgba(201,168,76,.5)}
+.pg{display:none}.pg.on{display:block}
+.btn-next{width:100%;padding:15px;border:none;border-radius:10px;
+ background:var(--gold);color:#0a1628;font-size:15px;font-weight:800;
+ cursor:pointer;font-family:inherit;margin-top:6px;transition:.15s}
+.btn-prev{width:100%;padding:15px;border:2px solid var(--border);border-radius:10px;
+ background:transparent;color:var(--muted);font-size:15px;font-weight:700;
+ cursor:pointer;font-family:inherit;margin-top:6px;transition:.15s}
+.btn-submit{width:100%;padding:16px;border:none;border-radius:12px;
+ background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0a1628;
+ font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;
+ box-shadow:0 4px 20px rgba(201,168,76,.3);transition:.15s;margin-top:8px}
+.btn-submit:active{transform:scale(.98)}
+.err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);
+ border-radius:8px;padding:11px 14px;color:var(--red);font-size:13px;margin-bottom:12px}
+.info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);
+ border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(240,244,255,.8);line-height:1.7}
+.anon-row{display:flex;align-items:center;justify-content:space-between;
+ padding:12px 0;border-top:1px solid var(--border);margin-top:4px}
+.anon-lbl{font-size:13px;font-weight:700}
+.anon-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.tog{width:44px;height:26px;background:var(--border);border-radius:99px;
+ cursor:pointer;position:relative;transition:.2s;border:none;flex-shrink:0}
+.tog.on{background:var(--green)}
+.tog::after{content:"";width:20px;height:20px;background:#fff;border-radius:50%;
+ position:absolute;top:3px;left:3px;transition:.2s}
+.tog.on::after{transform:translateX(18px)}</style>
+</head><body>
+<style>
+.hero{text-align:center;padding:28px 0 20px}
+.hero-logo{width:72px;height:72px;background:linear-gradient(135deg,var(--gold),var(--gold2));
+ border-radius:20px;display:flex;align-items:center;justify-content:center;
+ font-size:34px;margin:0 auto 14px;box-shadow:0 8px 30px rgba(201,168,76,.3)}
+.hero-title{font-size:22px;font-weight:900;margin-bottom:6px;letter-spacing:-.2px}
+.hero-sub{font-size:13px;color:var(--muted);line-height:1.6;max-width:310px;margin:0 auto}
+.rpt-btn{display:flex;align-items:center;gap:14px;background:var(--card);
+ border:1.5px solid var(--border);border-radius:14px;padding:17px 16px;
+ margin-bottom:10px;cursor:pointer;transition:.15s;width:100%;color:var(--text)}
+.rpt-btn:active{transform:scale(.98);background:rgba(201,168,76,.07);border-color:var(--gold)}
+.rpt-icon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;
+ justify-content:center;font-size:22px;flex-shrink:0}
+.rpt-ttl{font-size:15px;font-weight:800;margin-bottom:3px}
+.rpt-desc{font-size:11px;color:var(--muted)}
+.rpt-arr{margin-left:auto;font-size:20px;color:var(--muted)}
+.soon{opacity:.4;pointer-events:none}
+.soon-badge{font-size:9px;font-weight:800;background:var(--border);color:var(--muted);
+ padding:2px 7px;border-radius:99px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px}
+.sec-lbl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;
+ color:var(--muted);padding:6px 0 8px;border-bottom:1px solid var(--border);margin:14px 0 10px}
+.hint{background:rgba(201,168,76,.07);border:1px solid rgba(201,168,76,.18);
+ border-radius:8px;padding:9px 13px;text-align:center;font-size:11px;color:var(--gold);margin-bottom:14px}
+.footer{text-align:center;font-size:11px;color:var(--muted);margin-top:22px;line-height:1.9}
+</style>
+<div class="hdr">
+  <div class="hdr-logo">&#x2708;</div>
+  <div><div class="hdr-ttl">Jordan Aviation</div><div class="hdr-sub">Safety Management System</div></div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="hero-logo">&#x1F6E1;</div>
+    <div class="hero-title">Safety Reporting Portal</div>
+    <div class="hero-sub">Support safety culture through easy and fast reporting. Every report makes us safer.</div>
+  </div>
+  <div class="hint">&#128241; Add to Home Screen for app-like experience</div>
+  <div class="sec-lbl">Primary Reports</div>
+  <a href="/mobile/hazard" class="rpt-btn">
+    <div class="rpt-icon" style="background:rgba(239,68,68,.15)">&#x26A0;&#xFE0F;</div>
+    <div><div class="rpt-ttl">Hazard Report</div>
+    <div class="rpt-desc">Report an unsafe condition, hazard, or potential risk</div></div>
+    <div class="rpt-arr">&#8250;</div>
+  </a>
+  <a href="/mobile/asr" class="rpt-btn">
+    <div class="rpt-icon" style="background:rgba(59,130,246,.15)">&#x2708;</div>
+    <div><div class="rpt-ttl">Air Safety Report (ASR)</div>
+    <div class="rpt-desc">Aviation occurrence and flight safety event reporting</div></div>
+    <div class="rpt-arr">&#8250;</div>
+  </a>
+  <a href="/mobile/confidential" class="rpt-btn">
+    <div class="rpt-icon" style="background:rgba(139,92,246,.15)">&#x1F512;</div>
+    <div><div class="rpt-ttl">Confidential Report</div>
+    <div class="rpt-desc">Strictly protected &#8212; restricted access safety report</div></div>
+    <div class="rpt-arr">&#8250;</div>
+  </a>
+  <a href="/mobile/voluntary" class="rpt-btn">
+    <div class="rpt-icon" style="background:rgba(34,197,94,.15)">&#x1F64B;</div>
+    <div><div class="rpt-ttl">Voluntary Safety Report</div>
+    <div class="rpt-desc">Share observations, near-miss events, and safety concerns</div></div>
+    <div class="rpt-arr">&#8250;</div>
+  </a>
+  <div class="sec-lbl" style="margin-top:18px">Coming Soon</div>
+  <div class="rpt-btn soon"><div class="rpt-icon" style="background:rgba(255,255,255,.04)">&#x1F634;</div>
+    <div><div class="rpt-ttl">Fatigue Report <span class="soon-badge">Soon</span></div>
+    <div class="rpt-desc">Duty time and fatigue level reporting</div></div></div>
+  <div class="rpt-btn soon"><div class="rpt-icon" style="background:rgba(255,255,255,.04)">&#x1F527;</div>
+    <div><div class="rpt-ttl">Technical Report <span class="soon-badge">Soon</span></div>
+    <div class="rpt-desc">Aircraft defects and MEL items</div></div></div>
+  <div class="rpt-btn soon"><div class="rpt-icon" style="background:rgba(255,255,255,.04)">&#x1F985;</div>
+    <div><div class="rpt-ttl">Wildlife Strike <span class="soon-badge">Soon</span></div>
+    <div class="rpt-desc">Bird strike and wildlife hazard reporting</div></div></div>
+  <div class="rpt-btn soon"><div class="rpt-icon" style="background:rgba(255,255,255,.04)">&#x1F6DE;</div>
+    <div><div class="rpt-ttl">Ground Damage Report <span class="soon-badge">Soon</span></div>
+    <div class="rpt-desc">Ground handling incidents and aircraft damage</div></div></div>
+  <div class="footer">
+    &#x1F6E1; Non-Punitive &middot; Confidential &middot; ICAO Annex 19 Compliant<br>
+    Reports reviewed by Safety Department within 48 hours<br>
+    <a href="/portal" style="color:var(--gold)">&#8592; Public Portal</a>
+    &nbsp;&middot;&nbsp;
+    <a href="/admin/login" style="color:var(--muted)">Admin</a>
+  </div>
+</div>
+</body></html>

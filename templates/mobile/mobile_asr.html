@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#0a1628"/>
+<title>Air Safety Report &#8212; Jordan Aviation</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>:root{--bg:#0a1628;--bg2:#111f3a;--card:#1a2846;--border:#2a3a5c;
+--gold:#c9a84c;--gold2:#a8832a;--text:#f0f4ff;--muted:rgba(240,244,255,.5);
+--red:#ef4444;--green:#22c55e;--blue:#3b82f6;--yellow:#f59e0b}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,sans-serif;
+ background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.5}
+a{text-decoration:none;color:inherit}
+.hdr{background:var(--bg2);border-bottom:2px solid var(--gold);padding:13px 18px;
+ display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;
+ -webkit-backdrop-filter:blur(10px)}
+.hdr-logo{width:34px;height:34px;background:linear-gradient(135deg,var(--gold),var(--gold2));
+ border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.hdr-ttl{font-size:13px;font-weight:800;letter-spacing:.2px}
+.hdr-sub{font-size:10px;color:var(--muted);margin-top:1px}
+.back{margin-left:auto;color:var(--muted);font-size:12px;padding:6px 12px;
+ border:1px solid var(--border);border-radius:7px;transition:.15s}
+.wrap{max-width:480px;margin:0 auto;padding:16px 16px 60px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.card-ttl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;
+ color:var(--gold);margin-bottom:12px}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.fg label{font-size:11px;font-weight:700;color:rgba(240,244,255,.65);
+ text-transform:uppercase;letter-spacing:.4px}
+.fg input,.fg select,.fg textarea{background:rgba(255,255,255,.06);
+ border:1.5px solid var(--border);border-radius:9px;padding:13px 14px;
+ color:var(--text);font-size:15px;font-family:inherit;width:100%;
+ -webkit-appearance:none;appearance:none;transition:.15s;line-height:1.4}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--gold);
+ outline:none;background:rgba(255,255,255,.09);box-shadow:0 0 0 3px rgba(201,168,76,.12)}
+.fg textarea{resize:vertical;min-height:90px;line-height:1.6}
+.fg select option{background:#1a2846;color:var(--text)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.pills{display:flex;flex-wrap:wrap;gap:7px}
+.pill{padding:9px 14px;border:1.5px solid var(--border);border-radius:99px;
+ font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;
+ transition:.15s;background:transparent;-webkit-user-select:none;user-select:none}
+.pill.sel{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.12)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;
+ font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;
+ transition:.15s;background:transparent;-webkit-user-select:none;user-select:none}
+.chip.sel{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,.1)}
+.dyn{background:rgba(255,255,255,.02);border:1px solid rgba(201,168,76,.2);
+ border-radius:10px;padding:14px;margin-top:8px;display:none}
+.dyn.on{display:block}
+.dyn-ttl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;
+ color:var(--gold);margin-bottom:10px}
+.steps{display:flex;gap:4px;margin-bottom:16px}
+.step{flex:1;height:3px;background:var(--border);border-radius:99px;transition:.3s}
+.step.done{background:var(--gold)}.step.cur{background:rgba(201,168,76,.5)}
+.pg{display:none}.pg.on{display:block}
+.btn-next{width:100%;padding:15px;border:none;border-radius:10px;
+ background:var(--gold);color:#0a1628;font-size:15px;font-weight:800;
+ cursor:pointer;font-family:inherit;margin-top:6px;transition:.15s}
+.btn-prev{width:100%;padding:15px;border:2px solid var(--border);border-radius:10px;
+ background:transparent;color:var(--muted);font-size:15px;font-weight:700;
+ cursor:pointer;font-family:inherit;margin-top:6px;transition:.15s}
+.btn-submit{width:100%;padding:16px;border:none;border-radius:12px;
+ background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0a1628;
+ font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;
+ box-shadow:0 4px 20px rgba(201,168,76,.3);transition:.15s;margin-top:8px}
+.btn-submit:active{transform:scale(.98)}
+.err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);
+ border-radius:8px;padding:11px 14px;color:var(--red);font-size:13px;margin-bottom:12px}
+.info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);
+ border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(240,244,255,.8);line-height:1.7}
+.anon-row{display:flex;align-items:center;justify-content:space-between;
+ padding:12px 0;border-top:1px solid var(--border);margin-top:4px}
+.anon-lbl{font-size:13px;font-weight:700}
+.anon-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.tog{width:44px;height:26px;background:var(--border);border-radius:99px;
+ cursor:pointer;position:relative;transition:.2s;border:none;flex-shrink:0}
+.tog.on{background:var(--green)}
+.tog::after{content:"";width:20px;height:20px;background:#fff;border-radius:50%;
+ position:absolute;top:3px;left:3px;transition:.2s}
+.tog.on::after{transform:translateX(18px)}
+.steps{display:flex;gap:4px;margin-bottom:16px}
+.step{flex:1;height:3px;background:var(--border);border-radius:99px;transition:.3s}
+.step.done{background:var(--gold)}.step.cur{background:rgba(201,168,76,.5)}
+.pg{display:none}.pg.on{display:block}
+.btn-next{width:100%;padding:15px;border:none;border-radius:10px;background:var(--gold);
+  color:#0a1628;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:6px;transition:.15s}
+.btn-prev{width:100%;padding:15px;border:2px solid var(--border);border-radius:10px;
+  background:transparent;color:var(--muted);font-size:15px;font-weight:700;
+  cursor:pointer;font-family:inherit;margin-top:6px;transition:.15s}
+.btn-submit{width:100%;padding:16px;border:none;border-radius:12px;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0a1628;
+  font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;
+  box-shadow:0 4px 20px rgba(201,168,76,.3);transition:.15s;margin-top:8px}
+.dyn{background:rgba(255,255,255,.02);border:1px solid rgba(201,168,76,.2);border-radius:10px;padding:14px;margin-top:8px;display:none}
+.dyn.on{display:block}
+.dyn-ttl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--gold);margin-bottom:10px}
+.pills{display:flex;flex-wrap:wrap;gap:7px}
+.pill{padding:9px 14px;border:1.5px solid var(--border);border-radius:99px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:.15s;background:transparent;-webkit-user-select:none;user-select:none}
+.pill.sel{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.12)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:.15s;background:transparent;-webkit-user-select:none;user-select:none}
+.chip.sel{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,.1)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+</style>
+</head><body>
+<div class="hdr">
+  <div class="hdr-logo">&#x2708;</div>
+  <div><div class="hdr-ttl">Air Safety Report (ASR)</div><div class="hdr-sub">Jordan Aviation SMS</div></div>
+  <a href="/mobile" class="back">&#8592; Back</a>
+</div>
+<div class="wrap">
+<div style="font-size:19px;font-weight:900;margin-bottom:4px">Air Safety Report</div>
+<div style="font-size:12px;color:var(--muted);margin-bottom:14px">ICAO-compliant occurrence reporting &middot; Complete all relevant sections</div>
+{% if error %}<div class="err">&#x26A0; {{ error }}</div>{% endif %}
+<div class="steps" id="steps-bar">
+  <div class="step cur" id="st0"></div><div class="step" id="st1"></div>
+  <div class="step" id="st2"></div><div class="step" id="st3"></div>
+  <div class="step" id="st4"></div><div class="step" id="st5"></div>
+</div>
+<form method="POST" id="asr-form">
+
+<!-- PAGE 0: Flight Information -->
+<div class="pg on" id="p0">
+  <div class="card">
+    <div class="card-ttl">Section 1 &#8212; Flight Information</div>
+    <div class="g2">
+      <div class="fg"><label>Flight Number</label><input type="text" name="flight_number" placeholder="RJ 110"/></div>
+      <div class="fg"><label>Date *</label><input type="date" name="occurrence_date" required/></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Time Local</label><input type="time" name="time_local"/></div>
+      <div class="fg"><label>Time UTC</label><input type="time" name="time_utc"/></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>From (ICAO)</label><input type="text" name="route_from" placeholder="OJAM" maxlength="4"/></div>
+      <div class="fg"><label>To (ICAO)</label><input type="text" name="route_to" placeholder="LLBG" maxlength="4"/></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Diversion</label><input type="text" name="diversion_airport" placeholder="ICAO code"/></div>
+      <div class="fg"><label>Squawk</label><input type="text" name="squawk" placeholder="7700" maxlength="4"/></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Aircraft Type</label><input type="text" name="aircraft_type" placeholder="B737-800"/></div>
+      <div class="fg"><label>Registration</label><input type="text" name="registration" placeholder="JY-JAX"/></div>
+    </div>
+    <div class="g3">
+      <div class="fg"><label>PAX</label><input type="number" name="pax" placeholder="0" min="0"/></div>
+      <div class="fg"><label>Crew</label><input type="number" name="crew" placeholder="0" min="0"/></div>
+      <div class="fg"><label>Altitude ft</label><input type="number" name="altitude" placeholder="35000"/></div>
+    </div>
+  </div>
+  <button type="button" class="btn-next" onclick="goPage(1)">Next: Flight Phase &#8250;</button>
+</div>
+
+<!-- PAGE 1: Phase + Weather -->
+<div class="pg" id="p1">
+  <div class="card">
+    <div class="card-ttl">Section 2 &#8212; Flight Phase</div>
+    <div class="pills" id="phase-pills">
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Parked')">Parked</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Pushback')">Pushback</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Taxi Out')">Taxi Out</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Takeoff Roll')">Takeoff Roll</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Initial Climb')">Initial Climb</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Climb')">Climb</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Cruise')">Cruise</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Descent')">Descent</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Holding')">Holding</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Approach')">Approach</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Landing')">Landing</div>
+      <div class="pill" onclick="selPill(this,'phase-pills','flight_phase','Taxi In')">Taxi In</div>
+    </div>
+    <input type="hidden" name="flight_phase" id="flight_phase"/>
+  </div>
+  <div class="card">
+    <div class="card-ttl">Section 3 &#8212; Weather Conditions</div>
+    <div class="g2">
+      <div class="fg"><label>IMC / VMC</label>
+        <select name="imc_vmc"><option value="">&#8212;</option><option>VMC</option><option>IMC</option><option>MVMC</option></select></div>
+      <div class="fg"><label>Wind</label><input type="text" name="weather_wind" placeholder="270/15KT"/></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Visibility / RVR</label><input type="text" name="visibility" placeholder="9999 / RVR 550"/></div>
+      <div class="fg"><label>Clouds</label><input type="text" name="clouds" placeholder="FEW020 BKN080"/></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Temp &#176;C</label><input type="number" name="temperature" placeholder="15"/></div>
+      <div class="fg"><label>QNH</label><input type="number" name="qnh" placeholder="1013"/></div>
+    </div>
+    <div class="fg"><label>Significant Weather</label>
+      <div class="chips" id="wx-chips">
+        <div class="chip" onclick="togChip(this)">Fog</div>
+        <div class="chip" onclick="togChip(this)">Drizzle</div>
+        <div class="chip" onclick="togChip(this)">Rain</div>
+        <div class="chip" onclick="togChip(this)">Snow</div>
+        <div class="chip" onclick="togChip(this)">Ice</div>
+        <div class="chip" onclick="togChip(this)">Turbulence</div>
+        <div class="chip" onclick="togChip(this)">Hail</div>
+        <div class="chip" onclick="togChip(this)">Standing Water</div>
+        <div class="chip" onclick="togChip(this)">Windshear</div>
+        <div class="chip" onclick="togChip(this)">Icing Conditions</div>
+      </div>
+      <input type="hidden" name="sig_weather" id="sig_weather"/>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-ttl">Section 4 &#8212; Runway &amp; Aircraft Config</div>
+    <div class="g2">
+      <div class="fg"><label>Runway</label><input type="text" name="runway" placeholder="26L" maxlength="4"/></div>
+      <div class="fg"><label>Runway Condition</label>
+        <select name="runway_condition">
+          <option value="">&#8212;</option>
+          <option>Dry</option><option>Wet</option><option>Snow</option>
+          <option>Slush</option><option>Ice</option><option>Standing Water</option>
+        </select></div>
+    </div>
+    <div class="fg"><label>Active Systems</label>
+      <div class="chips" id="sys-chips">
+        <div class="chip" onclick="togChip(this)">Auto Pilot</div>
+        <div class="chip" onclick="togChip(this)">Auto Thrust</div>
+        <div class="chip" onclick="togChip(this)">TCAS</div>
+        <div class="chip" onclick="togChip(this)">GPWS/TAWS</div>
+        <div class="chip" onclick="togChip(this)">Gear Down</div>
+        <div class="chip" onclick="togChip(this)">Flaps Extended</div>
+        <div class="chip" onclick="togChip(this)">Speed Brake</div>
+        <div class="chip" onclick="togChip(this)">Spoilers</div>
+      </div>
+      <input type="hidden" name="aircraft_systems" id="aircraft_systems"/>
+    </div>
+  </div>
+  <div class="g2">
+    <button type="button" class="btn-prev" onclick="goPage(0)">&#8592; Back</button>
+    <button type="button" class="btn-next" onclick="goPage(2)">Event Details &#8250;</button>
+  </div>
+</div>
+
+<!-- PAGE 2: Event Category + Dynamic Fields -->
+<div class="pg" id="p2">
+  <div class="card">
+    <div class="card-ttl">Section 8 &#8212; Event Category *</div>
+    <div class="fg">
+      <select name="event_category" id="cat-sel" onchange="showDyn(this.value)" required>
+        <option value="">&#8212; Select Occurrence Category &#8212;</option>
+        <option>Air Miss / TCAS RA</option>
+        <option>Bird Strike</option>
+        <option>Technical Failure</option>
+        <option>Unstable Approach</option>
+        <option>Go Around</option>
+        <option>Flight Control Issue</option>
+        <option>Fuel Issue</option>
+        <option>Cabin Safety Event</option>
+        <option>Smoke / Fire / Fumes</option>
+        <option>Weather Deviation</option>
+        <option>Runway Incursion</option>
+        <option>Tail Strike</option>
+        <option>Hard Landing</option>
+        <option>Communication Failure</option>
+        <option>Navigation Failure</option>
+        <option>Ground Damage</option>
+        <option>Security Event</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <!-- Air Miss / TCAS RA -->
+    <div class="dyn" id="dyn-tcas">
+      <div class="dyn-ttl">TCAS RA / Air Miss Details</div>
+      <div class="g2">
+        <div class="fg"><label>Vertical Separation</label><input type="text" name="extra_vertical_separation" placeholder="500ft"/></div>
+        <div class="fg"><label>Horizontal Separation</label><input type="text" name="extra_horizontal_separation" placeholder="0.5nm"/></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>TCAS Alert Type</label>
+          <select name="extra_tcas_alert_type"><option value="">&#8212;</option>
+            <option>RA - Climb</option><option>RA - Descend</option>
+            <option>RA - Maintain</option><option>TA Only</option></select></div>
+        <div class="fg"><label>RA Followed</label>
+          <select name="extra_ra_followed"><option value="">&#8212;</option><option>Yes</option><option>No</option></select></div>
+      </div>
+      <div class="fg"><label>Avoiding Action</label>
+        <input type="text" name="extra_avoiding_action" placeholder="Climbed 500ft immediately..."/></div>
+      <div class="fg"><label>Other Aircraft</label>
+        <input type="text" name="extra_other_aircraft" placeholder="B737, estimated FL350"/></div>
+    </div>
+    <!-- Bird Strike -->
+    <div class="dyn" id="dyn-bird">
+      <div class="dyn-ttl">Bird Strike Details</div>
+      <div class="g2">
+        <div class="fg"><label>Birds Seen</label><input type="number" name="extra_birds_seen" placeholder="0" min="0"/></div>
+        <div class="fg"><label>Birds Struck</label><input type="number" name="extra_birds_struck" placeholder="0" min="0"/></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Impact Point</label>
+          <select name="extra_impact_point"><option value="">&#8212;</option>
+            <option>Engine 1</option><option>Engine 2</option><option>Nose</option>
+            <option>Windshield</option><option>Wing</option><option>Tail</option><option>Multiple</option></select></div>
+        <div class="fg"><label>Aircraft Damage</label>
+          <select name="extra_aircraft_damage"><option value="">&#8212;</option>
+            <option>None</option><option>Minor</option><option>Moderate</option><option>Substantial</option></select></div>
+      </div>
+    </div>
+    <!-- Technical Failure -->
+    <div class="dyn" id="dyn-tech">
+      <div class="dyn-ttl">Technical Failure Details</div>
+      <div class="fg"><label>Affected System</label>
+        <select name="extra_affected_system"><option value="">&#8212;</option>
+          <option>Engines</option><option>Hydraulics</option><option>Electrical</option>
+          <option>Avionics</option><option>Flight Controls</option><option>Landing Gear</option>
+          <option>Pressurization</option><option>Fuel System</option><option>Navigation</option>
+          <option>Communication</option><option>APU</option><option>Other</option></select></div>
+      <div class="g2">
+        <div class="fg"><label>MEL/CDL Reference</label><input type="text" name="extra_mel_ref" placeholder="MEL 24-01"/></div>
+        <div class="fg"><label>Tech Log No.</label><input type="text" name="extra_tech_log" placeholder="TL-12345"/></div>
+      </div>
+      <div class="fg"><label>Deferred Defect</label>
+        <select name="extra_deferred"><option value="">&#8212;</option><option>Yes</option><option>No</option></select></div>
+    </div>
+    <!-- Weather -->
+    <div class="dyn" id="dyn-wx">
+      <div class="dyn-ttl">Weather Event Details</div>
+      <div class="g2">
+        <div class="fg"><label>Turbulence Severity</label>
+          <select name="extra_turbulence_severity"><option value="">&#8212;</option>
+            <option>Light</option><option>Moderate</option><option>Severe</option><option>Extreme</option></select></div>
+        <div class="fg"><label>Windshear Encounter</label>
+          <select name="extra_windshear"><option value="">&#8212;</option><option>Yes</option><option>No</option></select></div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Weather Radar Used</label>
+          <select name="extra_wx_radar"><option value="">&#8212;</option><option>Yes</option><option>No</option></select></div>
+        <div class="fg"><label>Diversion Decision</label>
+          <select name="extra_diversion"><option value="">&#8212;</option>
+            <option>Yes - Diverted</option><option>No - Continued</option></select></div>
+      </div>
+    </div>
+  </div>
+  <div class="g2">
+    <button type="button" class="btn-prev" onclick="goPage(1)">&#8592; Back</button>
+    <button type="button" class="btn-next" onclick="goPage(3)">Description &#8250;</button>
+  </div>
+</div>
+
+<!-- PAGE 3: Event Description -->
+<div class="pg" id="p3">
+  <div class="card">
+    <div class="card-ttl">Section 7 &#8212; Event Description</div>
+    <div class="fg"><label>Event Title *</label>
+      <input type="text" name="event_title" required placeholder="Brief title of the occurrence"/></div>
+    <div class="fg"><label>Full Description *</label>
+      <textarea name="event_description" required rows="5" placeholder="Describe what happened in chronological order. Include ATC, crew actions, aircraft behavior..."></textarea></div>
+    <div class="fg"><label>Immediate Crew Actions Taken</label>
+      <textarea name="immediate_actions" rows="3" placeholder="What did the crew do immediately?"></textarea></div>
+    <div class="fg"><label>Safety Consequences</label>
+      <input type="text" name="consequences" placeholder="Potential safety impact..."/></div>
+  </div>
+  <div class="card">
+    <div class="card-ttl">Severity &amp; Report Type</div>
+    <div class="g2">
+      <div class="fg"><label>Severity Level</label>
+        <select name="severity_level">
+          <option value="E">E &#8212; Catastrophic</option>
+          <option value="D">D &#8212; Hazardous</option>
+          <option value="C" selected>C &#8212; Major</option>
+          <option value="B">B &#8212; Minor</option>
+          <option value="A">A &#8212; Negligible</option>
+        </select></div>
+      <div class="fg"><label>Report Type</label>
+        <select name="report_type">
+          <option value="Mandatory">Mandatory</option>
+          <option value="Voluntary">Voluntary</option>
+          <option value="Confidential">Confidential</option>
+        </select></div>
+    </div>
+  </div>
+  <div class="g2">
+    <button type="button" class="btn-prev" onclick="goPage(2)">&#8592; Back</button>
+    <button type="button" class="btn-next" onclick="goPage(4)">Reporter &#8250;</button>
+  </div>
+</div>
+
+<!-- PAGE 4: Reporter -->
+<div class="pg" id="p4">
+  <div class="card">
+    <div class="card-ttl">Section 10 &#8212; Reporter Information</div>
+    <div class="fg"><label>Crew Position *</label>
+      <select name="crew_position">
+        <option value="">&#8212; Select &#8212;</option>
+        <option>Captain / PIC</option><option>First Officer / SIC</option>
+        <option>Cabin Crew</option><option>Ground Operations</option>
+        <option>Maintenance</option><option>ATC</option><option>Dispatcher</option><option>Other</option>
+      </select></div>
+    <div class="fg"><label>Name</label>
+      <input type="text" name="reporter_name" placeholder="Your name (optional)"/></div>
+    <div class="g2">
+      <div class="fg"><label>Staff Number</label>
+        <input type="text" name="staff_number" placeholder="JA-1234"/></div>
+      <div class="fg"><label>Contact</label>
+        <input type="text" name="reporter_contact" placeholder="Ext. / email"/></div>
+    </div>
+    <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px 14px;margin-top:6px;font-size:11px;color:rgba(240,244,255,.8);line-height:1.7">
+      &#x1F512; This report may be submitted voluntarily or confidentially.<br>
+      Reviewed by Safety Department within 48 hours.
+    </div>
+  </div>
+  <div class="g2">
+    <button type="button" class="btn-prev" onclick="goPage(3)">&#8592; Back</button>
+    <button type="button" class="btn-next" onclick="buildReview();goPage(5)">Review &#8250;</button>
+  </div>
+</div>
+
+<!-- PAGE 5: Review + Submit -->
+<div class="pg" id="p5">
+  <div class="card" style="border-color:rgba(201,168,76,.35)">
+    <div class="card-ttl" style="color:var(--gold)">Ready to Submit</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7">
+      Please verify your report. Once submitted, the Safety Department will be notified within minutes.
+    </div>
+    <div id="review-out" style="font-size:12px;background:rgba(255,255,255,.04);border-radius:8px;padding:12px;line-height:2.1"></div>
+  </div>
+  <button type="submit" class="btn-submit">&#x2708; Submit Air Safety Report</button>
+  <button type="button" class="btn-prev" style="margin-top:8px" onclick="goPage(4)">&#8592; Edit</button>
+</div>
+
+</form>
+</div>
+<script>
+var cur=0;
+function goPage(to){
+  syncChips('wx-chips','sig_weather');
+  syncChips('sys-chips','aircraft_systems');
+  document.getElementById('p'+cur).classList.remove('on');
+  cur=to;
+  document.getElementById('p'+cur).classList.add('on');
+  for(var i=0;i<6;i++){
+    var s=document.getElementById('st'+i);
+    s.className='step'+(i<cur?' done':i===cur?' cur':'');
+  }
+  window.scrollTo(0,0);
+}
+function selPill(el,gid,hidId,val){
+  document.querySelectorAll('#'+gid+' .pill').forEach(function(p){p.classList.remove('sel');});
+  el.classList.add('sel');
+  document.getElementById(hidId).value=val;
+}
+function togChip(el){
+  el.classList.toggle('sel');
+  var w=el.closest('.chips');
+  if(w&&w.id) syncChips(w.id,w.id.replace('-chips',''));
+}
+function syncChips(wid,hid){
+  var vals=[];
+  document.querySelectorAll('#'+wid+' .chip.sel').forEach(function(c){vals.push(c.textContent.trim());});
+  var h=document.getElementById(hid);
+  if(h) h.value=vals.join(', ');
+}
+var DYN_MAP={'Air Miss / TCAS RA':'dyn-tcas','Bird Strike':'dyn-bird','Technical Failure':'dyn-tech','Weather Deviation':'dyn-wx','Turbulence':'dyn-wx'};
+function showDyn(v){
+  document.querySelectorAll('.dyn').forEach(function(d){d.classList.remove('on');});
+  var id=DYN_MAP[v];
+  if(id) document.getElementById(id).classList.add('on');
+}
+function buildReview(){
+  var fd=new FormData(document.getElementById('asr-form'));
+  var keys=['flight_number','occurrence_date','route_from','route_to','aircraft_type',
+            'registration','flight_phase','event_category','event_description',
+            'severity_level','report_type','reporter_name','crew_position'];
+  var html='';
+  keys.forEach(function(k){
+    var v=fd.get(k);
+    if(v) html+='<div><strong style="color:rgba(240,244,255,.6);min-width:120px;display:inline-block">'+k.replace(/_/g,' ')+'</strong> '+v+'</div>';
+  });
+  document.getElementById('review-out').innerHTML=html||'<span style="color:var(--muted)">No data entered.</span>';
+}
+document.getElementById('asr-form').onsubmit=function(){
+  syncChips('wx-chips','sig_weather');
+  syncChips('sys-chips','aircraft_systems');
+  return true;
+};
+</script>
+</body></html>
