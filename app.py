@@ -2918,11 +2918,21 @@ def delete_hazard_report(rid):
         rep.hazard_id = None
         db.session.flush()
 
-        # Step 2: Delete the report row
+        # Step 2: Delete linked Actions from SAG Portal
+        try:
+            linked_acts = Action.query.filter_by(hazard_id=hid).all() if hid else []
+            linked_acts += Action.query.filter_by(linked_ref_id=rid).all()
+            for la in linked_acts:
+                ActionHistory.query.filter_by(action_id=la.id).delete(synchronize_session=False)
+                db.session.delete(la)
+            db.session.flush()
+        except Exception: pass
+
+        # Step 3: Delete the report row
         db.session.delete(rep)
         db.session.flush()
 
-        # Step 3: If a linked Hazard exists, cascade-delete everything under it
+        # Step 4: If a linked Hazard exists, cascade-delete everything under it
         if hid:
             # Nullify hazard_id on ALL tables that reference hazards.id
             tables_to_nullify = [
@@ -3067,6 +3077,18 @@ def delete_audit_schedule(sid):
         AuditChecklist.query.filter_by(schedule_id=sid).delete(synchronize_session=False)
         db.session.flush()
 
+        # Delete linked Actions from SAG Portal (linked to findings)
+        try:
+            if fids:
+                acts = Action.query.filter(
+                    Action.linked_ref_id.in_([str(fid) for fid in fids])
+                ).all()
+                for la in acts:
+                    ActionHistory.query.filter_by(action_id=la.id).delete(synchronize_session=False)
+                    db.session.delete(la)
+                db.session.flush()
+        except Exception: pass
+
         # Now delete findings
         for f in findings:
             db.session.delete(f)
@@ -3081,7 +3103,7 @@ def delete_audit_schedule(sid):
     return redirect(url_for('audit_schedule'))
 
 
-@app.route('/delete/audit-finding/<int:fid>', methods=['POST'])
+@app.route('/delete/audit-finding/<fid>', methods=['POST'])
 def delete_audit_finding(fid):
     """Safe delete finding: nullify linked_finding_id in checklists, delete actions first."""
     f = AuditFinding.query.get_or_404(fid)
@@ -3093,9 +3115,21 @@ def delete_audit_finding(fid):
         db.session.flush()
         AuditAction.query.filter_by(finding_id=str(fid)).delete(synchronize_session=False)
         db.session.flush()
+        # Delete linked Actions from SAG Portal
+        try:
+            linked_acts = Action.query.filter_by(linked_ref_id=str(fid)).all()
+            if f.linked_action_id:
+                la = Action.query.get(f.linked_action_id)
+                if la and la not in linked_acts:
+                    linked_acts.append(la)
+            for la in linked_acts:
+                ActionHistory.query.filter_by(action_id=la.id).delete(synchronize_session=False)
+                db.session.delete(la)
+            db.session.flush()
+        except Exception: pass
         db.session.delete(f)
         db.session.commit()
-        flash('✓ Audit Finding deleted.', 'success')
+        flash('✓ Audit Finding and linked SAG actions deleted.', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'⚠ Could not delete finding: {str(e)[:120]}', 'error')
@@ -3105,9 +3139,18 @@ def delete_audit_finding(fid):
 @app.route('/delete/investigation/<iid>', methods=['POST'])
 def delete_investigation(iid):
     inv = Investigation.query.get_or_404(iid)
-    db.session.delete(inv)
-    db.session.commit()
-    flash('✓ Investigation deleted.', 'success')
+    try:
+        linked_acts = Action.query.filter_by(linked_ref_id=str(iid)).all()
+        for la in linked_acts:
+            ActionHistory.query.filter_by(action_id=la.id).delete(synchronize_session=False)
+            db.session.delete(la)
+        db.session.flush()
+        db.session.delete(inv)
+        db.session.commit()
+        flash('✓ Investigation and linked SAG actions deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete: {str(e)[:120]}', 'error')
     return redirect('/investigations')
 
 
@@ -3710,7 +3753,20 @@ def sag_logout():
 def sag_dashboard():
     check_overdue_actions()
     username = session.get('sag_user', '')
-    my_actions = Action.query.filter_by(sag_member=username)                     .order_by(Action.due_date).all()
+    # Load only valid actions — filter orphaned ones (source deleted)
+    all_my = Action.query.filter_by(sag_member=username).order_by(Action.due_date).all()
+    my_actions = []
+    for _a in all_my:
+        try:
+            if _a.source == 'Audit Finding' and _a.linked_ref_id:
+                if not AuditFinding.query.get(_a.linked_ref_id):
+                    continue  # source finding deleted — skip orphan
+            if _a.source in ('Hazard Report','Hazard') and _a.hazard_id:
+                if not Hazard.query.get(_a.hazard_id):
+                    continue  # source hazard deleted — skip orphan
+        except Exception:
+            pass
+        my_actions.append(_a)
     open_c     = sum(1 for a in my_actions if a.status == 'Open')
     prog_c     = sum(1 for a in my_actions if a.status == 'In Progress')
     overdue_c  = sum(1 for a in my_actions if a.status == 'Overdue')
@@ -4612,17 +4668,23 @@ def save_checklist(sid):
             count       = AuditFinding.query.filter_by(schedule_id=sid).count() + len(new_findings) + 1
             finding_ref = f'F-{count:03d}'
             fid = new_id('FND')
+            # Get auditor-entered finding details (if provided via expanded form)
+            _ftitle    = request.form.get(f'finding_title_{item.id}', '').strip()
+            _fdesc     = request.form.get(f'finding_desc_{item.id}', '').strip()
+            _fevidence = request.form.get(f'finding_evidence_{item.id}', '').strip()
+            _fseverity = request.form.get(f'finding_severity_{item.id}', 'Minor')
+            _frequire  = request.form.get(f'finding_require_{item.id}', '').strip()
             finding = AuditFinding(
-                id          = fid,
-                schedule_id = sid,
-                finding_ref = finding_ref,
-                # Inherit checklist metadata
-                description  = item.question or '',
+                id           = fid,
+                schedule_id  = sid,
+                finding_ref  = finding_ref,
+                finding_title = _ftitle or f'Non-Conformance: {item.item_ref}',
+                description  = _fdesc or item.question or '',
                 category     = item.category or 'Operational',
-                severity     = 'Minor',
-                standard_ref = item.item_ref or '',
+                severity     = _fseverity,
+                standard_ref = _frequire or item.item_ref or '',
                 requirement  = item.question or '',
-                evidence     = item.comment or item.evidence or '',
+                evidence     = _fevidence or item.comment or item.evidence or '',
                 assigned_to  = s.lead_auditor or '',
                 status       = 'Open',
             )
