@@ -160,10 +160,15 @@ def check_overdue_actions():
 
 @app.context_processor
 def inject_globals():
-    depts = Department.query.all()
-    now   = datetime.utcnow()
-    # Count overdue actions for nav badge
-    overdue = Action.query.filter_by(status='Overdue').count()
+    try:
+        depts = Department.query.all()
+    except Exception:
+        depts = []
+    try:
+        overdue = Action.query.filter_by(status='Overdue').count()
+    except Exception:
+        overdue = 0
+    now = datetime.utcnow()
     return dict(all_departments=depts, now=now, get_tolerance=get_tolerance,
                 nav_overdue=overdue, enumerate=enumerate)
 
