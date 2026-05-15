@@ -667,6 +667,7 @@ class AuditFinding(db.Model):
     id             = db.Column(db.String(30), primary_key=True)
     schedule_id    = db.Column(db.String(30), db.ForeignKey('audit_schedules.id'))
     finding_ref    = db.Column(db.String(30))    # e.g. F-001
+    finding_title  = db.Column(db.String(200))   # short NCR title
     description    = db.Column(db.Text)
     category       = db.Column(db.String(50))
     severity       = db.Column(db.String(20))    # Major / Minor / Observation
