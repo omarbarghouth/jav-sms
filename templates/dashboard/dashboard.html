@@ -1,156 +1,406 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Jordan Aviation SMS{% endblock %}
+{% block title %}Safety Operations Center — Jordan Aviation{% endblock %}
 {% block content %}
 
-<div class="page-title">Safety Management System</div>
-<div class="page-sub">Jordan Aviation · ICAO Annex 19 · IOSA Compliant</div>
-
-<!-- 4 Pillar health cards -->
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px">
-  <div style="background:#fff;border:1.5px solid #1e40af30;border-radius:10px;padding:16px;border-top:3px solid #1e40af">
-    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e40af;margin-bottom:8px">① Safety Policy</div>
-    <div style="font-size:26px;font-weight:800;color:var(--navy);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">{{ doc_cnt }}</div>
-    <div style="font-size:11px;color:var(--muted)">Approved documents</div>
+<!-- Page Header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title" style="font-size:22px">✈ Safety Operations Center</div>
+    <div class="page-sub">Real-time safety governance dashboard · Jordan Aviation SMS · {{ now.strftime('%d %B %Y %H:%M') }} UTC</div>
   </div>
-  <div style="background:#fff;border:1.5px solid #dc262630;border-radius:10px;padding:16px;border-top:3px solid #dc2626">
-    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#dc2626;margin-bottom:8px">② Risk Management</div>
-    <div style="font-size:26px;font-weight:800;color:var(--navy);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">{{ open_haz }}</div>
-    <div style="font-size:11px;color:var(--muted)">Open hazards</div>
-    {% if intol > 0 %}<div style="font-size:11px;color:#dc2626;font-weight:700;margin-top:4px">⚠ {{ intol }} intolerable</div>{% endif %}
-  </div>
-  <div style="background:#fff;border:1.5px solid #06574630;border-radius:10px;padding:16px;border-top:3px solid #065f46">
-    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#065f46;margin-bottom:8px">③ Safety Assurance</div>
-    <div style="font-size:26px;font-weight:800;color:var(--navy);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">{{ audit_cnt }}</div>
-    <div style="font-size:11px;color:var(--muted)">Audits · {{ inv_cnt }} investigations</div>
-    {% if spi_alerts > 0 %}<div style="font-size:11px;color:#d97706;font-weight:700;margin-top:4px">⚠ {{ spi_alerts }} SPI alert{{ 's' if spi_alerts != 1 }}</div>{% endif %}
-  </div>
-  <div style="background:#fff;border:1.5px solid #7c3aed30;border-radius:10px;padding:16px;border-top:3px solid #7c3aed">
-    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#7c3aed;margin-bottom:8px">Actions</div>
-    <div style="font-size:26px;font-weight:800;color:var(--navy);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">{{ open_act }}</div>
-    <div style="font-size:11px;color:var(--muted)">Open actions</div>
-    {% if overdue_act > 0 %}<div style="font-size:11px;color:#dc2626;font-weight:700;margin-top:4px">🔴 {{ overdue_act }} overdue</div>{% endif %}
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/hazard-reports/new" class="btn btn-gold btn-sm">+ Hazard Report</a>
+    <a href="/audit-dashboard"    class="btn btn-nav btn-sm">📋 Audits</a>
+    <a href="/sag/governance"     class="btn btn-nav btn-sm">🛡 SAG</a>
+    <a href="/spi"                class="btn btn-nav btn-sm">📈 SPI</a>
   </div>
 </div>
 
-<!-- Stat row -->
-<!-- Audit Plan Alerts -->
-{% if plan_this_month %}
-<div style="background:#fef9c3;border:2px solid #f59e0b;border-radius:10px;padding:13px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
-  <span style="font-size:20px">🔔</span>
-  <div style="flex:1">
-    <strong style="color:#92400e;font-size:13px">{{ plan_this_month|length }} audit{{ 's' if plan_this_month|length > 1 }} planned this month</strong>
-    <div style="font-size:12px;color:#374151;margin-top:3px">
-      {% for p in plan_this_month %}
-      {{ p.audit_type }} · {{ p.department.name if p.department else '—' }}{% if not loop.last %} &nbsp;|&nbsp; {% endif %}
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION 1 — EXECUTIVE KPI OVERVIEW
+════════════════════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
+  {% set kpis = [
+    ('Open Hazards',       open_haz,         '/hazards',           '#dc2626', '⚠'),
+    ('Open Findings',      open_findings,     '/audit-findings',    '#dc2626', '📋'),
+    ('Overdue Actions',    overdue_act,       '/actions',           '#dc2626', '🔴'),
+    ('Pending SAG Review', pending_review,    '/sag/governance',    '#d97706', '⏳'),
+    ('SPI Alerts',         spi_alerts,        '/spi',               '#d97706' if spi_alerts>0 else '#15803d', '📈'),
+    ('Open RA',            ra_open,           '/risk-assessments',  '#374151', '🔺'),
+    ('Unassigned Actions', unassigned_act,    '/sag/governance',    '#6b7280', '👤'),
+    ('Active Surveys',     active_surveys,    '/safety-promotion',  '#1d4ed8', '📊'),
+    ('Closure Rate',       closure_rate,      '/actions',           '#15803d', '✓'),
+    ('Finding Close Rate', finding_close_rate,'/audit-findings',    '#15803d', '📑'),
+  ] %}
+  {% for label, val, href, color, icon in kpis %}
+  <a href="{{ href }}" style="text-decoration:none">
+    <div class="stat-card" style="--accent:{{ color }};border-top:3px solid {{ color }};cursor:pointer;transition:.15s;display:block"
+         onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+      <div style="font-size:18px;margin-bottom:4px">{{ icon }}</div>
+      <div class="stat-val" style="color:{{ color }};font-size:22px">{{ val }}{% if 'Rate' in label %}%{% endif %}</div>
+      <div class="stat-lbl">{{ label }}</div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION 2 — ALERTS CENTER + ACTION GOVERNANCE
+════════════════════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Overdue Actions Alert -->
+  <div class="card" style="border-left:4px solid #dc2626;padding:0">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title" style="margin:0;color:#dc2626">🚨 Overdue Actions ({{ overdue_act }})</div>
+      <a href="/actions" class="btn btn-sm btn-outline" style="font-size:11px">View All →</a>
+    </div>
+    {% if overdue_actions %}
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#fef2f2">
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626">Action</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626">Description</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626">SAG Member</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626">Due</th>
+        </tr></thead>
+        <tbody>
+        {% for a in overdue_actions %}
+        <tr style="border-bottom:1px solid #fee2e2" onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background=''">
+          <td style="padding:7px 12px"><a href="/actions/{{ a.id }}" style="font-family:monospace;font-weight:700;font-size:11px;color:#dc2626">{{ a.id }}</a></td>
+          <td style="padding:7px 12px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ (a.description or '')[:45] }}</td>
+          <td style="padding:7px 12px;color:{% if not a.sag_member %}#dc2626;font-weight:700{% else %}#374151{% endif %}">{{ a.sag_member or '⚠ Unassigned' }}</td>
+          <td style="padding:7px 12px;font-family:monospace;font-size:11px;color:#dc2626;font-weight:700">{{ a.due_date or '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="padding:24px;text-align:center;color:#15803d;font-weight:600">✓ No overdue actions</div>
+    {% endif %}
+  </div>
+
+  <!-- Pending Safety Review -->
+  <div class="card" style="border-left:4px solid #d97706;padding:0">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title" style="margin:0;color:#d97706">⏳ Pending Safety Review ({{ pending_review }})</div>
+      <a href="/sag/governance" class="btn btn-sm btn-outline" style="font-size:11px">Review →</a>
+    </div>
+    {% if pending_review_list %}
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#fffbeb">
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#b45309">Action</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#b45309">Description</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#b45309">SAG Member</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#b45309">Status</th>
+        </tr></thead>
+        <tbody>
+        {% for a in pending_review_list %}
+        <tr style="border-bottom:1px solid #fde68a" onmouseover="this.style.background='#fffbeb'" onmouseout="this.style.background=''">
+          <td style="padding:7px 12px"><a href="/actions/{{ a.id }}" style="font-family:monospace;font-weight:700;font-size:11px;color:#1d4ed8">{{ a.id }}</a></td>
+          <td style="padding:7px 12px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ (a.description or '')[:45] }}</td>
+          <td style="padding:7px 12px">{{ a.sag_member or '—' }}</td>
+          <td style="padding:7px 12px"><span style="background:#fef3c7;color:#92400e;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700">{{ a.status }}</span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="padding:24px;text-align:center;color:#15803d;font-weight:600">✓ No pending reviews</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION 3 — AUDIT GOVERNANCE + DEPT PERFORMANCE
+════════════════════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Open Findings -->
+  <div class="card" style="padding:0">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title" style="margin:0">📋 Open Audit Findings ({{ open_findings }})</div>
+      <a href="/audit-findings" class="btn btn-sm btn-outline" style="font-size:11px">All Findings →</a>
+    </div>
+    <!-- Severity breakdown bar -->
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:8px;font-size:11px;margin-bottom:6px">
+        {% for sev, cnt, col in [('Critical', sev_data.Critical, '#dc2626'), ('Major', sev_data.Major, '#ea580c'), ('Minor', sev_data.Minor, '#d97706'), ('Obs', sev_data.Obs, '#1d4ed8')] %}
+        <span style="display:flex;align-items:center;gap:3px">
+          <span style="width:8px;height:8px;border-radius:50%;background:{{ col }};display:inline-block"></span>
+          {{ sev }}: <strong>{{ cnt }}</strong>
+        </span>
+        {% endfor %}
+      </div>
+      {% set total_sev = sev_data.Critical + sev_data.Major + sev_data.Minor + sev_data.Obs %}
+      {% if total_sev > 0 %}
+      <div style="height:8px;background:#f3f4f6;border-radius:99px;overflow:hidden;display:flex">
+        {% for val, col in [(sev_data.Critical,'#dc2626'),(sev_data.Major,'#ea580c'),(sev_data.Minor,'#d97706'),(sev_data.Obs,'#1d4ed8')] %}
+        {% if val > 0 %}<div style="width:{{ (val/total_sev*100)|round|int }}%;background:{{ col }}"></div>{% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% if recent_findings %}
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f9fafb">
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Ref</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Description</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Sev</th>
+          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Status</th>
+        </tr></thead>
+        <tbody>
+        {% for f in recent_findings %}
+        <tr style="border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <td style="padding:7px 12px"><a href="/audit-findings/{{ f.id }}" style="font-family:monospace;font-weight:700;font-size:11px;color:#0f1c3f">{{ f.finding_ref or f.id }}</a></td>
+          <td style="padding:7px 12px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ (f.description or '')[:50] }}</td>
+          <td style="padding:7px 12px">
+            {% if f.severity=='Critical' or f.severity=='Major' %}
+            <span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ f.severity }}</span>
+            {% elif f.severity=='Minor' %}
+            <span style="background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ f.severity }}</span>
+            {% else %}
+            <span style="background:#eff6ff;color:#1d4ed8;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ f.severity or 'Obs' }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:7px 12px">
+            <span style="background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ f.status }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="padding:24px;text-align:center;color:#15803d;font-weight:600">✓ No open findings</div>
+    {% endif %}
+  </div>
+
+  <!-- Department Performance -->
+  <div class="card">
+    <div class="card-title">🏢 Department Action Performance</div>
+    {% if dept_perf %}
+    {% for dp in dept_perf[:7] %}
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:3px">
+        <span>{{ dp.dept.name }}</span>
+        <span style="color:{% if dp.overdue>0 %}#dc2626{% else %}var(--muted){% endif %}">
+          {{ dp.open }} open{% if dp.overdue %} · <strong style="color:#dc2626">{{ dp.overdue }} overdue</strong>{% endif %}
+        </span>
+      </div>
+      <div class="progress">
+        <div class="progress-bar" style="width:{{ dp.rate }}%;background:{% if dp.rate>=75 %}#15803d{% elif dp.rate>=50 %}#d97706{% else %}#dc2626{% endif %}"></div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">{{ dp.rate }}% closure · {{ dp.total }} total actions</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No department data yet.</div>
+    {% endif %}
+    <a href="/sag/governance" class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:4px">Full Governance View →</a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION 4 — HAZARD INTELLIGENCE + SPI STATUS
+════════════════════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Recent Hazards -->
+  <div class="card" style="padding:0">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title" style="margin:0">⚠ Recent Hazards ({{ open_haz }} open)</div>
+      <a href="/hazards" class="btn btn-sm btn-outline" style="font-size:11px">All →</a>
+    </div>
+    {% if recent_haz %}
+    {% for h in recent_haz %}
+    <a href="/hazards/{{ h.id }}" style="text-decoration:none;color:inherit">
+      <div style="padding:10px 16px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center"
+           onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#0f1c3f">{{ (h.specific_components or h.generic_hazard or '')[:55] }}</div>
+          <div style="font-size:10px;color:var(--muted)">{{ h.classification or '—' }} · {{ h.source or '—' }}</div>
+        </div>
+        <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;
+          {% if h.status=='Open' %}background:#fee2e2;color:#dc2626{% else %}background:#dcfce7;color:#15803d{% endif %}">
+          {{ h.status }}
+        </span>
+      </div>
+    </a>
+    {% endfor %}
+    {% else %}
+    <div style="padding:24px;text-align:center;color:#15803d;font-weight:600">✓ No open hazards</div>
+    {% endif %}
+  </div>
+
+  <!-- SPI + Module Summary -->
+  <div class="card">
+    <div class="card-title">📈 Safety Performance Overview</div>
+
+    <!-- SPI Alert summary -->
+    <div style="background:{% if spi_l3>0 %}#fff5f5{% elif spi_l2>0 %}#fffbeb{% else %}#f0fdf4{% endif %};
+                border:1px solid {% if spi_l3>0 %}#fca5a5{% elif spi_l2>0 %}#fde68a{% else %}#bbf7d0{% endif %};
+                border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
+      <div style="font-size:24px">{% if spi_l3>0 %}🔴{% elif spi_l2>0 %}🟡{% else %}🟢{% endif %}</div>
+      <div>
+        <div style="font-weight:700;font-size:13px">SPI Status: {% if spi_l3>0 %}{{ spi_l3 }} Level-3 Alert(s){% elif spi_l2>0 %}{{ spi_l2 }} Level-2 Alert(s){% else %}Normal{% endif %}</div>
+        <div style="font-size:11px;color:var(--muted)">{{ spi_alerts }} total indicators in alert state</div>
+      </div>
+      <a href="/spi" class="btn btn-sm btn-outline" style="margin-left:auto;font-size:11px">SPI Dashboard →</a>
+    </div>
+
+    <!-- Module summary grid -->
+    {% set modules = [
+      ('Hazard Reports', hr_cnt, '/hazard-reports', '#dc2626'),
+      ('Investigations', inv_cnt, '/investigations', '#374151'),
+      ('ASR Reports', asr_cnt, '/asr', '#1d4ed8'),
+      ('Risk Assessments', ra_open, '/risk-assessments', '#d97706'),
+      ('Active Audits', active_audits, '/audit-dashboard', '#0f1c3f'),
+      ('Safety Bulletins', active_bulletins, '/safety-promotion', '#15803d'),
+      ('Active Surveys', active_surveys, '/safety-promotion', '#7c3aed'),
+      ('Approved Docs', doc_cnt, '/documents', '#6b7280'),
+    ] %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    {% for label, cnt, href, color in modules %}
+    <a href="{{ href }}" style="text-decoration:none">
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:7px;padding:10px 12px;
+                  border-left:3px solid {{ color }};transition:.15s"
+           onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='#f9fafb'">
+        <div style="font-size:16px;font-weight:800;color:{{ color }}">{{ cnt }}</div>
+        <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.3px">{{ label }}</div>
+      </div>
+    </a>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION 5 — AUDIT PLANS + QUICK ACCESS
+════════════════════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Audit Plan Alerts -->
+  <div class="card">
+    <div class="card-title">📅 Audit Schedule Alerts</div>
+    {% if plan_overdue %}
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">⚠ Overdue Plans ({{ plan_overdue|length }})</div>
+      {% for p in plan_overdue[:4] %}
+      <a href="/audit-plan/{{ p.id }}" style="text-decoration:none;color:inherit">
+        <div style="padding:7px 10px;background:#fff5f5;border:1px solid #fca5a5;border-radius:6px;margin-bottom:5px;font-size:12px"
+             onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff5f5'">
+          <div style="font-weight:700;color:#dc2626">{{ p.title or p.id }}</div>
+          <div style="font-size:10px;color:#6b7280">{{ p.department.name if p.department else '—' }} · {{ p.month }}/{{ p.year }}</div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if plan_this_month %}
+    <div style="font-size:10px;font-weight:800;color:#0f1c3f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">📋 This Month ({{ plan_this_month|length }})</div>
+    {% for p in plan_this_month[:4] %}
+    <a href="/audit-plan/{{ p.id }}" style="text-decoration:none;color:inherit">
+      <div style="padding:7px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;margin-bottom:5px;font-size:12px"
+           onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+        <div style="font-weight:700;color:#1d4ed8">{{ p.title or p.id }}</div>
+        <div style="font-size:10px;color:#6b7280">{{ p.department.name if p.department else '—' }} · Status: {{ p.status }}</div>
+      </div>
+    </a>
+    {% endfor %}
+    {% endif %}
+    {% if not plan_overdue and not plan_this_month %}
+    <div style="text-align:center;padding:20px;color:#15803d;font-weight:600">✓ All audit plans on schedule</div>
+    {% endif %}
+    <a href="/audit-dashboard" class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:8px">Full Audit Dashboard →</a>
+  </div>
+
+  <!-- Quick Access -->
+  <div class="card">
+    <div class="card-title">⚡ Quick Access Control Center</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      {% set quick = [
+        ('⚠ Report Hazard',       '/hazard-reports/new',   '#dc2626'),
+        ('📋 Open Audit',          '/audit-dashboard',      '#0f1c3f'),
+        ('🔺 Risk Assessment',     '/risk-assessments',     '#d97706'),
+        ('🔬 Investigation',       '/investigations',       '#374151'),
+        ('📈 SPI Dashboard',       '/spi',                  '#1d4ed8'),
+        ('🛡 SAG Governance',      '/sag/governance',       '#0f1c3f'),
+        ('📢 Safety Bulletins',    '/safety-promotion',     '#15803d'),
+        ('📊 Surveys',             '/safety-promotion',     '#7c3aed'),
+        ('📁 Documents',           '/documents',            '#6b7280'),
+        ('👥 User Management',     '/admin/users',          '#374151'),
+        ('☑️ Checklist Manager',   '/audit-checklists',    '#1d4ed8'),
+        ('🔒 Action Management',   '/actions',              '#0f1c3f'),
+      ] %}
+      {% for label, href, color in quick %}
+      <a href="{{ href }}" style="text-decoration:none">
+        <div style="padding:10px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:7px;
+                    border-left:3px solid {{ color }};font-size:12px;font-weight:700;color:#0f1c3f;
+                    transition:.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+             onmouseover="this.style.background='#f0f4ff';this.style.borderColor='{{ color }}'"
+             onmouseout="this.style.background='#f9fafb'">
+          {{ label }}
+        </div>
+      </a>
       {% endfor %}
     </div>
   </div>
-  <a href="/audit-plans" class="btn btn-outline btn-sm" style="border-color:#f59e0b;color:#92400e;white-space:nowrap">View Plan →</a>
-</div>
-{% endif %}
-
-{% if plan_overdue %}
-<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:10px;padding:13px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
-  <span style="font-size:20px">⚠️</span>
-  <div style="flex:1">
-    <strong style="color:#991b1b;font-size:13px">{{ plan_overdue|length }} audit plan{{ 's' if plan_overdue|length > 1 }} overdue</strong>
-    <div style="font-size:12px;color:#374151;margin-top:3px">Planned months have passed without being scheduled.</div>
-  </div>
-  <a href="/audit-plans" class="btn btn-outline btn-sm" style="border-color:#dc2626;color:#dc2626;white-space:nowrap">Review →</a>
-</div>
-{% endif %}
-
-<div class="stat-grid" style="grid-template-columns:repeat(8,1fr);margin-bottom:22px">
-  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ total_haz }}</div><div class="stat-lbl">Hazards</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ intol }}</div><div class="stat-lbl">Intolerable</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_act }}</div><div class="stat-lbl">Actions</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ overdue_act }}</div><div class="stat-lbl">Overdue</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#0891b2">{{ asr_cnt }}</div><div class="stat-lbl">ASRs</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#065f46">{{ audit_cnt }}</div><div class="stat-lbl">Audits</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#92400e">{{ moc_cnt }}</div><div class="stat-lbl">MOC</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#374151">{{ doc_cnt }}</div><div class="stat-lbl">Docs</div></div>
 </div>
 
-{% if total_haz == 0 %}
-<!-- Empty state — system just started -->
-<div class="card" style="text-align:center;padding:48px;border:2px dashed var(--border)">
-  <div style="font-size:40px;margin-bottom:14px">✈</div>
-  <div style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:8px">System Ready</div>
-  <div style="font-size:13px;color:var(--muted);margin-bottom:22px;max-width:400px;margin-left:auto;margin-right:auto">
-    No safety records yet. Submit your first Hazard Report or Air Safety Report to begin.
+<!-- ═══════════════════════════════════════════════════════════════
+     SECTION 6 — RECENT ACTIVITY FEED
+════════════════════════════════════════════════════════════════ -->
+<div class="card" style="padding:0">
+  <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+    <div class="card-title" style="margin:0">🔄 Active Actions Feed</div>
+    <a href="/actions" class="btn btn-sm btn-outline" style="font-size:11px">All Actions →</a>
   </div>
-  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-    <a href="/hazard-report" class="btn btn-nav">⚠️ Submit Hazard Report</a>
-    <a href="/asr" class="btn btn-gold">✈️ Submit Air Safety Report</a>
-    <a href="/safety-policy" class="btn btn-outline">📜 Set Up Safety Policy</a>
+  {% if recent_act %}
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#f9fafb">
+        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Action ID</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Source</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Description</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Priority</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">SAG Member</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Due</th>
+        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Status</th>
+      </tr></thead>
+      <tbody>
+      {% for a in recent_act %}
+      <tr style="border-bottom:1px solid #f3f4f6;cursor:pointer"
+          onclick="window.location='/actions/{{ a.id }}'"
+          onmouseover="this.style.background='#f8f9fd'" onmouseout="this.style.background=''">
+        <td style="padding:8px 12px"><span style="font-family:monospace;font-weight:700;font-size:11px;color:#0f1c3f">{{ a.id }}</span></td>
+        <td style="padding:8px 12px"><span style="background:#f3f4f6;color:#374151;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ a.source or 'Manual' }}</span></td>
+        <td style="padding:8px 12px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ (a.description or '')[:60] }}</td>
+        <td style="padding:8px 12px">
+          {% if a.priority=='High' %}<span style="background:#fee2e2;color:#dc2626;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700">High</span>
+          {% elif a.priority=='Medium' %}<span style="background:#fef9c3;color:#92400e;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700">Medium</span>
+          {% else %}<span style="background:#f3f4f6;color:#6b7280;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700">{{ a.priority }}</span>{% endif %}
+        </td>
+        <td style="padding:8px 12px;font-size:11px;color:{% if not a.sag_member %}#dc2626;font-weight:700{% else %}#374151{% endif %}">{{ a.sag_member or '⚠ Unassigned' }}</td>
+        <td style="padding:8px 12px;font-family:monospace;font-size:11px;color:{% if a.status=='Overdue' %}#dc2626;font-weight:700{% else %}#374151{% endif %}">{{ a.due_date or '—' }}</td>
+        <td style="padding:8px 12px">
+          {% set sc={'Open':'#3b82f6','Assigned':'#0f1c3f','In Progress':'#3b82f6','Overdue':'#dc2626','Returned':'#d97706','Mitigation Implemented':'#7c3aed','Closed':'#15803d'} %}
+          <span style="background:{{ sc.get(a.status,'#6b7280') }}20;color:{{ sc.get(a.status,'#6b7280') }};padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;border:1px solid {{ sc.get(a.status,'#6b7280') }}40">
+            {{ a.status }}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
   </div>
-</div>
-{% else %}
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
-  <div class="card">
-    <div class="card-title">Recent Hazards</div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Ref</th><th>Hazard</th><th>Risk</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-          {% for h in recent_haz %}
-          <tr>
-            <td><span class="ctrl-num">{{ h.id }}</span></td>
-            <td style="max-width:180px;font-size:12px">{{ (h.generic_hazard or '—')[:50] }}</td>
-            <td>
-              {% if h.risks %}
-              <span style="font-size:16px;font-weight:800;font-family:'IBM Plex Mono',monospace;
-                color:{% if h.risks[0].initial_tolerance=='INTOLERABLE' %}#dc2626{% elif h.risks[0].initial_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
-                {{ h.risks[0].initial_risk_index }}
-              </span>
-              {% else %}<span style="color:#9ca3af">—</span>{% endif %}
-            </td>
-            <td>{% if h.status=='Open' %}<span class="badge b-yellow">Open</span>
-                {% elif h.status=='Controlled' %}<span class="badge b-green">Controlled</span>
-                {% else %}<span class="badge b-gray">{{ h.status }}</span>{% endif %}</td>
-            <td><a href="/hazard-log/{{ h.id }}" class="btn btn-nav btn-sm">View</a></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:20px">No hazards recorded.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <div style="margin-top:10px"><a href="/hazard-log" class="btn btn-outline btn-sm">View All →</a></div>
-  </div>
-  <div class="card">
-    <div class="card-title">Open Actions</div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Ref</th><th>Description</th><th>Due</th><th>Status</th></tr></thead>
-        <tbody>
-          {% for a in recent_act %}
-          <tr>
-            <td><span class="ctrl-num">{{ a.id }}</span></td>
-            <td style="max-width:180px;font-size:12px">{{ (a.description or '—')[:50] }}</td>
-            <td style="font-size:11px;{% if a.status=='Overdue' %}color:#dc2626;font-weight:700{% endif %}">{{ a.due_date or '—' }}</td>
-            <td>{% if a.status=='Overdue' %}<span class="badge b-red">Overdue</span>
-                {% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
-                {% else %}<span class="badge b-yellow">Open</span>{% endif %}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:20px">No open actions.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <div style="margin-top:10px"><a href="/actions" class="btn btn-outline btn-sm">View All →</a></div>
-  </div>
-</div>
-{% endif %}
-
-<!-- Quick actions -->
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
-  <a href="/hazard-report" class="btn btn-nav">⚠️ Hazard Report</a>
-  <a href="/asr" class="btn btn-outline">✈️ ASR</a>
-  <a href="/audit-schedule/new" class="btn btn-outline">🔍 New Audit</a>
-  <a href="/moc/new" class="btn btn-outline">🔄 New MOC</a>
-  <a href="/risk-assessments/new" class="btn btn-outline">📝 New RA</a>
+  {% else %}
+  <div style="padding:32px;text-align:center;color:#15803d;font-weight:600">✓ No active actions</div>
+  {% endif %}
 </div>
 
 {% endblock %}
