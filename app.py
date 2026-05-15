@@ -4005,10 +4005,16 @@ def checklist_template_dept(dept_id):
         action = request.form.get('action', 'save')
 
         if action == 'save':
-            # Deactivate old templates for this dept+type
-            ChecklistTemplate.query.filter_by(
-                department_id=dept_id, audit_type=audit_type
-            ).update({'is_active': False})
+            # Deactivate old templates for this dept+type (safe for PostgreSQL)
+            try:
+                old_tmpls = ChecklistTemplate.query.filter_by(
+                    department_id=dept_id, audit_type=audit_type
+                ).all()
+                for ot in old_tmpls:
+                    ot.is_active = False
+                db.session.flush()
+            except Exception:
+                pass
 
             # Get version number
             last = ChecklistTemplate.query.filter_by(
@@ -4511,15 +4517,27 @@ def start_audit(sid):
     s.actual_date  = date.today().isoformat()
     s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
 
-    # Auto-load checklist from latest saved department template
-    if s.department_id and not s.checklist_items:
-        from models import AuditChecklist
-        tmpl = ChecklistTemplate.query.filter_by(
-            department_id=s.department_id,
-            audit_type=s.audit_type or 'Internal',
-            is_active=True
-        ).first()
+    # Always load LATEST active checklist template when starting audit
+    if s.department_id:
+        # Load latest active template for this dept
+        tmpl = None
+        try:
+            tmpl = ChecklistTemplate.query.filter_by(
+                department_id=s.department_id,
+                audit_type=s.audit_type or 'Internal',
+                is_active=True
+            ).order_by(ChecklistTemplate.version.desc()).first()
+        except Exception:
+            pass
+
         if tmpl and tmpl.items:
+            # Clear existing checklist items (replace with latest template)
+            try:
+                AuditChecklist.query.filter_by(schedule_id=sid).delete(
+                    synchronize_session=False)
+                db.session.flush()
+            except Exception:
+                pass
             for ti in tmpl.items:
                 db.session.add(AuditChecklist(
                     schedule_id=sid,
@@ -4531,20 +4549,20 @@ def start_audit(sid):
             db.session.flush()
             flash(f'✓ Audit started. Loaded {len(tmpl.items)} items from {tmpl.name}.', 'success')
         else:
-            # Fall back to static template (existing get_checklist_template logic)
-            from models import AuditChecklist as ACL
-            dept = Department.query.get(s.department_id)
-            static_tmpl = get_checklist_template(dept.code if dept else 'default')
-            for cat, items in static_tmpl.items():
-                for seq, (ref, q) in enumerate(items):
-                    db.session.add(ACL(
-                        schedule_id=sid,
-                        category=cat,
-                        item_ref=ref,
-                        question=q,
-                        sequence=seq,
-                    ))
-            flash('✓ Audit started. Checklist loaded from default template.', 'success')
+            # Fall back to static template only if no saved template exists
+            if not AuditChecklist.query.filter_by(schedule_id=sid).first():
+                dept = Department.query.get(s.department_id)
+                static_tmpl = get_checklist_template(dept.code if dept else 'default')
+                for cat, items in static_tmpl.items():
+                    for seq, (ref, q) in enumerate(items):
+                        db.session.add(AuditChecklist(
+                            schedule_id=sid,
+                            category=cat,
+                            item_ref=ref,
+                            question=q,
+                            sequence=seq,
+                        ))
+                flash('✓ Audit started. Checklist loaded from default template.', 'success')
 
     db.session.commit()
     return redirect(url_for('audit_execution', sid=sid))
