@@ -3742,14 +3742,28 @@ def sag_action_detail(aid):
         old_status = a.status
 
         if action_btn in ('save_progress', 'submit_review'):
+            # Core fields (all workflows)
+            a.root_cause             = f.get('root_cause',             a.root_cause or '')
             a.corrective_description = f.get('corrective_description', a.corrective_description or '')
             a.mitigation_description = f.get('mitigation_description', a.mitigation_description or '')
-            a.safety_notes           = f.get('safety_notes', a.safety_notes or '')
-            a.root_cause             = f.get('root_cause', a.root_cause or '')
-            a.follow_up_notes        = f.get('follow_up_notes', a.follow_up_notes or '')
-            a.evidence               = f.get('evidence', a.evidence or '')
+            a.safety_notes           = f.get('safety_notes',           a.safety_notes or '')
+            a.follow_up_notes        = f.get('follow_up_notes',        a.follow_up_notes or '')
+            a.evidence               = f.get('evidence',               a.evidence or '')
             if f.get('implementation_date'):
                 a.implementation_date = f.get('implementation_date')
+            if f.get('mitigation_status'):
+                a.mitigation_status = f.get('mitigation_status')
+            # Workflow-specific fields (stored in existing columns)
+            if f.get('contributing_factors'):
+                a.rejection_notes = f.get('contributing_factors')   # reuse for extra RCA detail
+            if f.get('residual_risk'):
+                a.safety_notes = (a.safety_notes or '') + ' | Residual Risk: ' + f.get('residual_risk','')
+            if f.get('cap_responsible'):
+                a.owner = f.get('cap_responsible', a.owner)
+            if f.get('cap_target_date'):
+                a.due_date = f.get('cap_target_date')
+            if f.get('recovery_timeline'):
+                a.follow_up_notes = (a.follow_up_notes or '') + ' | Recovery: ' + f.get('recovery_timeline','')
             if f.get('mitigation_status'):
                 a.mitigation_status = f.get('mitigation_status')
             # Handle evidence file upload
