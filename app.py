@@ -629,17 +629,41 @@ def api_mobile_hazard():
 
 @app.route('/api/mobile/asr', methods=['POST', 'OPTIONS'])
 def api_mobile_asr():
-    """Flutter: Submit Air Safety Report → existing ASR workflow."""
+    """Flutter: Submit Air Safety Report → full SMS workflow (Hazard + ASR + HazardReport)."""
     if request.method == 'OPTIONS':
         return api_ok()
     try:
-        f = request.get_json() if request.is_json else request.form.to_dict()
+        f      = request.get_json() if request.is_json else request.form.to_dict()
         from datetime import date as _d
+        se     = f.get('severity_level', 'C')
+        li     = 3
+        ri     = f'{li}{se}'
+        hid    = new_id('HAZ')
         asr_id = new_id('ASR')
+        occ    = f.get('event_category', 'Flight Occurrence')
+
+        # 1. Hazard record → Hazard Log + Dashboard
+        haz = Hazard(
+            id                  = hid,
+            source              = 'ASR (Mobile)',
+            linked_report_id    = asr_id,
+            department_id       = 1,
+            classification      = 'Operational',
+            type_of_activity    = 'Flight Operations',
+            generic_hazard      = occ,
+            specific_components = f.get('event_description', ''),
+            consequences        = f.get('operational_impact', 'To Be Assessed'),
+            status              = 'Open',
+            owner               = f.get('reporter_name', '') or 'Flight Operations Manager',
+        )
+        db.session.add(haz)
+        db.session.flush()
+
+        # 2. ASR record
         rep = ASRReport(
             id               = asr_id,
             report_type      = f.get('report_type', 'Voluntary'),
-            occurrence_type  = f.get('event_category', ''),
+            occurrence_type  = occ,
             captain          = f.get('reporter_name', ''),
             captain_staff_no = f.get('staff_number', ''),
             date             = f.get('date', _d.today().isoformat()),
@@ -653,11 +677,36 @@ def api_mobile_asr():
             flight_phase     = f.get('flight_phase', ''),
             event_description= f.get('event_description', ''),
             action_taken     = f.get('immediate_actions', ''),
-            severity         = f.get('severity_level', 'C'),
+            severity         = se, likelihood=li, risk_index=ri, hazard_id=hid,
         )
         db.session.add(rep)
+        db.session.flush()
+
+        # 3. HazardReport → appears in Hazard Reports list
+        try:
+            hr = HazardReport(
+                id             = new_id('HR'),
+                hazard_id      = hid,
+                department_id  = 1,
+                date           = f.get('date', _d.today().isoformat()),
+                location       = f'{f.get("route_from","")}-{f.get("route_to","")}',
+                description    = f.get('event_description', ''),
+                classification = 'Operational',
+                generic_hazard = occ,
+                consequences   = f.get('operational_impact', 'To Be Assessed'),
+                immediate_action = f.get('immediate_actions', ''),
+                reporter       = f.get('reporter_name', '') or 'Flight Crew',
+                reporter_severity = se,
+                report_type    = 'ASR',
+                status         = 'Submitted',
+            )
+            db.session.add(hr)
+        except Exception:
+            pass
+
         db.session.commit()
-        return api_ok({'report_id': asr_id}, 'ASR submitted successfully', 201)
+        return api_ok({'report_id': asr_id, 'hazard_id': hid},
+                      'ASR submitted successfully', 201)
     except Exception as e:
         db.session.rollback()
         return api_err(str(e)[:120], 500)
