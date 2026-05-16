@@ -1127,60 +1127,130 @@ def hazard_report_update_status(rid):
 @app.route('/asr', methods=['GET','POST'])
 def asr():
     if request.method == 'POST':
-        f  = request.form
-        li = int(f.get('likelihood', 3))
-        se = f.get('severity','C')
-        ri = f'{li}{se}'
+        f   = request.form
+        li  = int(f.get('likelihood', 3))
+        se  = f.get('severity', 'C')
+        ri  = f'{li}{se}'
+        occ = f.get('occurrence_type', 'Flight Occurrence')
         hid = new_id('HAZ')
         aid = new_id('ASR')
+
+        # Build full event description including dynamic category extras
+        ev_desc = f.get('event_description', '')
+        extras = [(k.replace('extra_','').replace('_',' ').title(), v)
+                  for k,v in f.items() if k.startswith('extra_') and v]
+        if extras:
+            ev_desc += chr(10)*2 + '--- Occurrence Details ---' + chr(10)
+            ev_desc += chr(10).join(f'{k}: {v}' for k,v in extras)
+
+        # 1. Create Hazard record (feeds Hazard Log + Dashboard)
         h = Hazard(id=hid, source='ASR', linked_report_id=aid,
                    department_id=1, classification='Operational',
                    type_of_activity='Flight Operations',
-                   generic_hazard=f.get('occurrence_type','Flight Occurrence'),
-                   specific_components=f.get('event_description',''),
-                   consequences='To Be Assessed by Safety Department',
+                   generic_hazard=occ,
+                   specific_components=ev_desc,
+                   consequences=f.get('operational_impact', 'To Be Assessed'),
                    status='Open', owner='Flight Operations Manager')
         db.session.add(h)
         db.session.flush()
+
+        # 2. Create Risk record
         r = Risk(id=new_id('RSK'), hazard_id=hid,
-                 description=f.get('event_description',''),
+                 description=ev_desc,
                  initial_likelihood=li, initial_severity=se,
                  initial_risk_index=ri, initial_tolerance=get_tolerance(ri))
         db.session.add(r)
+
+        # 3. Create ASR record with all fields
         asr_rec = ASRReport(id=aid,
-            report_type=f.get('report_type','Voluntary'),
-            occurrence_type=f.get('occurrence_type',''),
-            captain=f.get('captain',''), captain_staff_no=f.get('captain_staff_no',''),
-            copilot=f.get('copilot',''), copilot_staff_no=f.get('copilot_staff_no',''),
-            date=f.get('date',''), time_local=f.get('time_local',''),
-            time_utc=f.get('time_utc',''), flight_no=f.get('flight_no',''),
-            route_from=f.get('route_from',''), route_to=f.get('route_to',''),
-            diverted_to=f.get('diverted_to',''), squawk=f.get('squawk',''),
-            aircraft_type=f.get('aircraft_type',''), registration=f.get('registration',''),
-            pax=int(f.get('pax') or 0), crew=int(f.get('crew') or 0),
-            altitude_ft=int(f.get('altitude_ft') or 0),
-            flight_phase=f.get('flight_phase',''),
-            weather_wind=f.get('weather_wind',''), weather_vis_rvr=f.get('weather_vis_rvr',''),
-            weather_clouds=f.get('weather_clouds',''),
-            weather_temp_c=int(f.get('weather_temp_c') or 0),
-            weather_qnh=int(f.get('weather_qnh') or 0),
-            runway=f.get('runway',''), runway_state=f.get('runway_state',''),
-            event_description=f.get('event_description',''),
-            action_taken=f.get('action_taken',''),
+            report_type      = f.get('report_type', 'Voluntary'),
+            occurrence_type  = occ,
+            captain          = f.get('captain', ''),
+            captain_staff_no = f.get('captain_staff_no', ''),
+            copilot          = f.get('copilot', ''),
+            copilot_staff_no = f.get('copilot_staff_no', ''),
+            date             = f.get('date', ''),
+            time_local       = f.get('time_local', ''),
+            time_utc         = f.get('time_utc', ''),
+            flight_no        = f.get('flight_no', ''),
+            route_from       = f.get('route_from', ''),
+            route_to         = f.get('route_to', ''),
+            diverted_to      = f.get('diverted_to', ''),
+            squawk           = f.get('squawk', ''),
+            aircraft_type    = f.get('aircraft_type', ''),
+            registration     = f.get('registration', ''),
+            pax              = int(f.get('pax') or 0),
+            crew             = int(f.get('crew') or 0),
+            altitude_ft      = int(f.get('altitude_ft') or 0),
+            flight_phase     = f.get('flight_phase', ''),
+            weather_wind     = f.get('weather_wind', ''),
+            weather_vis_rvr  = f.get('weather_vis_rvr', ''),
+            weather_clouds   = f.get('weather_clouds', ''),
+            weather_temp_c   = int(f.get('weather_temp_c') or 0),
+            weather_qnh      = int(f.get('weather_qnh') or 0),
+            runway           = f.get('runway', ''),
+            runway_state     = f.get('runway_state', ''),
+            event_description= ev_desc,
+            action_taken     = f.get('action_taken', ''),
             severity=se, likelihood=li, risk_index=ri, hazard_id=hid)
         db.session.add(asr_rec)
+        db.session.flush()
+
+        # 4. Create HazardReport record so ASR appears in Hazard Reports list
+        try:
+            hr = HazardReport(
+                id           = new_id('HR'),
+                hazard_id    = hid,
+                department_id= 1,
+                date         = f.get('date', ''),
+                location     = f'{f.get("route_from","")}-{f.get("route_to","")}',
+                description  = ev_desc,
+                classification= 'Operational',
+                generic_hazard= occ,
+                consequences = f.get('operational_impact', 'To Be Assessed'),
+                immediate_action = f.get('action_taken', ''),
+                reporter     = f.get('captain', '') or 'Flight Crew',
+                reporter_severity = se,
+                report_type  = 'ASR',
+                status       = 'Submitted',
+            )
+            db.session.add(hr)
+            db.session.flush()
+        except Exception:
+            pass  # HazardReport creation is supplementary — never block ASR submission
+
+        # 5. Auto-create Action for high-severity occurrences
+        if se in ('D', 'E') or li >= 4:
+            act = Action(
+                id          = new_id('ACT'),
+                source      = 'ASR',
+                description = f'ASR Action: {occ} — Flight {f.get("flight_no","N/A")} on {f.get("date","")}',
+                owner       = f.get('captain', 'Flight Operations Manager'),
+                due_date    = (datetime.now() + __import__("datetime").timedelta(days=14)).strftime('%Y-%m-%d'),
+                priority    = 'High' if se == 'E' else 'Medium',
+                status      = 'Open',
+                hazard_id   = hid,
+            )
+            db.session.add(act)
+
         db.session.commit()
         h.status = 'Under Assessment'
         db.session.commit()
-        spi_auto_update(
-            source_type   = 'asr',
-            department_id = int(f.get('department_id', 1)),
-            category      = 'ASR',
-            year          = datetime.now().year,
-            month         = datetime.now().month,
-            report_id     = aid
-        )
-        flash(f'✓ ASR {aid} submitted. Complete the Risk Assessment for hazard {hid}.', 'success')
+
+        # 5. SPI auto-update
+        try:
+            spi_auto_update(
+                source_type   = 'asr',
+                department_id = 1,
+                category      = 'ASR',
+                year          = datetime.now().year,
+                month         = datetime.now().month,
+                report_id     = aid
+            )
+        except Exception:
+            pass
+
+        flash(f'✓ ASR {aid} submitted successfully. Hazard {hid} created. Proceeding to Risk Assessment.', 'success')
         return redirect(url_for('ra_wizard_start', hid=hid))
     return render_template('reporting/asr_report.html')
 
