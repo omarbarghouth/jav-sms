@@ -887,6 +887,57 @@ def api_ping():
     return api_ok({'server': 'Jordan Aviation SMS', 'version': '1.0'}, 'API online')
 
 
+@app.route('/api/mobile/history', methods=['GET'])
+def api_mobile_history():
+    """Flutter: Get recent reports for history screen."""
+    try:
+        limit = int(request.args.get('limit', 20))
+        records = []
+        # Hazard Reports
+        for r in HazardReport.query.order_by(HazardReport.created_at.desc()).limit(limit).all():
+            try:
+                records.append({
+                    'id': r.id, 'type': r.report_type or 'Hazard Report',
+                    'description': (r.description or '')[:80],
+                    'status': r.status or 'Submitted',
+                    'date': r.date or '',
+                    'location': r.location or '',
+                    'created_at': r.created_at.isoformat() if r.created_at else '',
+                })
+            except Exception: pass
+        # ASR Reports
+        for r in ASRReport.query.order_by(ASRReport.created_at.desc()).limit(10).all():
+            try:
+                records.append({
+                    'id': r.id, 'type': 'ASR',
+                    'description': (r.occurrence_type or '') + ': ' + (r.event_description or '')[:60],
+                    'status': 'Submitted',
+                    'date': r.date or '',
+                    'location': f'{r.route_from or ""}-{r.route_to or ""}',
+                    'created_at': r.created_at.isoformat() if r.created_at else '',
+                })
+            except Exception: pass
+        # Sort by created_at descending
+        records.sort(key=lambda x: x.get('created_at',''), reverse=True)
+        return api_ok({'reports': records[:limit], 'total': len(records)}, 'History loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/stats', methods=['GET'])
+def api_mobile_stats():
+    """Flutter: Dashboard stats for home screen."""
+    try:
+        return api_ok({
+            'hazards_open':   Hazard.query.filter_by(status='Open').count(),
+            'asr_total':      ASRReport.query.count(),
+            'actions_open':   Action.query.filter(Action.status.notin_(['Closed'])).count(),
+            'hr_this_month':  HazardReport.query.count(),
+        }, 'Stats loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     if is_logged_in():
