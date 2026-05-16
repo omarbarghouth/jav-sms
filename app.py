@@ -291,6 +291,62 @@ def public_portal():
                            lessons=lessons, safety_message=safety_message)
 
 
+# ── OCCURRENCE REGISTRY HELPER ────────────────────────────────────────────────
+def _register_occurrence(report_id, report_type, description, location='',
+                          date_str='', department_id=None,
+                          consequences='', reporter='Anonymous',
+                          is_confidential=False, classification='Operational'):
+    """
+    Creates linked HazardReport + Hazard records so any report type
+    appears in the central Safety Occurrence Registry (/hazard-reports).
+    Wrapped in try/except — never blocks the main submission.
+    """
+    from datetime import date as _d
+    try:
+        hid = new_id('HAZ')
+        hr_id = new_id('HR')
+        disp_desc = '*** CONFIDENTIAL — Description restricted ***' if is_confidential else description
+
+        # Hazard record (occurrence registry entry)
+        haz = Hazard(
+            id                  = hid,
+            source              = report_type,
+            linked_report_id    = report_id,
+            department_id       = department_id,
+            classification      = classification,
+            type_of_activity    = report_type,
+            generic_hazard      = f'{report_type}: {(disp_desc or "")[:80]}',
+            specific_components = disp_desc,
+            consequences        = consequences or 'Under Review',
+            status              = 'Open',
+        )
+        db.session.add(haz)
+        db.session.flush()
+
+        # HazardReport record (shows in /hazard-reports list)
+        hr = HazardReport(
+            id                = hr_id,
+            hazard_id         = hid,
+            department_id     = department_id,
+            date              = date_str or _d.today().isoformat(),
+            location          = location,
+            description       = disp_desc,
+            classification    = classification,
+            generic_hazard    = f'{report_type}: {(disp_desc or "")[:60]}',
+            consequences      = consequences or 'Under Review',
+            immediate_action  = '',
+            reporter          = '*** CONFIDENTIAL ***' if is_confidential else reporter,
+            reporter_severity = 'Medium',
+            report_type       = report_type,
+            status            = 'Submitted',
+        )
+        db.session.add(hr)
+        db.session.flush()
+        return hid, hr_id
+    except Exception:
+        return None, None
+
+
 @app.route('/portal/voluntary', methods=['GET', 'POST'])
 def portal_voluntary():
     """Voluntary Safety Report — open to all staff."""
@@ -313,6 +369,19 @@ def portal_voluntary():
             is_confidential = False,
         )
         db.session.add(rpt)
+        db.session.flush()
+        # Register in Safety Occurrence Registry
+        _register_occurrence(
+            report_id     = rnum,
+            report_type   = 'Voluntary',
+            description   = f.get('description', ''),
+            location      = f.get('location', ''),
+            date_str      = f.get('date', ''),
+            department_id = int(f['department_id']) if f.get('department_id') else None,
+            consequences  = f.get('consequences', ''),
+            reporter      = f.get('reporter_name', '') or 'Anonymous',
+            classification= 'Voluntary Report',
+        )
         db.session.commit()
         return render_template('portal/portal_submitted.html',
                                ref=rnum, report_type='Voluntary Safety Report')
@@ -339,6 +408,20 @@ def portal_confidential():
             status        = 'Submitted',
         )
         db.session.add(rpt)
+        db.session.flush()
+        # Register in Safety Occurrence Registry (masked for confidentiality)
+        _register_occurrence(
+            report_id       = rnum,
+            report_type     = 'Confidential',
+            description     = f.get('description', ''),
+            location        = f.get('location', ''),
+            date_str        = f.get('date', ''),
+            department_id   = int(f['department_id']) if f.get('department_id') else None,
+            consequences    = f.get('consequences', ''),
+            reporter        = 'Anonymous',
+            is_confidential = True,
+            classification  = 'Confidential Report',
+        )
         db.session.commit()
         return render_template('portal/portal_submitted.html',
                                ref=rnum, report_type='Confidential Safety Report')
@@ -735,6 +818,19 @@ def api_mobile_confidential():
             status        = 'Submitted',
         )
         db.session.add(rep)
+        db.session.flush()
+        # Register in Safety Occurrence Registry (masked)
+        _register_occurrence(
+            report_id       = ref,
+            report_type     = 'Confidential',
+            description     = f.get('description', ''),
+            location        = f.get('location', ''),
+            date_str        = f.get('date', ''),
+            consequences    = f.get('consequences', ''),
+            reporter        = 'Anonymous',
+            is_confidential = True,
+            classification  = 'Confidential Report',
+        )
         db.session.commit()
         return api_ok({'report_id': ref}, 'Confidential report submitted', 201)
     except Exception as e:
@@ -766,6 +862,18 @@ def api_mobile_voluntary():
             status        = 'Submitted',
         )
         db.session.add(rep)
+        db.session.flush()
+        # Register in Safety Occurrence Registry
+        _register_occurrence(
+            report_id     = ref,
+            report_type   = 'Voluntary',
+            description   = f.get('description', ''),
+            location      = f.get('location', ''),
+            date_str      = f.get('date', ''),
+            consequences  = f.get('consequences', ''),
+            reporter      = f.get('reporter_name', '') or 'Anonymous',
+            classification= 'Voluntary Report',
+        )
         db.session.commit()
         return api_ok({'report_id': ref}, 'Voluntary report submitted', 201)
     except Exception as e:
