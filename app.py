@@ -999,10 +999,21 @@ def dashboard():
         AuditPlan.year == now_year, AuditPlan.month < now_month,
         AuditPlan.month != None, AuditPlan.status != 'Completed').all()
 
+    # ── VOLUNTARY & CONFIDENTIAL ─────────────────────────────────────────────
+    vol_new  = 0; conf_new = 0; vol_total = 0; conf_total = 0
+    try:
+        vol_new   = VoluntaryReport.query.filter_by(status='Submitted').count()
+        vol_total = VoluntaryReport.query.count()
+        conf_new  = ConfidentialReport.query.filter_by(status='Submitted').count()
+        conf_total= ConfidentialReport.query.count()
+    except Exception: pass
+
     return render_template('dashboard/dashboard.html',
         # Hazards
         total_haz=total_haz, open_haz=open_haz, intol=intol,
         asr_cnt=asr_cnt, hr_cnt=hr_cnt,
+        vol_new=vol_new, vol_total=vol_total,
+        conf_new=conf_new, conf_total=conf_total,
         # Actions
         open_act=open_act, overdue_act=overdue_act, pending_review=pending_review,
         closed_act=closed_act, total_act=total_act, closure_rate=closure_rate,
