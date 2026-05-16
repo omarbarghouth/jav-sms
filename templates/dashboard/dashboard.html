@@ -241,6 +241,23 @@
   <div class="card">
     <div class="card-title">📈 Safety Performance Overview</div>
 
+    <!-- New Reports Inbox alert -->
+    {% if vol_new > 0 or conf_new > 0 %}
+    <a href="/admin/reports" style="text-decoration:none;display:block;margin-bottom:10px">
+      <div style="background:#faf5ff;border:1.5px solid #e9d5ff;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">📬</span>
+        <div>
+          <div style="font-weight:700;font-size:13px;color:#7c3aed">
+            New Reports in Inbox
+            {% if vol_new %}<span style="background:#dcfce7;color:#15803d;padding:1px 8px;border-radius:99px;font-size:11px;margin-left:6px">{{ vol_new }} Voluntary</span>{% endif %}
+            {% if conf_new %}<span style="background:#f3e8ff;color:#7c3aed;padding:1px 8px;border-radius:99px;font-size:11px;margin-left:4px">{{ conf_new }} Confidential</span>{% endif %}
+          </div>
+          <div style="font-size:11px;color:var(--muted)">Click to review in Safety Reports Inbox →</div>
+        </div>
+      </div>
+    </a>
+    {% endif %}
+
     <!-- SPI Alert summary -->
     <div style="background:{% if spi_l3>0 %}#fff5f5{% elif spi_l2>0 %}#fffbeb{% else %}#f0fdf4{% endif %};
                 border:1px solid {% if spi_l3>0 %}#fca5a5{% elif spi_l2>0 %}#fde68a{% else %}#bbf7d0{% endif %};
@@ -261,8 +278,8 @@
       ('Risk Assessments', ra_open, '/risk-assessments', '#d97706'),
       ('Active Audits', active_audits, '/audit-dashboard', '#0f1c3f'),
       ('Safety Bulletins', active_bulletins, '/safety-promotion', '#15803d'),
-      ('Active Surveys', active_surveys, '/safety-promotion', '#7c3aed'),
-      ('Approved Docs', doc_cnt, '/documents', '#6b7280'),
+      ('Voluntary Reports', vol_total, '/admin/reports', '#15803d'),
+      ('Confidential Rpts', conf_total, '/admin/reports', '#7c3aed'),
     ] %}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
     {% for label, cnt, href, color in modules %}
