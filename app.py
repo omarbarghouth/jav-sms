@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
@@ -171,6 +171,14 @@ def inject_globals():
     now = datetime.utcnow()
     return dict(all_departments=depts, now=now, get_tolerance=get_tolerance,
                 nav_overdue=overdue, enumerate=enumerate)
+
+
+@app.after_request
+def add_cors(response):
+    response.headers['Access-Control-Allow-Origin']  = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    return response
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -555,6 +563,171 @@ def mobile_submitted():
     return render_template('mobile/mobile_submitted.html',
                            rtype=request.args.get('rtype','report'),
                            rid=request.args.get('rid',''))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  FLUTTER MOBILE API  — JSON endpoints for Flutter app
+#  Base URL: https://jav-sms-p0c2.onrender.com/api/mobile
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def api_ok(data=None, message='Success', status=200):
+    return jsonify({'status': 'ok', 'message': message, 'data': data or {}}), status
+
+def api_err(message='Error', status=400):
+    return jsonify({'status': 'error', 'message': message}), status
+
+
+@app.route('/api/mobile/hazard', methods=['POST', 'OPTIONS'])
+def api_mobile_hazard():
+    """Flutter: Submit Hazard Report → existing Hazard workflow."""
+    if request.method == 'OPTIONS':
+        return api_ok()
+    try:
+        # Accept both JSON and form data from Flutter
+        if request.is_json:
+            f = request.get_json()
+        else:
+            f = request.form.to_dict()
+
+        from datetime import date as _d
+        haz = Hazard(
+            id                  = new_id('HAZ'),
+            source              = 'Flutter App',
+            classification      = f.get('classification', 'Operational'),
+            generic_hazard      = f.get('hazard_title', 'Mobile Hazard Report'),
+            specific_components = f.get('hazard_description', ''),
+            consequences        = f.get('consequences', ''),
+            status              = 'Open',
+            department_id       = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
+        )
+        db.session.add(haz)
+        db.session.flush()
+
+        rep = HazardReport(
+            id                   = new_id('HR'),
+            hazard_id            = haz.id,
+            department_id        = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
+            date                 = f.get('date', _d.today().isoformat()),
+            location             = f.get('location', ''),
+            description          = f.get('hazard_description', ''),
+            classification       = f.get('classification', 'Operational'),
+            generic_hazard       = f.get('hazard_title', ''),
+            consequences         = f.get('consequences', ''),
+            immediate_action     = f.get('immediate_action', ''),
+            suggested_mitigation = f.get('suggested_mitigation', ''),
+            reporter             = f.get('reporter_name', '') or 'Anonymous',
+            reporter_severity    = 'Medium',
+            status               = 'Submitted',
+        )
+        db.session.add(rep)
+        db.session.commit()
+        return api_ok({'report_id': rep.id, 'hazard_id': haz.id}, 'Hazard report submitted successfully', 201)
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/asr', methods=['POST', 'OPTIONS'])
+def api_mobile_asr():
+    """Flutter: Submit Air Safety Report → existing ASR workflow."""
+    if request.method == 'OPTIONS':
+        return api_ok()
+    try:
+        f = request.get_json() if request.is_json else request.form.to_dict()
+        from datetime import date as _d
+        asr_id = new_id('ASR')
+        rep = ASRReport(
+            id               = asr_id,
+            report_type      = f.get('report_type', 'Voluntary'),
+            occurrence_type  = f.get('event_category', ''),
+            captain          = f.get('reporter_name', ''),
+            captain_staff_no = f.get('staff_number', ''),
+            date             = f.get('date', _d.today().isoformat()),
+            time_local       = f.get('time_local', ''),
+            time_utc         = f.get('time_utc', ''),
+            flight_no        = f.get('flight_number', ''),
+            route_from       = f.get('route_from', ''),
+            route_to         = f.get('route_to', ''),
+            aircraft_type    = f.get('aircraft_type', ''),
+            registration     = f.get('registration', ''),
+            flight_phase     = f.get('flight_phase', ''),
+            event_description= f.get('event_description', ''),
+            action_taken     = f.get('immediate_actions', ''),
+            severity         = f.get('severity_level', 'C'),
+        )
+        db.session.add(rep)
+        db.session.commit()
+        return api_ok({'report_id': asr_id}, 'ASR submitted successfully', 201)
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/confidential', methods=['POST', 'OPTIONS'])
+def api_mobile_confidential():
+    """Flutter: Submit Confidential Report."""
+    if request.method == 'OPTIONS':
+        return api_ok()
+    try:
+        f = request.get_json() if request.is_json else request.form.to_dict()
+        from datetime import date as _d
+        seq = ConfidentialReport.query.count() + 1
+        ref = 'CR-SMS-{:03d}'.format(seq)
+        rep = ConfidentialReport(
+            ref_number    = ref,
+            date          = f.get('date', _d.today().isoformat()),
+            location      = f.get('location', ''),
+            description   = f.get('description', ''),
+            consequences  = f.get('consequences', ''),
+            suggestion    = f.get('suggestion', ''),
+            department_id = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
+            position      = f.get('reporter_position', ''),
+            report_type   = 'Confidential',
+            status        = 'Submitted',
+        )
+        db.session.add(rep)
+        db.session.commit()
+        return api_ok({'report_id': ref}, 'Confidential report submitted', 201)
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/voluntary', methods=['POST', 'OPTIONS'])
+def api_mobile_voluntary():
+    """Flutter: Submit Voluntary Safety Report."""
+    if request.method == 'OPTIONS':
+        return api_ok()
+    try:
+        f = request.get_json() if request.is_json else request.form.to_dict()
+        from datetime import date as _d
+        seq = VoluntaryReport.query.count() + 1
+        ref = 'VR-SMS-{:03d}'.format(seq)
+        rep = VoluntaryReport(
+            ref_number    = ref,
+            date          = f.get('date', _d.today().isoformat()),
+            location      = f.get('location', ''),
+            description   = f.get('description', ''),
+            consequences  = f.get('consequences', ''),
+            suggestion    = f.get('suggestion', ''),
+            reporter_name = f.get('reporter_name', '') or 'Anonymous',
+            position      = f.get('reporter_position', ''),
+            department_id = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
+            report_type   = 'Voluntary',
+            status        = 'Submitted',
+        )
+        db.session.add(rep)
+        db.session.commit()
+        return api_ok({'report_id': ref}, 'Voluntary report submitted', 201)
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/ping', methods=['GET'])
+def api_ping():
+    """Flutter: Health check — verify API is reachable."""
+    return api_ok({'server': 'Jordan Aviation SMS', 'version': '1.0'}, 'API online')
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
