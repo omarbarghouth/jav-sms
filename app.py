@@ -346,7 +346,9 @@ def resolve_report_status(hazard_id=None, hr_status=None):
             haz = Hazard.query.get(hazard_id)
             if haz and haz.status == 'Closed':
                 status = 'Closed'
-            elif haz and haz.status == 'Under Assessment' and status == 'Submitted':
+            elif haz and haz.status == 'Under Assessment' and status in ('Submitted',):
+                status = 'Under Review'
+            elif haz and haz.status == 'Open' and not actions and not investigations:
                 status = 'Under Review'
 
             # Build timeline from ActionHistory
@@ -798,6 +800,7 @@ def api_mobile_hazard():
             status              = 'Open',
             department_id       = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
         )
+        haz.status = 'Under Assessment'
         db.session.add(haz)
         db.session.flush()
 
@@ -902,6 +905,8 @@ def api_mobile_asr():
         except Exception:
             pass
 
+        # Mark hazard as Under Assessment
+        haz.status = 'Under Assessment'
         db.session.commit()
         return api_ok({'report_id': asr_id, 'hazard_id': hid},
                       'ASR submitted successfully', 201)
