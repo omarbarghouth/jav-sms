@@ -1079,3 +1079,25 @@ class RAChecklistItem(db.Model):
     description   = db.Column(db.String(200))
     checked       = db.Column(db.Boolean, default=False)
     notes         = db.Column(db.Text)
+
+
+class Employee(db.Model):
+    """Mobile app employees — separate from admin/SAG users."""
+    __tablename__ = 'employees'
+    id            = db.Column(db.Integer, primary_key=True)
+    employee_id   = db.Column(db.String(30), unique=True, nullable=False)  # e.g. JA-001
+    username      = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+    full_name     = db.Column(db.String(120), nullable=False)
+    email         = db.Column(db.String(120))
+    mobile        = db.Column(db.String(30))
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    role          = db.Column(db.String(50), default='employee')  # employee, captain, engineer, etc.
+    is_active     = db.Column(db.Boolean, default=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login    = db.Column(db.DateTime)
+
+    department = db.relationship('Department', foreign_keys=[department_id])
+
+    def __repr__(self):
+        return f'<Employee {self.employee_id} {self.full_name}>'
