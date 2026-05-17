@@ -295,9 +295,9 @@ def public_portal():
 
 def resolve_report_status(hazard_id=None, hr_status=None):
     """
-    Intelligently compute the current workflow status of a report
-    by looking at linked Actions, Investigations, and Risk Assessments.
-    Returns (status_label, status_color, stage_number, timeline_events)
+    Enterprise Workflow Intelligence Engine.
+    Dynamically calculates report lifecycle state from real workflow data.
+    Returns: (status, color, stage, timeline, guidance, responsible, next_step)
     """
     STATUS_MAP = {
         'Submitted':              ('#3b82f6', 1),
@@ -312,61 +312,156 @@ def resolve_report_status(hazard_id=None, hr_status=None):
         'Rejected':               ('#ef4444', 0),
     }
 
-    status = hr_status or 'Submitted'
-    timeline = []
+    GUIDANCE_MAP = {
+        'Submitted':
+            'Your report has been received. The Safety Department will begin review within 48 hours.',
+        'Under Review':
+            'Safety Department is reviewing your report. A workflow action will be assigned shortly.',
+        'Assigned':
+            'A corrective action has been assigned to the responsible department. Work is in progress.',
+        'Investigation Open':
+            'A formal investigation has been opened. Awaiting root cause analysis and mitigation plan.',
+        'Risk Assessment Open':
+            'A risk assessment is being conducted to evaluate the safety impact of this occurrence.',
+        'Pending SAG':
+            'Awaiting corrective action implementation by the assigned Safety Action Group (SAG).',
+        'Mitigation In Progress':
+            'Corrective action plan has been submitted. Implementation and verification is ongoing.',
+        'Awaiting Closure':
+            'All corrective actions are complete. Safety Manager must verify effectiveness before closure.',
+        'Closed':
+            'This occurrence has been fully resolved and closed. Thank you for your safety report.',
+        'Rejected':
+            'This report has been reviewed and classified as not requiring further action.',
+    }
+
+    status      = hr_status or 'Submitted'
+    timeline    = []
+    responsible = 'Safety Department'
+    next_step   = 'Awaiting safety review'
 
     if hazard_id:
         try:
-            # Check linked actions
-            actions = Action.query.filter_by(hazard_id=hazard_id).all()
-            investigations = Investigation.query.filter_by(hazard_id=hazard_id).all()
-            risks = Risk.query.filter_by(hazard_id=hazard_id).all()
+            actions       = Action.query.filter_by(hazard_id=hazard_id).order_by(Action.created_at).all()
+            investigations= Investigation.query.filter_by(hazard_id=hazard_id).all()
+            risks         = Risk.query.filter_by(hazard_id=hazard_id).all()
+            haz           = Hazard.query.filter_by(id=hazard_id).first()
 
-            if actions:
-                open_actions  = [a for a in actions if a.status not in ('Closed',)]
-                closed_actions= [a for a in actions if a.status == 'Closed']
-                sag_actions   = [a for a in actions if a.sag_member]
+            # ── Determine status (highest priority wins) ──────────────────────
+            if haz and haz.status == 'Closed':
+                status      = 'Closed'
+                responsible = 'Safety Manager'
+                next_step   = 'Occurrence fully closed'
+
+            elif investigations and any(i.status not in ('Closed','Completed') for i in investigations):
+                status      = 'Investigation Open'
+                responsible = 'Investigation Team'
+                next_step   = 'Complete root cause analysis'
+
+            elif actions:
+                open_acts   = [a for a in actions if a.status != 'Closed']
+                sag_acts    = [a for a in actions if a.sag_member and a.status != 'Closed']
+                cap_acts    = [a for a in actions if a.status in ('CAP Submitted','Root Cause Submitted')]
 
                 if all(a.status == 'Closed' for a in actions):
-                    status = 'Awaiting Closure'
-                elif sag_actions and any(a.status not in ('Closed',) for a in sag_actions):
-                    status = 'Pending SAG'
-                elif any(a.status in ('CAP Submitted','Root Cause Submitted') for a in actions):
-                    status = 'Mitigation In Progress'
-                elif open_actions:
-                    status = 'Assigned'
+                    status      = 'Awaiting Closure'
+                    responsible = 'Safety Manager'
+                    next_step   = 'Verify corrective action effectiveness'
 
-            if investigations and any(i.status not in ('Closed','Completed') for i in investigations):
-                status = 'Investigation Open'
+                elif cap_acts:
+                    status      = 'Mitigation In Progress'
+                    responsible = (cap_acts[0].owner or 'Department Manager')
+                    next_step   = 'Verify corrective action implementation'
 
-            if risks and any(r.initial_risk_index for r in risks) and status == 'Submitted':
-                status = 'Risk Assessment Open'
+                elif sag_acts:
+                    status      = 'Pending SAG'
+                    responsible = (sag_acts[0].sag_member or 'SAG Team')
+                    next_step   = 'Implement corrective action plan'
 
-            # Check if hazard itself is closed
-            haz = Hazard.query.get(hazard_id)
-            if haz and haz.status == 'Closed':
-                status = 'Closed'
-            elif haz and haz.status == 'Under Assessment' and status in ('Submitted',):
-                status = 'Under Review'
-            elif haz and haz.status == 'Open' and not actions and not investigations:
-                status = 'Under Review'
+                elif open_acts:
+                    status      = 'Assigned'
+                    responsible = (open_acts[0].owner or 'Department Manager')
+                    next_step   = f'Complete assigned action: {(open_acts[0].description or "")[:50]}'
 
-            # Build timeline from ActionHistory
+            elif risks and any(r.initial_risk_index for r in risks):
+                status      = 'Risk Assessment Open'
+                responsible = 'Safety Officer'
+                next_step   = 'Complete risk assessment and assign controls'
+
+            elif haz and haz.status == 'Under Assessment':
+                status      = 'Under Review'
+                responsible = 'Safety Department'
+                next_step   = 'Safety review in progress — action will be assigned'
+
+            else:
+                status      = 'Under Review'
+                responsible = 'Safety Department'
+                next_step   = 'Awaiting safety review and workflow assignment'
+
+            # ── Build rich timeline ───────────────────────────────────────────
+            if haz:
+                dt = haz.created_at.strftime('%d %b %Y') if haz.created_at else 'On submission'
+                timeline.append({
+                    'date':  dt,
+                    'event': 'Report received — Occurrence record created in Safety Registry',
+                    'icon':  '📋', 'type': 'submitted',
+                })
+                if haz.status in ('Under Assessment', 'Open', 'Closed'):
+                    timeline.append({
+                        'date':  dt,
+                        'event': 'Safety Department review initiated',
+                        'icon':  '🔍', 'type': 'review',
+                    })
+
             for a in actions:
-                hist = ActionHistory.query.filter_by(action_id=a.id).order_by(ActionHistory.changed_at).all()
-                for h in hist:
-                    if h.changed_at:
+                if a.created_at:
+                    dept = a.owner or 'Department'
+                    timeline.append({
+                        'date':  a.created_at.strftime('%d %b %Y'),
+                        'event': f'Action assigned to {dept}: {(a.description or "")[:50]}',
+                        'icon':  '⚡', 'type': 'action',
+                    })
+                if a.sag_member and a.created_at:
+                    timeline.append({
+                        'date':  a.created_at.strftime('%d %b %Y'),
+                        'event': f'SAG assigned: {a.sag_member}',
+                        'icon':  '🛡', 'type': 'sag',
+                    })
+                for h in ActionHistory.query.filter_by(action_id=a.id).order_by(ActionHistory.changed_at).all():
+                    if h.changed_at and h.to_status:
+                        icon = '✅' if h.to_status == 'Closed' else '🔄'
                         timeline.append({
-                            'date': h.changed_at.strftime('%d %b %Y'),
-                            'event': f'Action {h.to_status}: {(a.description or "")[:60]}',
-                            'type': 'action',
+                            'date':  h.changed_at.strftime('%d %b %Y'),
+                            'event': f'Action status → {h.to_status}',
+                            'icon':  icon, 'type': 'update',
                         })
+
+            for inv in investigations:
+                if inv.created_at:
+                    timeline.append({
+                        'date':  inv.created_at.strftime('%d %b %Y'),
+                        'event': f'Investigation opened: {(inv.title or "Formal Investigation")[:50]}',
+                        'icon':  '🔬', 'type': 'investigation',
+                    })
+
+            if haz and haz.status == 'Closed':
+                timeline.append({
+                    'date':  '—',
+                    'event': 'Occurrence closed — corrective action verified effective',
+                    'icon':  '✅', 'type': 'closed',
+                })
+
+            # Sort timeline by date (approximate)
+            timeline = sorted(timeline, key=lambda x: x.get('date',''))
 
         except Exception:
             pass
 
     color, stage = STATUS_MAP.get(status, ('#6b7280', 1))
-    return status, color, stage, timeline
+    guidance = GUIDANCE_MAP.get(status,
+        'Your report is being processed by the Safety Management System.')
+
+    return status, color, stage, timeline, guidance, responsible, next_step
 
 
 def get_report_timeline(hazard_id, created_at, report_type='Hazard Report'):
@@ -1010,7 +1105,7 @@ def api_report_detail(rid):
         # Try HazardReport first
         hr = HazardReport.query.get(rid)
         if hr:
-            wf_status, wf_color, wf_stage, _ = resolve_report_status(
+            wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next = resolve_report_status(
                 hazard_id=hr.hazard_id, hr_status=hr.status)
             timeline = get_report_timeline(hr.hazard_id, hr.created_at,
                                            hr.report_type or 'Hazard Report')
@@ -1027,6 +1122,8 @@ def api_report_detail(rid):
                 'title': hr.generic_hazard or '', 'description': hr.description or '',
                 'location': hr.location or '', 'date': hr.date or '',
                 'status': wf_status, 'status_color': wf_color, 'stage': wf_stage,
+                'guidance': wf_guidance, 'responsible': wf_responsible,
+                'next_step': wf_next,
                 'severity': hr.reporter_severity or 'Medium',
                 'hazard_id': hr.hazard_id or '',
                 'created_at': hr.created_at.isoformat() if hr.created_at else '',
@@ -1035,7 +1132,7 @@ def api_report_detail(rid):
         # Try ASR
         asr = ASRReport.query.get(rid)
         if asr:
-            wf_status, wf_color, wf_stage, _ = resolve_report_status(
+            wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next = resolve_report_status(
                 hazard_id=asr.hazard_id, hr_status='Submitted')
             timeline = get_report_timeline(asr.hazard_id, asr.created_at, 'ASR')
             return api_ok({
@@ -1218,7 +1315,7 @@ def api_my_reports():
             q = q.filter(HazardReport.reporter.ilike(f'%{uname}%'))
         for r in q.order_by(HazardReport.created_at.desc()).limit(50).all():
             try:
-                wf_status, wf_color, wf_stage, timeline = resolve_report_status(
+                wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next = resolve_report_status(
                     hazard_id=r.hazard_id, hr_status=r.status)
                 records.append({
                     'id':          r.id,
@@ -1228,12 +1325,15 @@ def api_my_reports():
                     'status':      wf_status,
                     'status_color':wf_color,
                     'stage':       wf_stage,
+                    'guidance':    wf_guidance,
+                    'responsible': wf_responsible,
+                    'next_step':   wf_next,
                     'date':        r.date or '',
                     'location':    r.location or '',
                     'severity':    r.reporter_severity or 'Medium',
                     'hazard_id':   r.hazard_id or '',
                     'created_at':  r.created_at.isoformat() if r.created_at else '',
-                    'timeline':    timeline[:5],
+                    'timeline':    timeline[:8],
                 })
             except Exception: pass
 
@@ -1246,7 +1346,7 @@ def api_my_reports():
             try:
                 if r.hazard_id and r.hazard_id in existing_ids:
                     continue  # Already included via HazardReport
-                wf_status, wf_color, wf_stage, timeline = resolve_report_status(
+                wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next = resolve_report_status(
                     hazard_id=r.hazard_id, hr_status='Submitted')
                 records.append({
                     'id':          r.id,
@@ -1279,7 +1379,7 @@ def api_mobile_history():
         records = []
         for r in HazardReport.query.order_by(HazardReport.created_at.desc()).limit(limit).all():
             try:
-                wf_status, wf_color, wf_stage, _ = resolve_report_status(
+                wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next = resolve_report_status(
                     hazard_id=r.hazard_id, hr_status=r.status)
                 records.append({
                     'id':          r.id,
@@ -1289,10 +1389,14 @@ def api_mobile_history():
                     'status':      wf_status,
                     'status_color':wf_color,
                     'stage':       wf_stage,
+                    'guidance':    wf_guidance,
+                    'responsible': wf_responsible,
+                    'next_step':   wf_next,
                     'date':        r.date or '',
                     'location':    r.location or '',
                     'severity':    r.reporter_severity or 'Medium',
                     'created_at':  r.created_at.isoformat() if r.created_at else '',
+                    'timeline':    timeline[:6],
                 })
             except Exception: pass
         records.sort(key=lambda x: x.get('created_at',''), reverse=True)
