@@ -295,7 +295,8 @@
     <a href="/erp" class="nav-a {% if '/erp' in request.path %}active{% endif %}" data-tip="ERP"><span class="nav-icon">🚨</span><span class="nav-label">Emergency Response</span></a>
   </nav>
 
-  <a href="/admin/users" class="nav-a" style="margin-top:auto;opacity:.45;font-size:11.5px" data-tip="Users"><span class="nav-icon" style="font-size:13px">👤</span><span class="nav-label">User Management</span></a>
+  <a href="/admin/employees" class="nav-link {% if request.path.startswith('/admin/employees') %}active{% endif %}">👥 Employees</a>
+      <a href="/admin/users" class="nav-a" style="margin-top:auto;opacity:.45;font-size:11.5px" data-tip="Users"><span class="nav-icon" style="font-size:13px">👤</span><span class="nav-label">User Management</span></a>
   <a href="/admin/cleanup" class="nav-a" style="opacity:.28;font-size:11px;border-top:1px solid rgba(255,255,255,.05)" data-tip="Cleanup"><span class="nav-icon" style="font-size:12px">🗑</span><span class="nav-label">DB Cleanup</span></a>
 
   <div class="sb-foot">
