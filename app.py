@@ -291,6 +291,121 @@ def public_portal():
                            lessons=lessons, safety_message=safety_message)
 
 
+# ── WORKFLOW STATUS ENGINE ─────────────────────────────────────────────────────
+
+def resolve_report_status(hazard_id=None, hr_status=None):
+    """
+    Intelligently compute the current workflow status of a report
+    by looking at linked Actions, Investigations, and Risk Assessments.
+    Returns (status_label, status_color, stage_number, timeline_events)
+    """
+    STATUS_MAP = {
+        'Submitted':              ('#3b82f6', 1),
+        'Under Review':           ('#f59e0b', 2),
+        'Assigned':               ('#8b5cf6', 3),
+        'Investigation Open':     ('#eab308', 4),
+        'Risk Assessment Open':   ('#06b6d4', 4),
+        'Mitigation In Progress': ('#06b6d4', 5),
+        'Pending SAG':            ('#f97316', 5),
+        'Awaiting Closure':       ('#6b7280', 6),
+        'Closed':                 ('#22c55e', 7),
+        'Rejected':               ('#ef4444', 0),
+    }
+
+    status = hr_status or 'Submitted'
+    timeline = []
+
+    if hazard_id:
+        try:
+            # Check linked actions
+            actions = Action.query.filter_by(hazard_id=hazard_id).all()
+            investigations = Investigation.query.filter_by(hazard_id=hazard_id).all()
+            risks = Risk.query.filter_by(hazard_id=hazard_id).all()
+
+            if actions:
+                open_actions  = [a for a in actions if a.status not in ('Closed',)]
+                closed_actions= [a for a in actions if a.status == 'Closed']
+                sag_actions   = [a for a in actions if a.sag_member]
+
+                if all(a.status == 'Closed' for a in actions):
+                    status = 'Awaiting Closure'
+                elif sag_actions and any(a.status not in ('Closed',) for a in sag_actions):
+                    status = 'Pending SAG'
+                elif any(a.status in ('CAP Submitted','Root Cause Submitted') for a in actions):
+                    status = 'Mitigation In Progress'
+                elif open_actions:
+                    status = 'Assigned'
+
+            if investigations and any(i.status not in ('Closed','Completed') for i in investigations):
+                status = 'Investigation Open'
+
+            if risks and any(r.initial_risk_index for r in risks) and status == 'Submitted':
+                status = 'Risk Assessment Open'
+
+            # Check if hazard itself is closed
+            haz = Hazard.query.get(hazard_id)
+            if haz and haz.status == 'Closed':
+                status = 'Closed'
+            elif haz and haz.status == 'Under Assessment' and status == 'Submitted':
+                status = 'Under Review'
+
+            # Build timeline from ActionHistory
+            for a in actions:
+                hist = ActionHistory.query.filter_by(action_id=a.id).order_by(ActionHistory.changed_at).all()
+                for h in hist:
+                    if h.changed_at:
+                        timeline.append({
+                            'date': h.changed_at.strftime('%d %b %Y'),
+                            'event': f'Action {h.to_status}: {(a.description or "")[:60]}',
+                            'type': 'action',
+                        })
+
+        except Exception:
+            pass
+
+    color, stage = STATUS_MAP.get(status, ('#6b7280', 1))
+    return status, color, stage, timeline
+
+
+def get_report_timeline(hazard_id, created_at, report_type='Hazard Report'):
+    """Build chronological timeline for a report."""
+    events = []
+    if created_at:
+        events.append({
+            'date': created_at.strftime('%d %b %Y %H:%M'),
+            'event': f'{report_type} submitted',
+            'type': 'submitted', 'icon': '📝'
+        })
+    if hazard_id:
+        try:
+            haz = Hazard.query.get(hazard_id)
+            if haz and haz.status == 'Under Assessment':
+                events.append({'date': '—', 'event': 'Safety review started',
+                    'type': 'review', 'icon': '🔍'})
+            actions = Action.query.filter_by(hazard_id=hazard_id).order_by(Action.created_at).all()
+            for a in actions:
+                if a.created_at:
+                    events.append({
+                        'date': a.created_at.strftime('%d %b %Y'),
+                        'event': f'Action assigned: {(a.description or "")[:60]}',
+                        'type': 'action', 'icon': '⚡'
+                    })
+                hist = ActionHistory.query.filter_by(action_id=a.id).order_by(ActionHistory.changed_at).all()
+                for h in hist:
+                    if h.changed_at and h.to_status:
+                        events.append({
+                            'date': h.changed_at.strftime('%d %b %Y'),
+                            'event': f'Action updated to: {h.to_status}',
+                            'type': 'update', 'icon': '🔄'
+                        })
+            if haz and haz.status == 'Closed':
+                events.append({'date': '—', 'event': 'Occurrence closed',
+                    'type': 'closed', 'icon': '✅'})
+        except Exception:
+            pass
+    return events
+
+
 # ── OCCURRENCE REGISTRY HELPER ────────────────────────────────────────────────
 def _register_occurrence(report_id, report_type, description, location='',
                           date_str='', department_id=None,
@@ -881,6 +996,59 @@ def api_mobile_voluntary():
         return api_err(str(e)[:120], 500)
 
 
+@app.route('/api/report/detail/<rid>', methods=['GET'])
+def api_report_detail(rid):
+    """Flutter: Get full report detail with timeline."""
+    token = request.headers.get('Authorization','').replace('Bearer ','')
+    _verify_token(token)  # optional auth
+    try:
+        # Try HazardReport first
+        hr = HazardReport.query.get(rid)
+        if hr:
+            wf_status, wf_color, wf_stage, _ = resolve_report_status(
+                hazard_id=hr.hazard_id, hr_status=hr.status)
+            timeline = get_report_timeline(hr.hazard_id, hr.created_at,
+                                           hr.report_type or 'Hazard Report')
+            actions = []
+            if hr.hazard_id:
+                for a in Action.query.filter_by(hazard_id=hr.hazard_id).all():
+                    actions.append({
+                        'id': a.id, 'description': (a.description or '')[:100],
+                        'status': a.status or '', 'owner': a.owner or '',
+                        'due_date': a.due_date or '', 'priority': a.priority or '',
+                    })
+            return api_ok({
+                'id': hr.id, 'type': hr.report_type or 'Hazard Report',
+                'title': hr.generic_hazard or '', 'description': hr.description or '',
+                'location': hr.location or '', 'date': hr.date or '',
+                'status': wf_status, 'status_color': wf_color, 'stage': wf_stage,
+                'severity': hr.reporter_severity or 'Medium',
+                'hazard_id': hr.hazard_id or '',
+                'created_at': hr.created_at.isoformat() if hr.created_at else '',
+                'timeline': timeline, 'actions': actions,
+            }, 'Report loaded')
+        # Try ASR
+        asr = ASRReport.query.get(rid)
+        if asr:
+            wf_status, wf_color, wf_stage, _ = resolve_report_status(
+                hazard_id=asr.hazard_id, hr_status='Submitted')
+            timeline = get_report_timeline(asr.hazard_id, asr.created_at, 'ASR')
+            return api_ok({
+                'id': asr.id, 'type': 'ASR',
+                'title': asr.occurrence_type or 'Air Safety Report',
+                'description': asr.event_description or '',
+                'location': f'{asr.route_from or ""}→{asr.route_to or ""}',
+                'date': asr.date or '',
+                'status': wf_status, 'status_color': wf_color, 'stage': wf_stage,
+                'severity': asr.severity or 'C', 'hazard_id': asr.hazard_id or '',
+                'created_at': asr.created_at.isoformat() if asr.created_at else '',
+                'timeline': timeline, 'actions': [],
+            }, 'Report loaded')
+        return api_err('Report not found', 404)
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
 @app.route('/api/mobile/ping', methods=['GET'])
 def api_ping():
     """Flutter: Health check — verify API is reachable."""
@@ -1026,37 +1194,72 @@ def api_my_reports():
     if not data:
         return api_err('Unauthorized', 401)
     try:
-        user = User.query.get(data['user_id'])
-        uname = (user.full_name or user.username) if user else ''
+        uid = data['user_id']
+        # Resolve reporter name from employee or user
+        uname = ''
+        try:
+            if str(uid).startswith('emp_'):
+                emp = Employee.query.get(int(str(uid).replace('emp_','')))
+                uname = emp.full_name if emp else ''
+            else:
+                user = User.query.get(int(str(uid).replace('usr_','')))
+                uname = (user.full_name or user.username) if user else ''
+        except Exception: pass
+
         records = []
-        # Hazard Reports by this user
-        for r in HazardReport.query.filter(
-            HazardReport.reporter.ilike(f'%{uname}%') if uname else HazardReport.id == None
-        ).order_by(HazardReport.created_at.desc()).limit(30).all():
+        # All HazardReports (includes ASR, Voluntary, Confidential linked ones)
+        q = HazardReport.query
+        if uname:
+            q = q.filter(HazardReport.reporter.ilike(f'%{uname}%'))
+        for r in q.order_by(HazardReport.created_at.desc()).limit(50).all():
             try:
+                wf_status, wf_color, wf_stage, timeline = resolve_report_status(
+                    hazard_id=r.hazard_id, hr_status=r.status)
                 records.append({
-                    'id': r.id, 'type': r.report_type or 'Hazard Report',
-                    'description': (r.description or '')[:80],
-                    'status': r.status or 'Submitted',
-                    'date': r.date or '',
-                    'location': r.location or '',
-                    'created_at': r.created_at.isoformat() if r.created_at else '',
+                    'id':          r.id,
+                    'type':        r.report_type or 'Hazard Report',
+                    'title':       r.generic_hazard or r.description[:60] if r.description else r.id,
+                    'description': (r.description or '')[:100],
+                    'status':      wf_status,
+                    'status_color':wf_color,
+                    'stage':       wf_stage,
+                    'date':        r.date or '',
+                    'location':    r.location or '',
+                    'severity':    r.reporter_severity or 'Medium',
+                    'hazard_id':   r.hazard_id or '',
+                    'created_at':  r.created_at.isoformat() if r.created_at else '',
+                    'timeline':    timeline[:5],
                 })
             except Exception: pass
-        # ASR Reports by this user
-        for r in ASRReport.query.filter(
-            ASRReport.captain.ilike(f'%{uname}%') if uname else ASRReport.id == None
-        ).order_by(ASRReport.created_at.desc()).limit(20).all():
+
+        # ASR by this user (not already in HazardReport)
+        existing_ids = {r['hazard_id'] for r in records if r.get('hazard_id')}
+        asr_q = ASRReport.query
+        if uname:
+            asr_q = asr_q.filter(ASRReport.captain.ilike(f'%{uname}%'))
+        for r in asr_q.order_by(ASRReport.created_at.desc()).limit(20).all():
             try:
+                if r.hazard_id and r.hazard_id in existing_ids:
+                    continue  # Already included via HazardReport
+                wf_status, wf_color, wf_stage, timeline = resolve_report_status(
+                    hazard_id=r.hazard_id, hr_status='Submitted')
                 records.append({
-                    'id': r.id, 'type': 'ASR',
-                    'description': f'{r.occurrence_type or ""}: {(r.event_description or "")[:60]}',
-                    'status': 'Submitted',
-                    'date': r.date or '',
-                    'location': f'{r.route_from or ""}→{r.route_to or ""}',
-                    'created_at': r.created_at.isoformat() if r.created_at else '',
+                    'id':          r.id,
+                    'type':        'ASR',
+                    'title':       r.occurrence_type or 'Air Safety Report',
+                    'description': f"Flight {r.flight_no or '—'}: {(r.event_description or '')[:80]}",
+                    'status':      wf_status,
+                    'status_color':wf_color,
+                    'stage':       wf_stage,
+                    'date':        r.date or '',
+                    'location':    f'{r.route_from or ""}→{r.route_to or ""}',
+                    'severity':    r.severity or 'C',
+                    'hazard_id':   r.hazard_id or '',
+                    'created_at':  r.created_at.isoformat() if r.created_at else '',
+                    'timeline':    timeline[:5],
                 })
             except Exception: pass
+
         records.sort(key=lambda x: x.get('created_at',''), reverse=True)
         return api_ok({'reports': records, 'total': len(records)}, 'My reports loaded')
     except Exception as e:
@@ -1069,31 +1272,24 @@ def api_mobile_history():
     try:
         limit = int(request.args.get('limit', 20))
         records = []
-        # Hazard Reports
         for r in HazardReport.query.order_by(HazardReport.created_at.desc()).limit(limit).all():
             try:
+                wf_status, wf_color, wf_stage, _ = resolve_report_status(
+                    hazard_id=r.hazard_id, hr_status=r.status)
                 records.append({
-                    'id': r.id, 'type': r.report_type or 'Hazard Report',
+                    'id':          r.id,
+                    'type':        r.report_type or 'Hazard Report',
+                    'title':       r.generic_hazard or (r.description or '')[:60],
                     'description': (r.description or '')[:80],
-                    'status': r.status or 'Submitted',
-                    'date': r.date or '',
-                    'location': r.location or '',
-                    'created_at': r.created_at.isoformat() if r.created_at else '',
+                    'status':      wf_status,
+                    'status_color':wf_color,
+                    'stage':       wf_stage,
+                    'date':        r.date or '',
+                    'location':    r.location or '',
+                    'severity':    r.reporter_severity or 'Medium',
+                    'created_at':  r.created_at.isoformat() if r.created_at else '',
                 })
             except Exception: pass
-        # ASR Reports
-        for r in ASRReport.query.order_by(ASRReport.created_at.desc()).limit(10).all():
-            try:
-                records.append({
-                    'id': r.id, 'type': 'ASR',
-                    'description': (r.occurrence_type or '') + ': ' + (r.event_description or '')[:60],
-                    'status': 'Submitted',
-                    'date': r.date or '',
-                    'location': f'{r.route_from or ""}-{r.route_to or ""}',
-                    'created_at': r.created_at.isoformat() if r.created_at else '',
-                })
-            except Exception: pass
-        # Sort by created_at descending
         records.sort(key=lambda x: x.get('created_at',''), reverse=True)
         return api_ok({'reports': records[:limit], 'total': len(records)}, 'History loaded')
     except Exception as e:
