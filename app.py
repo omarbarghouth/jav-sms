@@ -1471,7 +1471,17 @@ def asr():
 
         flash(f'✓ ASR {aid} submitted successfully. Hazard {hid} created. Proceeding to Risk Assessment.', 'success')
         return redirect(url_for('ra_wizard_start', hid=hid))
-    return render_template('reporting/asr_report.html')
+    # GET - show list if ?list=1, otherwise show form
+    all_asrs = ASRReport.query.order_by(ASRReport.created_at.desc()).all()
+    return render_template('reporting/asr_report.html', all_asrs=all_asrs)
+
+
+@app.route('/asr/list')
+@require_login
+def asr_list():
+    """All ASR reports with delete capability."""
+    asrs = ASRReport.query.order_by(ASRReport.created_at.desc()).all()
+    return render_template('reporting/asr_list.html', asrs=asrs)
 
 # ─── Hazard Log ───────────────────────────────────────────────────────────────
 @app.route('/hazard-log')
@@ -3757,12 +3767,27 @@ def delete_hazard(hid):
 
 
 @app.route('/delete/asr/<aid>', methods=['POST'])
+@require_login
 def delete_asr(aid):
     rec = ASRReport.query.get_or_404(aid)
-    db.session.delete(rec)
-    db.session.commit()
-    flash(f'✓ ASR Report {aid} deleted.', 'success')
-    return redirect('/asr')
+    try:
+        # Also clean up linked HazardReport and Hazard if they exist
+        if rec.hazard_id:
+            HazardReport.query.filter_by(hazard_id=rec.hazard_id).delete(synchronize_session=False)
+            # Delete linked actions
+            acts = Action.query.filter_by(hazard_id=rec.hazard_id).all()
+            for a in acts:
+                ActionHistory.query.filter_by(action_id=a.id).delete(synchronize_session=False)
+                db.session.delete(a)
+            haz = Hazard.query.get(rec.hazard_id)
+            if haz: db.session.delete(haz)
+        db.session.delete(rec)
+        db.session.commit()
+        flash(f'✓ ASR {aid} deleted successfully.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting ASR: {str(e)[:80]}', 'danger')
+    return redirect('/asr/list')
 
 
 @app.route('/delete/action/<aid>', methods=['POST'])
