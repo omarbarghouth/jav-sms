@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from openpyxl import Workbook
@@ -924,27 +924,58 @@ def api_login():
         password = f.get('password', '')
         if not username or not password:
             return api_err('Username and password required', 400)
-        user = User.query.filter_by(username=username, is_active=True).first()
-        if not user or not check_pw(password, user.password_hash):
+        # Check Employee table first (mobile users), then User table (admins)
+        emp = Employee.query.filter_by(username=username, is_active=True).first()
+        user = None if emp else User.query.filter_by(username=username, is_active=True).first()
+
+        if emp:
+            if not check_pw(password, emp.password_hash):
+                return api_err('Invalid username or password', 401)
+            emp.last_login = datetime.utcnow()
+            db.session.commit()
+            token = _make_token(f'emp_{emp.id}', emp.username)
+            dept_name = ''
+            if emp.department_id:
+                try:
+                    dept = Department.query.get(emp.department_id)
+                    dept_name = dept.name if dept else ''
+                except Exception: pass
+            return api_ok({
+                'token':         token,
+                'user_id':       f'emp_{emp.id}',
+                'username':      emp.username,
+                'full_name':     emp.full_name,
+                'role':          emp.role or 'employee',
+                'department':    dept_name,
+                'department_id': emp.department_id,
+                'employee_id':   emp.employee_id,
+                'account_type':  'employee',
+            }, 'Login successful')
+        elif user:
+            if not check_pw(password, user.password_hash):
+                return api_err('Invalid username or password', 401)
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            token = _make_token(f'usr_{user.id}', user.username)
+            dept_name = ''
+            if user.department_id:
+                try:
+                    dept = Department.query.get(user.department_id)
+                    dept_name = dept.name if dept else ''
+                except Exception: pass
+            return api_ok({
+                'token':         token,
+                'user_id':       f'usr_{user.id}',
+                'username':      user.username,
+                'full_name':     user.full_name or user.username,
+                'role':          user.role or 'admin',
+                'department':    dept_name,
+                'department_id': user.department_id,
+                'employee_id':   '',
+                'account_type':  'admin',
+            }, 'Login successful')
+        else:
             return api_err('Invalid username or password', 401)
-        user.last_login = datetime.utcnow()
-        db.session.commit()
-        token = _make_token(user.id, user.username)
-        dept_name = ''
-        if user.department_id:
-            try:
-                dept = Department.query.get(user.department_id)
-                dept_name = dept.name if dept else ''
-            except Exception: pass
-        return api_ok({
-            'token':      token,
-            'user_id':    user.id,
-            'username':   user.username,
-            'full_name':  user.full_name or user.username,
-            'role':       user.role or 'employee',
-            'department': dept_name,
-            'department_id': user.department_id,
-        }, 'Login successful')
     except Exception as e:
         return api_err(str(e)[:120], 500)
 
@@ -1112,6 +1143,93 @@ def admin_logout():
     session.clear()
     flash('You have been logged out.', 'info')
     return redirect(url_for('public_portal'))
+
+
+# ── EMPLOYEE MANAGEMENT ────────────────────────────────────────────────────────
+
+@app.route('/admin/employees')
+@require_login
+def admin_employees():
+    """Employee management — mobile app users."""
+    if session.get('admin_role') != 'admin':
+        flash('Admin access required.', 'error')
+        return redirect(url_for('dashboard'))
+    employees = Employee.query.order_by(Employee.created_at.desc()).all()
+    departments = Department.query.all()
+    return render_template('portal/admin_employees.html',
+                           employees=employees, departments=departments,
+                           total=len(employees),
+                           active=sum(1 for e in employees if e.is_active))
+
+
+@app.route('/admin/employees/new', methods=['POST'])
+@require_login
+def admin_employee_new():
+    if session.get('admin_role') != 'admin':
+        return redirect(url_for('dashboard'))
+    f = request.form
+    if Employee.query.filter_by(username=f['username']).first():
+        flash('Username already exists.', 'error')
+        return redirect(url_for('admin_employees'))
+    if Employee.query.filter_by(employee_id=f['employee_id']).first():
+        flash('Employee ID already exists.', 'error')
+        return redirect(url_for('admin_employees'))
+    emp = Employee(
+        employee_id   = f['employee_id'].strip(),
+        username      = f['username'].strip(),
+        password_hash = hash_pw(f['password']),
+        full_name     = f.get('full_name','').strip(),
+        email         = f.get('email','').strip(),
+        mobile        = f.get('mobile','').strip(),
+        role          = f.get('role','employee'),
+        department_id = int(f['department_id']) if f.get('department_id') else None,
+        is_active     = True,
+    )
+    db.session.add(emp)
+    db.session.commit()
+    flash(f'✓ Employee {emp.full_name} ({emp.employee_id}) created successfully.', 'success')
+    return redirect(url_for('admin_employees'))
+
+
+@app.route('/admin/employees/<int:eid>/toggle', methods=['POST'])
+@require_login
+def admin_employee_toggle(eid):
+    if session.get('admin_role') != 'admin':
+        return redirect(url_for('dashboard'))
+    emp = Employee.query.get_or_404(eid)
+    emp.is_active = not emp.is_active
+    db.session.commit()
+    flash(f'✓ {emp.full_name} {"activated" if emp.is_active else "deactivated"}.', 'success')
+    return redirect(url_for('admin_employees'))
+
+
+@app.route('/admin/employees/<int:eid>/reset-password', methods=['POST'])
+@require_login
+def admin_employee_reset_pw(eid):
+    if session.get('admin_role') != 'admin':
+        return redirect(url_for('dashboard'))
+    emp = Employee.query.get_or_404(eid)
+    new_pw = request.form.get('new_password','')
+    if not new_pw or len(new_pw) < 6:
+        flash('Password must be at least 6 characters.', 'error')
+        return redirect(url_for('admin_employees'))
+    emp.password_hash = hash_pw(new_pw)
+    db.session.commit()
+    flash(f'✓ Password reset for {emp.full_name}.', 'success')
+    return redirect(url_for('admin_employees'))
+
+
+@app.route('/admin/employees/<int:eid>/delete', methods=['POST'])
+@require_login
+def admin_employee_delete(eid):
+    if session.get('admin_role') != 'admin':
+        return redirect(url_for('dashboard'))
+    emp = Employee.query.get_or_404(eid)
+    name = emp.full_name
+    db.session.delete(emp)
+    db.session.commit()
+    flash(f'✓ Employee {name} deleted.', 'success')
+    return redirect(url_for('admin_employees'))
 
 
 @app.route('/admin/users')
