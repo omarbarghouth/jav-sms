@@ -887,6 +887,151 @@ def api_ping():
     return api_ok({'server': 'Jordan Aviation SMS', 'version': '1.0'}, 'API online')
 
 
+# ── EMPLOYEE AUTH APIs ────────────────────────────────────────────────────────
+
+def _make_token(user_id, username):
+    """Generate a simple secure token stored in memory."""
+    import secrets
+    token = secrets.token_urlsafe(32)
+    _token_store[token] = {
+        'user_id': user_id, 'username': username,
+        'expires': datetime.utcnow().timestamp() + 86400  # 24 hours
+    }
+    return token
+
+def _verify_token(token):
+    """Verify token and return user data or None."""
+    if not token or token not in _token_store:
+        return None
+    data = _token_store[token]
+    if datetime.utcnow().timestamp() > data['expires']:
+        del _token_store[token]
+        return None
+    return data
+
+# Simple in-memory token store (resets on server restart — production use Redis)
+_token_store = {}
+
+
+@app.route('/api/login', methods=['POST', 'OPTIONS'])
+def api_login():
+    """Flutter: Employee login → returns auth token."""
+    if request.method == 'OPTIONS':
+        return api_ok()
+    try:
+        f = request.get_json() if request.is_json else request.form.to_dict()
+        username = f.get('username', '').strip()
+        password = f.get('password', '')
+        if not username or not password:
+            return api_err('Username and password required', 400)
+        user = User.query.filter_by(username=username, is_active=True).first()
+        if not user or not check_pw(password, user.password_hash):
+            return api_err('Invalid username or password', 401)
+        user.last_login = datetime.utcnow()
+        db.session.commit()
+        token = _make_token(user.id, user.username)
+        dept_name = ''
+        if user.department_id:
+            try:
+                dept = Department.query.get(user.department_id)
+                dept_name = dept.name if dept else ''
+            except Exception: pass
+        return api_ok({
+            'token':      token,
+            'user_id':    user.id,
+            'username':   user.username,
+            'full_name':  user.full_name or user.username,
+            'role':       user.role or 'employee',
+            'department': dept_name,
+            'department_id': user.department_id,
+        }, 'Login successful')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/me', methods=['GET'])
+def api_me():
+    """Flutter: Get current employee profile."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized — please login', 401)
+    try:
+        user = User.query.get(data['user_id'])
+        if not user:
+            return api_err('User not found', 404)
+        dept_name = ''
+        if user.department_id:
+            try:
+                dept = Department.query.get(user.department_id)
+                dept_name = dept.name if dept else ''
+            except Exception: pass
+        return api_ok({
+            'user_id':    user.id,
+            'username':   user.username,
+            'full_name':  user.full_name or user.username,
+            'role':       user.role or 'employee',
+            'department': dept_name,
+            'last_login': user.last_login.isoformat() if user.last_login else '',
+        }, 'Profile loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/logout', methods=['POST'])
+def api_logout():
+    """Flutter: Invalidate auth token."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token in _token_store:
+        del _token_store[token]
+    return api_ok({}, 'Logged out successfully')
+
+
+@app.route('/api/my_reports', methods=['GET'])
+def api_my_reports():
+    """Flutter: Get reports submitted by the logged-in employee."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        user = User.query.get(data['user_id'])
+        uname = (user.full_name or user.username) if user else ''
+        records = []
+        # Hazard Reports by this user
+        for r in HazardReport.query.filter(
+            HazardReport.reporter.ilike(f'%{uname}%') if uname else HazardReport.id == None
+        ).order_by(HazardReport.created_at.desc()).limit(30).all():
+            try:
+                records.append({
+                    'id': r.id, 'type': r.report_type or 'Hazard Report',
+                    'description': (r.description or '')[:80],
+                    'status': r.status or 'Submitted',
+                    'date': r.date or '',
+                    'location': r.location or '',
+                    'created_at': r.created_at.isoformat() if r.created_at else '',
+                })
+            except Exception: pass
+        # ASR Reports by this user
+        for r in ASRReport.query.filter(
+            ASRReport.captain.ilike(f'%{uname}%') if uname else ASRReport.id == None
+        ).order_by(ASRReport.created_at.desc()).limit(20).all():
+            try:
+                records.append({
+                    'id': r.id, 'type': 'ASR',
+                    'description': f'{r.occurrence_type or ""}: {(r.event_description or "")[:60]}',
+                    'status': 'Submitted',
+                    'date': r.date or '',
+                    'location': f'{r.route_from or ""}→{r.route_to or ""}',
+                    'created_at': r.created_at.isoformat() if r.created_at else '',
+                })
+            except Exception: pass
+        records.sort(key=lambda x: x.get('created_at',''), reverse=True)
+        return api_ok({'reports': records, 'total': len(records)}, 'My reports loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
 @app.route('/api/mobile/history', methods=['GET'])
 def api_mobile_history():
     """Flutter: Get recent reports for history screen."""
