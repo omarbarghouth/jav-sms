@@ -718,7 +718,7 @@ def mobile_hazard():
                 consequences   = f.get('consequences', ''),
                 immediate_action = f.get('immediate_action', ''),
                 suggested_mitigation = f.get('suggested_mitigation', ''),
-                reporter       = f.get('reporter_name', '') or 'Anonymous',
+                reporter       = f.get('reporter_name', '') or identity_name or 'Anonymous',
                 reporter_severity = 'Medium',
                 status         = 'Submitted',
             )
@@ -766,7 +766,7 @@ def mobile_asr():
                 id               = asr_id,
                 report_type      = f.get('report_type', 'Voluntary'),
                 occurrence_type  = f.get('event_category', ''),
-                captain          = f.get('reporter_name', ''),
+                captain          = f.get('reporter_name', '') or identity_name,
                 captain_staff_no = f.get('staff_number', ''),
                 date             = f.get('occurrence_date', _d.today().isoformat()),
                 time_local       = f.get('time_local', ''),
@@ -902,6 +902,16 @@ def api_mobile_hazard():
         else:
             f = request.form.to_dict()
 
+        # Enrich reporter name from auth token if not provided
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        identity_name = ''
+        try:
+            id_data = _get_identity(token)
+            if id_data:
+                identity_name = id_data['name']
+        except Exception:
+            pass
+
         from datetime import date as _d
         haz = Hazard(
             id                  = new_id('HAZ'),
@@ -929,7 +939,7 @@ def api_mobile_hazard():
             consequences         = f.get('consequences', ''),
             immediate_action     = f.get('immediate_action', ''),
             suggested_mitigation = f.get('suggested_mitigation', ''),
-            reporter             = f.get('reporter_name', '') or 'Anonymous',
+            reporter             = f.get('reporter_name', '') or identity_name or 'Anonymous',
             reporter_severity    = 'Medium',
             status               = 'Submitted',
         )
@@ -948,6 +958,12 @@ def api_mobile_asr():
         return api_ok()
     try:
         f      = request.get_json() if request.is_json else request.form.to_dict()
+        token  = request.headers.get('Authorization', '').replace('Bearer ', '')
+        identity_name = ''
+        try:
+            id_data = _get_identity(token)
+            if id_data: identity_name = id_data['name']
+        except Exception: pass
         from datetime import date as _d
         se     = f.get('severity_level', 'C')
         li     = 3
@@ -978,7 +994,7 @@ def api_mobile_asr():
             id               = asr_id,
             report_type      = f.get('report_type', 'Voluntary'),
             occurrence_type  = occ,
-            captain          = f.get('reporter_name', ''),
+            captain          = f.get('reporter_name', '') or identity_name,
             captain_staff_no = f.get('staff_number', ''),
             date             = f.get('date', _d.today().isoformat()),
             time_local       = f.get('time_local', ''),
@@ -1116,9 +1132,11 @@ def api_mobile_voluntary():
 
 @app.route('/api/report/detail/<rid>', methods=['GET'])
 def api_report_detail(rid):
-    """Flutter: Get full report detail with timeline."""
+    """Flutter: Get full report detail — only own reports accessible."""
     token = request.headers.get('Authorization','').replace('Bearer ','')
-    _verify_token(token)  # optional auth
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
     try:
         # Try HazardReport first
         hr = HazardReport.query.get(rid)
@@ -1176,6 +1194,43 @@ def api_ping():
 
 
 # ── EMPLOYEE AUTH APIs ────────────────────────────────────────────────────────
+
+def _get_identity(token):
+    """
+    Resolve token → (account_type, full_name, employee_id, is_admin).
+    Returns None if token invalid.
+    """
+    data = _verify_token(token)
+    if not data:
+        return None
+    uid = str(data.get('user_id', ''))
+    try:
+        if uid.startswith('emp_'):
+            emp = Employee.query.get(int(uid.replace('emp_', '')))
+            if emp:
+                return {
+                    'type':     'employee',
+                    'uid':      uid,
+                    'name':     emp.full_name or emp.username,
+                    'username': emp.username,
+                    'emp_id':   emp.employee_id,
+                    'is_admin': False,
+                }
+        else:
+            usr = User.query.get(int(uid.replace('usr_', '')))
+            if usr:
+                return {
+                    'type':     'admin',
+                    'uid':      uid,
+                    'name':     usr.full_name or usr.username,
+                    'username': usr.username,
+                    'emp_id':   '',
+                    'is_admin': usr.role in ('admin', 'safety_manager', 'safety_officer'),
+                }
+    except Exception:
+        pass
+    return None
+
 
 def _make_token(user_id, username):
     """Generate a simple secure token stored in memory."""
@@ -1391,14 +1446,26 @@ def api_my_reports():
 
 @app.route('/api/mobile/history', methods=['GET'])
 def api_mobile_history():
-    """Flutter: Get recent reports for history screen."""
+    """Flutter: Get reports for the authenticated employee only."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized — please login', 401)
+
     try:
         limit = int(request.args.get('limit', 20))
         records = []
-        for r in HazardReport.query.order_by(HazardReport.created_at.desc()).limit(limit).all():
+        reporter_name = identity['name']
+        is_admin      = identity['is_admin']
+
+        # Build query — admins see all, employees see only their own
+        q = HazardReport.query
+        if not is_admin and reporter_name:
+            q = q.filter(HazardReport.reporter.ilike(f'%{reporter_name}%'))
+
+        for r in q.order_by(HazardReport.created_at.desc()).limit(limit * 3).all():
             try:
-                wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next = resolve_report_status(
-                    hazard_id=r.hazard_id, hr_status=r.status)
+                wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next =                     resolve_report_status(hazard_id=r.hazard_id, hr_status=r.status)
                 records.append({
                     'id':          r.id,
                     'type':        r.report_type or 'Hazard Report',
@@ -1416,8 +1483,10 @@ def api_mobile_history():
                     'created_at':  r.created_at.isoformat() if r.created_at else '',
                     'timeline':    timeline[:6],
                 })
-            except Exception: pass
-        records.sort(key=lambda x: x.get('created_at',''), reverse=True)
+            except Exception:
+                pass
+
+        records.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return api_ok({'reports': records[:limit], 'total': len(records)}, 'History loaded')
     except Exception as e:
         return api_err(str(e)[:120], 500)
@@ -1425,14 +1494,43 @@ def api_mobile_history():
 
 @app.route('/api/mobile/stats', methods=['GET'])
 def api_mobile_stats():
-    """Flutter: Dashboard stats for home screen."""
+    """Flutter: Dashboard stats — filtered by employee or full for admins."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
+
     try:
-        return api_ok({
-            'hazards_open':   Hazard.query.filter_by(status='Open').count(),
-            'asr_total':      ASRReport.query.count(),
-            'actions_open':   Action.query.filter(Action.status.notin_(['Closed'])).count(),
-            'hr_this_month':  HazardReport.query.count(),
-        }, 'Stats loaded')
+        is_admin      = identity['is_admin']
+        reporter_name = identity['name']
+
+        if is_admin:
+            # Admins see full system stats
+            return api_ok({
+                'hazards_open':  Hazard.query.filter_by(status='Open').count(),
+                'asr_total':     ASRReport.query.count(),
+                'actions_open':  Action.query.filter(Action.status.notin_(['Closed'])).count(),
+                'hr_this_month': HazardReport.query.count(),
+            }, 'Stats loaded')
+        else:
+            # Employees see only their own counts
+            my_hr = HazardReport.query.filter(
+                HazardReport.reporter.ilike(f'%{reporter_name}%')).count() if reporter_name else 0
+            my_asr = ASRReport.query.filter(
+                ASRReport.captain.ilike(f'%{reporter_name}%')).count() if reporter_name else 0
+            my_open = HazardReport.query.filter(
+                HazardReport.reporter.ilike(f'%{reporter_name}%'),
+                HazardReport.status.notin_(['Closed', 'Rejected'])).count() if reporter_name else 0
+            my_closed = HazardReport.query.filter(
+                HazardReport.reporter.ilike(f'%{reporter_name}%'),
+                HazardReport.status == 'Closed').count() if reporter_name else 0
+            return api_ok({
+                'hazards_open':  my_open,
+                'asr_total':     my_asr,
+                'actions_open':  0,
+                'hr_this_month': my_hr,
+                'my_closed':     my_closed,
+            }, 'Stats loaded')
     except Exception as e:
         return api_err(str(e)[:120], 500)
 
