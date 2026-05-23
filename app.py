@@ -1849,6 +1849,29 @@ def hazard_report():
         return redirect(url_for('hazard_report_detail', rid=rid))
     return render_template('reporting/hazard_report.html')
 
+@app.route('/hazard-report/<rid>/close', methods=['POST'])
+@require_login
+def close_hazard_report(rid):
+    """Safety Manager closes the occurrence — final step after all actions done."""
+    hr = HazardReport.query.get_or_404(rid)
+    try:
+        # Close the HazardReport
+        hr.status = 'Closed'
+        # Close the linked Hazard
+        if hr.hazard_id:
+            haz = Hazard.query.filter_by(id=hr.hazard_id).first()
+            if haz:
+                haz.status = 'Closed'
+        db.session.commit()
+        sync_report_status(hr.hazard_id)
+        db.session.commit()
+        flash(f'✓ Occurrence {rid} closed successfully.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Error closing: {str(e)[:80]}', 'error')
+    return redirect(request.referrer or url_for('hazard_report_list'))
+
+
 @app.route('/hazard-reports')
 @require_login
 def hazard_report_list():
@@ -2409,6 +2432,18 @@ def update_action(aid):
             'status'
         )
         db.session.commit()
+        # ── Auto-close hazard when ALL linked actions are closed ──────────────
+        if a.hazard_id and new_status == 'Closed':
+            try:
+                all_acts = Action.query.filter_by(hazard_id=a.hazard_id).all()
+                if all_acts and all(x.status == 'Closed' for x in all_acts):
+                    haz = Hazard.query.filter_by(id=a.hazard_id).first()
+                    if haz and haz.status != 'Closed':
+                        haz.status = 'Closed'
+                        db.session.commit()
+                        flash('✓ All actions closed — Hazard automatically marked Closed.', 'success')
+            except Exception:
+                pass
         sync_report_status(a.hazard_id)
         db.session.commit()
         flash('✓ Action updated.', 'success')
@@ -5246,6 +5281,17 @@ def sag_action_detail(aid):
                                'Submitted for Safety Review by ' + session.get('sag_name','SAG'),
                                'status')
             db.session.commit()
+            # Auto-close hazard if all actions now closed/implemented
+            if a.hazard_id:
+                try:
+                    all_acts = Action.query.filter_by(hazard_id=a.hazard_id).all()
+                    if all_acts and all(x.status in ('Closed','Mitigation Implemented') for x in all_acts):
+                        haz = Hazard.query.filter_by(id=a.hazard_id).first()
+                        if haz and haz.status != 'Closed':
+                            haz.status = 'Closed'
+                            db.session.commit()
+                except Exception:
+                    pass
             sync_report_status(a.hazard_id)
             db.session.commit()
             flash('✓ Action submitted for Safety Review. Awaiting Safety Department approval.', 'success')
