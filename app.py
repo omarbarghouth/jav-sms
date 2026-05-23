@@ -300,16 +300,17 @@ def resolve_report_status(hazard_id=None, hr_status=None):
     Returns: (status, color, stage, timeline, guidance, responsible, next_step)
     """
     STATUS_MAP = {
-        'Submitted':              ('#3b82f6', 1),
-        'Under Review':           ('#f59e0b', 2),
-        'Assigned':               ('#8b5cf6', 3),
-        'Investigation Open':     ('#eab308', 4),
-        'Risk Assessment Open':   ('#06b6d4', 4),
-        'Mitigation In Progress': ('#06b6d4', 5),
-        'Pending SAG':            ('#f97316', 5),
-        'Awaiting Closure':       ('#6b7280', 6),
-        'Closed':                 ('#22c55e', 7),
-        'Rejected':               ('#ef4444', 0),
+        'Submitted':                  ('#3b82f6', 1),
+        'Under Review':               ('#f59e0b', 2),
+        'Assigned':                   ('#8b5cf6', 3),
+        'Investigation Open':         ('#eab308', 4),
+        'Risk Assessment Open':       ('#06b6d4', 4),
+        'Mitigation In Progress':     ('#06b6d4', 5),
+        'Pending SAG':                ('#f97316', 5),
+        'Awaiting Closure':           ('#6b7280', 6),
+        'Awaiting Safety Approval':   ('#f97316', 6),
+        'Closed':                     ('#22c55e', 7),
+        'Rejected':                   ('#ef4444', 0),
     }
 
     GUIDANCE_MAP = {
@@ -329,6 +330,8 @@ def resolve_report_status(hazard_id=None, hr_status=None):
             'Corrective action plan has been submitted. Implementation and verification is ongoing.',
         'Awaiting Closure':
             'All corrective actions are complete. Safety Manager must verify effectiveness before closure.',
+        'Awaiting Safety Approval':
+            'SAG has completed all corrective actions. Awaiting Safety Manager final review and closure approval.',
         'Closed':
             'This occurrence has been fully resolved and closed. Thank you for your safety report.',
         'Rejected':
@@ -353,6 +356,11 @@ def resolve_report_status(hazard_id=None, hr_status=None):
                 responsible = 'Safety Manager'
                 next_step   = 'Occurrence fully closed'
 
+            elif haz and haz.status == 'Awaiting Safety Approval':
+                status      = 'Awaiting Safety Approval'
+                responsible = 'Safety Manager'
+                next_step   = 'Safety Manager must review evidence and approve final closure'
+
             elif investigations and any(i.status not in ('Closed','Completed') for i in investigations):
                 status      = 'Investigation Open'
                 responsible = 'Investigation Team'
@@ -364,9 +372,10 @@ def resolve_report_status(hazard_id=None, hr_status=None):
                 cap_acts    = [a for a in actions if a.status in ('CAP Submitted','Root Cause Submitted')]
 
                 if all(a.status == 'Closed' for a in actions):
-                    status      = 'Awaiting Closure'
+                    # Actions closed but safety approval still needed
+                    status      = 'Awaiting Safety Approval'
                     responsible = 'Safety Manager'
-                    next_step   = 'Verify corrective action effectiveness'
+                    next_step   = 'Safety Manager must verify effectiveness and approve closure'
 
                 elif cap_acts:
                     status      = 'Mitigation In Progress'
@@ -1947,27 +1956,53 @@ def hazard_report():
         return redirect(url_for('hazard_report_detail', rid=rid))
     return render_template('reporting/hazard_report.html')
 
-@app.route('/hazard-report/<rid>/close', methods=['POST'])
+
+@app.route('/hazard-report/<rid>/safety-closure', methods=['POST'])
 @require_login
-def close_hazard_report(rid):
-    """Safety Manager closes the occurrence — final step after all actions done."""
+def safety_closure_approve(rid):
+    """
+    Safety Manager Final Closure — ONLY authorized roles may close.
+    This is the ONLY legitimate path to Closed status.
+    """
+    # Role check — only safety roles may close
+    allowed_roles = ('admin', 'safety_manager', 'safety_officer', 'safety_admin')
+    user_role = session.get('admin_role', '')
+    if user_role not in allowed_roles:
+        flash('⚠ Only Safety Management personnel may approve final closure.', 'error')
+        return redirect(request.referrer or url_for('hazard_report_list'))
+
     hr = HazardReport.query.get_or_404(rid)
+    notes = request.form.get('closure_notes', '')
+
     try:
         # Close the HazardReport
         hr.status = 'Closed'
+
         # Close the linked Hazard
         if hr.hazard_id:
             haz = Hazard.query.filter_by(id=hr.hazard_id).first()
             if haz:
                 haz.status = 'Closed'
+                # Also close any remaining open actions on this hazard
+                for act in Action.query.filter_by(hazard_id=hr.hazard_id).all():
+                    if act.status not in ('Closed',):
+                        old_st = act.status
+                        act.status = 'Closed'
+                        log_action_history(act.id,
+                            session.get('admin_username', 'Safety Manager'),
+                            old_st, 'Closed',
+                            f'Safety closure approved: {notes[:100]}', 'closure')
+
         db.session.commit()
         sync_report_status(hr.hazard_id)
         db.session.commit()
-        flash(f'✓ Occurrence {rid} closed successfully.', 'success')
+        flash(f'✓ Occurrence {rid} officially closed by Safety Management. Closure approved.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'⚠ Error closing: {str(e)[:80]}', 'error')
+        flash(f'⚠ Error: {str(e)[:80]}', 'error')
+
     return redirect(request.referrer or url_for('hazard_report_list'))
+
 
 
 @app.route('/hazard-reports')
@@ -2530,16 +2565,17 @@ def update_action(aid):
             'status'
         )
         db.session.commit()
-        # ── Auto-close hazard when ALL linked actions are closed ──────────────
+        # When all actions closed → set hazard to Awaiting Safety Approval
+        # (Safety Manager must perform final closure — NOT automatic)
         if a.hazard_id and new_status == 'Closed':
             try:
                 all_acts = Action.query.filter_by(hazard_id=a.hazard_id).all()
                 if all_acts and all(x.status == 'Closed' for x in all_acts):
                     haz = Hazard.query.filter_by(id=a.hazard_id).first()
-                    if haz and haz.status != 'Closed':
-                        haz.status = 'Closed'
+                    if haz and haz.status not in ('Closed', 'Awaiting Safety Approval'):
+                        haz.status = 'Awaiting Safety Approval'
                         db.session.commit()
-                        flash('✓ All actions closed — Hazard automatically marked Closed.', 'success')
+                        flash('✓ All actions closed — Report is now Awaiting Safety Approval.', 'success')
             except Exception:
                 pass
         sync_report_status(a.hazard_id)
@@ -5379,20 +5415,18 @@ def sag_action_detail(aid):
                                'Submitted for Safety Review by ' + session.get('sag_name','SAG'),
                                'status')
             db.session.commit()
-            # Auto-close hazard if all actions now closed/implemented
+            # SAG completion → set to Awaiting Safety Approval (NOT auto-close)
             if a.hazard_id:
                 try:
-                    all_acts = Action.query.filter_by(hazard_id=a.hazard_id).all()
-                    if all_acts and all(x.status in ('Closed','Mitigation Implemented') for x in all_acts):
-                        haz = Hazard.query.filter_by(id=a.hazard_id).first()
-                        if haz and haz.status != 'Closed':
-                            haz.status = 'Closed'
-                            db.session.commit()
+                    haz = Hazard.query.filter_by(id=a.hazard_id).first()
+                    if haz and haz.status not in ('Closed', 'Awaiting Safety Approval'):
+                        haz.status = 'Awaiting Safety Approval'
+                        db.session.commit()
                 except Exception:
                     pass
             sync_report_status(a.hazard_id)
             db.session.commit()
-            flash('✓ Action submitted for Safety Review. Awaiting Safety Department approval.', 'success')
+            flash('✓ Mitigation submitted for Safety Review. Awaiting Safety Manager approval before closure.', 'success')
 
         return redirect(url_for('sag_action_detail', aid=aid))
 
