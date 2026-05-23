@@ -172,6 +172,16 @@
           </td>
           <td style="white-space:nowrap">
             <a href="/hazard-reports/{{ r.id }}" class="btn btn-nav btn-sm">View →</a>
+            {% if r.status == 'Awaiting Closure' %}
+            <form method="POST" action="/hazard-report/{{ r.id }}/close" style="display:inline"
+              onsubmit="return confirm('Close occurrence {{ r.id }}? This will mark it as fully resolved.')">
+              <button type="submit" class="btn btn-sm"
+                style="background:#22c55e;color:#fff;border:none;cursor:pointer;
+                  font-family:inherit;font-weight:700;padding:6px 14px;border-radius:7px">
+                ✓ Close
+              </button>
+            </form>
+            {% endif %}
             <form method="POST" action="/delete/hazard-report/{{ r.id }}" style="display:inline"
                   onsubmit="return confirm('Delete {{ r.id }}?')">
               <input type="hidden" name="return_url" value="/hazard-reports"/>
