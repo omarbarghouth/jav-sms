@@ -503,6 +503,24 @@ def get_report_timeline(hazard_id, created_at, report_type='Hazard Report'):
     return events
 
 
+def sync_report_status(hazard_id):
+    """
+    Call this after ANY workflow event to persist the calculated status
+    back to all linked HazardReport records. This ensures DB status
+    matches real workflow state for web lists and dashboards.
+    """
+    if not hazard_id:
+        return
+    try:
+        st, col, stage, tl, guid, resp, nxt = resolve_report_status(
+            hazard_id=hazard_id, hr_status='Submitted')
+        HazardReport.query.filter_by(hazard_id=hazard_id).update(
+            {'status': st}, synchronize_session=False)
+        db.session.flush()
+    except Exception:
+        pass
+
+
 # ── OCCURRENCE REGISTRY HELPER ────────────────────────────────────────────────
 def _register_occurrence(report_id, report_type, description, location='',
                           date_str='', department_id=None,
@@ -1864,6 +1882,20 @@ def hazard_report_list():
         )
 
     reports = q.order_by(HazardReport.created_at.desc()).all()
+
+    # Sync status for all visible reports from live workflow data
+    synced = False
+    for rpt in reports:
+        if rpt.hazard_id:
+            try:
+                sync_report_status(rpt.hazard_id)
+                synced = True
+            except Exception:
+                pass
+    if synced:
+        try: db.session.commit()
+        except Exception: db.session.rollback()
+
     total            = HazardReport.query.count()
     submitted        = HazardReport.query.filter_by(status='Submitted').count()
     under_assessment = HazardReport.query.filter_by(status='Under Assessment').count()
@@ -2248,6 +2280,8 @@ def new_action():
         )
         db.session.add(a)
         db.session.commit()
+        sync_report_status(a.hazard_id)
+        db.session.commit()
         flash(f'✓ Action {a.id} created successfully.', 'success')
         # Return to wherever the user came from
         return_url = f.get('return_url', url_for('actions'))
@@ -2304,6 +2338,8 @@ def update_action(aid):
         a.effectiveness     = None
         a.effectiveness_review = f.get('effectiveness_review', '')
         flash('⚠ Action re-opened — effectiveness was Ineffective. Please update the approach.', 'error')
+        db.session.commit()
+        sync_report_status(a.hazard_id)
         db.session.commit()
         return redirect(return_url)
 
@@ -2372,6 +2408,8 @@ def update_action(aid):
             f.get('safety_review_notes') or f.get('rejection_notes') or '',
             'status'
         )
+        db.session.commit()
+        sync_report_status(a.hazard_id)
         db.session.commit()
         flash('✓ Action updated.', 'success')
     except Exception as e:
@@ -2554,6 +2592,8 @@ def new_investigation():
                          due_date=f.get('due_date',''),
                          priority='High', status='Open')
             db.session.add(act)
+        db.session.commit()
+        sync_report_status(inv.hazard_id)
         db.session.commit()
         flash(f'✓ Investigation {inv.id} created.', 'success')
         return redirect(url_for('investigations'))
@@ -5194,6 +5234,8 @@ def sag_action_detail(aid):
             log_action_history(aid, session['sag_user'], old_status, a.status,
                                'Progress saved by SAG member', 'progress')
             db.session.commit()
+            sync_report_status(a.hazard_id)
+            db.session.commit()
             flash('✓ Progress saved successfully.', 'success')
 
         elif action_btn == 'submit_review':
@@ -5203,6 +5245,8 @@ def sag_action_detail(aid):
                                'Mitigation Implemented',
                                'Submitted for Safety Review by ' + session.get('sag_name','SAG'),
                                'status')
+            db.session.commit()
+            sync_report_status(a.hazard_id)
             db.session.commit()
             flash('✓ Action submitted for Safety Review. Awaiting Safety Department approval.', 'success')
 
@@ -5291,6 +5335,8 @@ def sag_assign(aid):
     log_action_history(aid, session.get('admin_name','Admin'),
                        old_owner, a.sag_member,
                        f'Assigned to {a.sag_member}', 'assignment')
+    db.session.commit()
+    sync_report_status(a.hazard_id)
     db.session.commit()
     flash(f'✓ Action {aid} assigned to {a.sag_member}.', 'success')
     return redirect(request.form.get('return_url', url_for('sag_governance')))
@@ -7363,6 +7409,8 @@ def add_risk_action(rid):
     )
     db.session.add(unified)
     db.session.commit()
+    sync_report_status(unified.hazard_id)
+    db.session.commit()
     flash(f'✓ Action created for risk {rid}.', 'success')
     return redirect(url_for('risk_detail', rid=rid))
 
@@ -7376,6 +7424,8 @@ def update_risk_action(aid):
     ra.effectiveness = f.get('effectiveness', ra.effectiveness)
     if ra.status == 'Closed':
         ra.closed_date = date.today().isoformat()
+    db.session.commit()
+    sync_report_status(a.hazard_id)
     db.session.commit()
     flash('✓ Action updated.', 'success')
     return redirect(url_for('risk_detail', rid=ra.risk_id))
