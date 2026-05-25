@@ -1554,6 +1554,14 @@ def api_setup_check():
     # 2. List employees (no passwords)
     try:
         emps = Employee.query.all()
+        def _hash_info(h):
+            if not h:
+                return {'type': 'NULL', 'preview': 'NO PASSWORD SET'}
+            if h.startswith('pbkdf2'):
+                return {'type': 'pbkdf2', 'preview': h[:20] + '...'}
+            if len(h) == 64 and ':' not in h:
+                return {'type': 'sha256-legacy', 'preview': h[:12] + '...'}
+            return {'type': 'UNKNOWN/PLAINTEXT', 'preview': repr(h[:20])}
         report['employees'] = [
             {
                 'id': e.id,
@@ -1561,7 +1569,13 @@ def api_setup_check():
                 'full_name': e.full_name,
                 'is_active': e.is_active,
                 'department_id': e.department_id,
-                'hash_type': 'pbkdf2' if e.password_hash and e.password_hash.startswith('pbkdf2') else ('sha256' if e.password_hash and len(e.password_hash)==64 else 'unknown'),
+                'hash_info': _hash_info(e.password_hash),
+                'login_will_work': (
+                    e.is_active and
+                    e.password_hash is not None and
+                    (e.password_hash.startswith('pbkdf2') or
+                     (len(e.password_hash) == 64 and ':' not in e.password_hash))
+                ),
             }
             for e in emps
         ]
@@ -1578,7 +1592,13 @@ def api_setup_check():
                 'username': u.username,
                 'role': u.role,
                 'is_active': u.is_active,
-                'hash_type': 'pbkdf2' if u.password_hash and u.password_hash.startswith('pbkdf2') else ('sha256' if u.password_hash and len(u.password_hash)==64 else 'unknown'),
+                'hash_info': _hash_info(u.password_hash),
+                'login_will_work': (
+                    u.is_active and
+                    u.password_hash is not None and
+                    (u.password_hash.startswith('pbkdf2') or
+                     (len(u.password_hash) == 64 and ':' not in u.password_hash))
+                ),
             }
             for u in users
         ]
@@ -1592,6 +1612,83 @@ def api_setup_check():
         report['departments'] = f'ERROR: {str(e)[:100]}'
 
     return api_ok(report, 'Setup check complete')
+
+
+@app.route('/api/debug-login', methods=['POST'])
+def api_debug_login():
+    """
+    Diagnostic: POST {"username":"x","password":"y"}
+    Returns exactly which step of the login flow fails.
+    REMOVE THIS ENDPOINT after login issue is resolved.
+    """
+    try:
+        f = request.get_json() if request.is_json else request.form.to_dict()
+        username = (f.get('username') or '').strip()
+        password = f.get('password') or ''
+        if not username or not password:
+            return api_ok({'result': 'MISSING_PARAMS'}, 'Provide username and password')
+
+        result = {'username': username}
+
+        # Step 1: find employee (active)
+        emp = Employee.query.filter_by(username=username).first()
+        if emp is None:
+            result['step'] = 'EMPLOYEE_NOT_FOUND'
+            result['hint'] = 'No employee with that username exists at all'
+            return api_ok(result, 'Login diagnosis complete')
+
+        result['employee_id'] = emp.id
+        result['is_active'] = emp.is_active
+        if not emp.is_active:
+            result['step'] = 'EMPLOYEE_INACTIVE'
+            result['hint'] = 'Employee exists but is_active=False — toggle active in web admin'
+            return api_ok(result, 'Login diagnosis complete')
+
+        # Step 2: password hash state
+        h = emp.password_hash
+        if not h:
+            result['step'] = 'NO_PASSWORD_HASH'
+            result['hint'] = 'password_hash is NULL — use Reset Password in web admin'
+            return api_ok(result, 'Login diagnosis complete')
+
+        result['hash_type'] = (
+            'pbkdf2' if h.startswith('pbkdf2') else
+            'sha256-legacy' if (len(h) == 64 and ':' not in h) else
+            'UNKNOWN/PLAINTEXT'
+        )
+        result['hash_preview'] = h[:20] + '...'
+
+        if result['hash_type'] == 'UNKNOWN/PLAINTEXT':
+            result['step'] = 'BAD_HASH_FORMAT'
+            result['hint'] = 'Password is stored in an unrecognised format — use Reset Password in web admin'
+            return api_ok(result, 'Login diagnosis complete')
+
+        # Step 3: actual password check
+        try:
+            pw_ok = check_pw(password, h)
+        except Exception as ce:
+            result['step'] = 'CHECK_PW_EXCEPTION'
+            result['hint'] = str(ce)[:120]
+            return api_ok(result, 'Login diagnosis complete')
+
+        if not pw_ok:
+            result['step'] = 'WRONG_PASSWORD'
+            result['hint'] = 'Employee found and hash is valid but password does not match'
+            return api_ok(result, 'Login diagnosis complete')
+
+        # Step 4: token creation
+        try:
+            token = _make_token(f'emp_{emp.id}', emp.username)
+            result['step'] = 'ALL_OK'
+            result['token_preview'] = token[:12] + '...'
+            result['hint'] = 'Login should succeed — if Flutter still fails, check the API URL'
+        except Exception as te:
+            result['step'] = 'TOKEN_CREATE_FAILED'
+            result['hint'] = str(te)[:120]
+
+        return api_ok(result, 'Login diagnosis complete')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
 
 
 @app.route('/api/my_reports', methods=['GET'])
