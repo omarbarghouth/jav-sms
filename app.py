@@ -1288,14 +1288,39 @@ def _get_identity(token):
     return None
 
 
+def _ensure_token_table():
+    """Create api_tokens table if it doesn't exist yet (safe for free-tier Render)."""
+    try:
+        db.session.execute(db.text('SELECT 1 FROM api_tokens LIMIT 1'))
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text('''
+                CREATE TABLE IF NOT EXISTS api_tokens (
+                    id SERIAL PRIMARY KEY,
+                    token VARCHAR(64) UNIQUE NOT NULL,
+                    user_id VARCHAR(30) NOT NULL,
+                    username VARCHAR(80) NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            '''))
+            db.session.execute(db.text(
+                'CREATE INDEX IF NOT EXISTS ix_api_tokens_token ON api_tokens(token)'
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
 def _make_token(user_id, username):
     """Generate a secure token persisted in the api_tokens table.
 
     Survives Gunicorn worker restarts and Render dyno spin-downs.
-    Also cleans up expired tokens for this user on each login (lazy GC).
+    Auto-creates the table if missing (safe on free-tier Render).
     """
     import secrets
     from datetime import timedelta
+    _ensure_token_table()
     token = secrets.token_urlsafe(32)
     expires_at = datetime.utcnow() + timedelta(hours=24)
     # Lazy cleanup: remove expired tokens for this user_id before adding new one
@@ -1304,15 +1329,20 @@ def _make_token(user_id, username):
             ApiToken.user_id == str(user_id),
             ApiToken.expires_at < datetime.utcnow()
         ).delete(synchronize_session=False)
+        db.session.flush()
     except Exception:
-        pass
-    db.session.add(ApiToken(
-        token=token,
-        user_id=str(user_id),
-        username=username,
-        expires_at=expires_at,
-    ))
-    db.session.commit()
+        db.session.rollback()
+    try:
+        db.session.add(ApiToken(
+            token=token,
+            user_id=str(user_id),
+            username=username,
+            expires_at=expires_at,
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
     return token
 
 def _verify_token(token):
@@ -1483,6 +1513,85 @@ def api_logout():
         except Exception:
             db.session.rollback()
     return api_ok({}, 'Logged out successfully')
+
+
+@app.route('/api/setup-check', methods=['GET'])
+def api_setup_check():
+    """
+    Diagnostic endpoint — safe to call from browser on free-tier Render.
+    Shows system status, creates api_tokens table if missing, lists employees.
+    Remove or protect this route after initial setup is confirmed.
+    """
+    report = {}
+    # 1. Check / create api_tokens table
+    try:
+        db.session.execute(db.text('SELECT COUNT(*) FROM api_tokens'))
+        count = db.session.execute(db.text('SELECT COUNT(*) FROM api_tokens')).scalar()
+        report['api_tokens_table'] = 'EXISTS'
+        report['active_tokens'] = count
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text('''
+                CREATE TABLE IF NOT EXISTS api_tokens (
+                    id SERIAL PRIMARY KEY,
+                    token VARCHAR(64) UNIQUE NOT NULL,
+                    user_id VARCHAR(30) NOT NULL,
+                    username VARCHAR(80) NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            '''))
+            db.session.execute(db.text(
+                'CREATE INDEX IF NOT EXISTS ix_api_tokens_token ON api_tokens(token)'
+            ))
+            db.session.commit()
+            report['api_tokens_table'] = 'CREATED NOW'
+        except Exception as e:
+            db.session.rollback()
+            report['api_tokens_table'] = f'ERROR: {str(e)[:100]}'
+
+    # 2. List employees (no passwords)
+    try:
+        emps = Employee.query.all()
+        report['employees'] = [
+            {
+                'id': e.id,
+                'username': e.username,
+                'full_name': e.full_name,
+                'is_active': e.is_active,
+                'department_id': e.department_id,
+                'hash_type': 'pbkdf2' if e.password_hash and e.password_hash.startswith('pbkdf2') else ('sha256' if e.password_hash and len(e.password_hash)==64 else 'unknown'),
+            }
+            for e in emps
+        ]
+        report['employee_count'] = len(emps)
+    except Exception as e:
+        report['employees'] = f'ERROR: {str(e)[:100]}'
+
+    # 3. List admin users (no passwords)
+    try:
+        users = User.query.all()
+        report['admin_users'] = [
+            {
+                'id': u.id,
+                'username': u.username,
+                'role': u.role,
+                'is_active': u.is_active,
+                'hash_type': 'pbkdf2' if u.password_hash and u.password_hash.startswith('pbkdf2') else ('sha256' if u.password_hash and len(u.password_hash)==64 else 'unknown'),
+            }
+            for u in users
+        ]
+    except Exception as e:
+        report['admin_users'] = f'ERROR: {str(e)[:100]}'
+
+    # 4. Check departments
+    try:
+        report['departments'] = [{'id': d.id, 'name': d.name} for d in Department.query.all()]
+    except Exception as e:
+        report['departments'] = f'ERROR: {str(e)[:100]}'
+
+    return api_ok(report, 'Setup check complete')
 
 
 @app.route('/api/my_reports', methods=['GET'])
