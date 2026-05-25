@@ -239,7 +239,7 @@ class Action(db.Model):
     linked_audit_id      = db.Column(db.String(30))
     linked_ra_id         = db.Column(db.String(30))
     linked_risk_id       = db.Column(db.String(30))
-    assigned_by          = db.Column(db.String(100))
+    # NOTE: assigned_by declared once above (duplicate removed)
     # Relationship to SPI indicator
     spi_indicator        = db.relationship('SPIIndicator', foreign_keys=[spi_id],
                                backref=db.backref('linked_actions', lazy=True))
@@ -1101,3 +1101,23 @@ class Employee(db.Model):
 
     def __repr__(self):
         return f'<Employee {self.employee_id} {self.full_name}>'
+
+
+class ApiToken(db.Model):
+    """Persistent auth tokens for mobile (Flutter) sessions.
+
+    Replaces the in-memory _token_store dict so tokens survive Render
+    spin-down and Gunicorn worker restarts. Token strings are generated
+    with secrets.token_urlsafe(32) — same as before. Expired rows are
+    cleaned up lazily on each login call.
+    """
+    __tablename__ = 'api_tokens'
+    id         = db.Column(db.Integer, primary_key=True)
+    token      = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id    = db.Column(db.String(30), nullable=False)   # 'emp_5' or 'usr_3'
+    username   = db.Column(db.String(80), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at

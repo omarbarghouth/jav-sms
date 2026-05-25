@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
+from werkzeug.security import generate_password_hash, check_password_hash as _wz_check
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -184,10 +185,22 @@ def add_cors(response):
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
 def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+    """Hash a password with werkzeug pbkdf2_sha256 (salted, slow)."""
+    return generate_password_hash(pw)
+
+def _is_legacy_hash(h):
+    """Return True if h is a raw SHA-256 hex digest (64 hex chars, no colon prefix)."""
+    return h and len(h) == 64 and ':' not in h
 
 def check_pw(pw, hashed):
-    return hashlib.sha256(pw.encode()).hexdigest() == hashed
+    """Verify password against stored hash.
+
+    Supports both legacy SHA-256 (64-char hex) and modern werkzeug pbkdf2.
+    If a legacy hash matches, the caller should upgrade it via hash_pw().
+    """
+    if _is_legacy_hash(hashed):
+        return hashlib.sha256(pw.encode()).hexdigest() == hashed
+    return _wz_check(hashed, pw)
 
 def is_logged_in():
     return session.get('admin_logged_in') is True
@@ -422,6 +435,19 @@ def resolve_report_status(hazard_id=None, hr_status=None):
                         'icon':  '🔍', 'type': 'review',
                     })
 
+            # Bulk-load all ActionHistory for this hazard's actions in ONE query
+            # (replaces N per-action queries with a single bulk fetch + in-memory grouping)
+            action_ids = [a.id for a in actions]
+            if action_ids:
+                all_histories = ActionHistory.query.filter(
+                    ActionHistory.action_id.in_(action_ids)
+                ).order_by(ActionHistory.changed_at).all()
+                history_by_action = {}
+                for h in all_histories:
+                    history_by_action.setdefault(h.action_id, []).append(h)
+            else:
+                history_by_action = {}
+
             for a in actions:
                 if a.created_at:
                     dept = a.owner or 'Department'
@@ -436,7 +462,7 @@ def resolve_report_status(hazard_id=None, hr_status=None):
                         'event': f'SAG assigned: {a.sag_member}',
                         'icon':  '🛡', 'type': 'sag',
                     })
-                for h in ActionHistory.query.filter_by(action_id=a.id).order_by(ActionHistory.changed_at).all():
+                for h in history_by_action.get(a.id, []):
                     if h.changed_at and h.to_status:
                         icon = '✅' if h.to_status == 'Closed' else '🔄'
                         timeline.append({
@@ -489,6 +515,14 @@ def get_report_timeline(hazard_id, created_at, report_type='Hazard Report'):
                 events.append({'date': '—', 'event': 'Safety review started',
                     'type': 'review', 'icon': '🔍'})
             actions = Action.query.filter_by(hazard_id=hazard_id).order_by(Action.created_at).all()
+            # Bulk-load histories in one query instead of N per-action queries
+            _aids = [a.id for a in actions]
+            _hist_map = {}
+            if _aids:
+                for h in ActionHistory.query.filter(
+                        ActionHistory.action_id.in_(_aids)
+                ).order_by(ActionHistory.changed_at).all():
+                    _hist_map.setdefault(h.action_id, []).append(h)
             for a in actions:
                 if a.created_at:
                     events.append({
@@ -496,8 +530,7 @@ def get_report_timeline(hazard_id, created_at, report_type='Hazard Report'):
                         'event': f'Action assigned: {(a.description or "")[:60]}',
                         'type': 'action', 'icon': '⚡'
                     })
-                hist = ActionHistory.query.filter_by(action_id=a.id).order_by(ActionHistory.changed_at).all()
-                for h in hist:
+                for h in _hist_map.get(a.id, []):
                     if h.changed_at and h.to_status:
                         events.append({
                             'date': h.changed_at.strftime('%d %b %Y'),
@@ -969,10 +1002,24 @@ def api_mobile_asr():
         f      = request.get_json() if request.is_json else request.form.to_dict()
         token  = request.headers.get('Authorization', '').replace('Bearer ', '')
         identity_name = ''
+        submitter_dept_id = None  # will be resolved from token
         try:
             id_data = _get_identity(token)
-            if id_data: identity_name = id_data['name']
-        except Exception: pass
+            if id_data:
+                identity_name = id_data['name']
+                # Resolve submitter's real department from Employee/User record
+                uid_str = str(id_data.get('uid', ''))
+                if uid_str.startswith('emp_'):
+                    _emp = Employee.query.get(int(uid_str.replace('emp_', '')))
+                    if _emp: submitter_dept_id = _emp.department_id
+                elif uid_str.startswith('usr_') or uid_str.isdigit():
+                    _uid = int(uid_str.replace('usr_', '')) if uid_str.startswith('usr_') else int(uid_str)
+                    _usr = User.query.get(_uid)
+                    if _usr: submitter_dept_id = _usr.department_id
+        except Exception:
+            pass
+        # Fall back to Flight Operations (dept 1) only if truly unknown
+        dept_id = submitter_dept_id or 1
         from datetime import date as _d
         se     = f.get('severity_level', 'C')
         li     = 3
@@ -986,7 +1033,7 @@ def api_mobile_asr():
             id                  = hid,
             source              = 'ASR (Mobile)',
             linked_report_id    = asr_id,
-            department_id       = 1,
+            department_id       = dept_id,
             classification      = 'Operational',
             type_of_activity    = 'Flight Operations',
             generic_hazard      = occ,
@@ -1026,7 +1073,7 @@ def api_mobile_asr():
             hr = HazardReport(
                 id             = new_id('HR'),
                 hazard_id      = hid,
-                department_id  = 1,
+                department_id  = dept_id,
                 date           = f.get('date', _d.today().isoformat()),
                 location       = f'{f.get("route_from","")}-{f.get("route_to","")}',
                 description    = f.get('event_description', ''),
@@ -1242,27 +1289,49 @@ def _get_identity(token):
 
 
 def _make_token(user_id, username):
-    """Generate a simple secure token stored in memory."""
+    """Generate a secure token persisted in the api_tokens table.
+
+    Survives Gunicorn worker restarts and Render dyno spin-downs.
+    Also cleans up expired tokens for this user on each login (lazy GC).
+    """
     import secrets
+    from datetime import timedelta
     token = secrets.token_urlsafe(32)
-    _token_store[token] = {
-        'user_id': user_id, 'username': username,
-        'expires': datetime.utcnow().timestamp() + 86400  # 24 hours
-    }
+    expires_at = datetime.utcnow() + timedelta(hours=24)
+    # Lazy cleanup: remove expired tokens for this user_id before adding new one
+    try:
+        ApiToken.query.filter(
+            ApiToken.user_id == str(user_id),
+            ApiToken.expires_at < datetime.utcnow()
+        ).delete(synchronize_session=False)
+    except Exception:
+        pass
+    db.session.add(ApiToken(
+        token=token,
+        user_id=str(user_id),
+        username=username,
+        expires_at=expires_at,
+    ))
+    db.session.commit()
     return token
 
 def _verify_token(token):
-    """Verify token and return user data or None."""
-    if not token or token not in _token_store:
+    """Look up token in DB and return {'user_id': ..., 'username': ...} or None."""
+    if not token:
         return None
-    data = _token_store[token]
-    if datetime.utcnow().timestamp() > data['expires']:
-        del _token_store[token]
+    try:
+        row = ApiToken.query.filter_by(token=token).first()
+        if row is None:
+            return None
+        if row.is_expired():
+            db.session.delete(row)
+            db.session.commit()
+            return None
+        return {'user_id': row.user_id, 'username': row.username}
+    except Exception:
         return None
-    return data
 
-# Simple in-memory token store (resets on server restart — production use Redis)
-_token_store = {}
+# NOTE: _token_store removed — tokens now persisted in api_tokens table
 
 
 @app.route('/api/login', methods=['POST', 'OPTIONS'])
@@ -1283,6 +1352,9 @@ def api_login():
         if emp:
             if not check_pw(password, emp.password_hash):
                 return api_err('Invalid username or password', 401)
+            # Silently upgrade legacy SHA-256 hash to pbkdf2 on first login
+            if _is_legacy_hash(emp.password_hash):
+                emp.password_hash = hash_pw(password)
             emp.last_login = datetime.utcnow()
             db.session.commit()
             token = _make_token(f'emp_{emp.id}', emp.username)
@@ -1306,6 +1378,9 @@ def api_login():
         elif user:
             if not check_pw(password, user.password_hash):
                 return api_err('Invalid username or password', 401)
+            # Silently upgrade legacy SHA-256 hash to pbkdf2 on first login
+            if _is_legacy_hash(user.password_hash):
+                user.password_hash = hash_pw(password)
             user.last_login = datetime.utcnow()
             db.session.commit()
             token = _make_token(f'usr_{user.id}', user.username)
@@ -1334,39 +1409,79 @@ def api_login():
 
 @app.route('/api/me', methods=['GET'])
 def api_me():
-    """Flutter: Get current employee profile."""
+    """Flutter: Get current user/employee profile.
+
+    Token user_id is prefixed: 'emp_<id>' for Employee accounts,
+    'usr_<id>' for admin/safety User accounts. Previously this always
+    queried the User table, causing 404 for all Employee users.
+    """
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     data = _verify_token(token)
     if not data:
         return api_err('Unauthorized — please login', 401)
     try:
-        user = User.query.get(data['user_id'])
-        if not user:
-            return api_err('User not found', 404)
-        dept_name = ''
-        if user.department_id:
-            try:
+        uid_str = str(data['user_id'])
+
+        if uid_str.startswith('emp_'):
+            # Mobile employee account
+            emp_id = int(uid_str.replace('emp_', ''))
+            emp = Employee.query.get(emp_id)
+            if not emp:
+                return api_err('Employee not found', 404)
+            dept_name = ''
+            if emp.department_id:
+                dept = Department.query.get(emp.department_id)
+                dept_name = dept.name if dept else ''
+            return api_ok({
+                'user_id':       uid_str,
+                'username':      emp.username,
+                'full_name':     emp.full_name,
+                'role':          emp.role or 'employee',
+                'department':    dept_name,
+                'department_id': emp.department_id,
+                'employee_id':   emp.employee_id,
+                'email':         emp.email or '',
+                'mobile':        emp.mobile or '',
+                'account_type':  'employee',
+                'last_login':    emp.last_login.isoformat() if emp.last_login else '',
+            }, 'Profile loaded')
+        else:
+            # Web admin / safety user account
+            usr_id = int(uid_str.replace('usr_', '')) if uid_str.startswith('usr_') else int(uid_str)
+            user = User.query.get(usr_id)
+            if not user:
+                return api_err('User not found', 404)
+            dept_name = ''
+            if user.department_id:
                 dept = Department.query.get(user.department_id)
                 dept_name = dept.name if dept else ''
-            except Exception: pass
-        return api_ok({
-            'user_id':    user.id,
-            'username':   user.username,
-            'full_name':  user.full_name or user.username,
-            'role':       user.role or 'employee',
-            'department': dept_name,
-            'last_login': user.last_login.isoformat() if user.last_login else '',
-        }, 'Profile loaded')
+            return api_ok({
+                'user_id':       uid_str,
+                'username':      user.username,
+                'full_name':     user.full_name or user.username,
+                'role':          user.role or 'admin',
+                'department':    dept_name,
+                'department_id': user.department_id,
+                'employee_id':   '',
+                'email':         '',
+                'mobile':        '',
+                'account_type':  'admin',
+                'last_login':    user.last_login.isoformat() if user.last_login else '',
+            }, 'Profile loaded')
     except Exception as e:
         return api_err(str(e)[:120], 500)
 
 
 @app.route('/api/logout', methods=['POST'])
 def api_logout():
-    """Flutter: Invalidate auth token."""
+    """Flutter: Invalidate auth token — deletes from persistent token store."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    if token in _token_store:
-        del _token_store[token]
+    if token:
+        try:
+            ApiToken.query.filter_by(token=token).delete(synchronize_session=False)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
     return api_ok({}, 'Logged out successfully')
 
 
@@ -1554,6 +1669,9 @@ def admin_login():
         password = request.form.get('password', '')
         user = User.query.filter_by(username=username, is_active=True).first()
         if user and check_pw(password, user.password_hash):
+            # Silently upgrade legacy SHA-256 hash to pbkdf2 on first web login
+            if _is_legacy_hash(user.password_hash):
+                user.password_hash = hash_pw(password)
             session['admin_logged_in'] = True
             session['admin_user']      = user.username
             session['admin_role']      = user.role
@@ -2091,6 +2209,7 @@ def hazard_report_detail(rid):
         rep=rep, hazard=hazard, ra=ra, actions=actions)
 
 @app.route('/hazard-reports/<rid>/update-status', methods=['POST'])
+@require_login
 def hazard_report_update_status(rid):
     rep = HazardReport.query.get_or_404(rid)
     rep.status = request.form.get('status', rep.status)
@@ -2118,9 +2237,20 @@ def asr():
             ev_desc += chr(10)*2 + '--- Occurrence Details ---' + chr(10)
             ev_desc += chr(10).join(f'{k}: {v}' for k,v in extras)
 
+        # Resolve submitter's department from session (web admin user) or default to FO (1)
+        _asr_dept_id = session.get('admin_dept_id') or 1
+        if not _asr_dept_id:
+            try:
+                _web_user = User.query.filter_by(
+                    username=session.get('admin_user'), is_active=True).first()
+                _asr_dept_id = _web_user.department_id if _web_user else 1
+            except Exception:
+                _asr_dept_id = 1
+        _asr_dept_id = _asr_dept_id or 1  # guard against None
+
         # 1. Create Hazard record (feeds Hazard Log + Dashboard)
         h = Hazard(id=hid, source='ASR', linked_report_id=aid,
-                   department_id=1, classification='Operational',
+                   department_id=_asr_dept_id, classification='Operational',
                    type_of_activity='Flight Operations',
                    generic_hazard=occ,
                    specific_components=ev_desc,
@@ -2176,7 +2306,7 @@ def asr():
             hr = HazardReport(
                 id           = new_id('HR'),
                 hazard_id    = hid,
-                department_id= 1,
+                department_id= _asr_dept_id,
                 date         = f.get('date', ''),
                 location     = f'{f.get("route_from","")}-{f.get("route_to","")}',
                 description  = ev_desc,
@@ -2212,11 +2342,11 @@ def asr():
         h.status = 'Under Assessment'
         db.session.commit()
 
-        # 5. SPI auto-update
+        # 5. SPI auto-update — use submitter's actual department, not hardcoded 1
         try:
             spi_auto_update(
                 source_type   = 'asr',
-                department_id = 1,
+                department_id = _asr_dept_id,
                 category      = 'ASR',
                 year          = datetime.now().year,
                 month         = datetime.now().month,
@@ -2260,6 +2390,7 @@ def hazard_detail(hid):
     return render_template('hazard/hazard_detail.html', h=h)
 
 @app.route('/hazard-log/<hid>/update', methods=['POST'])
+@require_login
 def hazard_update(hid):
     h = Hazard.query.get_or_404(hid)
     f = request.form
@@ -2274,6 +2405,7 @@ def hazard_update(hid):
 
 # ─── Risk Register ────────────────────────────────────────────────────────────
 @app.route('/hazard-log/<hid>/add-risk', methods=['POST'])
+@require_login
 def add_risk(hid):
     f  = request.form
     li = int(f['likelihood'])
@@ -2295,6 +2427,7 @@ def add_risk(hid):
     return redirect(url_for('hazard_detail', hid=hid))
 
 @app.route('/risk/<rid>/add-control', methods=['POST'])
+@require_login
 def add_control(rid):
     risk = Risk.query.get_or_404(rid)
     f = request.form
@@ -2783,6 +2916,7 @@ def moc_list():
     return render_template('investigation/moc_list.html', mocs=all_moc)
 
 @app.route('/moc/new', methods=['GET','POST'])
+@require_login
 def new_moc():
     if request.method == 'POST':
         f = request.form
@@ -2828,13 +2962,31 @@ def new_moc():
     return render_template('investigation/moc_form.html')
 
 @app.route('/moc/<mid>/update', methods=['POST'])
+@require_login
 def update_moc(mid):
     m = MOC.query.get_or_404(mid)
     f = request.form
-    m.approval_status       = f.get('approval_status', m.approval_status)
-    m.approved_by           = f.get('approved_by', m.approved_by)
-    m.implementation_status = f.get('implementation_status', m.implementation_status)
-    m.post_change_review    = f.get('post_change_review', m.post_change_review)
+    new_impl_status   = f.get('implementation_status', m.implementation_status)
+    new_approval      = f.get('approval_status', m.approval_status)
+    new_approved_by   = f.get('approved_by', m.approved_by or '').strip()
+    new_pcr           = f.get('post_change_review', m.post_change_review or '').strip()
+
+    # ── Gate: Completed requires post-change review evidence (ICAO Doc 9859 §8.3)
+    if new_impl_status == 'Completed' and not new_pcr:
+        flash('⚠ Cannot mark MOC as Completed without a Post-Change Review. '
+              'Document the review findings before closing.', 'error')
+        return redirect(url_for('moc_list'))
+
+    # ── Gate: Approved requires approver name
+    if new_approval == 'Approved' and not new_approved_by:
+        flash('⚠ Approval requires an Approved By name. '
+              'Record the approving authority before submitting.', 'error')
+        return redirect(url_for('moc_list'))
+
+    m.approval_status       = new_approval
+    m.approved_by           = new_approved_by
+    m.implementation_status = new_impl_status
+    m.post_change_review    = new_pcr
     db.session.commit()
     flash('✓ MOC updated.', 'success')
     return redirect(url_for('moc_list'))
@@ -4585,6 +4737,7 @@ def delete_action(aid):
 
 
 @app.route('/delete/risk-assessment/<ra_id>', methods=['POST'])
+@require_login
 def delete_risk_assessment(ra_id):
     """Safe delete RA: RARow/RAMitigation use assessment_id FK."""
     ra = RiskAssessment.query.get_or_404(ra_id)
@@ -4693,6 +4846,7 @@ def delete_audit_finding(fid):
 
 
 @app.route('/delete/investigation/<iid>', methods=['POST'])
+@require_login
 def delete_investigation(iid):
     inv = Investigation.query.get_or_404(iid)
     try:
@@ -4775,6 +4929,7 @@ def delete_spi_data(did):
 
 
 @app.route('/delete/moc/<mid>', methods=['POST'])
+@require_login
 def delete_moc(mid):
     m = MOC.query.get_or_404(mid)
     if m.hazard_id:
@@ -4894,8 +5049,7 @@ def _email_html(title, subtitle, body, color='#0f1c3f'):
 
 # ── Distribution List ─────────────────────────────────────────────────────────
 
-@app.route('/safety-promotion/distribution')
-@require_login
+# NOTE: duplicate route removed — /safety-promotion/distribution is served by distribution_list (above)
 def sp_distribution():
     recipients = DistributionList.query.order_by(DistributionList.department_id, DistributionList.name).all()
     total = DistributionList.query.filter_by(is_active=True).count()
@@ -4904,16 +5058,15 @@ def sp_distribution():
                            recipients=recipients, total=total, depts=depts)
 
 
-@app.route('/safety-promotion/distribution/add', methods=['POST'])
-@require_login
+# NOTE: duplicate route removed — served by distribution_add (above)
 def sp_distribution_add():
     f = request.form
     if not f.get('email') or not f.get('name'):
         flash('Name and email required.', 'error')
-        return redirect(url_for('sp_distribution'))
+        return redirect(url_for('distribution_list'))
     if DistributionList.query.filter_by(email=f['email'].strip()).first():
         flash(f'{f["email"]} already in distribution list.', 'warning')
-        return redirect(url_for('sp_distribution'))
+        return redirect(url_for('distribution_list'))
     db.session.add(DistributionList(
         name=f['name'].strip(), email=f['email'].strip(),
         position=f.get('position',''),
@@ -4922,32 +5075,29 @@ def sp_distribution_add():
     ))
     db.session.commit()
     flash(f'+ {f["name"]} added to distribution list.', 'success')
-    return redirect(url_for('sp_distribution'))
+    return redirect(url_for('distribution_list'))
 
 
-@app.route('/safety-promotion/distribution/<int:rid>/toggle', methods=['POST'])
-@require_login
+# NOTE: duplicate route removed — served by distribution_toggle (above)
 def sp_distribution_toggle(rid):
     r = DistributionList.query.get_or_404(rid)
     r.is_active = not r.is_active
     db.session.commit()
     flash(f'{"Activated" if r.is_active else "Deactivated"}: {r.name}', 'success')
-    return redirect(url_for('sp_distribution'))
+    return redirect(url_for('distribution_list'))
 
 
-@app.route('/safety-promotion/distribution/<int:rid>/delete', methods=['POST'])
-@require_login
+# NOTE: duplicate route removed — served by distribution_delete (above)
 def sp_distribution_delete(rid):
     r = DistributionList.query.get_or_404(rid)
     db.session.delete(r); db.session.commit()
     flash('Recipient removed.', 'success')
-    return redirect(url_for('sp_distribution'))
+    return redirect(url_for('distribution_list'))
 
 
 # ── Email Log ─────────────────────────────────────────────────────────────────
 
-@app.route('/safety-promotion/email-log')
-@require_login
+# NOTE: duplicate route removed — served by email_log_list (above)
 def sp_email_log():
     logs             = EmailLog.query.order_by(EmailLog.sent_at.desc()).all()
     total_sent       = sum(1 for l in logs if 'Sent' in (l.status or ''))
@@ -4961,8 +5111,7 @@ def sp_email_log():
 
 # ── Send Bulletin ─────────────────────────────────────────────────────────────
 
-@app.route('/safety-promotion/bulletin/<bid>/send-email', methods=['POST'])
-@require_login
+# NOTE: duplicate route removed — served by bulletin_send_email (above)
 def sp_send_bulletin_email(bid):
     b    = SafetyBulletin.query.get_or_404(bid)
     dept_id = request.form.get('dept_id') or None
@@ -4992,8 +5141,7 @@ def sp_send_bulletin_email(bid):
 
 # ── Send Newsletter ───────────────────────────────────────────────────────────
 
-@app.route('/safety-promotion/newsletter/<int:nid>/send-email', methods=['POST'])
-@require_login
+# NOTE: duplicate route removed — served by newsletter_send_email (above)
 def sp_send_newsletter_email(nid):
     n       = SafetyNewsletter.query.get_or_404(nid)
     dept_id = request.form.get('dept_id') or None
@@ -5080,8 +5228,7 @@ def sp_send_campaign_email(cid):
 
 # ── Send Lesson ───────────────────────────────────────────────────────────────
 
-@app.route('/safety-promotion/lesson/<int:lid>/send-email', methods=['POST'])
-@require_login
+# NOTE: duplicate route removed — served by lesson_send_email (above)
 def sp_send_lesson_email(lid):
     ll   = LessonLearned.query.get_or_404(lid)
     recip = _get_dist_list()
@@ -7013,12 +7160,14 @@ def update_personnel(pid):
 
 # ─── EMERGENCY RESPONSE PLANNING ─────────────────────────────────────────────
 @app.route('/erp')
+@require_login
 def erp_list():
     plans = ERPlan.query.filter_by(status='Active').order_by(ERPlan.scenario_type).all()
     archived = ERPlan.query.filter_by(status='Archived').all()
     return render_template('safety_policy/erp.html', plans=plans, archived=archived)
 
 @app.route('/erp/new', methods=['GET','POST'])
+@require_login
 def new_erp():
     if request.method == 'POST':
         f   = request.form
@@ -7045,11 +7194,13 @@ def new_erp():
     return render_template('safety_policy/erp_form.html')
 
 @app.route('/erp/<eid>')
+@require_login
 def erp_detail(eid):
     e = ERPlan.query.get_or_404(eid)
     return render_template('safety_policy/erp_detail.html', e=e)
 
 @app.route('/erp/<eid>/update', methods=['POST'])
+@require_login
 def update_erp(eid):
     e = ERPlan.query.get_or_404(eid)
     f = request.form
@@ -7523,6 +7674,7 @@ def risk_register():
 
 # ─── RISK DETAIL ──────────────────────────────────────────────────────────────
 @app.route('/risk/<rid>')
+@require_login
 def risk_detail(rid):
     risk    = Risk.query.get_or_404(rid)
     hazard  = risk.hazard
@@ -7539,6 +7691,7 @@ def risk_detail(rid):
 
 # ─── UPDATE RISK STATUS / RESIDUAL ────────────────────────────────────────────
 @app.route('/risk/<rid>/update', methods=['POST'])
+@require_login
 def update_risk(rid):
     risk = Risk.query.get_or_404(rid)
     f    = request.form
@@ -9054,125 +9207,75 @@ with app.app_context():
                 ('status',          'VARCHAR(20) DEFAULT "Submitted"'),
             ],
             'trainings': [
-                ('employee_id',        'VARCHAR(50)'),
-                ('position',           'VARCHAR(100)'),
-                ('course_code',        'VARCHAR(50)'),
-                ('location',           'VARCHAR(100)'),
-                ('scheduled_date',     'VARCHAR(20)'),
-                ('duration_hours',     'REAL'),
-                ('evidence',           'VARCHAR(200)'),
-                ('is_recurrent',       'BOOLEAN DEFAULT 0'),
-                ('recurrence_months',  'INTEGER'),
-                ('updated_at',         'DATETIME'),
+                ('employee_name',    'VARCHAR(100)'),
+                ('employee_id',      'VARCHAR(50)'),
+                ('department_id',    'INTEGER'),
+                ('position',         'VARCHAR(100)'),
+                ('training_type',    'VARCHAR(50)'),
+                ('training_program', 'VARCHAR(200)'),
+                ('course_code',      'VARCHAR(50)'),
+                ('instructor',       'VARCHAR(100)'),
+                ('location',         'VARCHAR(100)'),
+                ('scheduled_date',   'VARCHAR(20)'),
+                ('training_date',    'VARCHAR(20)'),
+                ('completion_date',  'VARCHAR(20)'),
+                ('expiry_date',      'VARCHAR(20)'),
+                ('duration_hours',   'FLOAT'),
+                ('status',           'VARCHAR(20) DEFAULT "Scheduled"'),
+                ('certificate',      'VARCHAR(200)'),
+                ('evidence',         'VARCHAR(200)'),
+                ('is_recurrent',     'BOOLEAN DEFAULT 0'),
+                ('recurrence_months','INTEGER'),
+                ('notes',            'TEXT'),
+                ('updated_at',       'DATETIME'),
+                ('created_at',       'DATETIME'),
             ],
-    }
+            'employees': [
+                ('email',            'VARCHAR(120)'),
+                ('mobile',           'VARCHAR(30)'),
+                ('role',             'VARCHAR(50) DEFAULT "employee"'),
+                ('is_active',        'BOOLEAN DEFAULT 1'),
+                ('last_login',       'DATETIME'),
+                ('created_at',       'DATETIME'),
+            ],
+            'api_tokens': [
+                ('token',      'VARCHAR(64)'),
+                ('user_id',    'VARCHAR(30)'),
+                ('username',   'VARCHAR(80)'),
+                ('expires_at', 'DATETIME'),
+                ('created_at', 'DATETIME'),
+            ],
+        }
 
-    # Detect database type
-    db_url = str(db.engine.url)
-    is_postgres = 'postgresql' in db_url or 'postgres' in db_url
-
-    if is_postgres:
-        # PostgreSQL: use information_schema
-        from sqlalchemy import text as sa_text
-        with db.engine.connect() as conn:
-            # Widen status columns that were too narrow for longer values
-            for tbl_col in [
-                ('actions',        'status',           'VARCHAR(50)'),
-                ('hazard_reports',  'status',           'VARCHAR(50)'),
-                ('hazards',         'status',           'VARCHAR(50)'),
-                ('audit_findings',  'status',           'VARCHAR(50)'),
-            ]:
+    # Apply safe column migrations
+    try:
+        engine = db.engine
+        is_sqlite = 'sqlite' in str(engine.url)
+        for _tbl, _cols in migrations.items():
+            for _col, _def in _cols:
                 try:
-                    conn.execute(sa_text(
-                        f'ALTER TABLE {tbl_col[0]} ALTER COLUMN {tbl_col[1]} TYPE {tbl_col[2]}'
-                    ))
-                    conn.commit()
+                    with engine.connect() as _conn:
+                        if is_sqlite:
+                            _conn.execute(db.text(
+                                f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_def}'
+                            ))
+                        else:
+                            _conn.execute(db.text(
+                                f'ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS {_col} {_def}'
+                            ))
+                        _conn.commit()
                 except Exception:
-                    try: conn.rollback()
-                    except: pass
+                    pass
+    except Exception as _me:
+        print(f'Warning: column migration: {_me}')
 
-            # Add SAG governance columns and action_history table
-            for _sql in [
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS sag_member VARCHAR(100)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS department_id INTEGER",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS root_cause TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS rejection_notes TEXT",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS reopen_count INTEGER DEFAULT 0",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'Corrective'",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_audit_id VARCHAR(30)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_ra_id VARCHAR(30)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS linked_risk_id VARCHAR(30)",
-                "ALTER TABLE actions ADD COLUMN IF NOT EXISTS assigned_by VARCHAR(100)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS sag_role VARCHAR(80)",
-                "ALTER TABLE audit_schedules ADD COLUMN IF NOT EXISTS audit_result VARCHAR(80)",
-                "ALTER TABLE audit_findings ADD COLUMN IF NOT EXISTS finding_title VARCHAR(200)",
-                "ALTER TABLE audit_findings ADD COLUMN IF NOT EXISTS immediate_action TEXT",
-                "ALTER TABLE audit_schedules ADD COLUMN IF NOT EXISTS followup_required VARCHAR(10)",
-                "CREATE TABLE IF NOT EXISTS action_history (id SERIAL PRIMARY KEY, action_id VARCHAR(30) REFERENCES actions(id) ON DELETE CASCADE, changed_by VARCHAR(100), changed_at TIMESTAMP DEFAULT NOW(), from_status VARCHAR(50), to_status VARCHAR(50), notes TEXT, field_changed VARCHAR(50) DEFAULT 'status')",
-            ]:
-                try:
-                    conn.execute(sa_text(_sql))
-                    conn.commit()
-                except Exception:
-                    try: conn.rollback()
-                    except: pass
-
-            # FAST BATCH: get all existing columns in ONE query
-            try:
-                conn.execute(sa_text("SET statement_timeout='6s'"))
-                tbl_names = list(migrations.keys())
-                result = conn.execute(sa_text(
-                    "SELECT table_name, column_name FROM information_schema.columns "
-                    "WHERE table_name = ANY(:tbls)"
-                ), {'tbls': tbl_names})
-                existing_cols = {}
-                for row in result:
-                    existing_cols.setdefault(row[0], set()).add(row[1])
-            except Exception:
-                existing_cols = {}
-
-            # Only ALTER for truly missing columns
-            for table, columns in migrations.items():
-                seen = set()
-                table_existing = existing_cols.get(table, set())
-                for col_name, col_def in columns:
-                    if col_name in seen or col_name in table_existing:
-                        seen.add(col_name); continue
-                    seen.add(col_name)
-                    try:
-                        pg_def = (col_def
-                            .replace('DATETIME', 'TIMESTAMP')
-                            .replace('BOOLEAN DEFAULT 0', 'BOOLEAN DEFAULT FALSE')
-                            .replace('BOOLEAN DEFAULT 1', 'BOOLEAN DEFAULT TRUE'))
-                        conn.execute(sa_text(
-                            f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_name} {pg_def}'
-                        ))
-                        conn.commit()
-                        print(f'✅ Migration: added {table}.{col_name}')
-                    except Exception:
-                        try: conn.rollback()
-                        except: pass
-    else:
-        # SQLite fallback
-        import sqlite3
-        db_path = os.path.join(os.path.dirname(__file__), 'sms.db')
-        if os.path.exists(db_path):
-            con = sqlite3.connect(db_path)
-            cur = con.cursor()
-            for table, columns in migrations.items():
-                try:
-                    cur.execute(f'PRAGMA table_info({table})')
-                    existing = {row[1] for row in cur.fetchall()}
-                    for col_name, col_def in columns:
-                        if col_name not in existing:
-                            cur.execute(f'ALTER TABLE {table} ADD COLUMN {col_name} {col_def}')
-                            print(f'✅ Migration: added {table}.{col_name}')
-                except Exception as e:
-                    print(f'Migration warning for {table}: {e}')
-            con.commit()
-            con.close()
+    try:
+        db.create_all()
+    except Exception as _ce:
+        print(f'Warning: create_all: {_ce}')
 
     seed()
 
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
