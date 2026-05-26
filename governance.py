@@ -168,6 +168,19 @@ def ae_setup():
 #  SAFETY REVIEW BOARD — Gap 1
 # ══════════════════════════════════════════════════════════════════════════════
 
+@gov.route('/srb/<path:mid>/delete', methods=['POST'])
+@require_login
+def srb_delete(mid):
+    mtg = SRBMeeting.query.get_or_404(mid)
+    # Cascade delete: agenda items, attendees, decisions
+    SRBAgendaItem.query.filter_by(meeting_id=mid).delete()
+    SRBAttendee.query.filter_by(meeting_id=mid).delete()
+    SRBDecision.query.filter_by(meeting_id=mid).delete()
+    db.session.delete(mtg)
+    db.session.commit()
+    flash(f'Meeting {mid} deleted.', 'success')
+    return redirect(url_for('governance.srb_list'))
+
 @gov.route('/srb')
 @require_login
 def srb_list():
