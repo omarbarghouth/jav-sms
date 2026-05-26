@@ -984,7 +984,7 @@ def api_mobile_hazard():
             consequences         = f.get('consequences', ''),
             immediate_action     = f.get('immediate_action', ''),
             suggested_mitigation = f.get('suggested_mitigation', ''),
-            reporter             = f.get('reporter_name', '') or identity_name or 'Anonymous',
+            reporter             = identity_name or f.get('reporter_name', '') or 'Anonymous',
             reporter_severity    = 'Medium',
             status               = 'Submitted',
         )
@@ -1053,7 +1053,7 @@ def api_mobile_asr():
             id               = asr_id,
             report_type      = f.get('report_type', 'Voluntary'),
             occurrence_type  = occ,
-            captain          = f.get('reporter_name', '') or identity_name,
+            captain          = identity_name or f.get('reporter_name', '') or 'Anonymous',
             captain_staff_no = f.get('staff_number', ''),
             date             = f.get('date', _d.today().isoformat()),
             time_local       = f.get('time_local', ''),
@@ -1084,7 +1084,7 @@ def api_mobile_asr():
                 generic_hazard = occ,
                 consequences   = f.get('operational_impact', 'To Be Assessed'),
                 immediate_action = f.get('immediate_actions', ''),
-                reporter       = f.get('reporter_name', '') or 'Flight Crew',
+                reporter       = identity_name or f.get('reporter_name', '') or 'Flight Crew',
                 reporter_severity = se,
                 report_type    = 'ASR',
                 status         = 'Submitted',
@@ -1806,14 +1806,14 @@ def api_mobile_history():
         reporter_name = identity['name']
         is_admin      = identity['is_admin']
 
-        # Build query — admins see all, employees see only their own
+        # ── 1. HazardReports (includes ASR-linked HazardReports) ──────────────
         q = HazardReport.query
         if not is_admin and reporter_name:
             q = q.filter(HazardReport.reporter.ilike(f'%{reporter_name}%'))
-
         for r in q.order_by(HazardReport.created_at.desc()).limit(limit * 3).all():
             try:
-                wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next =                     resolve_report_status(hazard_id=r.hazard_id, hr_status=r.status)
+                wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next = \
+                    resolve_report_status(hazard_id=r.hazard_id, hr_status=r.status)
                 records.append({
                     'id':          r.id,
                     'type':        r.report_type or 'Hazard Report',
@@ -1833,6 +1833,57 @@ def api_mobile_history():
                 })
             except Exception:
                 pass
+
+        # ── 2. Voluntary Reports ───────────────────────────────────────────────
+        vq = VoluntaryReport.query
+        if not is_admin and reporter_name:
+            vq = vq.filter(VoluntaryReport.reporter_name.ilike(f'%{reporter_name}%'))
+        for v in vq.order_by(VoluntaryReport.created_at.desc()).limit(limit).all():
+            try:
+                records.append({
+                    'id':          v.ref_number or str(v.id),
+                    'type':        'Voluntary',
+                    'title':       (v.description or '')[:60],
+                    'description': (v.description or '')[:80],
+                    'status':      v.status or 'Submitted',
+                    'status_color':'#22c55e',
+                    'stage':       2 if (v.status or '') == 'Under Review' else (7 if (v.status or '') == 'Closed' else 1),
+                    'guidance':    'Your voluntary report has been received and is under safety review.',
+                    'responsible': 'Safety Manager',
+                    'next_step':   'Await safety team assessment',
+                    'date':        str(v.date) if v.date else '',
+                    'location':    v.location or '',
+                    'severity':    'Medium',
+                    'created_at':  v.created_at.isoformat() if v.created_at else '',
+                    'timeline':    [{'icon': '📝', 'event': 'Voluntary report submitted', 'date': str(v.date) if v.date else ''}],
+                })
+            except Exception:
+                pass
+
+        # ── 3. Confidential Reports ────────────────────────────────────────────
+        if is_admin:
+            # Only admins can see confidential reports in history
+            for c in ConfidentialReport.query.order_by(ConfidentialReport.created_at.desc()).limit(limit).all():
+                try:
+                    records.append({
+                        'id':          c.ref_number or str(c.id),
+                        'type':        'Confidential',
+                        'title':       'Confidential Safety Report',
+                        'description': (c.description or '')[:80],
+                        'status':      c.status or 'Submitted',
+                        'status_color':'#7c3aed',
+                        'stage':       2 if (c.status or '') == 'Under Review' else (7 if (c.status or '') == 'Closed' else 1),
+                        'guidance':    'Confidential report received. Identity protected per SMS policy.',
+                        'responsible': 'Accountable Manager',
+                        'next_step':   'Confidential safety review',
+                        'date':        str(c.date) if c.date else '',
+                        'location':    c.location or '',
+                        'severity':    'Medium',
+                        'created_at':  c.created_at.isoformat() if c.created_at else '',
+                        'timeline':    [{'icon': '🔒', 'event': 'Confidential report received', 'date': str(c.date) if c.date else ''}],
+                    })
+                except Exception:
+                    pass
 
         records.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return api_ok({'reports': records[:limit], 'total': len(records)}, 'History loaded')
