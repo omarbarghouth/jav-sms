@@ -113,7 +113,35 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _db_opts
 app.secret_key = os.environ.get('SECRET_KEY', 'jav-sms-dev-only-change-in-prod')
 # IMPORTANT: Set a strong SECRET_KEY env var in production (Render dashboard)
 
+# ── Session / cookie security ──────────────────────────────────────────────────
+_is_prod = os.environ.get('FLASK_ENV', 'development') == 'production'
+app.config['SESSION_COOKIE_HTTPONLY'] = True          # no JS access to cookie
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'        # CSRF mitigation
+app.config['SESSION_COOKIE_SECURE']   = _is_prod      # HTTPS-only in prod
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7-day sessions
+
 db.init_app(app)
+
+# ─── Global error handlers ────────────────────────────────────────────────────
+@app.errorhandler(404)
+def err_404(e):
+    return render_template('error.html', code=404,
+                           title='Page Not Found',
+                           message='The page you requested does not exist.'), 404
+
+@app.errorhandler(403)
+def err_403(e):
+    return render_template('error.html', code=403,
+                           title='Access Denied',
+                           message='You do not have permission to access this page.'), 403
+
+@app.errorhandler(500)
+def err_500(e):
+    import traceback as _tb
+    app.logger.error('500 error: %s\n%s', e, _tb.format_exc())
+    return render_template('error.html', code=500,
+                           title='Internal Server Error',
+                           message='Something went wrong. The safety team has been notified.'), 500
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 INTOLERABLE = {'5A','5B','5C','4A','4B','3A'}
@@ -1380,6 +1408,7 @@ def _verify_token(token):
 
 
 @app.route('/api/login', methods=['POST', 'OPTIONS'])
+@require_login
 def api_login():
     """Flutter: Employee login → returns auth token."""
     if request.method == 'OPTIONS':
@@ -1524,6 +1553,7 @@ def api_me():
 
 
 @app.route('/api/logout', methods=['POST'])
+@require_login
 def api_logout():
     """Flutter: Invalidate auth token — deletes from persistent token store."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
@@ -1638,87 +1668,7 @@ def api_setup_check():
     return api_ok(report, 'Setup check complete')
 
 
-@app.route('/api/debug-login', methods=['GET', 'POST'])
-def api_debug_login():
-    """
-    Diagnostic: GET /api/debug-login?username=x&password=y
-    or POST {"username":"x","password":"y"}
-    Returns exactly which step of the login flow fails.
-    REMOVE THIS ENDPOINT after login issue is resolved.
-    """
-    try:
-        if request.method == 'GET':
-            username = (request.args.get('username') or '').strip()
-            password = request.args.get('password') or ''
-        else:
-            f = request.get_json() if request.is_json else request.form.to_dict()
-            username = (f.get('username') or '').strip()
-            password = f.get('password') or ''
-        if not username or not password:
-            return api_ok({'result': 'MISSING_PARAMS'}, 'Provide username and password')
-
-        result = {'username': username}
-
-        # Step 1: find employee (active)
-        emp = Employee.query.filter_by(username=username).first()
-        if emp is None:
-            result['step'] = 'EMPLOYEE_NOT_FOUND'
-            result['hint'] = 'No employee with that username exists at all'
-            return api_ok(result, 'Login diagnosis complete')
-
-        result['employee_id'] = emp.id
-        result['is_active'] = emp.is_active
-        if not emp.is_active:
-            result['step'] = 'EMPLOYEE_INACTIVE'
-            result['hint'] = 'Employee exists but is_active=False — toggle active in web admin'
-            return api_ok(result, 'Login diagnosis complete')
-
-        # Step 2: password hash state
-        h = emp.password_hash
-        if not h:
-            result['step'] = 'NO_PASSWORD_HASH'
-            result['hint'] = 'password_hash is NULL — use Reset Password in web admin'
-            return api_ok(result, 'Login diagnosis complete')
-
-        result['hash_type'] = (
-            'pbkdf2' if h.startswith('pbkdf2') else
-            'scrypt-werkzeug' if h.startswith('scrypt:') else
-            'sha256-legacy' if (len(h) == 64 and ':' not in h) else
-            'UNKNOWN/PLAINTEXT'
-        )
-        result['hash_preview'] = h[:20] + '...'
-
-        if result['hash_type'] == 'UNKNOWN/PLAINTEXT':
-            result['step'] = 'BAD_HASH_FORMAT'
-            result['hint'] = 'Password is plain text — use Reset Password in web admin'
-            return api_ok(result, 'Login diagnosis complete')
-
-        # Step 3: actual password check
-        try:
-            pw_ok = check_pw(password, h)
-        except Exception as ce:
-            result['step'] = 'CHECK_PW_EXCEPTION'
-            result['hint'] = str(ce)[:120]
-            return api_ok(result, 'Login diagnosis complete')
-
-        if not pw_ok:
-            result['step'] = 'WRONG_PASSWORD'
-            result['hint'] = 'Employee found and hash is valid but password does not match'
-            return api_ok(result, 'Login diagnosis complete')
-
-        # Step 4: token creation
-        try:
-            token = _make_token(f'emp_{emp.id}', emp.username)
-            result['step'] = 'ALL_OK'
-            result['token_preview'] = token[:12] + '...'
-            result['hint'] = 'Login should succeed — if Flutter still fails, check the API URL'
-        except Exception as te:
-            result['step'] = 'TOKEN_CREATE_FAILED'
-            result['hint'] = str(te)[:120]
-
-        return api_ok(result, 'Login diagnosis complete')
-    except Exception as e:
-        return api_err(str(e)[:120], 500)
+# /api/debug-login removed — was a diagnostic endpoint exposing auth internals
 
 
 @app.route('/api/my_reports', methods=['GET'])
@@ -1947,6 +1897,7 @@ def api_mobile_stats():
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
+@require_login
 def admin_login():
     if is_logged_in():
         return redirect(url_for('dashboard'))
@@ -1974,6 +1925,7 @@ def admin_login():
 
 
 @app.route('/admin/logout')
+@require_login
 def admin_logout():
     session.clear()
     flash('You have been logged out.', 'info')
@@ -2296,6 +2248,7 @@ def dashboard():
 
 # ─── Hazard Report ────────────────────────────────────────────────────────────
 @app.route('/hazard-report', methods=['GET','POST'])
+@require_login
 def hazard_report():
     if request.method == 'POST':
         f   = request.form
@@ -2506,6 +2459,7 @@ def hazard_report_update_status(rid):
 
 # ─── ASR ─────────────────────────────────────────────────────────────────────
 @app.route('/asr', methods=['GET','POST'])
+@require_login
 def asr():
     if request.method == 'POST':
         f   = request.form
@@ -2672,6 +2626,7 @@ def hazard_log():
         dept_f=dept_f, stat_f=stat_f, cls_f=cls_f)
 
 @app.route('/hazard-log/<hid>')
+@require_login
 def hazard_detail(hid):
     h = Hazard.query.get_or_404(hid)
     return render_template('hazard/hazard_detail.html', h=h)
@@ -3121,22 +3076,27 @@ def action_detail(aid):
 # ─── Audits ───────────────────────────────────────────────────────────────────
 # ─── Legacy /audits/* routes — redirected to new audit system ────────────────
 @app.route('/audits')
+@require_login
 def audits():
     return redirect(url_for('audit_schedule'))
 
 @app.route('/audits/new')
+@require_login
 def new_audit():
     return redirect(url_for('new_audit_schedule'))
 
 @app.route('/audits/<aid>')
+@require_login
 def audit_detail(aid):
     return redirect(url_for('audit_schedule'))
 
 @app.route('/audits/<aid>/add-finding', methods=['GET','POST'])
+@require_login
 def add_finding(aid):
     return redirect(url_for('audit_schedule'))
 
 @app.route('/audits/<aid>/update', methods=['GET','POST'])
+@require_login
 def update_audit(aid):
     return redirect(url_for('audit_schedule'))
 
@@ -3922,6 +3882,7 @@ def spi():
 
 
 @app.route('/spi/actions')
+@require_login
 def spi_actions_list():
     """List of all SPI-linked actions with full escalation traceability."""
     status_f = request.args.get('status', '')
@@ -3954,6 +3915,7 @@ def spi_actions_list():
                            dept_f=dept_f, level_f=level_f)
 
 @app.route('/spi/escalation/<int:esc_id>')
+@require_login
 def spi_escalation_detail(esc_id):
     """Escalation event detail — the source record for SPI actions."""
     esc = SPIEscalation.query.get_or_404(esc_id)
@@ -3968,6 +3930,7 @@ def spi_escalation_detail(esc_id):
                            MONTHS=MONTHS, now=datetime.utcnow())
 
 @app.route('/spi/action-report/<action_id>')
+@require_login
 def spi_action_report(action_id):
     """
     Print-ready SPI Alert Mitigation Report.
@@ -4090,6 +4053,7 @@ def spi_indicators():
 
 
 @app.route('/spi/indicators/<int:iid>/delete', methods=['POST'])
+@require_login
 def spi_delete_indicator(iid):
     ind = SPIIndicator.query.get_or_404(iid)
     db.session.delete(ind)
@@ -4099,12 +4063,14 @@ def spi_delete_indicator(iid):
 
 
 @app.route('/spi/evidence/<filename>')
+@require_login
 def spi_evidence_file(filename):
     """Serve uploaded evidence files."""
     from flask import send_from_directory
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/spi/indicators/<int:iid>/toggle', methods=['POST'])
+@require_login
 def spi_toggle_indicator(iid):
     ind = SPIIndicator.query.get_or_404(iid)
     ind.active = not ind.active
@@ -4157,6 +4123,7 @@ def sp_bulletins():
     return render_template('spi/sp_bulletins.html', bulletins=bulletins, status_f=status_f, type_f=type_f)
 
 @app.route('/safety-promotion/bulletin/new', methods=['GET','POST'])
+@require_login
 def new_bulletin():
     if request.method == 'POST':
         f = request.form
@@ -4182,11 +4149,13 @@ def new_bulletin():
                            now=datetime.utcnow())
 
 @app.route('/safety-promotion/bulletin/<bid>')
+@require_login
 def sp_bulletin_detail(bid):
     b = SafetyBulletin.query.get_or_404(bid)
     return render_template('spi/sp_bulletin_detail.html', b=b, now=datetime.utcnow())
 
 @app.route('/safety-promotion/bulletin/<bid>/archive', methods=['POST'])
+@require_login
 def sp_bulletin_archive(bid):
     b = SafetyBulletin.query.get_or_404(bid)
     b.status = 'Archived'; db.session.commit()
@@ -4200,6 +4169,7 @@ def sp_newsletters():
     return render_template('spi/sp_newsletters.html', newsletters=newsletters)
 
 @app.route('/safety-promotion/newsletter/new', methods=['GET','POST'])
+@require_login
 def sp_newsletter_new():
     if request.method == 'POST':
         f = request.form
@@ -4224,11 +4194,13 @@ def sp_newsletter_new():
                            now=datetime.utcnow())
 
 @app.route('/safety-promotion/newsletter/<int:nid>')
+@require_login
 def sp_newsletter_detail(nid):
     n = SafetyNewsletter.query.get_or_404(nid)
     return render_template('spi/sp_newsletter_detail.html', n=n, now=datetime.utcnow())
 
 @app.route('/safety-promotion/newsletter/<int:nid>/publish', methods=['POST'])
+@require_login
 def sp_newsletter_publish(nid):
     n = SafetyNewsletter.query.get_or_404(nid)
     n.status = 'Published'; db.session.commit()
@@ -4277,6 +4249,7 @@ def sp_training():
 
 
 @app.route('/safety-promotion/training/new', methods=['GET', 'POST'])
+@require_login
 def new_training():
     if request.method == 'POST':
         f = request.form
@@ -4312,6 +4285,7 @@ def new_training():
 
 
 @app.route('/safety-promotion/training/<int:tid>', methods=['GET', 'POST'])
+@require_login
 def sp_training_detail(tid):
     """View and edit a single training record."""
     t = Training.query.get_or_404(tid)
@@ -4357,6 +4331,7 @@ def sp_training_detail(tid):
 
 
 @app.route('/safety-promotion/training/export/xlsx')
+@require_login
 def sp_training_export_xlsx():
     """Export training records to Excel with formatting."""
     import io
@@ -4504,6 +4479,7 @@ def sp_surveys():
     return render_template('spi/sp_surveys.html', surveys=surveys)
 
 @app.route('/safety-promotion/survey/new', methods=['GET','POST'])
+@require_login
 def sp_survey_new():
     if request.method == 'POST':
         f = request.form
@@ -4521,6 +4497,7 @@ def sp_survey_new():
                            now=datetime.utcnow())
 
 @app.route('/safety-promotion/survey/<int:sid>/activate', methods=['POST'])
+@require_login
 def sp_survey_activate(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.status = 'Active'; db.session.commit()
@@ -4528,6 +4505,7 @@ def sp_survey_activate(sid):
     return redirect('/safety-promotion/surveys')
 
 @app.route('/safety-promotion/survey/<int:sid>/close', methods=['POST'])
+@require_login
 def sp_survey_close(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.status = 'Closed'; db.session.commit()
@@ -4535,6 +4513,7 @@ def sp_survey_close(sid):
     return redirect('/safety-promotion/surveys')
 
 @app.route('/safety-promotion/survey/<int:sid>/respond', methods=['POST'])
+@require_login
 def sp_survey_respond(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.response_count = (s.response_count or 0) + 1; db.session.commit()
@@ -4548,6 +4527,7 @@ def sp_campaigns():
     return render_template('spi/sp_campaigns.html', campaigns=campaigns)
 
 @app.route('/safety-promotion/campaign/new', methods=['GET','POST'])
+@require_login
 def sp_campaign_new():
     if request.method == 'POST':
         f = request.form
@@ -4754,9 +4734,10 @@ def lesson_send_email(lid):
     sent, err = _do_send(emails, subject, html)
     _write_log('Lesson', lid, subject, sent, 'All',
                'Sent' if not err else 'Failed', err)
-    flash(f'Lesson shared with {sent} recipients.', 'success')
+    flash(('⚠ SMTP not configured — email not sent.' if err == 'SMTP_NOT_CONFIGURED' else f'Lesson shared with {sent} recipients.'), 'warning' if err == 'SMTP_NOT_CONFIGURED' else 'success')
     return redirect(f'/safety-promotion/lesson/{lid}')
 @app.route('/safety-promotion/bulletin/<bid>/print')
+@require_login
 def sp_bulletin_print(bid):
     b = SafetyBulletin.query.get_or_404(bid)
     return render_template('spi/sp_bulletin_print.html', b=b, now=datetime.utcnow())
@@ -4765,6 +4746,7 @@ def sp_bulletin_print(bid):
 # ── Newsletter edit ────────────────────────────────────────────────────────────
 
 @app.route('/safety-promotion/newsletter/<int:nid>/edit', methods=['GET','POST'])
+@require_login
 def sp_newsletter_edit(nid):
     n = SafetyNewsletter.query.get_or_404(nid)
     if request.method == 'POST':
@@ -4791,6 +4773,7 @@ def sp_newsletter_edit(nid):
 
 
 @app.route('/safety-promotion/newsletter/<int:nid>/archive', methods=['POST'])
+@require_login
 def sp_newsletter_archive(nid):
     n = SafetyNewsletter.query.get_or_404(nid)
     n.status = 'Archived'
@@ -4800,6 +4783,7 @@ def sp_newsletter_archive(nid):
 
 
 @app.route('/safety-promotion/newsletter/<int:nid>/print')
+@require_login
 def sp_newsletter_print(nid):
     n = SafetyNewsletter.query.get_or_404(nid)
     return render_template('spi/sp_newsletter_print.html', n=n, now=datetime.utcnow())
@@ -4808,6 +4792,7 @@ def sp_newsletter_print(nid):
 # ── Survey results dashboard ──────────────────────────────────────────────────
 
 @app.route('/safety-promotion/survey/<int:sid>')
+@require_login
 def sp_survey_detail(sid):
     s = SafetySurvey.query.get_or_404(sid)
     import json
@@ -4824,12 +4809,14 @@ def sp_survey_detail(sid):
 # ── Campaign detail & close ───────────────────────────────────────────────────
 
 @app.route('/safety-promotion/campaign/<int:cid>')
+@require_login
 def sp_campaign_detail(cid):
     c = SafetyCampaign.query.get_or_404(cid)
     return render_template('spi/sp_campaign_detail.html', c=c, now=datetime.utcnow())
 
 
 @app.route('/safety-promotion/campaign/<int:cid>/complete', methods=['POST'])
+@require_login
 def sp_campaign_complete(cid):
     c = SafetyCampaign.query.get_or_404(cid)
     c.status = 'Completed'
@@ -4841,6 +4828,7 @@ def sp_campaign_complete(cid):
 # ── Training PDF report ───────────────────────────────────────────────────────
 
 @app.route('/safety-promotion/training/<int:tid>/edit', methods=['GET', 'POST'])
+@require_login
 def sp_training_edit(tid):
     """Full edit form — alias for detail page with editing mode."""
     t = Training.query.get_or_404(tid)
@@ -4851,6 +4839,7 @@ def sp_training_edit(tid):
 
 
 @app.route('/safety-promotion/training/report')
+@require_login
 def sp_training_report():
     dept_f   = request.args.get('dept', '')
     status_f = request.args.get('status', '')
@@ -4872,12 +4861,14 @@ def sp_training_report():
 # ── Lessons Learned PDF ───────────────────────────────────────────────────────
 
 @app.route('/safety-promotion/lesson/<int:lid>/print')
+@require_login
 def sp_lesson_print(lid):
     ll = LessonLearned.query.get_or_404(lid)
     return render_template('spi/sp_lesson_print.html', ll=ll, now=datetime.utcnow())
 
 
 @app.route('/safety-promotion/lesson/<int:lid>')
+@require_login
 
 def sp_lesson_detail(lid):
     ll = LessonLearned.query.get_or_404(lid)
@@ -4889,6 +4880,7 @@ def sp_lesson_detail(lid):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.route('/delete/hazard-report/<rid>', methods=['POST'])
+@require_login
 def delete_hazard_report(rid):
     """Safe delete: nullify FKs first, then cascade in correct dependency order."""
     rep = HazardReport.query.get_or_404(rid)
@@ -4946,6 +4938,7 @@ def delete_hazard_report(rid):
 
 
 @app.route('/delete/hazard/<hid>', methods=['POST'])
+@require_login
 def delete_hazard(hid):
     """Safe delete hazard: nullify ALL FK references across all 10 tables first."""
     h = Hazard.query.get_or_404(hid)
@@ -5049,6 +5042,7 @@ def delete_risk_assessment(ra_id):
 
 
 @app.route('/delete/audit-schedule/<sid>', methods=['POST'])
+@require_login
 def delete_audit_schedule(sid):
     """Safe delete audit: AuditAction.finding_id and
     AuditChecklist.linked_finding_id must be nullified before finding delete."""
@@ -5100,6 +5094,7 @@ def delete_audit_schedule(sid):
 
 
 @app.route('/delete/audit-finding/<fid>', methods=['POST'])
+@require_login
 def delete_audit_finding(fid):
     """Safe delete finding: nullify linked_finding_id in checklists, delete actions first."""
     f = AuditFinding.query.get_or_404(fid)
@@ -5152,6 +5147,7 @@ def delete_investigation(iid):
 
 
 @app.route('/delete/training/<int:tid>', methods=['POST'])
+@require_login
 def delete_training(tid):
     t = Training.query.get_or_404(tid)
     db.session.delete(t)
@@ -5161,6 +5157,7 @@ def delete_training(tid):
 
 
 @app.route('/delete/bulletin/<bid>', methods=['POST'])
+@require_login
 def delete_bulletin(bid):
     b = SafetyBulletin.query.get_or_404(bid)
     db.session.delete(b)
@@ -5170,6 +5167,7 @@ def delete_bulletin(bid):
 
 
 @app.route('/delete/newsletter/<int:nid>', methods=['POST'])
+@require_login
 def delete_newsletter(nid):
     n = SafetyNewsletter.query.get_or_404(nid)
     db.session.delete(n)
@@ -5179,6 +5177,7 @@ def delete_newsletter(nid):
 
 
 @app.route('/delete/survey/<int:sid>', methods=['POST'])
+@require_login
 def delete_survey(sid):
     s = SafetySurvey.query.get_or_404(sid)
     db.session.delete(s)
@@ -5188,6 +5187,7 @@ def delete_survey(sid):
 
 
 @app.route('/delete/campaign/<int:cid>', methods=['POST'])
+@require_login
 def delete_campaign(cid):
     sc = SafetyCampaign.query.get_or_404(cid)
     db.session.delete(sc)
@@ -5197,6 +5197,7 @@ def delete_campaign(cid):
 
 
 @app.route('/delete/lesson/<int:lid>', methods=['POST'])
+@require_login
 def delete_lesson(lid):
     ll = LessonLearned.query.get_or_404(lid)
     db.session.delete(ll)
@@ -5206,6 +5207,7 @@ def delete_lesson(lid):
 
 
 @app.route('/delete/spi-data/<int:did>', methods=['POST'])
+@require_login
 def delete_spi_data(did):
     d = SPIData.query.get_or_404(did)
     iid = d.spi_id
@@ -5277,7 +5279,9 @@ def _get_dist_list(dept_id=None):
 def _do_send(emails, subject, html):
     cfg = _smtp_cfg()
     if not cfg['host']:
-        return len(emails), None  # SMTP not configured — log as simulated
+        # SMTP not configured — return 0 sent and a clear warning
+        app.logger.warning('SMTP not configured — email not sent: "%s" (%d recipients)', subject, len(emails))
+        return 0, 'SMTP_NOT_CONFIGURED'
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -5422,7 +5426,7 @@ def sp_send_bulletin_email(bid):
     sent, err  = _do_send(emails, subject, html)
     _write_log('Bulletin', bid, subject, sent, dept_label,
                'Sent' if not err else 'Failed', err)
-    flash(f'Bulletin emailed to {sent} recipients ({dept_label}).', 'success')
+    flash(('⚠ SMTP not configured — email not sent. Set SMTP_HOST in environment.' if err == 'SMTP_NOT_CONFIGURED' else f'Bulletin emailed to {sent} recipients ({dept_label}).'), 'warning' if err == 'SMTP_NOT_CONFIGURED' else 'success')
     return redirect(url_for('sp_bulletin_detail', bid=bid))
 
 
@@ -5449,7 +5453,7 @@ def sp_send_newsletter_email(nid):
     sent, err  = _do_send(emails, subject, html)
     _write_log('Newsletter', nid, subject, sent, dept_label,
                'Sent' if not err else 'Failed', err)
-    flash(f'Newsletter emailed to {sent} recipients.', 'success')
+    flash(('⚠ SMTP not configured — email not sent. Set SMTP_HOST in environment.' if err == 'SMTP_NOT_CONFIGURED' else f'Newsletter emailed to {sent} recipients.'), 'warning' if err == 'SMTP_NOT_CONFIGURED' else 'success')
     return redirect(url_for('sp_newsletter_detail', nid=nid))
 
 
@@ -5481,7 +5485,7 @@ def sp_send_survey_email(sid):
     s.target_count = (s.target_count or 0) + sent
     _write_log('Survey', sid, subject, sent, dept_label,
                'Sent' if not err else 'Failed', err)
-    flash(f'Survey invitation sent to {sent} recipients.', 'success')
+    flash(('⚠ SMTP not configured — email not sent.' if err == 'SMTP_NOT_CONFIGURED' else f'Survey invitation sent to {sent} recipients.'), 'warning' if err == 'SMTP_NOT_CONFIGURED' else 'success')
     return redirect(url_for('sp_survey_detail', sid=sid))
 
 
@@ -5509,7 +5513,7 @@ def sp_send_campaign_email(cid):
     sent, err  = _do_send(emails, subject, html)
     _write_log('Campaign', cid, subject, sent, dept_label,
                'Sent' if not err else 'Failed', err)
-    flash(f'Campaign emailed to {sent} recipients.', 'success')
+    flash(('⚠ SMTP not configured — email not sent.' if err == 'SMTP_NOT_CONFIGURED' else f'Campaign emailed to {sent} recipients.'), 'warning' if err == 'SMTP_NOT_CONFIGURED' else 'success')
     return redirect(url_for('sp_campaign_detail', cid=cid))
 
 
@@ -5537,7 +5541,7 @@ def sp_send_lesson_email(lid):
     sent, err = _do_send(emails, subject, html)
     _write_log('Lesson', lid, subject, sent, 'All',
                'Sent' if not err else 'Failed', err)
-    flash(f'Lesson emailed to {sent} recipients.', 'success')
+    flash(('⚠ SMTP not configured — email not sent.' if err == 'SMTP_NOT_CONFIGURED' else f'Lesson emailed to {sent} recipients.'), 'warning' if err == 'SMTP_NOT_CONFIGURED' else 'success')
     return redirect(url_for('sp_lesson_detail', lid=lid))
 
 
@@ -5881,7 +5885,7 @@ def sag_action_detail(aid):
 # ── SAG Governance Dashboard (Safety Admin view inside main SMS) ───────────────
 
 @app.route('/sag/governance')
-@require_login
+@require_sag
 def sag_governance():
     check_overdue_actions()
     total_open     = Action.query.filter(Action.status.notin_(['Closed'])).count()
@@ -5933,7 +5937,7 @@ def sag_governance():
 
 
 @app.route('/sag/assign/<aid>', methods=['POST'])
-@require_login
+@require_sag
 def sag_assign(aid):
     a = Action.query.get_or_404(aid)
     old_owner = a.sag_member or 'Unassigned'
@@ -6335,6 +6339,7 @@ def audit_plans():
                            this_month=this_month)
 
 @app.route('/audit-plans/new', methods=['GET', 'POST'])
+@require_login
 def new_audit_plan():
     if request.method == 'POST':
         f   = request.form
@@ -6363,6 +6368,7 @@ def new_audit_plan():
 
 
 @app.route('/audit-plans/<pid>/edit', methods=['GET','POST'])
+@require_login
 def edit_audit_plan(pid):
     p = AuditPlan.query.get_or_404(pid)
     if request.method == 'POST':
@@ -6386,6 +6392,7 @@ def edit_audit_plan(pid):
     return render_template('audit/audit_plan_form.html', years=years, edit=p)
 
 @app.route('/audit-plans/<pid>/delete', methods=['POST'])
+@require_login
 def delete_audit_plan(pid):
     p = AuditPlan.query.get_or_404(pid)
     year = p.year
@@ -6418,6 +6425,7 @@ def delete_audit_plan(pid):
     return redirect(url_for('audit_plans') + f'?year={year}')
 
 @app.route('/audit-plans/<pid>/complete', methods=['POST'])
+@require_login
 def complete_audit_plan(pid):
     """Mark an audit plan entry as Completed."""
     p = AuditPlan.query.get_or_404(pid)
@@ -6427,6 +6435,7 @@ def complete_audit_plan(pid):
     return redirect(url_for('audit_plans'))
 
 @app.route('/audit-plans/<pid>/schedule', methods=['POST'])
+@require_login
 def schedule_from_plan(pid):
     """Convert an audit plan entry into a scheduled audit."""
     plan = AuditPlan.query.get_or_404(pid)
@@ -6486,6 +6495,7 @@ def audit_schedule():
                            dept_f=dept_f, status_f=status_f)
 
 @app.route('/audit-schedule/new', methods=['GET', 'POST'])
+@require_login
 def new_audit_schedule():
     """Create a scheduled audit without an existing plan (ad-hoc)."""
     if request.method == 'POST':
@@ -6586,6 +6596,7 @@ def audit_execution(sid):
         today_date=date.today().isoformat())
 
 @app.route('/audit-schedule/<sid>/start', methods=['POST'])
+@require_login
 def start_audit(sid):
     s = AuditSchedule.query.get_or_404(sid)
     s.status       = 'In Progress'
@@ -6643,6 +6654,7 @@ def start_audit(sid):
     return redirect(url_for('audit_execution', sid=sid))
 
 @app.route('/audit-schedule/<sid>/checklist', methods=['POST'])
+@require_login
 def save_checklist(sid):
     """
     Save checklist responses.
@@ -6771,6 +6783,7 @@ def close_audit(sid):
 
 # ─── AUDIT FINDINGS ───────────────────────────────────────────────────────────
 @app.route('/audit-schedule/<sid>/findings/new', methods=['POST'])
+@require_login
 def new_finding(sid):
     s   = AuditSchedule.query.get_or_404(sid)
     f   = request.form
@@ -6862,6 +6875,7 @@ def new_finding(sid):
 
 # ─── FINDING DETAIL ───────────────────────────────────────────────────────────
 @app.route('/audit-findings/<fid>', methods=['GET','POST'])
+@require_login
 def finding_detail(fid):
     """Finding detail with full lifecycle: auditee CAP submission + safety review."""
     finding = AuditFinding.query.get_or_404(fid)
@@ -7058,6 +7072,7 @@ def finding_detail(fid):
 
 
 @app.route('/audit-findings/<fid>/report')
+@require_login
 def finding_report(fid):
     """Dynamic NCR Report — safe, fully defensive, full lifecycle."""
     try:
@@ -7100,10 +7115,13 @@ def finding_report(fid):
                                ncr_number=ncr_number, now=datetime.utcnow(), MONTHS=MONTHS)
     except Exception as _e:
         import traceback; traceback.print_exc()
-        return f"<h2>NCR Report Error</h2><pre>{_e}</pre><p><a href='/audit-findings/{fid}'>← Back to Finding</a></p>", 500
+        app.logger.error('NCR report error fid=%s: %s', fid, _e)
+        flash('Could not generate the NCR report. Please try again.', 'error')
+        return redirect(f'/audit-findings/{fid}')
 
 
 @app.route('/audit-schedule/<sid>/final-report')
+@require_login
 def audit_final_report(sid):
     """Enterprise Aviation Final Audit & NCR/CAPA Report Package — safe rendering."""
     try:
@@ -7183,11 +7201,14 @@ def audit_final_report(sid):
                                compliance_pct=compliance_pct, now=datetime.utcnow())
     except Exception as _e:
         import traceback; traceback.print_exc()
-        return f"<h2>Final Report Error</h2><pre>{_e}</pre><p><a href='/audit-schedule/{sid}'>← Back to Audit</a></p>", 500
+        app.logger.error('Final report error sid=%s: %s', sid, _e)
+        flash('Could not generate the final audit report. Please try again.', 'error')
+        return redirect(f'/audit-schedule/{sid}')
 
 
 # ─── AUDIT ACTIONS ────────────────────────────────────────────────────────────
 @app.route('/audit-actions')
+@require_login
 def audit_actions():
     today    = date.today().isoformat()
     status_f = request.args.get('status', '')
@@ -7213,6 +7234,7 @@ def audit_actions():
         status_f=status_f, pri_f=pri_f)
 
 @app.route('/audit-actions/<aid>/update', methods=['POST'])
+@require_login
 def update_audit_action(aid):
     a = AuditAction.query.get_or_404(aid)
     f = request.form
@@ -7301,6 +7323,7 @@ def safety_policy():
                            active=active, history=history, drafts=drafts)
 
 @app.route('/safety-policy/new', methods=['GET','POST'])
+@require_login
 def new_safety_policy():
     if request.method == 'POST':
         f = request.form
@@ -7328,6 +7351,7 @@ def new_safety_policy():
     return render_template('safety_policy/policy_form.html', next_ver=next_ver, latest=latest)
 
 @app.route('/safety-policy/<pid>/activate', methods=['POST'])
+@require_login
 def activate_policy(pid):
     # Archive current active
     current = SafetyPolicy.query.filter_by(status='Active').first()
@@ -7340,6 +7364,7 @@ def activate_policy(pid):
     return redirect(url_for('safety_policy'))
 
 @app.route('/safety-policy/<pid>/edit', methods=['POST'])
+@require_login
 def edit_policy(pid):
     p = SafetyPolicy.query.get_or_404(pid)
     f = request.form
@@ -7363,6 +7388,7 @@ def safety_roles():
     return render_template('safety_policy/roles.html', roles=roles)
 
 @app.route('/safety-roles/new', methods=['GET','POST'])
+@require_login
 def new_safety_role():
     if request.method == 'POST':
         f = request.form
@@ -7386,6 +7412,7 @@ def new_safety_role():
     return render_template('safety_policy/role_form.html')
 
 @app.route('/safety-roles/<rid>/update', methods=['POST'])
+@require_login
 def update_safety_role(rid):
     r = SafetyRole.query.get_or_404(rid)
     f = request.form
@@ -7408,6 +7435,7 @@ def safety_personnel():
     return render_template('safety_policy/personnel.html', personnel=personnel)
 
 @app.route('/safety-personnel/new', methods=['GET','POST'])
+@require_login
 def new_safety_personnel():
     if request.method == 'POST':
         f = request.form
@@ -7430,6 +7458,7 @@ def new_safety_personnel():
     return render_template('safety_policy/personnel_form.html')
 
 @app.route('/safety-personnel/<pid>/update', methods=['POST'])
+@require_login
 def update_personnel(pid):
     p = SafetyPersonnel.query.get_or_404(pid)
     f = request.form
@@ -7519,6 +7548,7 @@ def documents():
                            type_f=type_f, dept_f=dept_f, status_f=status_f)
 
 @app.route('/documents/new', methods=['GET','POST'])
+@require_login
 def new_document():
     if request.method == 'POST':
         f        = request.form
@@ -7550,6 +7580,7 @@ def new_document():
     return render_template('document/document_form.html', doc_types=doc_types)
 
 @app.route('/documents/<did>')
+@require_login
 def document_detail(did):
     doc = SMSDocument.query.get_or_404(did)
     # Get all versions (parent chain)
@@ -7564,6 +7595,7 @@ def document_detail(did):
     return render_template('document/document_detail.html', doc=doc, versions=versions)
 
 @app.route('/documents/<did>/advance', methods=['POST'])
+@require_login
 def advance_document(did):
     """Draft → Under Review → Approved → Archived"""
     doc = SMSDocument.query.get_or_404(did)
@@ -7585,6 +7617,7 @@ def advance_document(did):
     return redirect(url_for('document_detail', did=did))
 
 @app.route('/documents/<did>/revise', methods=['POST'])
+@require_login
 def revise_document(did):
     """Create a new revision — old version becomes archived."""
     old = SMSDocument.query.get_or_404(did)
@@ -7697,6 +7730,7 @@ def build_traceability(doc):
 
 # ─── DOCUMENT LINKING API ─────────────────────────────────────────────────────
 @app.route('/documents/<did>/link', methods=['POST'])
+@require_login
 def link_document(did):
     doc = SMSDocument.query.get_or_404(did)
     f   = request.form
@@ -7735,6 +7769,7 @@ def link_document(did):
     return redirect(url_for('document_detail', did=did))
 
 @app.route('/documents/<did>/unlink/<int:link_id>', methods=['POST'])
+@require_login
 def unlink_document(did, link_id):
     lnk = DocumentLink.query.get_or_404(link_id)
     db.session.delete(lnk)
@@ -7744,6 +7779,7 @@ def unlink_document(did, link_id):
 
 # ─── DOCUMENT DETAIL (override — add traceability) ───────────────────────────
 @app.route('/documents/<did>/trace')
+@require_login
 def document_trace(did):
     doc   = SMSDocument.query.get_or_404(did)
     trace = build_traceability(doc)
@@ -7756,6 +7792,7 @@ def document_trace(did):
 
 # ─── ENTITY TRACEABILITY VIEWS ────────────────────────────────────────────────
 @app.route('/hazard-log/<hid>/documents')
+@require_login
 def hazard_documents(hid):
     hazard = Hazard.query.get_or_404(hid)
     # Documents linked to hazard
@@ -7777,6 +7814,7 @@ def hazard_documents(hid):
         risk_docs=risk_docs, action_docs=action_docs)
 
 @app.route('/audit-schedule/<sid>/documents')
+@require_login
 def audit_documents(sid):
     schedule = AuditSchedule.query.get_or_404(sid)
     audit_docs   = get_doc_links_for_entity('audit_schedule', sid)
@@ -7790,6 +7828,7 @@ def audit_documents(sid):
 
 # ─── TRACEABILITY DASHBOARD ───────────────────────────────────────────────────
 @app.route('/traceability')
+@require_login
 def traceability_dashboard():
     total_docs  = SMSDocument.query.count()
     total_links = DocumentLink.query.count()
@@ -7832,6 +7871,7 @@ def traceability_dashboard():
 
 # ─── QUICK LINK API (from any module page) ───────────────────────────────────
 @app.route('/quick-link', methods=['POST'])
+@require_login
 def quick_link():
     """Link a document to an entity from any page in the system."""
     f           = request.form
@@ -7999,6 +8039,7 @@ def update_risk(rid):
 
 # ─── RISK → ACTION (direct risk-level action) ─────────────────────────────────
 @app.route('/risk/<rid>/add-action', methods=['POST'])
+@require_login
 def add_risk_action(rid):
     risk = Risk.query.get_or_404(rid)
     f    = request.form
@@ -8033,6 +8074,7 @@ def add_risk_action(rid):
     return redirect(url_for('risk_detail', rid=rid))
 
 @app.route('/risk-action/<aid>/update', methods=['POST'])
+@require_login
 def update_risk_action(aid):
     ra = RiskAction.query.get_or_404(aid)
     f  = request.form
@@ -8050,6 +8092,7 @@ def update_risk_action(aid):
 
 # ─── CONTROL MANAGEMENT (enhanced) ───────────────────────────────────────────
 @app.route('/control/<cid>/update', methods=['POST'])
+@require_login
 def update_control(cid):
     ctrl = Control.query.get_or_404(cid)
     f    = request.form
@@ -8063,6 +8106,7 @@ def update_control(cid):
     return redirect(url_for('risk_detail', rid=ctrl.risk_id))
 
 @app.route('/delete/risk/<rid>', methods=['POST'])
+@require_login
 def delete_risk_record(rid):
     """Safe delete a Risk row and its controls."""
     r = Risk.query.get_or_404(rid)
@@ -8085,6 +8129,7 @@ def delete_risk_record(rid):
 
 
 @app.route('/control/<cid>/delete', methods=['POST'])
+@require_login
 def delete_control(cid):
     ctrl = Control.query.get_or_404(cid)
     rid  = ctrl.risk_id
@@ -8095,6 +8140,7 @@ def delete_control(cid):
 
 # ─── OCCURRENCE TRACKING ──────────────────────────────────────────────────────
 @app.route('/hazard-log/<hid>/occurrence', methods=['POST'])
+@require_login
 def add_occurrence(hid):
     hazard = Hazard.query.get_or_404(hid)
     f      = request.form
@@ -8181,6 +8227,7 @@ def compute_ra_summary(ra):
 
 # ─── LIST ALL RISK ASSESSMENTS ───────────────────────────────────────────────
 @app.route('/risk-assessments')
+@require_login
 def ra_list():
     check_ra_review_dates()  # Auto-set Under Review when due date reached
     dept_f  = request.args.get('dept','')
@@ -8193,6 +8240,7 @@ def ra_list():
 
 # ─── CREATE NEW RA (linked to hazard or standalone) ──────────────────────────
 @app.route('/risk-assessments/new', methods=['GET','POST'])
+@require_login
 def new_ra():
     hid = request.args.get('hazard_id','')
     hazard = Hazard.query.get(hid) if hid else None
@@ -8334,6 +8382,7 @@ def ra_detail(ra_id):
 
 # ─── ADD ROW to existing RA ──────────────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/add-row', methods=['POST'])
+@require_login
 def ra_add_row(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     f  = request.form
@@ -8413,6 +8462,7 @@ def ra_add_row(ra_id):
 
 # ─── ADD REVIEW (Page 5) ─────────────────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/add-review', methods=['POST'])
+@require_login
 def ra_add_review(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     f  = request.form
@@ -8438,6 +8488,7 @@ def ra_add_review(ra_id):
 
 # ─── UPDATE RA HEADER (approval / status) ────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/update', methods=['POST'])
+@require_login
 def ra_update(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     f  = request.form
@@ -8480,6 +8531,7 @@ def ra_update(ra_id):
 
 # ─── TRIGGER RA FROM HAZARD LOG ──────────────────────────────────────────────
 @app.route('/hazard-log/<hid>/start-ra')
+@require_login
 def start_ra_from_hazard(hid):
     """Redirect to new RA form pre-populated from hazard."""
     hazard = Hazard.query.get_or_404(hid)
@@ -8545,6 +8597,7 @@ def get_or_create_ra(hid):
 
 # ─── WIZARD ENTRY POINT ───────────────────────────────────────────────────────
 @app.route('/ra-wizard/<hid>')
+@require_login
 def ra_wizard_start(hid):
     hazard = Hazard.query.get_or_404(hid)
     ra     = get_or_create_ra(hid)
@@ -8552,6 +8605,7 @@ def ra_wizard_start(hid):
 
 # ─── STEP ROUTER ─────────────────────────────────────────────────────────────
 @app.route('/ra-wizard/<hid>/step/<int:step>', methods=['GET','POST'])
+@require_login
 def ra_wizard_step(hid, step):
     hazard = Hazard.query.get_or_404(hid)
     ra     = get_or_create_ra(hid)
@@ -8808,6 +8862,7 @@ def tol_color(tol):
 
 # ─── 1. RISK ASSESSMENT PRINT ─────────────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/print')
+@require_login
 def ra_print(ra_id):
     """Returns a print-ready HTML page that users print as PDF from the browser."""
     ra = RiskAssessment.query.get_or_404(ra_id)
@@ -8815,6 +8870,7 @@ def ra_print(ra_id):
 
 # ─── 2. HAZARD LOG → EXCEL ────────────────────────────────────────────────────
 @app.route('/hazard-log/export-excel')
+@require_login
 def hazard_log_excel():
     dept_f = request.args.get('dept','')
     stat_f = request.args.get('status','')
@@ -9006,6 +9062,7 @@ def hazard_log_excel():
 
 # ─── 3. HAZARD REPORT PRINT ───────────────────────────────────────────────────
 @app.route('/hazard-reports/<rep_id>/print')
+@require_login
 def hazard_report_print(rep_id):
     rep    = HazardReport.query.get_or_404(rep_id)
     hazard = Hazard.query.get(rep.hazard_id) if rep.hazard_id else None
@@ -9015,6 +9072,7 @@ def hazard_report_print(rep_id):
 
 # ─── 4. ASR PRINT ─────────────────────────────────────────────────────────────
 @app.route('/asr/<asr_id>/print')
+@require_login
 def asr_print(asr_id):
     asr = ASRReport.query.get_or_404(asr_id)
     return render_template('reporting/asr_print.html', asr=asr)
@@ -9075,6 +9133,7 @@ def check_ra_review_dates():
 
 # ─── SUBMIT (Draft → Submitted → Active) ────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/submit', methods=['POST'])
+@require_login
 def ra_submit(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     if ra.status != 'Draft':
@@ -9096,6 +9155,7 @@ def ra_submit(ra_id):
 
 # ─── SEND FOR REVIEW (Active → Under Review) ─────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/send-review', methods=['POST'])
+@require_login
 def ra_send_review(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     if ra.status not in ('Active', 'Submitted'):
@@ -9108,6 +9168,7 @@ def ra_send_review(ra_id):
 
 # ─── REACTIVATE (Under Review → Active) ──────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/reactivate', methods=['POST'])
+@require_login
 def ra_reactivate(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     if ra.status != 'Under Review':
@@ -9120,6 +9181,7 @@ def ra_reactivate(ra_id):
 
 # ─── CLOSE (validated) ────────────────────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/close', methods=['POST'])
+@require_login
 def ra_close(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     if ra.status == 'Closed':
@@ -9143,6 +9205,7 @@ def ra_close(ra_id):
 
 # ─── CLOSURE CHECK (AJAX / page query) ───────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/closure-check')
+@require_login
 def ra_closure_check(ra_id):
     ra = RiskAssessment.query.get_or_404(ra_id)
     blocks = ra_closure_checks(ra)
@@ -9150,6 +9213,7 @@ def ra_closure_check(ra_id):
 
 # ─── REASSESS (create new revision) ──────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/reassess', methods=['POST'])
+@require_login
 def ra_reassess(ra_id):
     old_ra = RiskAssessment.query.get_or_404(ra_id)
     if old_ra.status == 'Closed':
@@ -9589,6 +9653,9 @@ with app.app_context():
                         db.session.execute(db.text(
                             f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_col_type}'
                         ))
-                db.session.commit()
-            except Exception as _col_e:
+            except Exception:
                 db.session.rollback()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
