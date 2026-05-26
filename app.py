@@ -4047,22 +4047,31 @@ def spi_toggle_indicator(iid):
 @app.route('/safety-promotion')
 @require_login
 def safety_promotion():
-    bulletins   = SafetyBulletin.query.filter_by(status='Active').order_by(SafetyBulletin.created_at.desc()).limit(5).all()
-    newsletters = SafetyNewsletter.query.filter_by(status='Published').order_by(SafetyNewsletter.created_at.desc()).limit(4).all()
-    trainings   = Training.query.order_by(Training.created_at.desc()).limit(8).all()
-    campaigns   = SafetyCampaign.query.filter_by(status='Active').order_by(SafetyCampaign.created_at.desc()).limit(4).all()
-    lessons     = LessonLearned.query.order_by(LessonLearned.created_at.desc()).limit(4).all()
-    surveys     = SafetySurvey.query.filter_by(status='Active').all()
-    overdue_training = Training.query.filter_by(status='Expired').count()
-    due_soon    = Training.query.filter_by(status='Due Soon').count()
-    emails_sent = EmailLog.query.count()
-    dist_count  = DistributionList.query.filter_by(is_active=True).count()
+    def _safe(fn, default):
+        try: return fn()
+        except Exception as _ex:
+            db.session.rollback()
+            app.logger.warning('safety_promotion query failed: %s', _ex)
+            return default
+    bulletins   = _safe(lambda: SafetyBulletin.query.filter_by(status='Active').order_by(SafetyBulletin.created_at.desc()).limit(5).all(), [])
+    newsletters = _safe(lambda: SafetyNewsletter.query.filter_by(status='Published').order_by(SafetyNewsletter.created_at.desc()).limit(4).all(), [])
+    trainings   = _safe(lambda: Training.query.order_by(Training.created_at.desc()).limit(8).all(), [])
+    campaigns   = _safe(lambda: SafetyCampaign.query.filter_by(status='Active').order_by(SafetyCampaign.created_at.desc()).limit(4).all(), [])
+    lessons     = _safe(lambda: LessonLearned.query.order_by(LessonLearned.created_at.desc()).limit(4).all(), [])
+    surveys     = _safe(lambda: SafetySurvey.query.filter_by(status='Active').all(), [])
+    overdue_training = _safe(lambda: Training.query.filter_by(status='Expired').count(), 0)
+    due_soon    = _safe(lambda: Training.query.filter_by(status='Due Soon').count(), 0)
+    emails_sent = _safe(lambda: EmailLog.query.count(), 0)
+    dist_count  = _safe(lambda: DistributionList.query.filter_by(is_active=True).count(), 0)
     avg_response_rate = 0
-    surveyed = SafetySurvey.query.filter(SafetySurvey.target_count > 0).all()
-    if surveyed:
-        avg_response_rate = round(sum(
-            (s.response_count or 0) / s.target_count * 100 for s in surveyed
-        ) / len(surveyed), 1)
+    try:
+        surveyed = SafetySurvey.query.filter(SafetySurvey.target_count > 0).all()
+        if surveyed:
+            avg_response_rate = round(sum(
+                (s.response_count or 0) / s.target_count * 100 for s in surveyed
+            ) / len(surveyed), 1)
+    except Exception:
+        db.session.rollback()
     return render_template('spi/safety_promotion.html',
                            bulletins=bulletins, newsletters=newsletters,
                            trainings=trainings, campaigns=campaigns,
