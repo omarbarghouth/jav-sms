@@ -7,6 +7,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from flask import send_file, make_response, Response
+from flask_wtf.csrf import CSRFProtect, generate_csrf
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # ── Enterprise PDF engine (ReportLab — no system deps) ───────────────────────
 try:
@@ -122,6 +125,18 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7-day sessions
 
 db.init_app(app)
 
+# ── CSRF protection (flask-wtf) ───────────────────────────────────────────────
+csrf = CSRFProtect(app)
+app.config['WTF_CSRF_TIME_LIMIT'] = 3600   # 1-hour token lifetime
+
+# ── Rate limiting (flask-limiter) ─────────────────────────────────────────────
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],          # no blanket limit; apply per-route
+    storage_uri='memory://',    # in-proc store — fine for 1-worker Gunicorn
+)
+
 # ─── Global error handlers ────────────────────────────────────────────────────
 @app.errorhandler(404)
 def err_404(e):
@@ -187,17 +202,35 @@ def new_id(prefix):
     short = str(uuid.uuid4())[:6].upper()
     return f'{prefix}-SMS-{short}' 
 
+_overdue_last_run: float = 0.0          # module-level timestamp; 0 = never run
+_OVERDUE_COOLDOWN: int  = 300           # seconds between DB sweeps (5 minutes)
+
 def check_overdue_actions():
-    """Auto-mark actions as Overdue when due_date passes (only Open/In Progress)."""
+    """Auto-mark actions as Overdue when due_date passes (only Open/In Progress).
+
+    Uses a module-level cooldown so the DB sweep runs at most once every
+    5 minutes regardless of how many page loads hit routes that call this.
+    Safe for 1-worker Gunicorn (single process, no shared state issues).
+    """
+    global _overdue_last_run
+    import time as _time
+    now = _time.monotonic()
+    if now - _overdue_last_run < _OVERDUE_COOLDOWN:
+        return                           # still within cooldown window
+    _overdue_last_run = now              # update before DB work to avoid stampede
+
     today = date.today().isoformat()
-    actions = Action.query.filter(Action.status.in_(['Open','In Progress'])).all()
-    changed = False
-    for a in actions:
-        if a.due_date and a.due_date < today:
-            a.status = 'Overdue'
-            changed = True
-    if changed:
-        db.session.commit()
+    try:
+        actions = Action.query.filter(Action.status.in_(['Open','In Progress'])).all()
+        changed = False
+        for a in actions:
+            if a.due_date and a.due_date < today:
+                a.status = 'Overdue'
+                changed = True
+        if changed:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 @app.context_processor
 def inject_globals():
@@ -1408,7 +1441,8 @@ def _verify_token(token):
 
 
 @app.route('/api/login', methods=['POST', 'OPTIONS'])
-@require_login
+@csrf.exempt
+@limiter.limit('10 per minute')
 def api_login():
     """Flutter: Employee login → returns auth token."""
     if request.method == 'OPTIONS':
@@ -1566,106 +1600,7 @@ def api_logout():
     return api_ok({}, 'Logged out successfully')
 
 
-@app.route('/api/setup-check', methods=['GET'])
-def api_setup_check():
-    """
-    Diagnostic endpoint — safe to call from browser on free-tier Render.
-    Shows system status, creates api_tokens table if missing, lists employees.
-    Remove or protect this route after initial setup is confirmed.
-    """
-    report = {}
-    # 1. Check / create api_tokens table
-    try:
-        db.session.execute(db.text('SELECT COUNT(*) FROM api_tokens'))
-        count = db.session.execute(db.text('SELECT COUNT(*) FROM api_tokens')).scalar()
-        report['api_tokens_table'] = 'EXISTS'
-        report['active_tokens'] = count
-    except Exception:
-        db.session.rollback()
-        try:
-            db.session.execute(db.text('''
-                CREATE TABLE IF NOT EXISTS api_tokens (
-                    id SERIAL PRIMARY KEY,
-                    token VARCHAR(64) UNIQUE NOT NULL,
-                    user_id VARCHAR(30) NOT NULL,
-                    username VARCHAR(80) NOT NULL,
-                    expires_at TIMESTAMP NOT NULL,
-                    created_at TIMESTAMP DEFAULT NOW()
-                )
-            '''))
-            db.session.execute(db.text(
-                'CREATE INDEX IF NOT EXISTS ix_api_tokens_token ON api_tokens(token)'
-            ))
-            db.session.commit()
-            report['api_tokens_table'] = 'CREATED NOW'
-        except Exception as e:
-            db.session.rollback()
-            report['api_tokens_table'] = f'ERROR: {str(e)[:100]}'
-
-    # 2. List employees (no passwords)
-    try:
-        emps = Employee.query.all()
-        def _hash_info(h):
-            if not h:
-                return {'type': 'NULL', 'preview': 'NO PASSWORD SET'}
-            if h.startswith('pbkdf2'):
-                return {'type': 'pbkdf2', 'preview': h[:20] + '...'}
-            if h.startswith('scrypt:'):
-                return {'type': 'scrypt-werkzeug', 'preview': h[:20] + '...'}
-            if len(h) == 64 and ':' not in h:
-                return {'type': 'sha256-legacy', 'preview': h[:12] + '...'}
-            return {'type': 'UNKNOWN/PLAINTEXT', 'preview': repr(h[:20])}
-        report['employees'] = [
-            {
-                'id': e.id,
-                'username': e.username,
-                'full_name': e.full_name,
-                'is_active': e.is_active,
-                'department_id': e.department_id,
-                'hash_info': _hash_info(e.password_hash),
-                'login_will_work': (
-                    e.is_active and
-                    e.password_hash is not None and
-                    (e.password_hash.startswith('pbkdf2') or
-                     e.password_hash.startswith('scrypt:') or
-                     (len(e.password_hash) == 64 and ':' not in e.password_hash))
-                ),
-            }
-            for e in emps
-        ]
-        report['employee_count'] = len(emps)
-    except Exception as e:
-        report['employees'] = f'ERROR: {str(e)[:100]}'
-
-    # 3. List admin users (no passwords)
-    try:
-        users = User.query.all()
-        report['admin_users'] = [
-            {
-                'id': u.id,
-                'username': u.username,
-                'role': u.role,
-                'is_active': u.is_active,
-                'hash_info': _hash_info(u.password_hash),
-                'login_will_work': (
-                    u.is_active and
-                    u.password_hash is not None and
-                    (u.password_hash.startswith('pbkdf2') or
-                     (len(u.password_hash) == 64 and ':' not in u.password_hash))
-                ),
-            }
-            for u in users
-        ]
-    except Exception as e:
-        report['admin_users'] = f'ERROR: {str(e)[:100]}'
-
-    # 4. Check departments
-    try:
-        report['departments'] = [{'id': d.id, 'name': d.name} for d in Department.query.all()]
-    except Exception as e:
-        report['departments'] = f'ERROR: {str(e)[:100]}'
-
-    return api_ok(report, 'Setup check complete')
+# /api/setup-check removed — was a diagnostic endpoint exposing employee list and DB schema
 
 
 # /api/debug-login removed — was a diagnostic endpoint exposing auth internals
@@ -2607,8 +2542,10 @@ def asr():
 @require_login
 def asr_list():
     """All ASR reports with delete capability."""
-    asrs = ASRReport.query.order_by(ASRReport.created_at.desc()).all()
-    return render_template('reporting/asr_list.html', asrs=asrs)
+    page = request.args.get('page', 1, type=int)
+    pg   = ASRReport.query.order_by(ASRReport.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+    asrs = pg.items
+    return render_template('reporting/asr_list.html', asrs=asrs, pagination=pg)
 
 # ─── Hazard Log ───────────────────────────────────────────────────────────────
 @app.route('/hazard-log')
@@ -2617,13 +2554,15 @@ def hazard_log():
     dept_f = request.args.get('dept','')
     stat_f = request.args.get('status','')
     cls_f  = request.args.get('classification','')
+    page   = request.args.get('page', 1, type=int)
     q = Hazard.query
     if dept_f: q = q.filter_by(department_id=int(dept_f))
     if stat_f: q = q.filter_by(status=stat_f)
     if cls_f:  q = q.filter_by(classification=cls_f)
-    hazards = q.order_by(Hazard.created_at.desc()).all()
+    pg     = q.order_by(Hazard.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+    hazards = pg.items
     return render_template('hazard/hazard_log.html', hazards=hazards,
-        dept_f=dept_f, stat_f=stat_f, cls_f=cls_f)
+        dept_f=dept_f, stat_f=stat_f, cls_f=cls_f, pagination=pg)
 
 @app.route('/hazard-log/<hid>')
 @require_login
@@ -2709,7 +2648,9 @@ def actions():
             Action.owner.ilike(f'%{q_f}%') |
             Action.id.ilike(f'%{q_f}%')
         )
-    all_actions = q.order_by(Action.created_at.desc()).all()
+    page        = request.args.get('page', 1, type=int)
+    _pg         = q.order_by(Action.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+    all_actions = _pg.items
 
     # Status counts
     counts = {
@@ -2749,7 +2690,7 @@ def actions():
     return render_template('action/action_list.html',
         actions=all_actions, counts=counts,
         source_counts=source_counts, all_sources=sorted(all_sources),
-        pending_eff=pending_eff,
+        pending_eff=pending_eff, pagination=_pg,
         stat_f=stat_f, pri_f=pri_f, src_f=src_f, dept_f=dept_f, q_f=q_f)
 
 
@@ -3104,8 +3045,10 @@ def update_audit(aid):
 @app.route('/investigations')
 @require_login
 def investigations():
-    all_inv = Investigation.query.order_by(Investigation.created_at.desc()).all()
-    return render_template('investigation/investigation_list.html', investigations=all_inv)
+    page   = request.args.get('page', 1, type=int)
+    pg     = Investigation.query.order_by(Investigation.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+    all_inv = pg.items
+    return render_template('investigation/investigation_list.html', investigations=all_inv, pagination=pg)
 
 @app.route('/investigations/new', methods=['GET','POST'])
 @require_login
@@ -5234,7 +5177,7 @@ def delete_moc(mid):
 # ── Admin cleanup dashboard ───────────────────────────────────────────────────
 
 @app.route('/admin/cleanup')
-@require_login
+@admin_required
 def admin_cleanup():
     counts = {
         'hazard_reports':   HazardReport.query.count(),
@@ -6474,10 +6417,12 @@ def schedule_from_plan(pid):
 def audit_schedule():
     dept_f   = request.args.get('dept', '')
     status_f = request.args.get('status', '')
+    page     = request.args.get('page', 1, type=int)
     q = AuditSchedule.query
     if dept_f:   q = q.filter_by(department_id=int(dept_f))
     if status_f: q = q.filter_by(status=status_f)
-    schedules = q.order_by(AuditSchedule.scheduled_date).all()
+    pg        = q.order_by(AuditSchedule.scheduled_date).paginate(page=page, per_page=50, error_out=False)
+    schedules = pg.items
 
     # Check/update overdue audit actions
     today = date.today().isoformat()
@@ -6492,7 +6437,7 @@ def audit_schedule():
         db.session.commit()
 
     return render_template('audit/audit_schedule.html', schedules=schedules,
-                           dept_f=dept_f, status_f=status_f)
+                           dept_f=dept_f, status_f=status_f, pagination=pg)
 
 @app.route('/audit-schedule/new', methods=['GET', 'POST'])
 @require_login
@@ -9659,3 +9604,12 @@ with app.app_context():
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+# ── Bulk-exempt all /api/* and /pdf/* routes from CSRF ────────────────────────
+# These endpoints use Bearer-token auth (Flutter mobile) — no session cookie,
+# so CSRF protection does not apply and would break the mobile app.
+for _rule in app.url_map.iter_rules():
+    if _rule.rule.startswith(('/api/', '/pdf/')):
+        _vf = app.view_functions.get(_rule.endpoint)
+        if _vf:
+            csrf.exempt(_vf)
