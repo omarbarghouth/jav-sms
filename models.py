@@ -1121,3 +1121,213 @@ class ApiToken(db.Model):
 
     def is_expired(self):
         return datetime.utcnow() > self.expires_at
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PHASE 1 — GOVERNANCE & AUTHORITY LAYER
+#  ICAO Annex 19 §4 / Doc 9859 §§3–4 — Management Commitment & Accountability
+#  Gaps: 1 (SRB/MRB), 3 (Risk Acceptance), 4 (AE Identity), 10 (Four-Eyes)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AccountableExecutive(db.Model):
+    """
+    ICAO Doc 9859 §3.2 — Accountable Executive (AE).
+    The single named individual responsible for effective implementation of SMS.
+    Linked to a real User account for approval queue integration.
+    """
+    __tablename__ = 'accountable_executives'
+    id               = db.Column(db.Integer, primary_key=True)
+    user_id          = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    full_name        = db.Column(db.String(120), nullable=False)
+    title            = db.Column(db.String(100))   # e.g. Accountable Manager / CEO / SVP Operations
+    email            = db.Column(db.String(120))
+    phone            = db.Column(db.String(50))
+    employee_number  = db.Column(db.String(30))
+    authority_scope  = db.Column(db.Text)          # Documented authority & responsibilities
+    appointment_ref  = db.Column(db.String(50))    # e.g. JAV/AE/2026/001
+    effective_from   = db.Column(db.String(20))
+    effective_to     = db.Column(db.String(20))    # null = current incumbent
+    is_current       = db.Column(db.Boolean, default=True)
+    appointment_doc  = db.Column(db.String(200))   # uploaded appointment letter filename
+    notes            = db.Column(db.Text)
+    created_by       = db.Column(db.String(100))
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    user             = db.relationship('User', foreign_keys=[user_id],
+                           backref=db.backref('ae_profile', uselist=False))
+
+
+class SRBMeeting(db.Model):
+    """
+    Safety Review Board / Management Review Board meeting record.
+    ICAO Annex 19 §4.1 — SMS management review.
+    Full lifecycle: Scheduled → In Progress → Minutes Draft → Completed / Cancelled.
+    """
+    __tablename__ = 'srb_meetings'
+    id              = db.Column(db.String(30), primary_key=True)   # SRB/2026/001
+    meeting_type    = db.Column(db.String(20), default='SRB')
+    # SRB (Safety Review Board) / MRB (Management Review Board) / Ad-Hoc / Emergency
+    title           = db.Column(db.String(200))
+    scheduled_date  = db.Column(db.String(20))
+    actual_date     = db.Column(db.String(20))
+    start_time      = db.Column(db.String(10))
+    end_time        = db.Column(db.String(10))
+    venue           = db.Column(db.String(200))
+    chair_person    = db.Column(db.String(100))
+    secretary       = db.Column(db.String(100))
+    status          = db.Column(db.String(20), default='Scheduled')
+    # Scheduled / In Progress / Minutes Draft / Completed / Cancelled
+    quorum_met      = db.Column(db.Boolean, default=False)
+    quorum_count    = db.Column(db.Integer, default=0)
+    objectives      = db.Column(db.Text)
+    minutes_text    = db.Column(db.Text)          # full narrative minutes
+    key_outcomes    = db.Column(db.Text)
+    next_meeting_date = db.Column(db.String(20))
+    minutes_approved_by = db.Column(db.String(100))
+    minutes_approved_date = db.Column(db.String(20))
+    ae_id           = db.Column(db.Integer, db.ForeignKey('accountable_executives.id'), nullable=True)
+    created_by      = db.Column(db.String(100))
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at      = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Relationships
+    ae              = db.relationship('AccountableExecutive', foreign_keys=[ae_id],
+                          backref=db.backref('srb_meetings', lazy=True))
+    agenda_items    = db.relationship('SRBAgendaItem', backref='meeting', lazy=True,
+                          cascade='all, delete-orphan',
+                          order_by='SRBAgendaItem.item_number')
+    attendees       = db.relationship('SRBAttendee', backref='meeting', lazy=True,
+                          cascade='all, delete-orphan',
+                          order_by='SRBAttendee.sort_order')
+    decisions       = db.relationship('SRBDecision', backref='meeting', lazy=True,
+                          cascade='all, delete-orphan')
+
+
+class SRBAgendaItem(db.Model):
+    """
+    Individual agenda item within an SRB/MRB meeting.
+    Can be sourced from an SPI escalation, hazard, audit finding, or standing item.
+    """
+    __tablename__ = 'srb_agenda_items'
+    id               = db.Column(db.Integer, primary_key=True)
+    meeting_id       = db.Column(db.String(30), db.ForeignKey('srb_meetings.id'), nullable=False)
+    item_number      = db.Column(db.Integer)          # 1, 2, 3…
+    title            = db.Column(db.String(200))
+    description      = db.Column(db.Text)
+    item_type        = db.Column(db.String(30), default='Standing')
+    # Standing / SPI Review / Hazard Review / Audit Finding / Investigation /
+    # Risk Acceptance / CAP Review / Action Review / Other
+    source_type      = db.Column(db.String(30))       # spi_escalation / hazard / audit / investigation
+    source_id        = db.Column(db.String(50))       # linked record ID
+    presenter        = db.Column(db.String(100))
+    time_allocated   = db.Column(db.Integer)          # minutes
+    status           = db.Column(db.String(20), default='Pending')
+    # Pending / Discussed / Deferred / Withdrawn
+    discussion_notes = db.Column(db.Text)
+    decision         = db.Column(db.Text)
+    action_required  = db.Column(db.Boolean, default=False)
+    deferred_to_meeting_id = db.Column(db.String(30), nullable=True)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class SRBAttendee(db.Model):
+    """Attendance record for an SRB/MRB meeting."""
+    __tablename__ = 'srb_attendees'
+    id              = db.Column(db.Integer, primary_key=True)
+    meeting_id      = db.Column(db.String(30), db.ForeignKey('srb_meetings.id'), nullable=False)
+    person_name     = db.Column(db.String(100))
+    role_title      = db.Column(db.String(100))       # e.g. Safety Manager / Flight Ops Director
+    department      = db.Column(db.String(100))
+    is_required     = db.Column(db.Boolean, default=True)   # quorum member?
+    attended        = db.Column(db.Boolean, default=False)
+    apology_given   = db.Column(db.Boolean, default=False)
+    proxy_for       = db.Column(db.String(100))       # if attending as proxy for someone
+    sort_order      = db.Column(db.Integer, default=0)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class SRBDecision(db.Model):
+    """
+    Formal decision recorded at an SRB/MRB meeting.
+    Each decision generates an auditable action item.
+    """
+    __tablename__ = 'srb_decisions'
+    id              = db.Column(db.Integer, primary_key=True)
+    meeting_id      = db.Column(db.String(30), db.ForeignKey('srb_meetings.id'), nullable=False)
+    agenda_item_id  = db.Column(db.Integer, db.ForeignKey('srb_agenda_items.id'), nullable=True)
+    decision_ref    = db.Column(db.String(30))        # e.g. SRB/2026/001-D01
+    decision_text   = db.Column(db.Text)
+    decision_type   = db.Column(db.String(20), default='Noted')
+    # Approved / Rejected / Deferred / Noted / Action Required / Escalated
+    responsible_party = db.Column(db.String(100))
+    due_date        = db.Column(db.String(20))
+    linked_action_id = db.Column(db.String(30), nullable=True)   # FK to actions.id
+    status          = db.Column(db.String(20), default='Open')   # Open / In Progress / Closed
+    closed_date     = db.Column(db.String(20))
+    closure_notes   = db.Column(db.Text)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    agenda_item     = db.relationship('SRBAgendaItem', foreign_keys=[agenda_item_id],
+                          backref=db.backref('decisions', lazy=True))
+
+
+class RiskAcceptance(db.Model):
+    """
+    ICAO Doc 9859 §5.5 — Formal risk acceptance authority.
+    INTOLERABLE risks MUST be formally accepted by the AE with documented justification.
+    Creates an immutable governance record with full audit trail.
+    """
+    __tablename__ = 'risk_acceptances'
+    id               = db.Column(db.Integer, primary_key=True)
+    ref_number       = db.Column(db.String(30))       # e.g. RA-ACC/2026/001
+    risk_id          = db.Column(db.String(30), db.ForeignKey('risks.id'), nullable=True)
+    hazard_id        = db.Column(db.String(30), db.ForeignKey('hazards.id'), nullable=True)
+    risk_tolerance   = db.Column(db.String(20))       # INTOLERABLE / TOLERABLE
+    risk_index       = db.Column(db.String(5))
+    risk_description = db.Column(db.Text)
+    justification    = db.Column(db.Text)             # Why acceptance is warranted
+    mitigations_in_place = db.Column(db.Text)         # What controls are already active
+    conditions       = db.Column(db.Text)             # Conditions attached to acceptance
+    valid_until      = db.Column(db.String(20))       # Expiry of acceptance
+    review_date      = db.Column(db.String(20))
+    # Workflow
+    submitted_by     = db.Column(db.String(100))
+    submitted_date   = db.Column(db.String(20))
+    safety_mgr_review = db.Column(db.Text)            # Safety Manager pre-review
+    safety_mgr_by    = db.Column(db.String(100))
+    safety_mgr_date  = db.Column(db.String(20))
+    ae_id            = db.Column(db.Integer, db.ForeignKey('accountable_executives.id'), nullable=True)
+    ae_decision      = db.Column(db.String(20))       # Approved / Rejected / Conditional
+    ae_decision_by   = db.Column(db.String(100))      # AE full name on record
+    ae_decision_date = db.Column(db.String(20))
+    ae_notes         = db.Column(db.Text)
+    status           = db.Column(db.String(30), default='Pending Safety Review')
+    # Pending Safety Review / Pending AE / Approved / Rejected / Conditional / Expired
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    # Relationships
+    risk             = db.relationship('Risk', foreign_keys=[risk_id],
+                           backref=db.backref('acceptance_record', uselist=False))
+    hazard           = db.relationship('Hazard', foreign_keys=[hazard_id],
+                           backref=db.backref('risk_acceptances', lazy=True))
+    ae               = db.relationship('AccountableExecutive', foreign_keys=[ae_id],
+                           backref=db.backref('risk_acceptances', lazy=True))
+
+
+class GovernanceAuditLog(db.Model):
+    """
+    ICAO Doc 9859 §3.4 — Four-eyes governance enforcement log.
+    Immutable audit trail of every governance decision: who did what, when,
+    and whether segregation-of-duties was respected.
+    Reporter cannot self-close. Submitter cannot approve.
+    """
+    __tablename__ = 'governance_audit_log'
+    id              = db.Column(db.Integer, primary_key=True)
+    entity_type     = db.Column(db.String(40))        # hazard / risk / action / srb / risk_acceptance / audit_finding
+    entity_id       = db.Column(db.String(50))
+    action          = db.Column(db.String(40))        # submitted / approved / rejected / closed / reopened / escalated
+    actor_username  = db.Column(db.String(100))
+    actor_role      = db.Column(db.String(50))
+    previous_state  = db.Column(db.String(50))
+    new_state       = db.Column(db.String(50))
+    sod_check       = db.Column(db.String(20), default='OK')   # OK / VIOLATION / BYPASSED
+    sod_note        = db.Column(db.Text)              # populated if violation
+    ip_address      = db.Column(db.String(50))
+    notes           = db.Column(db.Text)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)

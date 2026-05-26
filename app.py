@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from werkzeug.security import generate_password_hash, check_password_hash as _wz_check
@@ -136,6 +136,10 @@ limiter = Limiter(
     default_limits=[],          # no blanket limit; apply per-route
     storage_uri='memory://',    # in-proc store — fine for 1-worker Gunicorn
 )
+
+# ── Governance Blueprint (ICAO Annex 19 §4 / Doc 9859 §§3-5) ─────────────────
+from governance import gov as governance_bp
+app.register_blueprint(governance_bp)
 
 # ─── Global error handlers ────────────────────────────────────────────────────
 @app.errorhandler(404)
@@ -9592,6 +9596,73 @@ with app.app_context():
             ('report_type','VARCHAR(50)'),('consequences','TEXT'),('suggestion','TEXT'),
             ('status','VARCHAR(20) DEFAULT "Submitted"'),('created_at','DATETIME'),
         ],
+        # ── ICAO Governance tables (Phase 1) ──────────────────────────────────
+        'accountable_executives': [
+            ('user_id','INTEGER'),('full_name','VARCHAR(120)'),('title','VARCHAR(120)'),
+            ('email','VARCHAR(200)'),('phone','VARCHAR(30)'),('employee_number','VARCHAR(30)'),
+            ('authority_scope','TEXT'),('appointment_ref','VARCHAR(80)'),
+            ('effective_from','VARCHAR(20)'),('effective_to','VARCHAR(20)'),
+            ('is_current','BOOLEAN DEFAULT TRUE'),('appointment_doc','VARCHAR(200)'),
+            ('notes','TEXT'),('created_by','VARCHAR(80)'),('created_at','DATETIME'),
+        ],
+        'srb_meetings': [
+            ('meeting_type','VARCHAR(20) DEFAULT "SRB"'),('title','VARCHAR(200)'),
+            ('scheduled_date','VARCHAR(20)'),('actual_date','VARCHAR(20)'),
+            ('start_time','VARCHAR(10)'),('end_time','VARCHAR(10)'),
+            ('venue','VARCHAR(200)'),('chair_person','VARCHAR(120)'),
+            ('secretary','VARCHAR(120)'),('status','VARCHAR(30) DEFAULT "Scheduled"'),
+            ('quorum_met','BOOLEAN DEFAULT FALSE'),('quorum_count','INTEGER DEFAULT 0'),
+            ('objectives','TEXT'),('minutes_text','TEXT'),('key_outcomes','TEXT'),
+            ('next_meeting_date','VARCHAR(20)'),('minutes_approved_by','VARCHAR(80)'),
+            ('minutes_approved_date','VARCHAR(20)'),('ae_id','INTEGER'),
+            ('created_by','VARCHAR(80)'),('created_at','DATETIME'),('updated_at','DATETIME'),
+        ],
+        'srb_agenda_items': [
+            ('meeting_id','VARCHAR(30)'),('item_number','INTEGER'),('title','VARCHAR(200)'),
+            ('description','TEXT'),('item_type','VARCHAR(30) DEFAULT "Standard"'),
+            ('source_type','VARCHAR(30)'),('source_id','VARCHAR(30)'),
+            ('presenter','VARCHAR(120)'),('time_allocated','INTEGER'),
+            ('status','VARCHAR(20) DEFAULT "Pending"'),('discussion_notes','TEXT'),
+            ('decision','TEXT'),('action_required','BOOLEAN DEFAULT FALSE'),
+            ('deferred_to_meeting_id','VARCHAR(30)'),('created_at','DATETIME'),
+        ],
+        'srb_attendees': [
+            ('meeting_id','VARCHAR(30)'),('person_name','VARCHAR(120)'),
+            ('role_title','VARCHAR(120)'),('department','VARCHAR(100)'),
+            ('is_required','BOOLEAN DEFAULT FALSE'),('attended','BOOLEAN DEFAULT FALSE'),
+            ('apology_given','BOOLEAN DEFAULT FALSE'),('proxy_for','VARCHAR(120)'),
+            ('sort_order','INTEGER DEFAULT 0'),('created_at','DATETIME'),
+        ],
+        'srb_decisions': [
+            ('meeting_id','VARCHAR(30)'),('agenda_item_id','INTEGER'),
+            ('decision_ref','VARCHAR(30)'),('decision_text','TEXT'),
+            ('decision_type','VARCHAR(30) DEFAULT "Action Required"'),
+            ('responsible_party','VARCHAR(120)'),('due_date','VARCHAR(20)'),
+            ('linked_action_id','VARCHAR(30)'),('status','VARCHAR(20) DEFAULT "Open"'),
+            ('closed_date','VARCHAR(20)'),('closure_notes','TEXT'),('created_at','DATETIME'),
+        ],
+        'risk_acceptances': [
+            ('ref_number','VARCHAR(30)'),('risk_id','VARCHAR(30)'),
+            ('hazard_id','VARCHAR(30)'),('risk_tolerance','VARCHAR(20)'),
+            ('risk_index','VARCHAR(5)'),('risk_description','TEXT'),
+            ('justification','TEXT'),('mitigations_in_place','TEXT'),
+            ('conditions','TEXT'),('valid_until','VARCHAR(20)'),
+            ('review_date','VARCHAR(20)'),('submitted_by','VARCHAR(80)'),
+            ('submitted_date','VARCHAR(20)'),('safety_mgr_review','TEXT'),
+            ('safety_mgr_by','VARCHAR(80)'),('safety_mgr_date','VARCHAR(20)'),
+            ('ae_id','INTEGER'),('ae_decision','VARCHAR(20)'),
+            ('ae_decision_by','VARCHAR(80)'),('ae_decision_date','VARCHAR(20)'),
+            ('ae_notes','TEXT'),('status','VARCHAR(30) DEFAULT "Pending Safety Review"'),
+            ('created_at','DATETIME'),
+        ],
+        'governance_audit_log': [
+            ('entity_type','VARCHAR(50)'),('entity_id','VARCHAR(50)'),
+            ('action','VARCHAR(50)'),('actor_username','VARCHAR(80)'),
+            ('actor_role','VARCHAR(50)'),('previous_state','TEXT'),
+            ('new_state','TEXT'),('sod_check','VARCHAR(20) DEFAULT "OK"'),
+            ('sod_note','TEXT'),('ip_address','VARCHAR(50)'),
+            ('notes','TEXT'),('created_at','DATETIME'),
+        ],
     }
 
     _db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
@@ -9617,12 +9688,3 @@ with app.app_context():
         db.session.commit()
     except Exception:
         db.session.rollback()
-
-# ── Bulk-exempt all /api/* and /pdf/* routes from CSRF ────────────────────────
-# These endpoints use Bearer-token auth (Flutter mobile) — no session cookie,
-# so CSRF protection does not apply and would break the mobile app.
-for _rule in app.url_map.iter_rules():
-    if _rule.rule.startswith(('/api/', '/pdf/')):
-        _vf = app.view_functions.get(_rule.endpoint)
-        if _vf:
-            csrf.exempt(_vf)
