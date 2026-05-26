@@ -122,11 +122,11 @@ class _AviaHeader:
 
     def __init__(self, doc_type, control_number, classification,
                  generated_by, report_status):
-        self.doc_type       = doc_type
-        self.control_number = control_number
-        self.classification = classification
-        self.generated_by   = generated_by
-        self.report_status  = report_status
+        self.doc_type       = str(doc_type or 'Document')
+        self.control_number = str(control_number or '—')
+        self.classification = str(classification or 'INTERNAL')
+        self.generated_by   = str(generated_by or 'Safety Department')
+        self.report_status  = str(report_status or '—')
         self.timestamp      = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
 
     def __call__(self, canvas, doc):

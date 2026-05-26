@@ -9259,8 +9259,11 @@ def pdf_route_hazard_report(rid):
     hr         = HazardReport.query.get_or_404(rid)
     hazard     = Hazard.query.get(hr.hazard_id) if hr.hazard_id else None
     actions    = Action.query.filter_by(hazard_id=hr.hazard_id).all() if hr.hazard_id else []
-    history    = ActionHistory.query.filter_by(hazard_id=hr.hazard_id).order_by(
-                     ActionHistory.timestamp.asc()).all() if hr.hazard_id else []
+    # ActionHistory is per-action (no hazard_id col) — collect via action IDs
+    _aids      = [a.id for a in actions]
+    history    = (ActionHistory.query
+                  .filter(ActionHistory.action_id.in_(_aids))
+                  .order_by(ActionHistory.changed_at.asc()).all()) if _aids else []
     risks      = Risk.query.filter_by(hazard_id=hr.hazard_id).all() if hr.hazard_id else []
     inv        = Investigation.query.filter_by(hazard_id=hr.hazard_id).first() if hr.hazard_id else None
     ra         = RiskAssessment.query.filter_by(hazard_id=hr.hazard_id).first() if hr.hazard_id else None
@@ -9275,10 +9278,10 @@ def pdf_route_asr(asr_id):
     if not _PDF_ENGINE:
         return _pdf_unavailable()
     asr       = ASRReport.query.get_or_404(asr_id)
-    # ASR may or may not have a linked HazardReport
-    hr        = HazardReport.query.get(asr.report_id) if getattr(asr, 'report_id', None) else None
-    hazard    = Hazard.query.get(hr.hazard_id) if (hr and hr.hazard_id) else None
-    actions   = Action.query.filter_by(hazard_id=hazard.id).all() if hazard else []
+    # ASRReport.hazard_id links directly to Hazard (no separate report_id field)
+    hazard    = Hazard.query.get(asr.hazard_id) if asr.hazard_id else None
+    hr        = HazardReport.query.filter_by(hazard_id=asr.hazard_id).first() if asr.hazard_id else None
+    actions   = Action.query.filter_by(hazard_id=asr.hazard_id).all() if asr.hazard_id else []
     pdf_bytes = pdf_asr_report(asr, hazard, hr, actions, generated_by=_gen_by())
     return _pdf_response(pdf_bytes, f'ASR-{asr_id}.pdf')
 
@@ -9320,7 +9323,7 @@ def pdf_route_action(aid):
         return _pdf_unavailable()
     action    = Action.query.get_or_404(aid)
     history   = ActionHistory.query.filter_by(action_id=aid).order_by(
-                    ActionHistory.timestamp.asc()).all()
+                    ActionHistory.changed_at.asc()).all()
     pdf_bytes = pdf_action(action, history, generated_by=_gen_by())
     return _pdf_response(pdf_bytes, f'ACT-{aid}.pdf')
 
@@ -9428,347 +9431,164 @@ def pdf_route_spi_summary():
     return _pdf_response(pdf_bytes, f'SPI-Summary-{stamp}.pdf')
 
 
+
 with app.app_context():
     try:
         db.create_all()
     except Exception as _e:
         print(f'Warning: db.create_all() skipped: {_e}')
 
-    # ── Safe column migration (PostgreSQL + SQLite compatible) ─────────────────
-    # Uses information_schema for PostgreSQL and PRAGMA for SQLite.
-    # Safely adds any missing columns to existing live databases on Render.
-    migrations = {
-            'distribution_lists': [('name','VARCHAR(100)'),('email','VARCHAR(200)'),('department_id','INTEGER'),('position','VARCHAR(100)'),('is_active','BOOLEAN DEFAULT TRUE')],
-            'email_logs': [('subject','VARCHAR(300)'),('content_type','VARCHAR(30)'),('content_ref','VARCHAR(50)'),('sent_by','VARCHAR(100)'),('recipient_count','INTEGER DEFAULT 0'),('dept_filter','VARCHAR(200)'),('status',"VARCHAR(20) DEFAULT 'Sent'"),('error_message','TEXT')],
-            'survey_responses': [('survey_id','INTEGER'),('respondent_name','VARCHAR(100)'),('respondent_email','VARCHAR(200)'),('department_id','INTEGER'),('is_anonymous','BOOLEAN DEFAULT FALSE'),('answers','TEXT'),('ip_address','VARCHAR(50)')],
-            'departments': [
-                ('color',                  'VARCHAR(20) DEFAULT "#1e40af"'),
-            ],
-            'hazard_reports': [
-                ('classification',         'VARCHAR(50) DEFAULT "Operational"'),
-                ('report_type',            'VARCHAR(30) DEFAULT "Hazard Report"'),
-                ('created_at',             'DATETIME'),
-                ('status',                 'VARCHAR(30) DEFAULT "Submitted"'),
-                ('generic_hazard',         'VARCHAR(200)'),
-                ('consequences',           'TEXT'),
-                ('immediate_action',       'TEXT'),
-                ('suggested_mitigation',   'TEXT'),
-                ('reporter_severity',      'VARCHAR(20)'),
-                ('reporter',               'VARCHAR(100) DEFAULT "Anonymous"'),
-                ('hazard_id',              'VARCHAR(30)'),
-                ('severity',               'VARCHAR(2)'),
-                ('likelihood',             'INTEGER'),
-                ('risk_index',             'VARCHAR(5)'),
-            ],
-            'hazards': [
-                ('classification',         'VARCHAR(50)'),
-                ('type_of_activity',       'VARCHAR(100)'),
-                ('generic_hazard',         'VARCHAR(200)'),
-                ('specific_components',    'TEXT'),
-                ('consequences',           'TEXT'),
-                ('status',                 'VARCHAR(30) DEFAULT "Open"'),
-                ('owner',                  'VARCHAR(100)'),
-                ('linked_report_id',       'VARCHAR(30)'),
-                ('department_id',          'INTEGER'),
-                ('created_at',             'DATETIME'),
-            ],
-            'actions': [
-                ('hazard_id',              'VARCHAR(30)'),
-                ('spi_id',                 'INTEGER'),
-                ('spi_alert_level',        'VARCHAR(5)'),
-                ('spi_trigger_rule',       'VARCHAR(2)'),
-                ('evidence',               'TEXT'),
-                ('follow_up_notes',        'TEXT'),
-                ('mitigation_status',      'VARCHAR(30) DEFAULT "Pending"'),
-                ('verified_by',            'VARCHAR(100)'),
-                ('verified_date',          'VARCHAR(20)'),
-                ('spi_alert_month',        'INTEGER'),
-                ('spi_alert_year',         'INTEGER'),
-                ('spi_escalation_id',      'INTEGER'),
-                ('safety_review_notes',    'TEXT'),
-                ('safety_reviewer',        'VARCHAR(100)'),
-                ('safety_review_date',     'VARCHAR(20)'),
-                ('implementation_date',    'VARCHAR(20)'),
-                ('evidence_filename',      'VARCHAR(200)'),
-                ('mitigation_description', 'TEXT'),
-                ('corrective_description', 'TEXT'),
-                ('safety_notes',           'TEXT'),
-                ('assigned_by',            'VARCHAR(100)'),
-                ('closure_by',             'VARCHAR(100)'),
-                ('linked_ref_id',          'VARCHAR(30)'),
-                ('linked_risk_id',         'VARCHAR(30)'),
-                ('linked_audit_id',        'VARCHAR(30)'),
-                ('linked_ra_id',           'VARCHAR(30)'),
-                ('department_id',          'INTEGER'),
-                ('action_type',            'VARCHAR(20) DEFAULT "Corrective"'),
-                ('owner',                  'VARCHAR(100)'),
-                ('due_date',               'VARCHAR(20)'),
-                ('priority',               'VARCHAR(20) DEFAULT "Medium"'),
-                ('completed_date',         'VARCHAR(20)'),
-                ('closed_date',            'VARCHAR(20)'),
-                ('effectiveness',          'VARCHAR(30)'),
-                ('effectiveness_review',   'TEXT'),
-                ('verified_by',            'VARCHAR(100)'),
-                ('verified_date',          'VARCHAR(20)'),
-                ('spi_alert_month',        'INTEGER'),
-                ('spi_alert_year',         'INTEGER'),
-                ('spi_escalation_id',      'INTEGER'),
-                ('safety_review_notes',    'TEXT'),
-                ('safety_reviewer',        'VARCHAR(100)'),
-                ('safety_review_date',     'VARCHAR(20)'),
-                ('implementation_date',    'VARCHAR(20)'),
-                ('evidence_filename',      'VARCHAR(200)'),
-                ('mitigation_description', 'TEXT'),
-                ('corrective_description', 'TEXT'),
-                ('safety_notes',           'TEXT'),
-                ('assigned_by',            'VARCHAR(100)'),
-                ('closure_by',             'VARCHAR(100)'),
-                ('reopen_count',           'INTEGER DEFAULT 0'),
-                ('reopen_reason',          'TEXT'),
-                ('created_at',             'DATETIME'),
-            ],
-            'audit_plans': [
-                ('month',                  'INTEGER'),
-                ('created_at',             'DATETIME'),
-                ('objectives',             'TEXT'),
-                ('iosa_reference',         'VARCHAR(100)'),
-                ('auditor_name',           'VARCHAR(100)'),
-                ('planned_week',           'INTEGER'),
-                ('responsible_manager',    'VARCHAR(100)'),
-                ('frequency',              'VARCHAR(30)'),
-                ('scope',                  'TEXT'),
-            ],
-            'audit_schedules': [
-                ('plan_id',                'VARCHAR(30)'),
-                ('audit_team',             'VARCHAR(200)'),
-                ('scope',                  'TEXT'),
-                ('objectives',             'TEXT'),
-                ('actual_date',            'VARCHAR(20)'),
-                ('opening_meeting',        'TEXT'),
-                ('closing_meeting',        'TEXT'),
-                ('summary',                'TEXT'),
-                ('final_remarks',          'TEXT'),
-                ('closure_date',           'VARCHAR(20)'),
-                ('closed_by',              'VARCHAR(100)'),
-                ('created_at',             'DATETIME'),
-            ],
-            'audit_findings': [
-                ('finding_ref',            'VARCHAR(30)'),
-                ('assigned_to',            'VARCHAR(100)'),
-                ('assigned_dept',          'VARCHAR(100)'),
-                ('assigned_date',          'VARCHAR(20)'),
-                ('investigation_notes',    'TEXT'),
-                ('contributing_factors',   'TEXT'),
-                ('root_cause_submitted_at','DATETIME'),
-                ('immediate_action',       'TEXT'),
-                ('longterm_action',        'TEXT'),
-                ('cap_responsible',        'VARCHAR(100)'),
-                ('cap_due_date',           'VARCHAR(20)'),
-                ('cap_status',             'VARCHAR(30) DEFAULT "Pending"'),
-                ('cap_completion_pct',     'INTEGER DEFAULT 0'),
-                ('cap_submitted_at',       'DATETIME'),
-                ('evidence_files',         'TEXT'),
-                ('review_notes',           'TEXT'),
-                ('reviewed_by',            'VARCHAR(100)'),
-                ('review_date',            'VARCHAR(20)'),
-                ('revision_reason',        'TEXT'),
-                ('closure_verified_by',    'VARCHAR(100)'),
-                ('closure_date',           'VARCHAR(20)'),
-                ('closure_notes',          'TEXT'),
-                ('sig_dept_manager',       'VARCHAR(100)'),
-                ('sig_auditor',            'VARCHAR(100)'),
-                ('sig_safety_manager',     'VARCHAR(100)'),
-                ('sig_date',               'VARCHAR(20)'),
-                ('linked_action_id',       'VARCHAR(30)'),
-                ('created_at',             'DATETIME'),
-                ('category',               'VARCHAR(50)'),
-                ('severity',               'VARCHAR(20)'),
-                ('requirement',            'TEXT'),
-                ('root_cause',             'TEXT'),
-                ('evidence',               'TEXT'),
-                ('standard_ref',           'VARCHAR(100)'),
-                ('status',                 'VARCHAR(20) DEFAULT "Open"'),
-                ('hazard_id',              'VARCHAR(30)'),
-            ],
-            'risks': [
-                ('description',            'TEXT'),
-                ('initial_likelihood',      'INTEGER'),
-                ('initial_severity',        'VARCHAR(2)'),
-                ('initial_risk_index',      'VARCHAR(5)'),
-                ('initial_tolerance',       'VARCHAR(20)'),
-                ('residual_likelihood',     'INTEGER'),
-                ('residual_severity',       'VARCHAR(2)'),
-                ('residual_risk_index',     'VARCHAR(5)'),
-                ('residual_tolerance',      'VARCHAR(20)'),
-                ('created_at',             'DATETIME'),
-            ],
-            'controls': [
-                ('hazard_id',              'VARCHAR(30)'),
-                ('risk_id',               'VARCHAR(30)'),
-                ('description',           'TEXT'),
-                ('control_type',          'VARCHAR(50)'),
-                ('effectiveness',         'VARCHAR(30)'),
-                ('status',               'VARCHAR(20)'),
-                ('created_at',           'DATETIME'),
-            ],
-            'spi_indicators': [
-                ('category',        'VARCHAR(50)'),
-                ('baseline_months', 'INTEGER DEFAULT 3'),
-                ('improvement_pct', 'FLOAT DEFAULT 5.0'),
-                ('stat_mode',       'BOOLEAN DEFAULT 0'),
-                ('description',     'TEXT'),
-                ('calc_type',       'VARCHAR(10) DEFAULT "RATE"'),
-                ('exposure_type',   'VARCHAR(30) DEFAULT "Flights"'),
-                ('frequency',       'VARCHAR(20) DEFAULT "Monthly"'),
-                ('alert_l3',        'FLOAT'),
-                ('auto_source',     'VARCHAR(50) DEFAULT "manual"'),
-                ('auto_category',   'VARCHAR(50)'),
-                ('active',          'BOOLEAN DEFAULT 1'),
-                ('created_at',      'DATETIME'),
-            ],
-            'checklist_templates': [
-                ('is_active',   'BOOLEAN DEFAULT 1'),
-                ('updated_at',  'DATETIME'),
-                ('version',     'INTEGER DEFAULT 1'),
-            ],
-            'checklist_template_items': [
-                ('iosa_ref',    'VARCHAR(100)'),
-            ],
-            'audit_checklists': [
-                ('evidence_filename',   'VARCHAR(200)'),
-                ('linked_finding_id',   'VARCHAR(30)'),
-            ],
-            'spi_data': [
-                ('exposure',        'FLOAT DEFAULT 1'),
-                ('mean_at_time',    'FLOAT'),
-                ('sd_at_time',      'FLOAT'),
-                ('total_events',    'INTEGER DEFAULT 0'),
-                ('value',           'FLOAT'),
-                ('source',          'VARCHAR(20) DEFAULT "manual"'),
-                ('notes',           'TEXT'),
-            ],
-            'risk_assessments': [
-                ('control_number',         'VARCHAR(50)'),
-                ('responsible_name',       'VARCHAR(100)'),
-                ('assessors_names',        'VARCHAR(200)'),
-                ('created_at',             'DATETIME'),
-                ('title',                  'VARCHAR(200)'),
-                ('general_description',    'TEXT'),
-                ('reasons',                'TEXT'),
-                ('risk_level_prior',       'VARCHAR(20)'),
-                ('risk_level_after',       'VARCHAR(20)'),
-                ('management_acceptance',  'VARCHAR(30)'),
-                ('acceptance_date',        'VARCHAR(20)'),
-                ('prepared_by_name',       'VARCHAR(100)'),
-                ('prepared_by_position',   'VARCHAR(100)'),
-                ('reviewed_by_name',       'VARCHAR(100)'),
-                ('reviewed_by_position',   'VARCHAR(100)'),
-                ('approved_by_name',       'VARCHAR(100)'),
-                ('approved_by_position',   'VARCHAR(100)'),
-                ('submitted_date',         'VARCHAR(20)'),
-                ('activated_date',         'VARCHAR(20)'),
-                ('closed_date',            'VARCHAR(20)'),
-                ('revision',               'INTEGER DEFAULT 0'),
-                ('parent_ra_id',           'VARCHAR(30)'),
-                ('next_review_date',       'VARCHAR(20)'),
-                ('assessment_date',        'VARCHAR(20)'),
-            ],
-            'voluntary_reports': [
-                ('ref_number',      'VARCHAR(30)'),
-                ('reporter_name',   'VARCHAR(100)'),
-                ('position',        'VARCHAR(100)'),
-                ('department_id',   'INTEGER'),
-                ('date',            'VARCHAR(20)'),
-                ('location',        'VARCHAR(200)'),
-                ('report_type',     'VARCHAR(50)'),
-                ('description',     'TEXT'),
-                ('consequences',    'TEXT'),
-                ('suggestion',      'TEXT'),
-                ('status',          'VARCHAR(20) DEFAULT "Submitted"'),
-                ('is_confidential', 'BOOLEAN DEFAULT 0'),
-            ],
-            'confidential_reports': [
-                ('ref_number',      'VARCHAR(30)'),
-                ('position',        'VARCHAR(100)'),
-                ('department_id',   'INTEGER'),
-                ('date',            'VARCHAR(20)'),
-                ('location',        'VARCHAR(200)'),
-                ('report_type',     'VARCHAR(50)'),
-                ('description',     'TEXT'),
-                ('consequences',    'TEXT'),
-                ('suggestion',      'TEXT'),
-                ('status',          'VARCHAR(20) DEFAULT "Submitted"'),
-            ],
-            'trainings': [
-                ('employee_name',    'VARCHAR(100)'),
-                ('employee_id',      'VARCHAR(50)'),
-                ('department_id',    'INTEGER'),
-                ('position',         'VARCHAR(100)'),
-                ('training_type',    'VARCHAR(50)'),
-                ('training_program', 'VARCHAR(200)'),
-                ('course_code',      'VARCHAR(50)'),
-                ('instructor',       'VARCHAR(100)'),
-                ('location',         'VARCHAR(100)'),
-                ('scheduled_date',   'VARCHAR(20)'),
-                ('training_date',    'VARCHAR(20)'),
-                ('completion_date',  'VARCHAR(20)'),
-                ('expiry_date',      'VARCHAR(20)'),
-                ('duration_hours',   'FLOAT'),
-                ('status',           'VARCHAR(20) DEFAULT "Scheduled"'),
-                ('certificate',      'VARCHAR(200)'),
-                ('evidence',         'VARCHAR(200)'),
-                ('is_recurrent',     'BOOLEAN DEFAULT 0'),
-                ('recurrence_months','INTEGER'),
-                ('notes',            'TEXT'),
-                ('updated_at',       'DATETIME'),
-                ('created_at',       'DATETIME'),
-            ],
-            'employees': [
-                ('email',            'VARCHAR(120)'),
-                ('mobile',           'VARCHAR(30)'),
-                ('role',             'VARCHAR(50) DEFAULT "employee"'),
-                ('is_active',        'BOOLEAN DEFAULT 1'),
-                ('last_login',       'DATETIME'),
-                ('created_at',       'DATETIME'),
-            ],
-            'api_tokens': [
-                ('token',      'VARCHAR(64)'),
-                ('user_id',    'VARCHAR(30)'),
-                ('username',   'VARCHAR(80)'),
-                ('expires_at', 'DATETIME'),
-                ('created_at', 'DATETIME'),
-            ],
-        }
+    _migrations = {
+        'distribution_lists': [('name','VARCHAR(100)'),('email','VARCHAR(200)'),('department_id','INTEGER'),('position','VARCHAR(100)'),('is_active','BOOLEAN DEFAULT TRUE')],
+        'email_logs': [('subject','VARCHAR(300)'),('content_type','VARCHAR(30)'),('content_ref','VARCHAR(50)'),('sent_by','VARCHAR(100)'),('recipient_count','INTEGER DEFAULT 0'),('dept_filter','VARCHAR(200)'),('status',"VARCHAR(20) DEFAULT 'Sent'"),('error_message','TEXT')],
+        'survey_responses': [('survey_id','INTEGER'),('respondent_name','VARCHAR(100)'),('respondent_email','VARCHAR(200)'),('department_id','INTEGER'),('is_anonymous','BOOLEAN DEFAULT FALSE'),('answers','TEXT'),('ip_address','VARCHAR(50)')],
+        'departments': [('color','VARCHAR(20) DEFAULT "#1e40af"')],
+        'hazard_reports': [
+            ('classification','VARCHAR(50) DEFAULT "Operational"'),('report_type','VARCHAR(30) DEFAULT "Hazard Report"'),
+            ('created_at','DATETIME'),('status','VARCHAR(30) DEFAULT "Submitted"'),('generic_hazard','VARCHAR(200)'),
+            ('consequences','TEXT'),('immediate_action','TEXT'),('suggested_mitigation','TEXT'),
+            ('reporter_severity','VARCHAR(20)'),('reporter','VARCHAR(100) DEFAULT "Anonymous"'),
+            ('hazard_id','VARCHAR(30)'),('severity','VARCHAR(2)'),('likelihood','INTEGER'),('risk_index','VARCHAR(5)'),
+        ],
+        'hazards': [
+            ('classification','VARCHAR(50)'),('type_of_activity','VARCHAR(100)'),('generic_hazard','VARCHAR(200)'),
+            ('specific_components','TEXT'),('consequences','TEXT'),('status','VARCHAR(30) DEFAULT "Open"'),
+            ('owner','VARCHAR(100)'),('linked_report_id','VARCHAR(30)'),('department_id','INTEGER'),('created_at','DATETIME'),
+        ],
+        'actions': [
+            ('hazard_id','VARCHAR(30)'),('spi_id','INTEGER'),('spi_alert_level','VARCHAR(5)'),
+            ('spi_trigger_rule','VARCHAR(2)'),('evidence','TEXT'),('follow_up_notes','TEXT'),
+            ('mitigation_status','VARCHAR(30) DEFAULT "Pending"'),('verified_by','VARCHAR(100)'),
+            ('verified_date','VARCHAR(20)'),('spi_alert_month','INTEGER'),('spi_alert_year','INTEGER'),
+            ('spi_escalation_id','INTEGER'),('safety_review_notes','TEXT'),('safety_reviewer','VARCHAR(100)'),
+            ('safety_review_date','VARCHAR(20)'),('implementation_date','VARCHAR(20)'),
+            ('evidence_filename','VARCHAR(200)'),('mitigation_description','TEXT'),
+            ('corrective_description','TEXT'),('safety_notes','TEXT'),('assigned_by','VARCHAR(100)'),
+            ('closure_by','VARCHAR(100)'),('linked_ref_id','VARCHAR(30)'),('linked_risk_id','VARCHAR(30)'),
+            ('linked_audit_id','VARCHAR(30)'),('linked_ra_id','VARCHAR(30)'),('department_id','INTEGER'),
+            ('action_type','VARCHAR(20) DEFAULT "Corrective"'),('owner','VARCHAR(100)'),('due_date','VARCHAR(20)'),
+            ('priority','VARCHAR(20) DEFAULT "Medium"'),('completed_date','VARCHAR(20)'),
+            ('closed_date','VARCHAR(20)'),('effectiveness','VARCHAR(30)'),('effectiveness_review','TEXT'),
+            ('reopen_count','INTEGER DEFAULT 0'),('reopen_reason','TEXT'),('created_at','DATETIME'),
+            ('root_cause','TEXT'),('rejection_notes','TEXT'),('sag_member','VARCHAR(100)'),
+        ],
+        'audit_plans': [
+            ('month','INTEGER'),('created_at','DATETIME'),('objectives','TEXT'),('iosa_reference','VARCHAR(100)'),
+            ('auditor_name','VARCHAR(100)'),('planned_week','INTEGER'),('responsible_manager','VARCHAR(100)'),
+            ('frequency','VARCHAR(30)'),('scope','TEXT'),
+        ],
+        'audit_schedules': [
+            ('plan_id','VARCHAR(30)'),('audit_team','VARCHAR(200)'),('scope','TEXT'),('objectives','TEXT'),
+            ('actual_date','VARCHAR(20)'),('opening_meeting','TEXT'),('closing_meeting','TEXT'),
+            ('summary','TEXT'),('final_remarks','TEXT'),('closure_date','VARCHAR(20)'),
+            ('closed_by','VARCHAR(100)'),('created_at','DATETIME'),
+        ],
+        'audit_findings': [
+            ('finding_ref','VARCHAR(30)'),('finding_title','VARCHAR(200)'),('assigned_to','VARCHAR(100)'),
+            ('assigned_dept','VARCHAR(100)'),('assigned_date','VARCHAR(20)'),('investigation_notes','TEXT'),
+            ('contributing_factors','TEXT'),('root_cause_submitted_at','DATETIME'),
+            ('immediate_action','TEXT'),('longterm_action','TEXT'),('cap_responsible','VARCHAR(100)'),
+            ('cap_due_date','VARCHAR(20)'),('cap_status','VARCHAR(30) DEFAULT "Pending"'),
+            ('cap_completion_pct','INTEGER DEFAULT 0'),('cap_submitted_at','DATETIME'),
+            ('evidence_files','TEXT'),('review_notes','TEXT'),('reviewed_by','VARCHAR(100)'),
+            ('review_date','VARCHAR(20)'),('revision_reason','TEXT'),('closure_verified_by','VARCHAR(100)'),
+            ('closure_date','VARCHAR(20)'),('closure_notes','TEXT'),('sig_dept_manager','VARCHAR(100)'),
+            ('sig_auditor','VARCHAR(100)'),('sig_safety_manager','VARCHAR(100)'),('sig_date','VARCHAR(20)'),
+            ('linked_action_id','VARCHAR(30)'),('created_at','DATETIME'),('category','VARCHAR(50)'),
+            ('severity','VARCHAR(20)'),('requirement','TEXT'),('root_cause','TEXT'),('evidence','TEXT'),
+            ('standard_ref','VARCHAR(100)'),('status','VARCHAR(20) DEFAULT "Open"'),('hazard_id','VARCHAR(30)'),
+        ],
+        'risks': [
+            ('description','TEXT'),('initial_likelihood','INTEGER'),('initial_severity','VARCHAR(2)'),
+            ('initial_risk_index','VARCHAR(5)'),('initial_tolerance','VARCHAR(20)'),
+            ('residual_likelihood','INTEGER'),('residual_severity','VARCHAR(2)'),
+            ('residual_risk_index','VARCHAR(5)'),('residual_tolerance','VARCHAR(20)'),('created_at','DATETIME'),
+        ],
+        'investigations': [
+            ('title','VARCHAR(200)'),('linked_report_id','VARCHAR(30)'),('hazard_id','VARCHAR(30)'),
+            ('department_id','INTEGER'),('date_of_occurrence','VARCHAR(20)'),('investigator','VARCHAR(100)'),
+            ('description','TEXT'),('why1','TEXT'),('why2','TEXT'),('why3','TEXT'),('why4','TEXT'),
+            ('why5','TEXT'),('root_cause','TEXT'),('human_factors','TEXT'),('technical_factors','TEXT'),
+            ('organizational_factors','TEXT'),('environmental_factors','TEXT'),
+            ('recommendations','TEXT'),('status','VARCHAR(20) DEFAULT "Open"'),('created_at','DATETIME'),
+        ],
+        'moc': [
+            ('change_type','VARCHAR(50)'),('initiator','VARCHAR(100)'),('planned_date','VARCHAR(20)'),
+            ('pre_change_risk','TEXT'),('approval_status','VARCHAR(30) DEFAULT "Pending"'),
+            ('approved_by','VARCHAR(100)'),('implementation_status','VARCHAR(30) DEFAULT "Not Started"'),
+            ('post_change_review','TEXT'),('hazard_id','VARCHAR(30)'),('created_at','DATETIME'),
+        ],
+        'risk_assessments': [
+            ('control_number','VARCHAR(50)'),('responsible_name','VARCHAR(100)'),
+            ('assessors_names','VARCHAR(300)'),('assessment_date','VARCHAR(20)'),
+            ('next_review_date','VARCHAR(20)'),('general_description','TEXT'),('reasons','TEXT'),
+            ('risk_level_prior','VARCHAR(20)'),('risk_level_after','VARCHAR(20)'),
+            ('management_acceptance','VARCHAR(20)'),('acceptance_date','VARCHAR(20)'),
+            ('prepared_by_name','VARCHAR(100)'),('prepared_by_position','VARCHAR(100)'),
+            ('reviewed_by_name','VARCHAR(100)'),('reviewed_by_position','VARCHAR(100)'),
+            ('approved_by_name','VARCHAR(100)'),('approved_by_position','VARCHAR(100)'),
+            ('status','VARCHAR(20) DEFAULT "Draft"'),('submitted_date','VARCHAR(20)'),
+            ('activated_date','VARCHAR(20)'),('closed_date','VARCHAR(20)'),
+            ('revision','INTEGER DEFAULT 0'),('parent_ra_id','VARCHAR(30)'),('created_at','DATETIME'),
+        ],
+        'employees': [
+            ('employee_id','VARCHAR(30)'),('full_name','VARCHAR(100)'),('email','VARCHAR(150)'),
+            ('phone','VARCHAR(30)'),('department_id','INTEGER'),('position','VARCHAR(100)'),
+            ('role','VARCHAR(30) DEFAULT "viewer"'),('is_active','BOOLEAN DEFAULT TRUE'),
+            ('last_login','DATETIME'),('created_at','DATETIME'),
+        ],
+        'api_tokens': [
+            ('token','VARCHAR(64)'),('user_id','VARCHAR(30)'),('username','VARCHAR(80)'),
+            ('expires_at','DATETIME'),('created_at','DATETIME'),
+        ],
+        'trainings': [
+            ('employee_name','VARCHAR(100)'),('employee_id','VARCHAR(50)'),('department_id','INTEGER'),
+            ('position','VARCHAR(100)'),('training_type','VARCHAR(50)'),('training_program','VARCHAR(200)'),
+            ('course_code','VARCHAR(50)'),('instructor','VARCHAR(100)'),('location','VARCHAR(100)'),
+            ('scheduled_date','VARCHAR(20)'),('training_date','VARCHAR(20)'),('completion_date','VARCHAR(20)'),
+            ('expiry_date','VARCHAR(20)'),('duration_hours','FLOAT'),('status','VARCHAR(20) DEFAULT "Scheduled"'),
+            ('certificate','VARCHAR(200)'),('evidence','TEXT'),('is_recurrent','BOOLEAN DEFAULT 0'),
+            ('recurrence_months','INTEGER'),('notes','TEXT'),('updated_at','DATETIME'),('created_at','DATETIME'),
+        ],
+        'spi_indicators': [
+            ('auto_source','VARCHAR(50)'),('auto_category','VARCHAR(50)'),
+            ('baseline_months','INTEGER DEFAULT 3'),('improvement_pct','FLOAT DEFAULT 5.0'),
+            ('stat_mode','BOOLEAN DEFAULT FALSE'),('active','BOOLEAN DEFAULT TRUE'),('created_at','DATETIME'),
+        ],
+        'spi_data': [
+            ('total_events','INTEGER DEFAULT 0'),('source','VARCHAR(20) DEFAULT "manual"'),
+            ('notes','TEXT'),('mean_at_time','FLOAT'),('sd_at_time','FLOAT'),
+        ],
+        'voluntary_reports': [
+            ('ref_number','VARCHAR(30)'),('position','VARCHAR(100)'),('department_id','INTEGER'),
+            ('report_type','VARCHAR(50)'),('consequences','TEXT'),('suggestion','TEXT'),
+            ('status','VARCHAR(20) DEFAULT "Submitted"'),('is_confidential','BOOLEAN DEFAULT FALSE'),
+            ('created_at','DATETIME'),
+        ],
+        'confidential_reports': [
+            ('ref_number','VARCHAR(30)'),('position','VARCHAR(100)'),('department_id','INTEGER'),
+            ('report_type','VARCHAR(50)'),('consequences','TEXT'),('suggestion','TEXT'),
+            ('status','VARCHAR(20) DEFAULT "Submitted"'),('created_at','DATETIME'),
+        ],
+    }
 
-    # Apply safe column migrations
-    try:
-        engine = db.engine
-        is_sqlite = 'sqlite' in str(engine.url)
-        for _tbl, _cols in migrations.items():
-            for _col, _def in _cols:
-                try:
-                    with engine.connect() as _conn:
-                        if is_sqlite:
-                            _conn.execute(db.text(
-                                f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_def}'
-                            ))
-                        else:
-                            _conn.execute(db.text(
-                                f'ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS {_col} {_def}'
-                            ))
-                        _conn.commit()
-                except Exception:
-                    pass
-    except Exception as _me:
-        print(f'Warning: column migration: {_me}')
+    _db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    _is_pg  = _db_uri.startswith('postgresql')
 
-    try:
-        db.create_all()
-    except Exception as _ce:
-        print(f'Warning: create_all: {_ce}')
-
-    seed()
-
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    for _tbl, _cols in _migrations.items():
+        for _col, _col_type in _cols:
+            try:
+                if _is_pg:
+                    db.session.execute(db.text(
+                        f'ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS {_col} {_col_type}'
+                    ))
+                else:
+                    _existing = [row[1] for row in
+                                 db.session.execute(db.text(f'PRAGMA table_info({_tbl})')).fetchall()]
+                    if _col not in _existing:
+                        db.session.execute(db.text(
+                            f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_col_type}'
+                        ))
+                db.session.commit()
+            except Exception as _col_e:
+                db.session.rollback()
