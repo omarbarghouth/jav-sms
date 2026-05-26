@@ -1385,11 +1385,14 @@ def api_login():
         if emp:
             if not check_pw(password, emp.password_hash):
                 return api_err('Invalid username or password', 401)
-            # Silently upgrade legacy SHA-256 hash to pbkdf2 on first login
-            if _is_legacy_hash(emp.password_hash):
+            # Silently upgrade legacy or scrypt hash to pbkdf2 on successful login
+            if _is_legacy_hash(emp.password_hash) or emp.password_hash.startswith('scrypt:'):
                 emp.password_hash = hash_pw(password)
-            emp.last_login = datetime.utcnow()
-            db.session.commit()
+            try:
+                emp.last_login = datetime.utcnow()
+                db.session.commit()
+            except Exception:
+                db.session.rollback()  # last_login column may not exist yet — non-fatal
             token = _make_token(f'emp_{emp.id}', emp.username)
             dept_name = ''
             if emp.department_id:
@@ -1411,11 +1414,14 @@ def api_login():
         elif user:
             if not check_pw(password, user.password_hash):
                 return api_err('Invalid username or password', 401)
-            # Silently upgrade legacy SHA-256 hash to pbkdf2 on first login
-            if _is_legacy_hash(user.password_hash):
+            # Silently upgrade legacy or scrypt hash to pbkdf2 on successful login
+            if _is_legacy_hash(user.password_hash) or user.password_hash.startswith('scrypt:'):
                 user.password_hash = hash_pw(password)
-            user.last_login = datetime.utcnow()
-            db.session.commit()
+            try:
+                user.last_login = datetime.utcnow()
+                db.session.commit()
+            except Exception:
+                db.session.rollback()  # last_login column may not exist yet — non-fatal
             token = _make_token(f'usr_{user.id}', user.username)
             dept_name = ''
             if user.department_id:
@@ -1562,6 +1568,8 @@ def api_setup_check():
                 return {'type': 'NULL', 'preview': 'NO PASSWORD SET'}
             if h.startswith('pbkdf2'):
                 return {'type': 'pbkdf2', 'preview': h[:20] + '...'}
+            if h.startswith('scrypt:'):
+                return {'type': 'scrypt-werkzeug', 'preview': h[:20] + '...'}
             if len(h) == 64 and ':' not in h:
                 return {'type': 'sha256-legacy', 'preview': h[:12] + '...'}
             return {'type': 'UNKNOWN/PLAINTEXT', 'preview': repr(h[:20])}
@@ -1577,6 +1585,7 @@ def api_setup_check():
                     e.is_active and
                     e.password_hash is not None and
                     (e.password_hash.startswith('pbkdf2') or
+                     e.password_hash.startswith('scrypt:') or
                      (len(e.password_hash) == 64 and ':' not in e.password_hash))
                 ),
             }
@@ -1661,6 +1670,7 @@ def api_debug_login():
 
         result['hash_type'] = (
             'pbkdf2' if h.startswith('pbkdf2') else
+            'scrypt-werkzeug' if h.startswith('scrypt:') else
             'sha256-legacy' if (len(h) == 64 and ':' not in h) else
             'UNKNOWN/PLAINTEXT'
         )
@@ -1668,7 +1678,7 @@ def api_debug_login():
 
         if result['hash_type'] == 'UNKNOWN/PLAINTEXT':
             result['step'] = 'BAD_HASH_FORMAT'
-            result['hint'] = 'Password is stored in an unrecognised format — use Reset Password in web admin'
+            result['hint'] = 'Password is plain text — use Reset Password in web admin'
             return api_ok(result, 'Login diagnosis complete')
 
         # Step 3: actual password check
