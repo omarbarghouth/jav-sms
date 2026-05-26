@@ -79,6 +79,9 @@
           <td style="white-space:nowrap">
             <a href="/governance/srb/{{ m.id }}" class="btn btn-nav btn-sm">Open →</a>
             <a href="/governance/srb/{{ m.id }}/print" class="btn btn-sm btn-outline" target="_blank">🖨</a>
+            <form method="POST" action="/governance/srb/{{ m.id }}/delete" style="display:inline" onsubmit="return confirm('Delete {{ m.id }}? This cannot be undone.')">
+              <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;font-size:11px">🗑</button>
+            </form>
           </td>
         </tr>
         {% else %}
