@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{{ a.id }} — SAG Action</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:#eef0f6;color:#111827;font-size:14px;min-height:100vh}
+a{text-decoration:none;color:inherit}
+.sag-hdr{background:#0f1c3f;border-bottom:3px solid #c9a84c}
+.sag-hdr-in{max-width:1060px;margin:0 auto;padding:13px 22px;display:flex;align-items:center;gap:12px}
+.sag-logo{width:36px;height:36px;background:linear-gradient(135deg,#c9a84c,#a8832a);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.sag-ttl{color:#fff;font-size:13px;font-weight:800}
+.sag-sub{color:rgba(255,255,255,.5);font-size:10px;margin-top:1px}
+.user-area{margin-left:auto;display:flex;align-items:center;gap:10px}
+.user-name{color:rgba(255,255,255,.8);font-size:12px;font-weight:700}
+.user-role{background:rgba(201,168,76,.15);color:#c9a84c;border:1px solid rgba(201,168,76,.3);padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700}
+.lnk{color:rgba(255,255,255,.45);font-size:11px;padding:5px 10px;border:1px solid rgba(255,255,255,.15);border-radius:5px}
+.lnk:hover{color:#fff;border-color:rgba(255,255,255,.4)}
+.wrap{max-width:1060px;margin:0 auto;padding:22px}
+.page-title{font-size:20px;font-weight:800;color:#0f1c3f;letter-spacing:-.3px;margin-bottom:3px}
+.page-sub{color:#6b7280;font-size:12.5px;margin-bottom:16px}
+.badge{display:inline-flex;align-items:center;border-radius:5px;padding:2px 9px;font-size:10.5px;font-weight:700;white-space:nowrap}
+.br{background:#fff0f0;color:#dc2626;border:1px solid #fecaca}
+.by{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
+.bg{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.bb{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.bp{background:#faf5ff;color:#7c3aed;border:1px solid #e9d5ff}
+.bn{background:#0f1c3f;color:#fff}
+.bx{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb}
+.bd::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;display:inline-block;margin-right:4px}
+.card{background:#fff;border-radius:9px;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(15,28,63,.05);padding:18px;margin-bottom:14px}
+.sec-hdr{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#fff;background:#0f1c3f;padding:6px 12px;margin:-18px -18px 14px;border-radius:8px 8px 0 0;display:flex;align-items:center;gap:8px}
+.sec-hdr-gold{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#0f1c3f;background:#c9a84c;padding:6px 12px;margin:-18px -18px 14px;border-radius:8px 8px 0 0}
+.sec-hdr-green{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#fff;background:#15803d;padding:6px 12px;margin:-18px -18px 14px;border-radius:8px 8px 0 0}
+.sec-hdr-red{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#fff;background:#dc2626;padding:6px 12px;margin:-18px -18px 14px;border-radius:8px 8px 0 0}
+.sec-hdr-blue{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#fff;background:#1d4ed8;padding:6px 12px;margin:-18px -18px 14px;border-radius:8px 8px 0 0}
+.sec-hdr-purple{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#fff;background:#7c3aed;padding:6px 12px;margin:-18px -18px 14px;border-radius:8px 8px 0 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:13px}
+.fg label{font-size:10px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.5px}
+.fg input,.fg select,.fg textarea{border:1.5px solid #e5e7eb;border-radius:7px;padding:9px 12px;background:#fafbfe;font-family:inherit;font-size:13px;width:100%;color:#111827;transition:.13s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:#0f1c3f;outline:none;background:#fff;box-shadow:0 0 0 3px rgba(15,28,63,.06)}
+.fg textarea{resize:vertical;min-height:80px;line-height:1.6}
+.ro{background:#f4f6fb!important;color:#374151;cursor:default}
+.mono{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;border:none;font-family:inherit;transition:.13s;white-space:nowrap}
+.btn-n{background:#0f1c3f;color:#fff}.btn-n:hover{background:#1a2d5a}
+.btn-s{background:#15803d;color:#fff}.btn-s:hover{background:#166534}
+.btn-o{background:#fff;color:#0f1c3f;border:1.5px solid #d1d5db}.btn-o:hover{border-color:#0f1c3f}
+.btn-sm{padding:5px 11px;font-size:11px;border-radius:6px}
+.alert-r{background:#fff5f5;border:2px solid #fca5a5;border-radius:8px;padding:12px 16px;margin-bottom:14px;color:#dc2626;font-size:13px}
+.alert-b{background:#eff6ff;border:2px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:14px;color:#1d4ed8;font-size:13px}
+.alert-g{background:#f0fdf4;border:2px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:14px;color:#15803d;font-size:13px}
+.flash-s{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;padding:10px 14px;border-radius:7px;font-size:12.5px;font-weight:600;margin-bottom:14px}
+.flash-e{background:#fff5f5;color:#dc2626;border:1px solid #fca5a5;padding:10px 14px;border-radius:7px;font-size:12.5px;font-weight:600;margin-bottom:14px}
+.src-box{background:#f4f6fb;border:1px solid #e5e7eb;border-left:3px solid #1d4ed8;border-radius:0 7px 7px 0;padding:10px 13px;margin-bottom:4px;font-size:12.5px;color:#374151;line-height:1.7}
+.fl{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.fv{font-size:13px;color:#0f1c3f;font-weight:500}
+.kv-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.tl{border-left:2px solid #0f1c3f;margin-left:5px;padding-left:10px;margin-top:6px}
+.tl-dot{position:relative;margin-bottom:7px}
+.tl-dot::before{content:'';position:absolute;left:-15px;top:3px;width:8px;height:8px;border-radius:50%;background:#0f1c3f}
+.tl-d{font-size:10px;color:#6b7280;font-weight:700}
+.tl-t{font-size:12px;color:#374151}
+.progress-bar-wrap{height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:4px}
+.pbf{height:100%;border-radius:99px;background:#0f1c3f}
+.wf-tag{display:inline-flex;align-items:center;gap:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}.wrap{padding:14px}}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="sag-hdr">
+  <div class="sag-hdr-in">
+    <div class="sag-logo">🛡</div>
+    <div><div class="sag-ttl">SAG Member Portal</div><div class="sag-sub">Safety Action Group · Jordan Aviation</div></div>
+    <div class="user-area">
+      <a href="/sag/dashboard" class="lnk">← Dashboard</a>
+      <div><div class="user-name">{{ session.get('sag_name') }}</div><div class="user-role">{{ session.get('sag_role','SAG') }}</div></div>
+      <a href="/sag-logout" class="lnk">Logout</a>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat,msg in msgs %}
+  <div class="{{ 'flash-s' if cat=='success' else 'flash-e' }}">{{ '✓' if cat=='success' else '⚠' }} {{ msg }}</div>
+  {% endfor %}{% endwith %}
+
+  <!-- Page header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <span class="mono" style="font-size:13px">{{ a.id }}</span>
+        {% if a.priority=='High' %}<span class="badge br">High Priority</span>
+        {% elif a.priority=='Medium' %}<span class="badge by">Medium Priority</span>
+        {% else %}<span class="badge bx">{{ a.priority }}</span>{% endif %}
+        {% set sc={'Open':'bb','Assigned':'bn','In Progress':'bb','Overdue':'br','Returned':'by','Mitigation Implemented':'bp','Under Safety Review':'bp','Closed':'bg'} %}
+        <span class="badge bd {{ sc.get(a.status,'bx') }}">{{ a.status }}</span>
+      </div>
+      <div class="page-title">{{ a.description or 'Action Detail' }}</div>
+      <div class="page-sub">Source: {{ a.source or 'Manual' }} · Due: {{ a.due_date or 'Not set' }}</div>
+    </div>
+  </div>
+
+  <!-- Status alerts -->
+  {% if a.status == 'Returned' %}
+  <div class="alert-r"><strong style="display:block;margin-bottom:4px">⚠ Returned by Safety Department</strong>{{ a.rejection_notes or 'Additional action required. Please review and resubmit.' }}</div>
+  {% endif %}
+  {% if a.status in ('Under Safety Review','Mitigation Implemented') %}
+  <div class="alert-b"><strong style="display:block;margin-bottom:4px">📋 Awaiting Safety Department Review</strong>Your submission is being reviewed. You will be notified of the outcome.</div>
+  {% endif %}
+  {% if a.status == 'Closed' %}
+  <div class="alert-g"><strong>✓ Action Closed.</strong> Closed: {{ a.closed_date or '—' }} · Effectiveness: {{ a.effectiveness or 'Pending' }}</div>
+  {% endif %}
+
+  <div style="display:grid;grid-template-columns:1fr 300px;gap:14px">
+  <div>
+  <form method="POST" enctype="multipart/form-data">
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       WORKFLOW ROUTER — Different form per source type
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  {% set src = a.source or 'Manual' %}
+
+  <!-- ───────────────────────────────────────────────────────────────
+       SOURCE RECORD (shown for all workflows)
+  ─────────────────────────────────────────────────────────────────── -->
+  {% if finding or hazard_rep or investigation or spi_ind or ra %}
+  <div class="card">
+    <div class="sec-hdr-blue">📋 Source Record — {{ src }}</div>
+
+    {% if finding %}
+    <div class="wf-tag">📑 NCR / CAPA Workflow</div>
+    <div class="kv-grid">
+      <div><div class="fl">Finding Ref</div><div class="fv mono">{{ finding.finding_ref or finding.id }}</div></div>
+      <div><div class="fl">Severity</div><div class="fv">
+        {% if finding.severity=='Major' %}<span class="badge br">Major</span>
+        {% elif finding.severity=='Minor' %}<span class="badge by">Minor</span>
+        {% else %}<span class="badge bx">{{ finding.severity or '—' }}</span>{% endif %}
+      </div></div>
+      <div><div class="fl">Category</div><div class="fv">{{ finding.category or '—' }}</div></div>
+      <div><div class="fl">Standard Ref</div><div class="fv mono" style="font-size:11px">{{ finding.standard_ref or '—' }}</div></div>
+    </div>
+    {% if finding.requirement %}<div class="fl" style="margin-bottom:3px">Requirement</div><div style="font-size:12px;color:#374151;margin-bottom:8px">{{ finding.requirement }}</div>{% endif %}
+    <div class="fl">Non-Conformance Statement</div>
+    <div class="src-box">{{ finding.description or '—' }}</div>
+    {% if finding.evidence %}<div class="fl" style="margin-top:6px">Auditor Evidence</div><div style="font-size:12px;color:#374151">{{ finding.evidence }}</div>{% endif %}
+    {% endif %}
+
+    {% if hazard_rep %}
+    <div class="wf-tag">⚠ Hazard Mitigation Workflow</div>
+    <div class="kv-grid">
+      <div><div class="fl">Report ID</div><div class="fv mono">{{ hazard_rep.id }}</div></div>
+      <div><div class="fl">Classification</div><div class="fv">{{ hazard_rep.classification or '—' }}</div></div>
+      <div><div class="fl">Location</div><div class="fv">{{ hazard_rep.location or '—' }}</div></div>
+      <div><div class="fl">Date</div><div class="fv mono">{{ hazard_rep.date or '—' }}</div></div>
+    </div>
+    <div class="fl">Hazard Description</div>
+    <div class="src-box" style="border-left-color:#dc2626">{{ hazard_rep.description or '—' }}</div>
+    {% if hazard_rep.consequences %}<div class="fl" style="margin-top:6px">Consequences</div><div style="font-size:12px;color:#374151">{{ hazard_rep.consequences }}</div>{% endif %}
+    {% if hazard_rep.immediate_action %}<div class="fl" style="margin-top:6px">Immediate Action Taken</div><div style="font-size:12px;color:#374151">{{ hazard_rep.immediate_action }}</div>{% endif %}
+    {% endif %}
+
+    {% if investigation %}
+    <div class="wf-tag">🔬 Investigation Workflow</div>
+    <div class="kv-grid">
+      <div><div class="fl">Investigation ID</div><div class="fv mono">{{ investigation.id }}</div></div>
+      <div><div class="fl">Date</div><div class="fv mono">{{ investigation.date_of_occurrence or '—' }}</div></div>
+      <div><div class="fl">Investigator</div><div class="fv">{{ investigation.investigator or '—' }}</div></div>
+      <div><div class="fl">Status</div><div class="fv"><span class="badge bb">{{ investigation.status or '—' }}</span></div></div>
+    </div>
+    <div class="fl">Description</div>
+    <div class="src-box">{{ investigation.description or '—' }}</div>
+    {% if investigation.why1 %}
+    <div class="fl" style="margin-top:6px">5-Why Root Cause Analysis</div>
+    {% for why in [investigation.why1,investigation.why2,investigation.why3,investigation.why4,investigation.why5] if why %}
+    <div style="font-size:12px;padding:3px 0;border-bottom:1px solid #f3f4f6;color:#374151">Why {{ loop.index }}: {{ why }}</div>
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+
+    {% if spi_ind %}
+    <div class="wf-tag">📈 SPI Performance Recovery Workflow</div>
+    <div class="kv-grid">
+      <div><div class="fl">Indicator</div><div class="fv mono">{{ spi_ind.ref_code }}</div></div>
+      <div><div class="fl">Alert Level</div><div class="fv">
+        <span class="badge {% if a.spi_alert_level=='L3' %}br{% elif a.spi_alert_level=='L2' %}by{% else %}bb{% endif %}">{{ a.spi_alert_level or 'L1' }} Alert</span>
+      </div></div>
+      <div><div class="fl">Indicator Name</div><div class="fv">{{ spi_ind.name or '—' }}</div></div>
+      <div><div class="fl">Category</div><div class="fv">{{ spi_ind.category or '—' }}</div></div>
+    </div>
+    {% endif %}
+
+    {% if ra %}
+    <div class="wf-tag">🔺 Risk Assessment — Mitigation Workflow</div>
+    <div class="kv-grid">
+      <div><div class="fl">RA Reference</div><div class="fv mono">{{ ra.id }}</div></div>
+      <div><div class="fl">Status</div><div class="fv"><span class="badge bb">{{ ra.status or '—' }}</span></div></div>
+    </div>
+    <div class="fl">Assessment Description</div>
+    <div class="src-box">{{ ra.description or '—' }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       WORKFLOW 1 — AUDIT FINDING / NCR (CAPA)
+  ═══════════════════════════════════════════════════════════════════ -->
+  {% if src == 'Audit Finding' %}
+
+  <div class="card">
+    <div class="sec-hdr-red">A. Root Cause Analysis (RCA)</div>
+    <div class="fg">
+      <label>Root Cause Description *</label>
+      <textarea name="root_cause" rows="4" placeholder="What is the root cause of this non-conformance? Include process failures, system weaknesses, and human factors if applicable.">{{ a.root_cause or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Contributing Factors</label>
+      <textarea name="contributing_factors" rows="3" placeholder="What contributing factors led to this finding? (Management issues, training gaps, procedure deficiencies…)">{{ a.rejection_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-blue">B. Corrective Action</div>
+    <div class="fg">
+      <label>Corrective Action Description *</label>
+      <textarea name="corrective_description" rows="4" placeholder="Describe the corrective action taken to address the root cause and prevent recurrence.">{{ a.corrective_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Procedure / SOP Revision</label>
+      <textarea name="mitigation_description" rows="3" placeholder="Describe any SOP or procedure revisions made (include document reference and version).">{{ a.mitigation_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Training Actions</label>
+      <textarea name="safety_notes" rows="2" placeholder="Describe any training conducted, who attended, and completion date.">{{ a.safety_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-gold">C. Corrective Action Plan (CAP)</div>
+    <div class="grid2">
+      <div class="fg">
+        <label>Responsible Person</label>
+        <input type="text" name="cap_responsible" value="{{ a.owner or '' }}" placeholder="Name of person responsible"/>
+      </div>
+      <div class="fg">
+        <label>Target Completion Date</label>
+        <input type="date" name="cap_target_date" value="{{ a.due_date or '' }}"/>
+      </div>
+      <div class="fg">
+        <label>Implementation Date</label>
+        <input type="date" name="implementation_date" value="{{ a.implementation_date or '' }}"/>
+      </div>
+      <div class="fg">
+        <label>CAP Status</label>
+        <select name="mitigation_status">
+          {% for s in ['Pending','In Progress','Completed'] %}
+          <option {% if a.mitigation_status==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Implementation Milestones / Notes</label>
+      <textarea name="follow_up_notes" rows="3" placeholder="Describe implementation milestones, resources required, and monitoring plan.">{{ a.follow_up_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       WORKFLOW 2 — HAZARD REPORT (Mitigation)
+  ═══════════════════════════════════════════════════════════════════ -->
+  {% elif src in ('Hazard Report','Hazard') %}
+
+  <div class="card">
+    <div class="sec-hdr-red">B. Immediate Action Taken</div>
+    <div class="fg">
+      <label>Immediate Action / Containment Measures *</label>
+      <textarea name="corrective_description" rows="3" placeholder="What immediate action was taken to contain the hazard? (e.g. area cordoned off, operations suspended, warnings issued)">{{ a.corrective_description or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-blue">C. Mitigation Implementation</div>
+    <div class="fg">
+      <label>Long-Term Mitigation Implemented *</label>
+      <textarea name="mitigation_description" rows="4" placeholder="Describe the long-term mitigation measures, control methods, and operational changes implemented.">{{ a.mitigation_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Operational Control Measures</label>
+      <textarea name="safety_notes" rows="3" placeholder="Describe any new operational controls, monitoring procedures, or safety barriers introduced.">{{ a.safety_notes or '' }}</textarea>
+    </div>
+    <div class="grid2">
+      <div class="fg">
+        <label>Implementation Date</label>
+        <input type="date" name="implementation_date" value="{{ a.implementation_date or '' }}"/>
+      </div>
+      <div class="fg">
+        <label>Implementation Status</label>
+        <select name="mitigation_status">
+          {% for s in ['Pending','In Progress','Completed'] %}
+          <option {% if a.mitigation_status==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-purple">D. Residual Risk Evaluation</div>
+    <div class="fg">
+      <label>Residual Risk Level</label>
+      <select name="residual_risk">
+        <option value="">— Select residual risk —</option>
+        <option value="Acceptable">Acceptable — Risk eliminated / reduced to acceptable level</option>
+        <option value="Tolerable">Tolerable — Risk reduced, monitoring required</option>
+        <option value="Not Acceptable">Not Acceptable — Further mitigation required</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Monitoring Method</label>
+      <textarea name="follow_up_notes" rows="3" placeholder="How will residual risk be monitored? (e.g. daily inspection, monthly audit, SPI tracking)">{{ a.follow_up_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       WORKFLOW 3 — RISK ASSESSMENT (Mitigation Effectiveness)
+  ═══════════════════════════════════════════════════════════════════ -->
+  {% elif src in ('Risk Assessment','RA') %}
+
+  <div class="card">
+    <div class="sec-hdr-blue">B. Mitigation Implementation</div>
+    <div class="fg">
+      <label>Mitigation Implemented *</label>
+      <textarea name="corrective_description" rows="4" placeholder="Describe what mitigation measures have been implemented, including specific control measures applied.">{{ a.corrective_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Operational Procedures Introduced</label>
+      <textarea name="mitigation_description" rows="3" placeholder="New procedures, work instructions, or operational controls introduced.">{{ a.mitigation_description or '' }}</textarea>
+    </div>
+    <div class="grid2">
+      <div class="fg">
+        <label>Implementation Date</label>
+        <input type="date" name="implementation_date" value="{{ a.implementation_date or '' }}"/>
+      </div>
+      <div class="fg">
+        <label>Implementation Status</label>
+        <select name="mitigation_status">
+          {% for s in ['Pending','In Progress','Completed'] %}
+          <option {% if a.mitigation_status==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-purple">C. Effectiveness Review</div>
+    <div class="fg">
+      <label>Effectiveness Assessment</label>
+      <textarea name="safety_notes" rows="3" placeholder="How effective has the mitigation been? Describe monitoring results and operational feedback received.">{{ a.safety_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-red">D. Residual Risk Assessment</div>
+    <div class="grid2">
+      <div class="fg">
+        <label>Residual Risk Level</label>
+        <select name="residual_risk">
+          <option value="">— Select —</option>
+          <option value="Acceptable">Acceptable</option>
+          <option value="Tolerable">Tolerable (monitor)</option>
+          <option value="Not Acceptable">Not Acceptable</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Review Frequency</label>
+        <select name="recovery_timeline">
+          <option value="">— Select —</option>
+          <option value="Monthly">Monthly</option>
+          <option value="Quarterly">Quarterly</option>
+          <option value="Semi-Annual">Semi-Annual</option>
+          <option value="Annual">Annual</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Monitoring Method</label>
+      <textarea name="follow_up_notes" rows="3" placeholder="How will residual risk be monitored? Who is responsible?">{{ a.follow_up_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       WORKFLOW 4 — SPI/SPT (Performance Recovery)
+  ═══════════════════════════════════════════════════════════════════ -->
+  {% elif src in ('SPI Alert','SPI','SPT') %}
+
+  <div class="card">
+    <div class="sec-hdr-red">B. Root Cause of SPI Deterioration</div>
+    <div class="fg">
+      <label>Root Cause Analysis *</label>
+      <textarea name="root_cause" rows="4" placeholder="Why did the SPI deteriorate? Identify operational contributors, process weaknesses, and systemic factors.">{{ a.root_cause or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Performance Weaknesses Identified</label>
+      <textarea name="contributing_factors" rows="3" placeholder="What operational weaknesses contributed to the performance deterioration?">{{ a.rejection_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-blue">C. Recovery Action Plan</div>
+    <div class="fg">
+      <label>Recovery Action Implemented *</label>
+      <textarea name="corrective_description" rows="4" placeholder="Describe the recovery actions taken to improve the SPI performance indicator.">{{ a.corrective_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Performance Improvement Actions</label>
+      <textarea name="mitigation_description" rows="3" placeholder="Specific improvement actions, training programs, or operational changes introduced.">{{ a.mitigation_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Operational Controls</label>
+      <textarea name="safety_notes" rows="2" placeholder="New operational controls or monitoring measures introduced.">{{ a.safety_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-gold">D. Monitoring & KPI Tracking</div>
+    <div class="grid2">
+      <div class="fg">
+        <label>KPI Tracking Method</label>
+        <select name="mitigation_status">
+          <option value="Pending">Pending — Not yet tracking</option>
+          <option value="In Progress">In Progress — Monitoring active</option>
+          <option value="Completed">Completed — Target achieved</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Expected Recovery Timeline</label>
+        <select name="recovery_timeline">
+          <option value="">— Select —</option>
+          <option value="1 Month">1 Month</option>
+          <option value="3 Months">3 Months</option>
+          <option value="6 Months">6 Months</option>
+          <option value="12 Months">12 Months</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Monitoring Method</label>
+      <textarea name="follow_up_notes" rows="3" placeholder="How will performance recovery be tracked? What KPI targets are expected?">{{ a.follow_up_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       WORKFLOW 5 — INVESTIGATION
+  ═══════════════════════════════════════════════════════════════════ -->
+  {% elif src == 'Investigation' %}
+
+  <div class="card">
+    <div class="sec-hdr-red">B. Implementation of Recommendations</div>
+    <div class="fg">
+      <label>Recommendation Implementation *</label>
+      <textarea name="corrective_description" rows="4" placeholder="Describe how the investigation recommendations have been implemented operationally.">{{ a.corrective_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Safety Improvements Made</label>
+      <textarea name="mitigation_description" rows="3" placeholder="What safety improvements, operational changes, or procedural updates were made?">{{ a.mitigation_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Training / Awareness Actions</label>
+      <textarea name="safety_notes" rows="2" placeholder="Training conducted, safety bulletins issued, awareness programs implemented.">{{ a.safety_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-gold">C. Implementation Plan</div>
+    <div class="grid2">
+      <div class="fg">
+        <label>Responsible Person</label>
+        <input type="text" name="cap_responsible" value="{{ a.owner or '' }}" placeholder="Name of responsible person"/>
+      </div>
+      <div class="fg">
+        <label>Target Completion</label>
+        <input type="date" name="cap_target_date" value="{{ a.due_date or '' }}"/>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Follow-up Monitoring</label>
+      <textarea name="follow_up_notes" rows="3" placeholder="How will effectiveness of implemented recommendations be monitored?">{{ a.follow_up_notes or '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       WORKFLOW 6 — GENERIC / MANUAL ACTION
+  ═══════════════════════════════════════════════════════════════════ -->
+  {% else %}
+
+  <div class="card">
+    <div class="sec-hdr-red">B. Root Cause Analysis</div>
+    <div class="fg">
+      <label>Root Cause</label>
+      <textarea name="root_cause" rows="3" placeholder="What is the root cause?">{{ a.root_cause or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-hdr-blue">C. Corrective Action & Mitigation</div>
+    <div class="fg">
+      <label>Corrective Action Taken *</label>
+      <textarea name="corrective_description" rows="4" placeholder="Describe corrective action taken.">{{ a.corrective_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Mitigation Description</label>
+      <textarea name="mitigation_description" rows="3" placeholder="Mitigation and control measures applied.">{{ a.mitigation_description or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Safety Improvement Notes</label>
+      <textarea name="safety_notes" rows="2" placeholder="How does this improve safety performance?">{{ a.safety_notes or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Follow-up / Monitoring</label>
+      <textarea name="follow_up_notes" rows="2" placeholder="How will effectiveness be monitored?">{{ a.follow_up_notes or '' }}</textarea>
+    </div>
+    <div class="grid2">
+      <div class="fg">
+        <label>Implementation Date</label>
+        <input type="date" name="implementation_date" value="{{ a.implementation_date or '' }}"/>
+      </div>
+      <div class="fg">
+        <label>Status</label>
+        <select name="mitigation_status">
+          {% for s in ['Pending','In Progress','Completed'] %}
+          <option {% if a.mitigation_status==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       EVIDENCE SECTION (all workflows)
+  ═══════════════════════════════════════════════════════════════════ -->
+  <div class="card">
+    <div class="sec-hdr-green">📎 Evidence & Supporting Documents</div>
+    <div class="fg">
+      <label>Evidence Description</label>
+      <textarea name="evidence" rows="3" placeholder="Describe your evidence — e.g. 'SOP-GR-004 v2.0 attached', 'Training records updated in LMMS', 'Photos of corrected area taken 2026-05-15'…">{{ a.evidence or '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Upload Evidence File</label>
+      <input type="file" name="evidence_file"
+             accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.bmp,.txt,.zip"
+             style="border:1.5px solid #e5e7eb;border-radius:7px;padding:8px 12px;background:#fafbfe;font-size:13px;width:100%;cursor:pointer"/>
+      <span style="font-size:10.5px;color:#6b7280;margin-top:2px">PDF · Word · Excel · Images · ZIP · Max 10MB</span>
+    </div>
+    {% if a.evidence_filename %}
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+      <span>📄</span>
+      <div><div style="font-size:12px;font-weight:700;color:#15803d">Current Evidence File</div>
+      <div style="font-size:12px;color:#374151">{{ a.evidence_filename }}</div></div>
+      <a href="/uploads/{{ a.evidence_filename }}" target="_blank"
+         class="btn btn-sm" style="margin-left:auto;background:#dcfce7;color:#15803d;border:1px solid #bbf7d0">View →</a>
+    </div>
+    {% endif %}
+    <div style="background:#f4f6fb;border:1px solid #e5e7eb;border-radius:7px;padding:10px 13px;font-size:12px;color:#374151;margin-top:8px">
+      📋 <strong>Evidence examples:</strong> Revised SOPs · Training records · Work orders · Photographs · Test results · Meeting minutes · Sign-off sheets · Monitoring reports
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div style="display:flex;gap:11px;flex-wrap:wrap;margin-top:4px;margin-bottom:20px">
+    {% if a.status not in ('Closed','Under Safety Review','Mitigation Implemented') %}
+    <button type="submit" name="action_btn" value="save_progress" class="btn btn-o">
+      💾 Save Progress
+    </button>
+    {% endif %}
+    {% if a.status in ('Open','In Progress','Returned','Assigned','Overdue') %}
+    <button type="submit" name="action_btn" value="submit_review" class="btn btn-s"
+            onclick="return confirm('Submit for Safety Review?\n\nEnsure all required fields are complete and evidence is uploaded.')">
+      ✅ Submit for Safety Review →
+    </button>
+    {% endif %}
+    {% if a.status == 'Closed' %}
+    <div class="alert-g" style="margin:0">✓ Closed — no further action required.</div>
+    {% elif a.status in ('Under Safety Review','Mitigation Implemented') %}
+    <div class="alert-b" style="margin:0">📋 Awaiting Safety Department review.</div>
+    {% endif %}
+  </div>
+
+  </form>
+  </div>
+
+  <!-- RIGHT SIDEBAR -->
+  <div>
+
+    <!-- Lifecycle -->
+    <div class="card">
+      <div class="sec-hdr">📍 Lifecycle</div>
+      {% set steps=[('Open / Assigned',0),('In Progress',2),('Implemented',4),('Safety Review',6),('Closed',8)] %}
+      {% set order=['Open','Assigned','In Progress','Mitigation Implemented','Under Safety Review','Closed'] %}
+      {% set cur_idx=order.index(a.status) if a.status in order else 0 %}
+      {% for label,threshold in steps %}
+      <div style="display:flex;align-items:center;gap:9px;padding:6px 0">
+        <div style="width:23px;height:23px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;
+          {% if cur_idx>threshold %}background:#0f1c3f;color:#c9a84c;
+          {% elif cur_idx==threshold or (threshold==0 and a.status=='Assigned') %}background:#c9a84c;color:#0f1c3f;
+          {% else %}background:#e5e7eb;color:#9ca3af;{% endif %}">{{ loop.index }}</div>
+        <div style="font-size:12px;font-weight:{% if cur_idx==threshold %}800{% else %}500{% endif %};color:{% if cur_idx==threshold %}#0f1c3f{% else %}#6b7280{% endif %}">{{ label }}</div>
+      </div>
+      {% if not loop.last %}<div style="width:2px;height:9px;background:#e5e7eb;margin-left:10px"></div>{% endif %}
+      {% endfor %}
+    </div>
+
+    <!-- Action info -->
+    <div class="card">
+      <div class="sec-hdr" style="margin-bottom:12px">📋 Action Details</div>
+      <div style="font-size:11px;color:#6b7280;margin-bottom:3px;font-weight:700;text-transform:uppercase">Action ID</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0f1c3f;margin-bottom:10px">{{ a.id }}</div>
+      <div style="font-size:11px;color:#6b7280;margin-bottom:3px;font-weight:700;text-transform:uppercase">Source</div>
+      <div style="font-size:12px;margin-bottom:10px"><span class="badge bx">{{ a.source or 'Manual' }}</span></div>
+      <div style="font-size:11px;color:#6b7280;margin-bottom:3px;font-weight:700;text-transform:uppercase">Due Date</div>
+      <div style="font-size:12px;font-family:monospace;font-weight:700;margin-bottom:10px;color:{% if a.status=='Overdue' %}#dc2626{% else %}#0f1c3f{% endif %}">{{ a.due_date or '—' }}</div>
+      <div style="font-size:11px;color:#6b7280;margin-bottom:3px;font-weight:700;text-transform:uppercase">Priority</div>
+      <div style="margin-bottom:10px">
+        {% if a.priority=='High' %}<span class="badge br">High</span>
+        {% elif a.priority=='Medium' %}<span class="badge by">Medium</span>
+        {% else %}<span class="badge bx">{{ a.priority }}</span>{% endif %}
+      </div>
+      {% if a.department %}
+      <div style="font-size:11px;color:#6b7280;margin-bottom:3px;font-weight:700;text-transform:uppercase">Department</div>
+      <div style="font-size:12px;margin-bottom:10px">{{ a.department.name }}</div>
+      {% endif %}
+    </div>
+
+    <!-- History -->
+    {% if history %}
+    <div class="card">
+      <div class="sec-hdr" style="margin-bottom:12px">📜 Recent History</div>
+      <div class="tl">
+        {% for h in history[:8] %}
+        <div class="tl-dot">
+          <div class="tl-d">{{ h.changed_at.strftime('%d %b %H:%M') if h.changed_at else '—' }} · {{ h.changed_by or '—' }}</div>
+          <div class="tl-t"><strong>{{ h.to_status or '—' }}</strong>{% if h.notes %} — {{ h.notes[:45] }}{% endif %}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Current evidence -->
+    {% if a.corrective_description or a.evidence %}
+    <div class="card">
+      <div class="sec-hdr-green" style="margin-bottom:12px">📎 Submitted Data</div>
+      {% if a.implementation_date %}
+      <div style="font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;margin-bottom:3px">Implemented</div>
+      <div style="font-family:monospace;font-size:12px;margin-bottom:8px">{{ a.implementation_date }}</div>
+      {% endif %}
+      {% if a.mitigation_status %}
+      <div style="font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;margin-bottom:3px">Status</div>
+      <div style="margin-bottom:8px"><span class="badge {% if a.mitigation_status=='Completed' %}bg{% else %}by{% endif %}">{{ a.mitigation_status }}</span></div>
+      {% endif %}
+      {% if a.evidence %}
+      <div style="font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;margin-bottom:3px">Evidence</div>
+      <div style="font-size:11px;color:#374151;line-height:1.6">{{ a.evidence[:150] }}{% if a.evidence|length>150 %}…{% endif %}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div><!-- end sidebar -->
+  </div><!-- end grid -->
+</div>
+</body>
+</html>

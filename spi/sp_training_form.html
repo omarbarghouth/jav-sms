@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}{% if editing %}Edit{% else %}Schedule{% endif %} Training{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px">
+  <a href="/safety-promotion/training" style="color:var(--muted);font-size:13px">← Training Records</a>
+</div>
+<div class="page-title">{% if editing %}Edit Training Record{% else %}Schedule New Training{% endif %}</div>
+<div class="page-sub">Aviation safety training scheduling and certification management</div>
+
+<form class="form-card" method="POST"
+      {% if editing %}action="/safety-promotion/training/{{ t.id }}"{% endif %}
+      enctype="multipart/form-data" style="max-width:740px">
+  {% if editing %}<input type="hidden" name="action" value="update"/>{% endif %}
+
+  <!-- ── Employee ─────────────────────────────────────────────── -->
+  <div class="sec">Employee Information</div>
+  <div class="g2">
+    <div class="fg"><label>Employee Name *</label>
+      <input type="text" name="employee_name" required
+             value="{{ t.employee_name if editing else '' }}" placeholder="Full name"/></div>
+    <div class="fg"><label>Employee ID / Staff Number</label>
+      <input type="text" name="employee_id"
+             value="{{ t.employee_id if editing else '' }}" placeholder="e.g. JAV-001"/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Department</label>
+      <select name="department_id">
+        <option value="">Select department…</option>
+        {% for d in all_departments %}
+        <option value="{{ d.id }}" {% if editing and t.department_id==d.id %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select></div>
+    <div class="fg"><label>Position / Job Title</label>
+      <input type="text" name="position"
+             value="{{ t.position if editing else '' }}" placeholder="e.g. First Officer"/></div>
+  </div>
+
+  <!-- ── Course ─────────────────────────────────────────────────── -->
+  <div class="sec">Training Course Details</div>
+  <div class="g2">
+    <div class="fg"><label>Training Type *</label>
+      <select name="training_type" required>
+        {% set ttypes = ["SMS Training","Hazard Reporting Training","Emergency Response Training",
+                         "Human Factors Training","Investigation Training","Audit Training",
+                         "Safety Leadership","CRM Training","Recurrent Training","Other"] %}
+        {% for tt in ttypes %}
+        <option {% if editing and t.training_type==tt %}selected{% endif %}>{{ tt }}</option>
+        {% endfor %}
+      </select></div>
+    <div class="fg"><label>Course / Program Name</label>
+      <input type="text" name="training_program"
+             value="{{ t.training_program if editing else '' }}"
+             placeholder="e.g. ICAO SMS Awareness Course"/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Course Code</label>
+      <input type="text" name="course_code"
+             value="{{ t.course_code if editing else '' }}" placeholder="e.g. SMS-001"/></div>
+    <div class="fg"><label>Instructor / Training Provider</label>
+      <input type="text" name="instructor"
+             value="{{ t.instructor if editing else '' }}" placeholder="Name or organization"/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Location / Venue</label>
+      <input type="text" name="location"
+             value="{{ t.location if editing else '' }}" placeholder="e.g. JCAA Training Centre"/></div>
+    <div class="fg"><label>Duration (hours)</label>
+      <input type="number" name="duration_hours" min="0" step="0.5"
+             value="{{ t.duration_hours if editing else '' }}" placeholder="e.g. 8"/></div>
+  </div>
+
+  <!-- ── Dates ─────────────────────────────────────────────────── -->
+  <div class="sec">Training Schedule & Dates</div>
+  <div class="g3">
+    <div class="fg"><label>Scheduled Date</label>
+      <input type="date" name="scheduled_date"
+             value="{{ t.scheduled_date if editing else '' }}"/></div>
+    <div class="fg"><label>Actual Training Date</label>
+      <input type="date" name="training_date"
+             value="{{ t.training_date if editing else '' }}"/></div>
+    <div class="fg"><label>Completion Date</label>
+      <input type="date" name="completion_date"
+             value="{{ t.completion_date if editing else '' }}"/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Expiry / Renewal Date</label>
+      <input type="date" name="expiry_date"
+             value="{{ t.expiry_date if editing else '' }}"/></div>
+    <div class="fg"><label>Training Status *</label>
+      <select name="status" required>
+        {% for s in ["Scheduled","In Progress","Completed","Due Soon","Expired","Overdue","Cancelled"] %}
+        <option {% if editing and t.status==s %}selected{% elif not editing and s=="Scheduled" %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select></div>
+  </div>
+
+  <!-- ── Recurrence ───────────────────────────────────────────── -->
+  <div class="fg" style="display:flex;align-items:center;gap:10px">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+      <input type="checkbox" name="is_recurrent" {% if editing and t.is_recurrent %}checked{% endif %}
+             onchange="document.getElementById('rec-months').style.display=this.checked?'block':'none'"
+             style="width:auto"/>
+      Recurrent Training (requires periodic renewal)
+    </label>
+  </div>
+  <div id="rec-months" style="display:{% if editing and t.is_recurrent %}block{% else %}none{% endif %}">
+    <div class="fg" style="max-width:200px"><label>Recurrence Interval (months)</label>
+      <input type="number" name="recurrence_months" min="1" max="60"
+             value="{{ t.recurrence_months if editing else 12 }}" placeholder="e.g. 12 = annually"/></div>
+  </div>
+
+  <!-- ── Files ─────────────────────────────────────────────────── -->
+  <div class="sec">Certificate & Evidence Upload</div>
+  <div class="g2">
+    <div class="fg">
+      <label>Training Certificate (PDF / Image)</label>
+      <input type="file" name="certificate" accept=".pdf,.png,.jpg,.jpeg"
+             style="border:1.5px solid var(--border);border-radius:7px;padding:8px;font-size:12px;font-family:inherit;background:#fafbfe"/>
+      {% if editing and t.certificate %}
+      <div style="margin-top:5px;font-size:11px;color:#15803d">
+        Current: <a href="/spi/evidence/{{ t.certificate }}" target="_blank">📎 {{ t.certificate.split('_',1)[-1] if '_' in t.certificate else t.certificate }}</a>
+      </div>
+      {% endif %}
+    </div>
+    <div class="fg">
+      <label>Supporting Evidence / Documents</label>
+      <input type="file" name="evidence" accept=".pdf,.docx,.png,.jpg,.jpeg"
+             style="border:1.5px solid var(--border);border-radius:7px;padding:8px;font-size:12px;font-family:inherit;background:#fafbfe"/>
+      {% if editing and t.evidence %}
+      <div style="margin-top:5px;font-size:11px;color:#15803d">
+        Current: <a href="/spi/evidence/{{ t.evidence }}" target="_blank">📎 {{ t.evidence.split('_',1)[-1] if '_' in t.evidence else t.evidence }}</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Notes ─────────────────────────────────────────────────── -->
+  <div class="fg"><label>Notes / Comments</label>
+    <textarea name="notes" rows="3" placeholder="Additional notes, pass/fail remarks, assessment details…">{{ t.notes if editing else '' }}</textarea></div>
+
+  <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
+    <button type="submit" class="btn btn-nav" style="font-size:14px;padding:11px 26px">
+      {% if editing %}💾 Save Changes{% else %}📅 Schedule Training{% endif %}
+    </button>
+    <a href="/safety-promotion/training" class="btn btn-outline">Cancel</a>
+    {% if editing %}
+    <form method="POST" action="/safety-promotion/training/{{ t.id }}"
+          onsubmit="return confirm('Delete this training record permanently?')"
+          style="display:inline;margin-left:auto">
+      <input type="hidden" name="action" value="delete"/>
+      <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">
+        🗑 Delete Record
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+// Auto-set expiry based on recurrence months when scheduled date is set
+document.addEventListener('DOMContentLoaded', function() {
+  var schDate = document.querySelector('[name="scheduled_date"]');
+  var expDate = document.querySelector('[name="expiry_date"]');
+  var recMon  = document.querySelector('[name="recurrence_months"]');
+  var recChk  = document.querySelector('[name="is_recurrent"]');
+  if (schDate && expDate && recMon && recChk) {
+    function calcExpiry() {
+      if (recChk.checked && schDate.value && recMon.value) {
+        var d = new Date(schDate.value);
+        d.setMonth(d.getMonth() + parseInt(recMon.value));
+        expDate.value = d.toISOString().split('T')[0];
+      }
+    }
+    schDate.addEventListener('change', calcExpiry);
+    recMon.addEventListener('change', calcExpiry);
+  }
+});
+</script>
+{% endblock %}

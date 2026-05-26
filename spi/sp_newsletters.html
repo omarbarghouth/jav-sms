@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Safety Newsletters{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion" style="color:var(--muted);font-size:13px">← Safety Promotion</a></div>
+<div class="page-title">Safety Newsletters</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+  <div class="page-sub" style="margin:0">Professional safety communications</div>
+  <a href="/safety-promotion/newsletter/new" class="btn btn-nav btn-sm">+ New Newsletter</a>
+</div>
+{% if newsletters %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+{% for n in newsletters %}
+<div class="card" style="border-top:3px solid var(--navy)">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+    <span class="mono" style="font-size:10px;color:var(--muted)">{{ n.ref_number }}</span>
+    <span class="badge {% if n.status=="Published" %}b-green{% elif n.status=="Draft" %}b-yellow{% else %}b-gray{% endif %}" style="font-size:10px">{{ n.status }}</span>
+  </div>
+  <div style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:4px">{{ n.title }}</div>
+  {% if n.issue_number %}<div style="font-size:11px;color:var(--muted)">Issue {{ n.issue_number }}</div>{% endif %}
+  <p style="font-size:12px;color:#374151;line-height:1.5;margin:8px 0">{{ (n.summary or "")[:100] }}</p>
+  <div style="font-size:10px;color:var(--muted);margin-bottom:10px">{{ n.author }} · {{ n.issue_date or n.created_at.strftime("%d %b %Y") }}</div>
+  <div style="display:flex;gap:6px">
+    <a href="/safety-promotion/newsletter/{{ n.id }}" class="btn btn-nav btn-sm">View</a>
+    <form method="POST" action="/delete/newsletter/{{ n.id }}" style="display:inline"
+          onsubmit="return confirm('Delete Newsletter {{ n.id }}?')">
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+    </form>
+    {% if n.status=="Draft" %}
+    <form method="POST" action="/safety-promotion/newsletter/{{ n.id }}/publish" style="display:inline">
+      <button class="btn btn-outline btn-sm">Publish</button>
+    </form>
+    {% endif %}
+    {% if n.attachment %}
+    <a href="/spi/evidence/{{ n.attachment }}" target="_blank" class="btn btn-outline btn-sm">📎</a>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:12px">📰</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No Newsletters Yet</div>
+  <a href="/safety-promotion/newsletter/new" class="btn btn-nav">+ Create First Newsletter</a>
+</div>
+{% endif %}
+{% endblock %}

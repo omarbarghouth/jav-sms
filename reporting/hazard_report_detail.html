@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}{{ rep.id }} — Hazard Report{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+  <a href="/hazard-reports" style="color:var(--muted);font-size:13px">← All Hazard Reports</a>
+  <div style="display:flex;gap:8px">
+    <a href="/hazard-reports/{{ rep.id }}/print" target="_blank"
+       class="btn btn-nav" style="background:#065f46">🖨 Print Report</a>
+    <a href="/pdf/hazard-report/{{ rep.id }}" target="_blank"
+       class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c" title="Export ICAO/IOSA PDF">📄 ICAO PDF</a>
+    {% if rep.hazard_id %}
+    <a href="/hazard-log/{{ rep.hazard_id }}"
+       class="btn btn-outline">⚠ View Hazard →</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Header card -->
+<div class="card" style="padding:18px 22px;margin-bottom:18px;
+            border-left:4px solid
+            {% if rep.reporter_severity=='Critical' %}#dc2626
+            {% elif rep.reporter_severity=='High' %}#d97706
+            {% else %}var(--navy){% endif %}">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px">
+        Hazard Report
+      </div>
+      <div style="font-size:22px;font-weight:800;color:var(--navy);margin-bottom:4px">
+        {{ rep.generic_hazard or 'Untitled Report' }}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="ctrl-num">{{ rep.id }}</span>
+        <span class="badge
+          {% if rep.classification=='Operational' %}b-blue
+          {% elif rep.classification=='Technical' %}b-purple
+          {% elif rep.classification=='Human Factors' %}b-orange
+          {% elif rep.classification=='Environmental' %}b-green
+          {% else %}b-gray{% endif %}">
+          {{ rep.classification or '—' }}
+        </span>
+        {% if rep.status=='Closed' %}<span class="badge b-green">Closed</span>
+        {% elif rep.status=='Actioned' %}<span class="badge b-purple">Actioned</span>
+        {% elif rep.status=='Under Assessment' %}<span class="badge b-blue">Under Assessment</span>
+        {% else %}<span class="badge b-yellow">Submitted</span>{% endif %}
+      </div>
+    </div>
+    <div style="text-align:right;font-size:12px;color:var(--muted)">
+      <div>📅 {{ rep.date or '—' }}</div>
+      <div>📍 {{ rep.location or '—' }}</div>
+      <div>👤 {{ rep.reporter or 'Anonymous' }}</div>
+      <div style="font-size:10px;margin-top:4px">Submitted: {{ rep.created_at.strftime('%d %b %Y %H:%M') }}</div>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+
+  <!-- LEFT: Full report details -->
+  <div>
+    <div class="card">
+      <div class="card-title">Report Details</div>
+      <table style="font-size:13px;width:100%">
+        <tr>
+          <td style="color:var(--muted);padding:6px 0;width:130px;vertical-align:top">Department</td>
+          <td>{{ rep.department.name if rep.department else '—' }}</td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding:6px 0">Date</td>
+          <td>{{ rep.date or '—' }}</td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding:6px 0">Location</td>
+          <td>{{ rep.location or '—' }}</td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding:6px 0">Category</td>
+          <td>{{ rep.classification or '—' }}</td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted);padding:6px 0;vertical-align:top">Full Description</td>
+          <td style="line-height:1.7">{{ rep.description or '—' }}</td>
+        </tr>
+      </table>
+    </div>
+
+    {% if rep.consequences or rep.immediate_action or rep.suggested_mitigation %}
+    <div class="card">
+      <div class="card-title">Additional Information</div>
+      {% if rep.consequences %}
+      <div style="margin-bottom:14px">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Potential Consequences</div>
+        <p style="font-size:13px;color:#374151;line-height:1.6">{{ rep.consequences }}</p>
+      </div>
+      {% endif %}
+      {% if rep.immediate_action %}
+      <div style="margin-bottom:14px">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Immediate Action Taken</div>
+        <p style="font-size:13px;color:#374151;line-height:1.6">{{ rep.immediate_action }}</p>
+      </div>
+      {% endif %}
+      {% if rep.suggested_mitigation %}
+      <div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Reporter's Suggestion</div>
+        <p style="font-size:13px;color:#374151;line-height:1.6">{{ rep.suggested_mitigation }}</p>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Reporter severity perception -->
+    {% if rep.reporter_severity %}
+    <div class="card">
+      <div class="card-title">Reporter's Severity Perception</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:32px;font-weight:800;
+          color:{% if rep.reporter_severity=='Critical' %}#7f1d1d{% elif rep.reporter_severity=='High' %}#dc2626{% elif rep.reporter_severity=='Medium' %}#d97706{% else %}#15803d{% endif %}">
+          {{ rep.reporter_severity }}
+        </span>
+        <span style="font-size:12px;color:var(--muted)">
+          This is the reporter's personal perception.<br>
+          Actual risk level is determined by the Safety Department.
+        </span>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- RIGHT: Linked SMS records -->
+  <div>
+    <!-- Linked Hazard -->
+    <div class="card">
+      <div class="card-title">🔗 SMS Integration</div>
+      {% if hazard %}
+      <div style="border:1.5px solid #d97706;border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#d97706;margin-bottom:6px">
+          ⚠ Linked Hazard Record
+        </div>
+        <a href="/hazard-log/{{ hazard.id }}" class="mono"
+           style="color:#1d4ed8;font-size:13px;font-weight:700">{{ hazard.id }}</a>
+        <div style="font-size:12px;color:#374151;margin-top:5px">
+          {{ hazard.generic_hazard or '—' }}
+        </div>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          {% if hazard.risks %}
+          {% set r = hazard.risks[0] %}
+          <span style="font-size:15px;font-weight:800;font-family:'IBM Plex Mono',monospace;
+            color:{% if r.initial_tolerance=='INTOLERABLE' %}#dc2626{% elif r.initial_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+            {{ r.initial_risk_index }}
+          </span>
+          <span class="badge {% if r.initial_tolerance=='INTOLERABLE' %}b-red{% elif r.initial_tolerance=='TOLERABLE' %}b-yellow{% else %}b-green{% endif %}">
+            {{ r.initial_tolerance }}
+          </span>
+          {% else %}
+          <span class="badge b-yellow">Awaiting Risk Assessment</span>
+          {% endif %}
+        </div>
+        <div style="margin-top:10px;font-size:11.5px">
+          Status:
+          <strong style="color:{% if hazard.status=='Open' %}#d97706{% elif hazard.status=='Controlled' %}#15803d{% else %}#6b7280{% endif %}">
+            {{ hazard.status }}
+          </strong>
+        </div>
+        <a href="/hazard-log/{{ hazard.id }}" class="btn btn-outline btn-sm" style="margin-top:10px">
+          Open Hazard →
+        </a>
+      </div>
+      {% else %}
+      <div style="background:#f8f9fc;border-radius:8px;padding:12px;font-size:13px;color:var(--muted);text-align:center">
+        No hazard record linked yet.
+      </div>
+      {% endif %}
+
+      <!-- Risk Assessment -->
+      {% if ra %}
+      <div style="border:1.5px solid #7c3aed;border-radius:8px;padding:12px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#7c3aed;margin-bottom:5px">
+          📝 Risk Assessment
+        </div>
+        <a href="/risk-assessments/{{ ra.id }}" class="mono"
+           style="color:#1d4ed8;font-size:12px">{{ ra.control_number or ra.id }}</a>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">
+          {{ ra.status }} · REV{{ ra.revision or 0 }}
+        </div>
+        <a href="/risk-assessments/{{ ra.id }}" class="btn btn-outline btn-sm" style="margin-top:8px">
+          Open RA →
+        </a>
+      </div>
+      {% endif %}
+
+      <!-- Actions -->
+      {% if actions %}
+      <div style="border:1.5px solid #1e40af;border-radius:8px;padding:12px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#1e40af;margin-bottom:8px">
+          ✅ Linked Actions ({{ actions|length }})
+        </div>
+        {% for a in actions %}
+        <div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;
+                    display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <span class="mono" style="font-size:10px;color:var(--muted)">{{ a.id }}</span>
+            <div style="color:#374151;margin-top:1px">{{ (a.description or '—')[:50] }}</div>
+          </div>
+          {% if a.status=='Closed' %}<span class="badge b-green" style="font-size:10px">Closed</span>
+          {% elif a.status=='Overdue' %}<span class="badge b-red" style="font-size:10px">Overdue</span>
+          {% elif a.status=='In Progress' %}<span class="badge b-blue" style="font-size:10px">In Progress</span>
+          {% else %}<span class="badge b-yellow" style="font-size:10px">Open</span>{% endif %}
+        </div>
+        {% endfor %}
+        <a href="/actions?source=Hazard+Report" class="btn btn-outline btn-sm" style="margin-top:8px">
+          View All Actions →
+        </a>
+      </div>
+      {% endif %}
+
+      <!-- No SMS links yet -->
+      {% if not hazard and not ra and not actions %}
+      <div style="text-align:center;padding:14px 0">
+        <div style="color:var(--muted);font-size:13px;margin-bottom:12px">
+          This report has not yet been assessed by the Safety Department.
+        </div>
+        <a href="/hazard-log" class="btn btn-outline btn-sm">Go to Hazard Log →</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Update status -->
+    <div class="card">
+      <div class="card-title">Update Report Status</div>
+      <form method="POST" action="/hazard-reports/{{ rep.id }}/update-status"
+            style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div class="fg" style="margin:0;flex:1">
+          <label>Status</label>
+          <select name="status">
+            {% for s in ['Submitted','Under Assessment','Actioned','Closed'] %}
+            <option {% if rep.status==s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-nav btn-sm">Update</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

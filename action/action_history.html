@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Audit Trail — {{ a.id }}{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/actions/{{ a.id }}" style="color:var(--muted);font-size:13px">← Back to {{ a.id }}</a></div>
+<div class="page-title">Audit Trail — {{ a.id }}</div>
+<div class="page-sub">{{ (a.description or '')[:60] }} · Complete change history</div>
+<div class="card" style="margin-top:16px;padding:0">
+  {% if history %}
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Date / Time</th><th>Changed By</th><th>Field</th><th>From</th><th>To</th><th>Notes</th></tr></thead>
+      <tbody>
+      {% for h in history %}
+      <tr>
+        <td style="font-size:11px;font-family:monospace;white-space:nowrap">{{ h.changed_at.strftime('%d %b %Y %H:%M') if h.changed_at else '—' }}</td>
+        <td style="font-size:12px;font-weight:600">{{ h.changed_by or '—' }}</td>
+        <td><span class="badge b-gray" style="font-size:10px">{{ h.field_changed or 'status' }}</span></td>
+        <td style="font-size:11px;color:var(--muted)">{{ h.from_status or '—' }}</td>
+        <td>{% set sc={'Open':'b-blue','Assigned':'b-navy','In Progress':'b-blue','Overdue':'b-red','Returned':'b-yellow','Closed':'b-green'} %}
+          <span class="badge {{ sc.get(h.to_status,'b-gray') }}" style="font-size:10px">{{ h.to_status or '—' }}</span></td>
+        <td style="font-size:11px;color:#374151;max-width:200px">{{ (h.notes or '')[:80] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:32px;color:var(--muted)">
+    <div style="font-size:28px;margin-bottom:10px">📋</div><div>No history recorded yet.</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

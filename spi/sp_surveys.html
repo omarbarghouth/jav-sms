@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Safety Surveys{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion" style="color:var(--muted);font-size:13px">← Safety Promotion</a></div>
+<div class="page-title">Safety Surveys</div>
+<div class="page-sub">Safety culture · Fatigue · Training feedback · Reporting culture measurement</div>
+<div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+  <a href="/safety-promotion/survey/new" class="btn btn-nav btn-sm">+ New Survey</a>
+</div>
+{% if surveys %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
+{% for s in surveys %}
+{% set pct = ((s.response_count or 0) / (s.target_count or 1) * 100)|int %}
+<div class="card" style="border-top:4px solid {% if s.status=="Active" %}#15803d{% elif s.status=="Closed" %}#6b7280{% else %}#d97706{% endif %}">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span class="badge b-blue" style="font-size:10px">{{ s.survey_type }}</span>
+    <span class="badge {% if s.status=="Active" %}b-green{% elif s.status=="Closed" %}b-gray{% else %}b-yellow{% endif %}" style="font-size:10px">{{ s.status }}</span>
+  </div>
+  <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:5px">{{ s.title }}</div>
+  {% if s.department %}<div style="font-size:11px;color:var(--muted);margin-bottom:3px">{{ s.department.name }}</div>{% endif %}
+  <p style="font-size:12px;color:#374151;line-height:1.5;margin-bottom:10px">{{ (s.description or "")[:80] }}</p>
+  <!-- Progress -->
+  <div style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+      <span style="color:var(--muted)">Participation</span>
+      <span style="font-weight:700;color:{% if pct>=80 %}#15803d{% elif pct>=50 %}#d97706{% else %}#dc2626{% endif %}">{{ [pct,100]|min }}%</span>
+    </div>
+    <div style="height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden">
+      <div style="height:100%;width:{{ [pct,100]|min }}%;background:{% if pct>=80 %}#15803d{% elif pct>=50 %}#d97706{% else %}#dc2626{% endif %};border-radius:99px"></div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:3px">{{ s.response_count or 0 }} of {{ s.target_count or 0 }} responses</div>
+  </div>
+  <div style="font-size:10px;color:var(--muted);margin-bottom:10px">{{ s.start_date or "—" }} → {{ s.end_date or "—" }}</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <a href="/safety-promotion/survey/{{ s.id }}" class="btn btn-nav btn-sm">📊 Dashboard</a>
+    <form method="POST" action="/delete/survey/{{ s.id }}" style="display:inline"
+          onsubmit="return confirm('Delete Survey {{ s.id }}?')">
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
+    </form>
+    {% if s.status=="Draft" %}
+    <form method="POST" action="/safety-promotion/survey/{{ s.id }}/activate" style="display:inline">
+      <button class="btn btn-outline btn-sm">Activate</button>
+    </form>
+    {% elif s.status=="Active" %}
+    <form method="POST" action="/safety-promotion/survey/{{ s.id }}/respond" style="display:inline">
+      <button class="btn btn-outline btn-sm" style="color:#15803d;border-color:#15803d">+ Response</button>
+    </form>
+    <form method="POST" action="/safety-promotion/survey/{{ s.id }}/close" style="display:inline">
+      <button class="btn btn-outline btn-sm">Close</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:12px">📋</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">No Surveys Yet</div>
+  <a href="/safety-promotion/survey/new" class="btn btn-nav">+ Create First Survey</a>
+</div>
+{% endif %}
+{% endblock %}

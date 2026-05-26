@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Distribution List{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion" style="color:var(--muted);font-size:13px">← Safety Promotion</a></div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Email Distribution List</div>
+    <div class="page-sub">Manage employee email recipients for Safety Promotion communications</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/safety-promotion/email-log" class="btn btn-outline btn-sm">📊 Email Log</a>
+  </div>
+</div>
+
+<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+  <div class="stat-card" style="--accent:#0f1c3f">
+    <div class="stat-val" style="color:#0f1c3f">{{ total }}</div>
+    <div class="stat-lbl">Active Recipients</div>
+  </div>
+  {% for d in depts %}
+  <div class="stat-card" style="--accent:#1d4ed8">
+    <div class="stat-val" style="color:#1d4ed8;font-size:20px">{{ d.distribution_members.filter_by(is_active=True).count() if d.distribution_members is defined else recipients|selectattr("department_id","equalto",d.id)|list|length }}</div>
+    <div class="stat-lbl" style="font-size:9px">{{ d.name[:20] }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start">
+
+  <!-- Recipients Table -->
+  <div class="card" style="padding:0">
+    <div style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;color:var(--navy)">📧 Email Recipients</div>
+      <form method="GET" style="display:flex;gap:8px">
+        <select name="dept" onchange="this.form.submit()" style="border:1.5px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px">
+          <option value="">All Departments</option>
+          {% for d in depts %}
+          <option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+    {% if recipients %}
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Department</th><th>Position</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for r in recipients %}
+        <tr>
+          <td style="font-size:12px;font-weight:600">{{ r.name or '—' }}</td>
+          <td style="font-size:12px;font-family:monospace">{{ r.email }}</td>
+          <td style="font-size:11px">{{ r.department.name if r.department else '—' }}</td>
+          <td style="font-size:11px;color:var(--muted)">{{ r.position or '—' }}</td>
+          <td>
+            {% if r.is_active %}<span class="badge b-green b-dot" style="font-size:10px">Active</span>
+            {% else %}<span class="badge b-gray b-dot" style="font-size:10px">Inactive</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap">
+            <form method="POST" action="/safety-promotion/distribution/{{ r.id }}/toggle" style="display:inline">
+              <button class="btn btn-outline btn-sm" style="font-size:10px">
+                {% if r.is_active %}Disable{% else %}Enable{% endif %}
+              </button>
+            </form>
+            <form method="POST" action="/safety-promotion/distribution/{{ r.id }}/delete" style="display:inline"
+                  onsubmit="return confirm('Remove {{ r.email }}?')">
+              <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;font-size:10px">🗑</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:40px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:10px">📭</div>
+      <div style="font-weight:700">No recipients yet</div>
+      <p style="font-size:13px;margin-top:6px">Add individual emails or bulk import below.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Add & Import -->
+  <div>
+    <div class="card">
+      <div class="card-title">➕ Add Recipient</div>
+      <form method="POST" action="/safety-promotion/distribution/add">
+        <div class="fg"><label>Full Name</label><input type="text" name="name" placeholder="e.g. Captain Omar Al-Hassan"/></div>
+        <div class="fg"><label>Email Address *</label><input type="email" name="email" required placeholder="omar@jordanaviation.com"/></div>
+        <div class="fg"><label>Department</label>
+          <select name="department_id">
+            <option value="">Select…</option>
+            {% for d in depts %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="fg"><label>Position</label><input type="text" name="position" placeholder="e.g. Captain, Safety Officer"/></div>
+        <button type="submit" class="btn btn-nav" style="width:100%">+ Add to List</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📥 Bulk Import CSV</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+        Format: <code>Name, Email, DeptID, Position</code><br>One entry per line.
+      </p>
+      <form method="POST" action="/safety-promotion/distribution/import">
+        <div class="fg">
+          <textarea name="csv_text" rows="6" placeholder="Captain Omar, omar@jav.com, 1, Captain&#10;Safety Officer, safety@jav.com, 2, Safety Officer"></textarea>
+        </div>
+        <button type="submit" class="btn btn-nav" style="width:100%">📥 Import</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

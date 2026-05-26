@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Add Lesson Learned{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion/lessons" style="color:var(--muted);font-size:13px">← Lessons Library</a></div>
+<div class="page-title">Publish Lesson Learned</div>
+<form class="form-card" method="POST" enctype="multipart/form-data" style="max-width:640px">
+  <div class="sec">Lesson Information</div>
+  <div class="g2">
+    <div class="fg"><label>Reference Number</label><input type="text" name="ref_number" placeholder="e.g. LL-2026-001"/></div>
+    <div class="fg"><label>Category *</label>
+      <select name="category" required>
+        {% for c in ["Incident","Audit","Investigation","Operational","Hazard","Training"] %}
+        <option>{{ c }}</option>{% endfor %}
+      </select></div>
+  </div>
+  <div class="fg"><label>Title *</label><input type="text" name="title" required placeholder="Lesson learned title…"/></div>
+  <div class="g2">
+    <div class="fg"><label>Date</label><input type="date" name="date"/></div>
+    <div class="fg"><label>Author</label><input type="text" name="author" placeholder="Safety Department"/></div>
+  </div>
+  <div class="fg"><label>Department</label>
+    <select name="department_id">
+      <option value="">All Departments</option>
+      {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+    </select></div>
+  <div class="sec">Content</div>
+  <div class="fg"><label>Description / What Happened *</label><textarea name="description" required rows="5" placeholder="Describe the event or finding…"></textarea></div>
+  <div class="fg"><label>Key Lesson *</label><textarea name="lesson" required rows="3" placeholder="What is the key lesson to learn?"></textarea></div>
+  <div class="fg"><label>Recommendations</label><textarea name="recommendations" rows="3" placeholder="Recommendations for improvement…"></textarea></div>
+  <div class="fg"><label>Related Hazard ID (optional)</label><input type="text" name="linked_hazard_id" placeholder="e.g. HAZ-SMS-01"/></div>
+  <div class="fg"><label>Attachment (PDF, DOCX, Image)</label>
+    <input type="file" name="attachment" accept=".pdf,.docx,.png,.jpg,.jpeg"
+           style="border:1.5px solid var(--border);border-radius:7px;padding:8px;font-size:12px;font-family:inherit;background:#fafbfe"/></div>
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <button type="submit" class="btn btn-nav">📚 Publish Lesson</button>
+    <a href="/safety-promotion/lessons" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}

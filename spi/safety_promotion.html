@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Safety Promotion{% endblock %}
+{% block content %}
+
+  <!-- Email Distribution Stats -->
+  <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
+    <div class="stat-card" style="--accent:#0f1c3f">
+      <div class="stat-val" style="color:#0f1c3f">{{ emails_sent or 0 }}</div>
+      <div class="stat-lbl">Emails Sent</div>
+      <div class="stat-sub"><a href="/safety-promotion/email-log" style="color:var(--navy)">View Log →</a></div>
+    </div>
+    <div class="stat-card" style="--accent:#1d4ed8">
+      <div class="stat-val" style="color:#1d4ed8">{{ dist_count or 0 }}</div>
+      <div class="stat-lbl">Email Recipients</div>
+      <div class="stat-sub"><a href="/safety-promotion/distribution" style="color:var(--navy)">Manage →</a></div>
+    </div>
+    <div class="stat-card" style="--accent:#7c3aed">
+      <div class="stat-val" style="color:#7c3aed">{{ avg_response_rate or 0 }}%</div>
+      <div class="stat-lbl">Avg Survey Response</div>
+    </div>
+  </div>
+<div class="page-title">Safety Promotion</div>
+<div class="page-sub">ICAO Annex 19 §6.4 · Safety communication, training, and awareness management</div>
+
+<!-- KPI cards -->
+<div class="stat-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:22px">
+  <div class="stat-card" style="border-top:3px solid #dc2626">
+    <div class="stat-val" style="color:#dc2626">{{ overdue_training }}</div>
+    <div class="stat-lbl">⚠ Expired Training</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #d97706">
+    <div class="stat-val" style="color:#d97706">{{ due_soon }}</div>
+    <div class="stat-lbl">🕐 Due Soon</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #dc2626">
+    <div class="stat-val" style="color:#dc2626">{{ bulletins|length }}</div>
+    <div class="stat-lbl">🔔 Active Bulletins</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #1d4ed8">
+    <div class="stat-val" style="color:#1d4ed8">{{ newsletters|length }}</div>
+    <div class="stat-lbl">📰 Newsletters</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #15803d">
+    <div class="stat-val" style="color:#15803d">{{ campaigns|length }}</div>
+    <div class="stat-lbl">📣 Campaigns</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #7c3aed">
+    <div class="stat-val" style="color:#7c3aed">{{ surveys|length }}</div>
+    <div class="stat-lbl">📋 Active Surveys</div>
+  </div>
+</div>
+
+<!-- Quick action buttons -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px">
+  <a href="/safety-promotion/bulletin/new" class="btn btn-nav">+ New Bulletin</a>
+  <a href="/safety-promotion/newsletter/new" class="btn btn-outline">+ Newsletter</a>
+  <a href="/safety-promotion/training/new" class="btn btn-outline">+ Training Record</a>
+  <a href="/safety-promotion/lesson/new" class="btn btn-outline">+ Lesson Learned</a>
+  <a href="/safety-promotion/survey/new" class="btn btn-outline">+ Survey</a>
+  <a href="/safety-promotion/campaign/new" class="btn btn-outline">+ Campaign</a>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+  <!-- Active Bulletins -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0">🔔 Active Safety Bulletins</div>
+      <a href="/safety-promotion/distribution" class="btn btn-outline btn-sm" style="margin-bottom:14px">👥 Distribution List</a>
+  <a href="/safety-promotion/bulletins" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    {% for b in bulletins %}
+    <div style="border-left:4px solid {% if b.severity=='Critical' %}#dc2626{% elif b.severity=='High' %}#ea580c{% else %}#1d4ed8{% endif %};padding:10px 12px;background:#f8f9fc;border-radius:0 7px 7px 0;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <span class="mono" style="font-size:10px;color:var(--muted)">{{ b.ref_number or b.id }}</span>
+          <div style="font-size:13px;font-weight:700;color:var(--navy);margin-top:2px">{{ b.title }}</div>
+        </div>
+        <span class="badge {% if b.severity=='Critical' %}b-red{% elif b.severity=='High' %}b-orange{% else %}b-blue{% endif %}" style="font-size:10px;flex-shrink:0">{{ b.bulletin_type }}</span>
+      </div>
+      <p style="font-size:12px;color:#374151;margin-top:5px;line-height:1.5">{{ (b.content or '')[:100] }}{% if (b.content or '')|length > 100 %}…{% endif %}</p>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--muted)">
+        <span>{{ b.issued_by }} · {{ b.created_at.strftime('%d %b %Y') }}</span>
+        <a href="/safety-promotion/bulletin/{{ b.id }}" style="color:#1d4ed8;font-weight:700">Read →</a>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:13px">No active bulletins.</p>
+    {% endfor %}
+    <a href="/safety-promotion/bulletin/new" class="btn btn-nav btn-sm" style="margin-top:8px">+ New Bulletin</a>
+  </div>
+
+  <!-- Newsletters -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0">📰 Latest Newsletters</div>
+      <a href="/safety-promotion/newsletters" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    {% for n in newsletters %}
+    <div style="border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <span class="mono" style="font-size:10px;color:var(--muted)">{{ n.ref_number }}</span>
+          <div style="font-size:13px;font-weight:700;color:var(--navy);margin-top:2px">{{ n.title }}</div>
+        </div>
+        <span class="badge b-green" style="font-size:10px">Published</span>
+      </div>
+      <p style="font-size:12px;color:#374151;margin-top:4px">{{ (n.summary or '')[:80] }}</p>
+      <div style="font-size:10px;color:var(--muted);margin-top:4px">{{ n.author }} · {{ n.issue_date or n.created_at.strftime('%d %b %Y') }}</div>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:13px">No newsletters yet.</p>
+    {% endfor %}
+    <a href="/safety-promotion/newsletter/new" class="btn btn-outline btn-sm" style="margin-top:8px">+ New Newsletter</a>
+  </div>
+
+  <!-- Training -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0">🎓 Recent Training Records</div>
+      <a href="/safety-promotion/training" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    {% if overdue_training > 0 %}
+    <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#dc2626;font-weight:700">
+      ⚠ {{ overdue_training }} expired training record(s) require immediate attention
+    </div>
+    {% endif %}
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Employee</th><th>Type</th><th>Expiry</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for t in trainings[:6] %}
+          <tr>
+            <td style="font-size:12px"><strong>{{ t.employee_name }}</strong>
+              {% if t.department %}<div style="font-size:10px;color:var(--muted)">{{ t.department.code }}</div>{% endif %}
+            </td>
+            <td style="font-size:11px">{{ t.training_type }}</td>
+            <td style="font-size:11px">{{ t.expiry_date or '—' }}</td>
+            <td>{% if t.status=='Expired' %}<span class="badge b-red" style="font-size:9px">Expired</span>
+                {% elif t.status=='Due Soon' %}<span class="badge b-yellow" style="font-size:9px">Due Soon</span>
+                {% elif t.status=='Scheduled' %}<span class="badge b-blue" style="font-size:9px">Scheduled</span>
+                {% else %}<span class="badge b-green" style="font-size:9px">Current</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <a href="/safety-promotion/training/new" class="btn btn-outline btn-sm" style="margin-top:8px">+ Add Record</a>
+  </div>
+
+  <!-- Lessons Learned -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0">📚 Lessons Learned</div>
+      <a href="/safety-promotion/lessons" class="btn btn-outline btn-sm">Library →</a>
+    </div>
+    {% for ll in lessons %}
+    <div style="border-left:3px solid #7c3aed;padding:9px 12px;background:#faf5ff;border-radius:0 7px 7px 0;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="badge b-purple" style="font-size:10px">{{ ll.category }}</span>
+        <span style="font-size:10px;color:var(--muted)">{{ ll.date or ll.created_at.strftime('%d %b %Y') }}</span>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-top:4px">{{ ll.title }}</div>
+      <p style="font-size:11px;color:#374151;margin-top:3px">{{ (ll.description or '')[:80] }}</p>
+      <a href="/safety-promotion/lesson/{{ ll.id }}" style="font-size:11px;color:#7c3aed;font-weight:700">Read →</a>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:13px">No lessons learned published yet.</p>
+    {% endfor %}
+    <a href="/safety-promotion/lesson/new" class="btn btn-outline btn-sm" style="margin-top:8px">+ Add Lesson</a>
+  </div>
+</div>
+
+<!-- Campaigns + Surveys row -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0">📣 Active Campaigns</div>
+      <a href="/safety-promotion/campaigns" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    {% for c in campaigns %}
+    <div style="border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start">
+      <span style="font-size:24px">📣</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--navy)">{{ c.title }}</div>
+        <div style="font-size:11px;color:var(--muted)">{{ c.campaign_type }} · {{ c.start_date or '—' }} → {{ c.end_date or '—' }}</div>
+        <p style="font-size:11px;color:#374151;margin-top:3px">{{ (c.description or '')[:60] }}</p>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:13px">No active campaigns.</p>
+    {% endfor %}
+    <a href="/safety-promotion/campaign/new" class="btn btn-outline btn-sm" style="margin-top:8px">+ New Campaign</a>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0">📋 Active Surveys</div>
+      <a href="/safety-promotion/surveys" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    {% for s in surveys %}
+    <div style="border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700;color:var(--navy)">{{ s.title }}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ s.survey_type }} · Closes {{ s.end_date or '—' }}</div>
+      <div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden">
+          {% set pct = ((s.response_count or 0) / (s.target_count or 1) * 100)|int %}
+          <div style="height:100%;width:{{ [pct,100]|min }}%;background:#15803d;border-radius:99px"></div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#374151">{{ s.response_count or 0 }}/{{ s.target_count or 0 }}</span>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:13px">No active surveys.</p>
+    {% endfor %}
+    <a href="/safety-promotion/survey/new" class="btn btn-outline btn-sm" style="margin-top:8px">+ New Survey</a>
+  </div>
+</div>
+{% endblock %}
