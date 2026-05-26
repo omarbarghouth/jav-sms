@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} — {{ title }}{% endblock %}
+{% block content %}
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px">
+  <div style="font-size:72px;font-weight:900;color:var(--navy);opacity:.12;line-height:1">{{ code }}</div>
+  <div style="font-size:22px;font-weight:800;color:var(--navy);margin-top:-20px;margin-bottom:12px">{{ title }}</div>
+  <p style="color:var(--muted);font-size:14px;max-width:420px">{{ message }}</p>
+  <div style="display:flex;gap:12px;margin-top:24px">
+    <a href="javascript:history.back()" class="btn btn-outline">← Go Back</a>
+    <a href="/dashboard" class="btn btn-nav">Dashboard</a>
+  </div>
+</div>
+{% endblock %}
