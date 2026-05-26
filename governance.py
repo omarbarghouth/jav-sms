@@ -396,16 +396,20 @@ def srb_add_decision(mid):
     )
     db.session.add(dec)
 
-    # If decision_type requires action, auto-create an Action record
-    if dec.decision_type == 'Action Required' and dec.responsible_party:
+    # Auto-create a linked Action whenever a responsible party is assigned
+    if dec.responsible_party:
         from models import Action
+        # Build a slash-free action ID: e.g. ACT-SRB20260011-D01
+        safe_mid   = mid.replace('/', '')          # SRB/2026/001 → SRB20260011
+        action_id  = f'ACT-{safe_mid}-D{seq:02d}'
+        priority   = 'High' if dec.decision_type in ('Action Required', 'Escalated') else 'Medium'
         action = Action(
-            id          = f'ACT-SRB-{dec.decision_ref}',
+            id          = action_id,
             source      = 'SRB Decision',
-            description = dec.decision_text,
+            description = f'[{dec.decision_ref}] {dec.decision_text}',
             owner       = dec.responsible_party,
-            due_date    = dec.due_date,
-            priority    = 'High',
+            due_date    = dec.due_date or '',
+            priority    = priority,
             status      = 'Open',
             assigned_by = _current_user(),
         )
@@ -663,9 +667,9 @@ def gov_widgets():
     violations   = GovernanceAuditLog.query.filter_by(sod_check='VIOLATION').count()
 
     return jsonify({
-        'ae_name':      ae.full_name if ae else None,
-        'pending_ra':   pending_ra,
+        'ae_name':        ae.full_name if ae else None,
+        'pending_ra':     pending_ra,
         'open_decisions': open_dec,
-        'next_srb_date': next_srb.scheduled_date if next_srb else None,
+        'next_srb_date':  next_srb.scheduled_date if next_srb else None,
         'sod_violations': violations,
     })
