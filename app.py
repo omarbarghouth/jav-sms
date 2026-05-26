@@ -302,6 +302,19 @@ def require_login(f):
         return f(*args, **kwargs)
     return decorated
 
+def admin_required(f):
+    """Decorator — requires login AND admin role."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not is_logged_in():
+            return redirect(url_for('admin_login', next=request.path))
+        user = User.query.filter_by(username=session.get('admin_user'), is_active=True).first()
+        if not user or user.role != 'admin':
+            return render_template('error.html', code=403, title='Access Denied',
+                                   message='This page requires administrator access.'), 403
+        return f(*args, **kwargs)
+    return decorated
+
 def seed_admin():
     """Create default admin account if no users exist."""
     if User.query.count() == 0:
