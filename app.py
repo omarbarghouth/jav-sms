@@ -9596,6 +9596,38 @@ with app.app_context():
             ('report_type','VARCHAR(50)'),('consequences','TEXT'),('suggestion','TEXT'),
             ('status','VARCHAR(20) DEFAULT "Submitted"'),('created_at','DATETIME'),
         ],
+        'safety_surveys': [
+            ('title','VARCHAR(200)'),('survey_type','VARCHAR(50)'),
+            ('department_id','INTEGER'),('start_date','VARCHAR(20)'),
+            ('end_date','VARCHAR(20)'),('description','TEXT'),('questions','TEXT'),
+            ('status','VARCHAR(20) DEFAULT "Draft"'),
+            ('target_count','INTEGER DEFAULT 0'),('response_count','INTEGER DEFAULT 0'),
+            ('created_at','DATETIME'),
+        ],
+        'safety_bulletins': [
+            ('title','VARCHAR(200)'),('content','TEXT'),('bulletin_type','VARCHAR(50)'),
+            ('department_id','INTEGER'),('issued_by','VARCHAR(100)'),
+            ('issue_date','VARCHAR(20)'),('expiry_date','VARCHAR(20)'),
+            ('status','VARCHAR(20) DEFAULT "Draft"'),('created_at','DATETIME'),
+        ],
+        'safety_newsletters': [
+            ('title','VARCHAR(200)'),('content','TEXT'),('edition','VARCHAR(30)'),
+            ('published_by','VARCHAR(100)'),('publish_date','VARCHAR(20)'),
+            ('status','VARCHAR(20) DEFAULT "Draft"'),('created_at','DATETIME'),
+        ],
+        'safety_campaigns': [
+            ('title','VARCHAR(200)'),('description','TEXT'),('campaign_type','VARCHAR(50)'),
+            ('department_id','INTEGER'),('start_date','VARCHAR(20)'),('end_date','VARCHAR(20)'),
+            ('owner','VARCHAR(100)'),('status','VARCHAR(20) DEFAULT "Draft"'),
+            ('target_audience','VARCHAR(200)'),('created_at','DATETIME'),
+        ],
+        'lessons_learned': [
+            ('title','VARCHAR(200)'),('description','TEXT'),('lesson_type','VARCHAR(50)'),
+            ('department_id','INTEGER'),('source_ref','VARCHAR(50)'),
+            ('applicability','TEXT'),('status','VARCHAR(20) DEFAULT "Draft"'),
+            ('approved_by','VARCHAR(100)'),('approved_date','VARCHAR(20)'),
+            ('created_at','DATETIME'),
+        ],
         # ── ICAO Governance tables (Phase 1) ──────────────────────────────────
         'accountable_executives': [
             ('user_id','INTEGER'),('full_name','VARCHAR(120)'),('title','VARCHAR(120)'),
