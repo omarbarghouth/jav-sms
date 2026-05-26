@@ -131,7 +131,7 @@ app.config['WTF_CSRF_TIME_LIMIT'] = 3600   # 1-hour token lifetime
 
 # ── Rate limiting (flask-limiter) ─────────────────────────────────────────────
 limiter = Limiter(
-    get_remote_address,
+    key_func=get_remote_address,
     app=app,
     default_limits=[],          # no blanket limit; apply per-route
     storage_uri='memory://',    # in-proc store — fine for 1-worker Gunicorn
