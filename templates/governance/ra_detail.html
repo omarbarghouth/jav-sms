@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}Risk Acceptance — {{ ra.ref_number }}{% endblock %}
+{% block content %}
+<div class="page-title">Risk Acceptance Record</div>
+<div class="page-sub">ICAO Doc 9859 §5.5 — Formal Accountable Executive acceptance of INTOLERABLE / TOLERABLE risk</div>
+
+<!-- Header Bar -->
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span class="ctrl-num" style="font-size:13px">{{ ra.ref_number }}</span>
+    <span class="badge {% if ra.status=='Approved' %}b-green{% elif ra.status=='Rejected' %}b-gray{% elif ra.status=='Pending AE' %}b-red{% elif ra.status=='Conditional' %}b-blue{% else %}b-yellow{% endif %}">
+      {{ ra.status }}
+    </span>
+    <span class="badge {% if ra.risk_tolerance=='INTOLERABLE' %}b-red{% else %}b-yellow{% endif %}" style="font-size:10px">
+      {{ ra.risk_tolerance }}
+    </span>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/governance/risk-acceptance/{{ ra.id }}/print" target="_blank" class="btn btn-outline btn-sm">🖨 Print / Export</a>
+    <a href="/governance/risk-acceptance" class="btn btn-outline btn-sm">← Register</a>
+  </div>
+</div>
+
+<!-- Status Workflow Timeline -->
+<div class="card" style="margin-bottom:16px;padding:16px">
+  <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:12px">Approval Workflow</div>
+  <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap">
+    <!-- Step 1: Submitted -->
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:120px">
+      <div style="width:32px;height:32px;border-radius:50%;background:#15803d;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900">✓</div>
+      <div style="font-size:10px;font-weight:700;color:#15803d;margin-top:4px">SUBMITTED</div>
+      <div style="font-size:10px;color:var(--muted)">{{ ra.submitted_by }}</div>
+      <div style="font-size:10px;color:var(--muted)">{{ ra.submitted_date }}</div>
+    </div>
+    <div style="flex:1;height:2px;background:{% if ra.safety_mgr_review %}#15803d{% else %}var(--border){% endif %};min-width:30px"></div>
+    <!-- Step 2: Safety Review -->
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:120px">
+      <div style="width:32px;height:32px;border-radius:50%;background:{% if ra.safety_mgr_review %}#15803d{% elif ra.status=='Pending Safety Review' %}#d97706{% else %}var(--border){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900">
+        {% if ra.safety_mgr_review %}✓{% else %}2{% endif %}
+      </div>
+      <div style="font-size:10px;font-weight:700;color:{% if ra.safety_mgr_review %}#15803d{% elif ra.status=='Pending Safety Review' %}#d97706{% else %}var(--muted){% endif %};margin-top:4px">SAFETY REVIEW</div>
+      {% if ra.safety_mgr_review %}
+      <div style="font-size:10px;color:var(--muted)">{{ ra.safety_mgr_by }}</div>
+      <div style="font-size:10px;color:var(--muted)">{{ ra.safety_mgr_date }}</div>
+      {% else %}
+      <div style="font-size:10px;color:var(--muted)">Pending</div>
+      {% endif %}
+    </div>
+    <div style="flex:1;height:2px;background:{% if ra.ae_decision %}#15803d{% else %}var(--border){% endif %};min-width:30px"></div>
+    <!-- Step 3: AE Decision -->
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:120px">
+      <div style="width:32px;height:32px;border-radius:50%;background:{% if ra.ae_decision=='Approved' %}#15803d{% elif ra.ae_decision=='Rejected' %}#dc2626{% elif ra.ae_decision=='Conditional' %}#1e40af{% elif ra.status=='Pending AE' %}#d97706{% else %}var(--border){% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900">
+        {% if ra.ae_decision=='Approved' %}✓{% elif ra.ae_decision=='Rejected' %}✗{% elif ra.ae_decision %}C{% else %}3{% endif %}
+      </div>
+      <div style="font-size:10px;font-weight:700;color:{% if ra.ae_decision %}#15803d{% elif ra.status=='Pending AE' %}#d97706{% else %}var(--muted){% endif %};margin-top:4px">AE DECISION</div>
+      {% if ra.ae_decision %}
+      <div style="font-size:10px;color:var(--muted)">{{ ra.ae_decision_by }}</div>
+      <div style="font-size:10px;color:var(--muted)">{{ ra.ae_decision_date }}</div>
+      {% else %}
+      <div style="font-size:10px;color:var(--muted)">Pending</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Left Column: Risk Details -->
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">Risk Details</div>
+      <div style="display:grid;gap:10px">
+        <div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Risk ID</div>
+          <div><a href="/risk/{{ ra.risk_id }}" style="font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:13px;color:var(--navy);text-decoration:none">{{ ra.risk_id }}</a></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Risk Index</div>
+            <div style="font-size:24px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:{% if ra.risk_tolerance=='INTOLERABLE' %}#dc2626{% else %}#d97706{% endif %}">{{ ra.risk_index }}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Tolerance</div>
+            <div style="margin-top:4px"><span class="badge {% if ra.risk_tolerance=='INTOLERABLE' %}b-red{% else %}b-yellow{% endif %}">{{ ra.risk_tolerance }}</span></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Risk Description</div>
+          <div style="font-size:12px;margin-top:2px">{{ ra.risk_description }}</div>
+        </div>
+        {% if ra.valid_until %}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Valid Until</div>
+            <div style="font-size:12px;font-weight:600;margin-top:2px">{{ ra.valid_until }}</div>
+          </div>
+          {% if ra.review_date %}
+          <div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Review Date</div>
+            <div style="font-size:12px;font-weight:600;margin-top:2px">{{ ra.review_date }}</div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Justification -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">Acceptance Justification</div>
+      <div style="font-size:12px;line-height:1.6;white-space:pre-wrap">{{ ra.justification }}</div>
+    </div>
+
+    {% if ra.mitigations_in_place %}
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:8px">Mitigations In Place</div>
+      <div style="font-size:12px;line-height:1.6;white-space:pre-wrap">{{ ra.mitigations_in_place }}</div>
+    </div>
+    {% endif %}
+
+    {% if ra.conditions %}
+    <div class="card">
+      <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:8px">Conditions / Monitoring</div>
+      <div style="font-size:12px;line-height:1.6;white-space:pre-wrap">{{ ra.conditions }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Right Column: Decisions / Actions -->
+  <div>
+
+    <!-- Safety Manager Review -->
+    {% if ra.status == 'Pending Safety Review' and is_safety_mgr %}
+    <div class="card" style="margin-bottom:16px;background:#fffbeb;border:1px solid #fde68a">
+      <div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #fde68a">Safety Manager Review Required</div>
+      <form method="POST" action="/governance/risk-acceptance/{{ ra.id }}/safety-review">
+        <div style="display:grid;gap:10px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Review Notes</label>
+            <textarea name="review_notes" rows="3" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px;resize:vertical" placeholder="Record your review findings..."></textarea>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button type="submit" name="action" value="forward" class="btn btn-nav">Forward to AE →</button>
+            <button type="submit" name="action" value="return" class="btn" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer">Return for Revision</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    {% elif ra.safety_mgr_review %}
+    <div class="card" style="margin-bottom:16px;background:#f0fdf4;border:1px solid #86efac">
+      <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:8px">✓ Safety Manager Review Complete</div>
+      <div style="font-size:12px;color:#166534">Reviewed by <strong>{{ ra.safety_mgr_by }}</strong> on {{ ra.safety_mgr_date }}</div>
+    </div>
+    {% endif %}
+
+    <!-- AE Decision -->
+    {% if ra.status == 'Pending AE' and is_ae %}
+    <div class="card" style="margin-bottom:16px;background:#fff8f8;border:1px solid #fca5a5">
+      <div style="font-size:12px;font-weight:800;color:#dc2626;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #fca5a5">Accountable Executive Decision Required</div>
+      {% if ae %}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Acting as: <strong>{{ ae.full_name }}</strong> — {{ ae.title }}</div>
+      {% endif %}
+      <form method="POST" action="/governance/risk-acceptance/{{ ra.id }}/ae-decision">
+        <div style="display:grid;gap:10px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">AE Decision *</label>
+            <select name="ae_decision" required style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+              <option value="">Select decision…</option>
+              <option value="Approved">Approved — Accept risk as stated</option>
+              <option value="Conditional">Conditional — Accept with additional requirements</option>
+              <option value="Rejected">Rejected — Risk not accepted; further mitigation required</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">AE Notes / Rationale *</label>
+            <textarea name="ae_notes" required rows="4" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px;resize:vertical" placeholder="Document the rationale for this decision..."></textarea>
+          </div>
+          <div class="card" style="background:#fff8f8;padding:10px;margin:0">
+            <p style="font-size:11px;color:#92400e;margin:0"><strong>⚠ ICAO Governance Note:</strong> This decision is irreversible and will be permanently recorded in the governance audit trail with your identity and timestamp. It constitutes formal Accountable Executive acceptance per ICAO Doc 9859 §5.5.</p>
+          </div>
+          <button type="submit" class="btn btn-nav">Record AE Decision</button>
+        </div>
+      </form>
+    </div>
+    {% elif ra.ae_decision %}
+    <div class="card" style="margin-bottom:16px;background:{% if ra.ae_decision=='Approved' %}#f0fdf4{% elif ra.ae_decision=='Rejected' %}#fff1f2{% else %}#eff6ff{% endif %};border:1px solid {% if ra.ae_decision=='Approved' %}#86efac{% elif ra.ae_decision=='Rejected' %}#fca5a5{% else %}#bfdbfe{% endif %}">
+      <div style="font-size:12px;font-weight:800;color:{% if ra.ae_decision=='Approved' %}#15803d{% elif ra.ae_decision=='Rejected' %}#dc2626{% else %}#1e40af{% endif %};margin-bottom:8px">
+        {% if ra.ae_decision=='Approved' %}✓{% elif ra.ae_decision=='Rejected' %}✗{% else %}◈{% endif %} AE Decision: {{ ra.ae_decision }}
+      </div>
+      <div style="font-size:12px;margin-bottom:6px">Decided by <strong>{{ ra.ae_decision_by }}</strong> on {{ ra.ae_decision_date }}</div>
+      {% if ra.ae_notes %}
+      <div style="font-size:12px;color:#374151;white-space:pre-wrap;background:#fff;padding:8px;border-radius:4px;margin-top:6px">{{ ra.ae_notes }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Governance Audit Trail -->
+    <div class="card">
+      <div style="font-size:12px;font-weight:800;color:var(--navy);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">Governance Audit Trail</div>
+      {% if audit_logs %}
+      <div style="display:grid;gap:6px">
+        {% for log in audit_logs %}
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:{% if log.sod_check=='VIOLATION' %}#fff1f2{% else %}#f9fafb{% endif %};border-radius:6px;border:1px solid {% if log.sod_check=='VIOLATION' %}#fca5a5{% else %}var(--border){% endif %}">
+          <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:{% if log.action=='ae_decision' %}#0f1c3f{% elif log.action=='safety_review' %}#1e40af{% elif log.action=='submitted' %}#15803d{% else %}#6b7280{% endif %};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">
+            {{ log.actor_username[:2]|upper }}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;font-weight:700;color:var(--navy)">{{ log.action|replace('_',' ')|title }}</div>
+            <div style="font-size:10px;color:var(--muted)">{{ log.actor_username }} ({{ log.actor_role }}) · {{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+            {% if log.notes %}<div style="font-size:11px;color:#374151;margin-top:3px">{{ log.notes[:120] }}</div>{% endif %}
+            {% if log.sod_check=='VIOLATION' %}<div style="font-size:10px;color:#dc2626;font-weight:700;margin-top:2px">⚠ SOD VIOLATION: {{ log.sod_note }}</div>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="font-size:12px;color:var(--muted);text-align:center;padding:16px">No audit log entries yet.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

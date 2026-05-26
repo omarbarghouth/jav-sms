@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>{{ ra.ref_number }} — Risk Acceptance Certificate</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Arial',sans-serif;font-size:11pt;color:#000;background:#fff;padding:20mm}
+    h1{font-size:16pt;font-weight:bold;color:#0f1c3f;margin-bottom:4px}
+    h2{font-size:12pt;font-weight:bold;color:#0f1c3f;margin:16px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}
+    .header-bar{background:#0f1c3f;color:#fff;padding:10px 16px;border-radius:4px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+    .header-bar .ref{font-family:monospace;font-size:12pt;color:#c9a84c}
+    .meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+    .meta-box{border:1px solid #ddd;border-radius:4px;padding:8px;background:#f9f9f9}
+    .meta-label{font-size:8pt;text-transform:uppercase;color:#666;font-weight:bold;margin-bottom:2px}
+    .meta-val{font-size:11pt;font-weight:bold}
+    .badge{display:inline-block;padding:3px 10px;border-radius:4px;font-size:9pt;font-weight:bold}
+    .badge-red{background:#fee2e2;color:#dc2626}
+    .badge-yellow{background:#fef3c7;color:#92400e}
+    .badge-green{background:#dcfce7;color:#15803d}
+    .badge-blue{background:#dbeafe;color:#1e40af}
+    .badge-gray{background:#f3f4f6;color:#4b5563}
+    .risk-index{font-size:36pt;font-weight:900;font-family:monospace}
+    .risk-index.intolerable{color:#dc2626}
+    .risk-index.tolerable{color:#d97706}
+    .section-box{background:#f9f9f9;border:1px solid #ddd;border-radius:4px;padding:12px;margin-bottom:12px;white-space:pre-wrap;font-size:10.5pt;line-height:1.7;min-height:50px}
+    .workflow{display:flex;align-items:center;margin-bottom:16px}
+    .wf-step{text-align:center;min-width:110px}
+    .wf-circle{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:13pt;color:#fff}
+    .wf-circle.done{background:#15803d}
+    .wf-circle.pending{background:#ccc}
+    .wf-circle.rejected{background:#dc2626}
+    .wf-line{flex:1;height:2px;background:#ccc}
+    .wf-line.done{background:#15803d}
+    .wf-label{font-size:8pt;font-weight:bold;margin-top:4px;text-transform:uppercase}
+    .wf-sub{font-size:7.5pt;color:#666}
+    table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10pt}
+    th{background:#0f1c3f;color:#fff;padding:5px 8px;text-align:left;font-size:9pt}
+    td{padding:5px 8px;border-bottom:1px solid #eee}
+    .sig-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:28px}
+    .sig-box{border-top:2px solid #333;padding-top:8px;text-align:center;font-size:9pt;color:#555}
+    .sig-box .sig-name{font-weight:bold;font-size:10pt;color:#000}
+    .icao-ref{font-size:8pt;color:#999;text-align:right;margin-top:12px}
+    .decision-banner{padding:14px;border-radius:6px;margin-bottom:16px;display:flex;align-items:center;gap:14px}
+    .decision-banner.approved{background:#dcfce7;border:2px solid #15803d}
+    .decision-banner.rejected{background:#fee2e2;border:2px solid #dc2626}
+    .decision-banner.conditional{background:#dbeafe;border:2px solid #1e40af}
+    .decision-banner.pending{background:#fef3c7;border:2px solid #d97706}
+    @media print{body{padding:10mm}button{display:none}}
+  </style>
+</head>
+<body>
+
+<div class="header-bar">
+  <div>
+    <div style="font-size:14pt;font-weight:bold">Jordan Aviation</div>
+    <div style="font-size:9pt;opacity:.8">Safety Management System — Risk Acceptance Certificate</div>
+  </div>
+  <div class="ref">{{ ra.ref_number }}</div>
+</div>
+
+<h1>Risk Acceptance Certificate</h1>
+<div style="font-size:9pt;color:#666;margin-bottom:16px">
+  ICAO Doc 9859 §5.5 — Formal Accountable Executive Acceptance &nbsp;·&nbsp; Annex 19 §6.3
+</div>
+
+<!-- Decision Banner -->
+{% if ra.ae_decision == 'Approved' %}
+<div class="decision-banner approved">
+  <div style="font-size:24pt;font-weight:900;color:#15803d">✓</div>
+  <div>
+    <div style="font-weight:bold;color:#15803d;font-size:13pt">RISK ACCEPTED</div>
+    <div style="font-size:9pt;color:#166534">Formally accepted by Accountable Executive on {{ ra.ae_decision_date }}</div>
+  </div>
+</div>
+{% elif ra.ae_decision == 'Rejected' %}
+<div class="decision-banner rejected">
+  <div style="font-size:24pt;font-weight:900;color:#dc2626">✗</div>
+  <div>
+    <div style="font-weight:bold;color:#dc2626;font-size:13pt">RISK NOT ACCEPTED</div>
+    <div style="font-size:9pt;color:#991b1b">Further mitigation required. Decided by AE on {{ ra.ae_decision_date }}</div>
+  </div>
+</div>
+{% elif ra.ae_decision == 'Conditional' %}
+<div class="decision-banner conditional">
+  <div style="font-size:24pt;font-weight:900;color:#1e40af">◈</div>
+  <div>
+    <div style="font-weight:bold;color:#1e40af;font-size:13pt">CONDITIONALLY ACCEPTED</div>
+    <div style="font-size:9pt;color:#1e3a8a">Accepted subject to conditions stated below. Decided by AE on {{ ra.ae_decision_date }}</div>
+  </div>
+</div>
+{% else %}
+<div class="decision-banner pending">
+  <div style="font-size:24pt;font-weight:900;color:#d97706">⏳</div>
+  <div>
+    <div style="font-weight:bold;color:#92400e;font-size:13pt">PENDING AE DECISION</div>
+    <div style="font-size:9pt;color:#78350f">This risk acceptance is awaiting formal Accountable Executive approval</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Risk Summary -->
+<div class="meta-grid">
+  <div class="meta-box">
+    <div class="meta-label">Reference Number</div>
+    <div class="meta-val" style="font-family:monospace">{{ ra.ref_number }}</div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Risk ID</div>
+    <div class="meta-val" style="font-family:monospace">{{ ra.risk_id }}</div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Status</div>
+    <div class="meta-val">
+      <span class="badge {% if ra.status=='Approved' %}badge-green{% elif ra.status=='Rejected' %}badge-gray{% elif ra.status=='Conditional' %}badge-blue{% else %}badge-yellow{% endif %}">{{ ra.status }}</span>
+    </div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Risk Index</div>
+    <div class="risk-index {% if ra.risk_tolerance=='INTOLERABLE' %}intolerable{% else %}tolerable{% endif %}">{{ ra.risk_index }}</div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Tolerance Level</div>
+    <div class="meta-val">
+      <span class="badge {% if ra.risk_tolerance=='INTOLERABLE' %}badge-red{% else %}badge-yellow{% endif %}">{{ ra.risk_tolerance }}</span>
+    </div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Submitted By</div>
+    <div class="meta-val">{{ ra.submitted_by }}</div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Submission Date</div>
+    <div class="meta-val">{{ ra.submitted_date }}</div>
+  </div>
+  {% if ra.valid_until %}
+  <div class="meta-box">
+    <div class="meta-label">Acceptance Valid Until</div>
+    <div class="meta-val">{{ ra.valid_until }}</div>
+  </div>
+  {% endif %}
+  {% if ra.review_date %}
+  <div class="meta-box">
+    <div class="meta-label">Scheduled Review</div>
+    <div class="meta-val">{{ ra.review_date }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if ae %}
+<div class="meta-box" style="margin-bottom:16px">
+  <div class="meta-label">Accountable Executive</div>
+  <div class="meta-val">{{ ae.full_name }} — {{ ae.title }}</div>
+</div>
+{% endif %}
+
+<!-- Approval Workflow -->
+<h2>1. Approval Workflow</h2>
+<div class="workflow">
+  <div class="wf-step">
+    <div class="wf-circle done">✓</div>
+    <div class="wf-label" style="color:#15803d">Submitted</div>
+    <div class="wf-sub">{{ ra.submitted_by }}<br>{{ ra.submitted_date }}</div>
+  </div>
+  <div class="wf-line {% if ra.safety_mgr_review %}done{% endif %}"></div>
+  <div class="wf-step">
+    <div class="wf-circle {% if ra.safety_mgr_review %}done{% else %}pending{% endif %}">{% if ra.safety_mgr_review %}✓{% else %}2{% endif %}</div>
+    <div class="wf-label" style="color:{% if ra.safety_mgr_review %}#15803d{% else %}#666{% endif %}">Safety Review</div>
+    <div class="wf-sub">{% if ra.safety_mgr_review %}{{ ra.safety_mgr_by }}<br>{{ ra.safety_mgr_date }}{% else %}Pending{% endif %}</div>
+  </div>
+  <div class="wf-line {% if ra.ae_decision %}done{% endif %}"></div>
+  <div class="wf-step">
+    <div class="wf-circle {% if ra.ae_decision=='Approved' or ra.ae_decision=='Conditional' %}done{% elif ra.ae_decision=='Rejected' %}rejected{% else %}pending{% endif %}">{% if ra.ae_decision %}{% if ra.ae_decision=='Rejected' %}✗{% else %}✓{% endif %}{% else %}3{% endif %}</div>
+    <div class="wf-label" style="color:{% if ra.ae_decision %}#15803d{% else %}#666{% endif %}">AE Decision</div>
+    <div class="wf-sub">{% if ra.ae_decision %}{{ ra.ae_decision_by }}<br>{{ ra.ae_decision_date }}{% else %}Pending{% endif %}</div>
+  </div>
+</div>
+
+<!-- Risk Description -->
+<h2>2. Risk Description</h2>
+<div class="section-box">{{ ra.risk_description }}</div>
+
+<!-- Justification -->
+<h2>3. Justification for Acceptance</h2>
+<div class="section-box">{{ ra.justification }}</div>
+
+{% if ra.mitigations_in_place %}
+<h2>4. Mitigations Currently in Place</h2>
+<div class="section-box">{{ ra.mitigations_in_place }}</div>
+{% endif %}
+
+{% if ra.conditions %}
+<h2>5. Conditions &amp; Monitoring Requirements</h2>
+<div class="section-box">{{ ra.conditions }}</div>
+{% endif %}
+
+{% if ra.ae_notes %}
+<h2>6. Accountable Executive Notes</h2>
+<div class="section-box">{{ ra.ae_notes }}</div>
+{% endif %}
+
+<!-- Audit Trail -->
+{% if audit_logs %}
+<h2>7. Governance Audit Trail</h2>
+<table>
+  <thead><tr><th>Date / Time</th><th>Action</th><th>Actor</th><th>Role</th><th>SOD</th><th>Notes</th></tr></thead>
+  <tbody>
+    {% for log in audit_logs %}
+    <tr>
+      <td style="font-family:monospace;font-size:9pt">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>{{ log.action|replace('_',' ')|title }}</td>
+      <td>{{ log.actor_username }}</td>
+      <td>{{ log.actor_role }}</td>
+      <td>
+        {% if log.sod_check == 'VIOLATION' %}<span class="badge badge-red" style="font-size:7.5pt">VIOLATION</span>
+        {% elif log.sod_check == 'OK' %}<span class="badge badge-green" style="font-size:7.5pt">OK</span>
+        {% else %}—{% endif %}
+      </td>
+      <td style="font-size:9pt">{{ log.notes[:80] if log.notes else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<!-- Signature Block -->
+<div class="sig-row">
+  <div class="sig-box">
+    <div class="sig-name">{{ ra.submitted_by }}</div>
+    <div>Risk Originator</div>
+    <div>Date: _______________</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-name">{{ ra.safety_mgr_by or '___________________' }}</div>
+    <div>Safety Manager</div>
+    <div>Date: {{ ra.safety_mgr_date or '_______________' }}</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-name">{{ ae.full_name if ae else '___________________' }}</div>
+    <div>Accountable Executive</div>
+    <div>Date: {{ ra.ae_decision_date or '_______________' }}</div>
+  </div>
+</div>
+
+<div class="icao-ref">
+  ICAO Annex 19 §6.3 / Doc 9859 §5.5 &nbsp;·&nbsp; {{ ra.ref_number }} &nbsp;·&nbsp; Generated {{ now.strftime('%Y-%m-%d %H:%M') }} UTC
+</div>
+
+<div style="text-align:center;margin-top:20px">
+  <button onclick="window.print()" style="padding:8px 20px;background:#0f1c3f;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11pt">🖨 Print / Save PDF</button>
+</div>
+</body>
+</html>

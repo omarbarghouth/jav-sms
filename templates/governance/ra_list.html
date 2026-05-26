@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Risk Acceptance Register{% endblock %}
+{% block content %}
+<div class="page-title">Risk Acceptance Register</div>
+<div class="page-sub">ICAO Doc 9859 §5.5 — Formal Accountable Executive acceptance of INTOLERABLE risks</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+  <div class="card" style="text-align:center;padding:16px;border-left:4px solid #dc2626">
+    <div style="font-size:28px;font-weight:900;color:#dc2626">{{ pending_ae|length }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Awaiting AE Decision</div>
+  </div>
+  <div class="card" style="text-align:center;padding:16px;border-left:4px solid #d97706">
+    <div style="font-size:28px;font-weight:900;color:#d97706">{{ pending_sm|length }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Awaiting Safety Review</div>
+  </div>
+  <div class="card" style="text-align:center;padding:16px;border-left:4px solid #15803d">
+    <div style="font-size:28px;font-weight:900;color:#15803d">{{ approved|length }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Approved</div>
+  </div>
+  <div class="card" style="text-align:center;padding:16px">
+    <div style="font-size:28px;font-weight:900;color:var(--navy)">{{ records|length }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Total Records</div>
+  </div>
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+  <a href="/governance/ae" class="btn btn-outline btn-sm">AE Dashboard</a>
+</div>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Ref</th>
+          <th>Risk Index</th>
+          <th>Tolerance</th>
+          <th>Submitted By</th>
+          <th>Submitted</th>
+          <th>AE Decision</th>
+          <th>Valid Until</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ra in records %}
+        <tr>
+          <td><span class="ctrl-num" style="font-size:11px">{{ ra.ref_number }}</span></td>
+          <td style="font-size:17px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:{% if ra.risk_tolerance=='INTOLERABLE' %}#dc2626{% elif ra.risk_tolerance=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
+            {{ ra.risk_index }}</td>
+          <td><span class="badge {% if ra.risk_tolerance=='INTOLERABLE' %}b-red{% elif ra.risk_tolerance=='TOLERABLE' %}b-yellow{% else %}b-green{% endif %}" style="font-size:10px">{{ ra.risk_tolerance }}</span></td>
+          <td style="font-size:12px">{{ ra.submitted_by }}</td>
+          <td style="font-size:12px">{{ ra.submitted_date }}</td>
+          <td style="font-size:12px">{{ ra.ae_decision or '—' }}</td>
+          <td style="font-size:12px">{{ ra.valid_until or '—' }}</td>
+          <td>
+            {% if ra.status == 'Approved' %}<span class="badge b-green" style="font-size:10px">Approved</span>
+            {% elif ra.status == 'Pending AE' %}<span class="badge b-red" style="font-size:10px">Pending AE</span>
+            {% elif ra.status == 'Pending Safety Review' %}<span class="badge b-yellow" style="font-size:10px">Pending Review</span>
+            {% elif ra.status == 'Rejected' %}<span class="badge b-gray" style="font-size:10px">Rejected</span>
+            {% elif ra.status == 'Conditional' %}<span class="badge b-blue" style="font-size:10px">Conditional</span>
+            {% else %}<span class="badge b-gray" style="font-size:10px">{{ ra.status }}</span>{% endif %}
+          </td>
+          <td>
+            <a href="/governance/risk-acceptance/{{ ra.id }}" class="btn btn-nav btn-sm">Review →</a>
+            <a href="/governance/risk-acceptance/{{ ra.id }}/print" target="_blank" class="btn btn-sm btn-outline">🖨</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:36px">No risk acceptance records. These are created from INTOLERABLE risk records.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

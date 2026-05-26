@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Schedule SRB Meeting{% endblock %}
+{% block content %}
+<div class="page-title">Schedule Safety Review Board Meeting</div>
+<div class="page-sub">ICAO Doc 9859 §3.3 — Periodic management review of SMS performance</div>
+
+{% if open_escalations %}
+<div class="card" style="margin-bottom:16px;background:#fffbeb;border:1px solid #fde68a">
+  <div style="font-weight:700;color:#92400e;margin-bottom:8px;font-size:13px">⚠ {{ open_escalations|length }} Open SPI Escalation(s) — consider adding to agenda</div>
+  {% for esc in open_escalations[:5] %}
+  <div style="font-size:12px;color:#78350f;padding:4px 0;border-bottom:1px solid #fef3c7">
+    {{ esc.indicator.code if esc.indicator else '—' }} · Level {{ esc.alert_level }} · {{ esc.indicator.name[:60] if esc.indicator else '' }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form method="POST">
+  <div class="card" style="max-width:760px">
+    <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border)">Meeting Details</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Meeting Type</label>
+        <select name="meeting_type" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+          <option value="SRB">SRB — Safety Review Board</option>
+          <option value="MRB">MRB — Management Review Board</option>
+          <option value="Ad-Hoc">Ad-Hoc Safety Meeting</option>
+          <option value="Emergency">Emergency Safety Meeting</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Scheduled Date *</label>
+        <input type="date" name="scheduled_date" required style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Title *</label>
+        <input type="text" name="title" required placeholder="e.g. Q2 2026 Safety Review Board Meeting"
+               style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Start Time</label>
+        <input type="time" name="start_time" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Venue</label>
+        <input type="text" name="venue" placeholder="e.g. Boardroom A, Terminal Building"
+               style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Chair Person</label>
+        <input type="text" name="chair_person" value="{{ ae.full_name if ae else '' }}"
+               style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Secretary / Minutes Taker</label>
+        <input type="text" name="secretary"
+               style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Meeting Objectives</label>
+        <textarea name="objectives" rows="3" placeholder="State the objectives of this meeting..."
+                  style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px;resize:vertical"></textarea>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:12px">
+      Standard agenda items and required attendees will be pre-populated automatically.
+    </p>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button type="submit" class="btn btn-nav">Schedule Meeting</button>
+      <a href="/governance/srb" class="btn btn-outline">Cancel</a>
+    </div>
+  </div>
+</form>
+{% endblock %}

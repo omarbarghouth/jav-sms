@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Accountable Executive Dashboard{% endblock %}
+{% block content %}
+<div class="page-title">Accountable Executive</div>
+<div class="page-sub">ICAO Annex 19 §4.1 — SMS Management Commitment & Authority</div>
+
+{% if ae %}
+<!-- AE Identity Card -->
+<div class="card" style="margin-bottom:20px;border-left:4px solid var(--gold)">
+  <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--navy2));display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--gold);flex-shrink:0">✈</div>
+    <div style="flex:1">
+      <div style="font-size:20px;font-weight:800;color:var(--navy)">{{ ae.full_name }}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px">{{ ae.title }}</div>
+      <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap">
+        {% if ae.email %}<span style="font-size:12px;color:var(--navy)">✉ {{ ae.email }}</span>{% endif %}
+        {% if ae.phone %}<span style="font-size:12px;color:var(--navy)">📞 {{ ae.phone }}</span>{% endif %}
+        {% if ae.appointment_ref %}<span style="font-size:12px;color:var(--muted)">Ref: {{ ae.appointment_ref }}</span>{% endif %}
+        {% if ae.effective_from %}<span style="font-size:12px;color:var(--muted)">Effective: {{ ae.effective_from }}</span>{% endif %}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <a href="/governance/ae/setup" class="btn btn-outline btn-sm">✏ Update</a>
+      <a href="/governance/srb/new" class="btn btn-nav btn-sm">+ Schedule SRB</a>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card" style="margin-bottom:20px;border:2px dashed #dc2626;background:#fff8f8">
+  <div style="text-align:center;padding:24px">
+    <div style="font-size:36px;margin-bottom:12px">⚠</div>
+    <div style="font-size:16px;font-weight:800;color:#dc2626;margin-bottom:8px">No Accountable Executive Designated</div>
+    <p style="color:var(--muted);font-size:13px;max-width:480px;margin:0 auto 16px">ICAO Annex 19 §4.1 requires a single Accountable Executive responsible for SMS implementation. This is a critical compliance gap.</p>
+    <a href="/governance/ae/setup" class="btn btn-nav">Designate Accountable Executive</a>
+  </div>
+</div>
+{% endif %}
+
+<!-- KPI Row -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px">
+  <div class="card" style="text-align:center;padding:18px">
+    <div style="font-size:32px;font-weight:900;color:{% if pending_ra|length > 0 %}#dc2626{% else %}#15803d{% endif %}">{{ pending_ra|length }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px">Pending Risk Acceptances</div>
+    <a href="/governance/risk-acceptance" style="font-size:11px;color:var(--navy);font-weight:700">Review →</a>
+  </div>
+  <div class="card" style="text-align:center;padding:18px">
+    <div style="font-size:32px;font-weight:900;color:{% if open_decisions|length > 0 %}#d97706{% else %}#15803d{% endif %}">{{ open_decisions|length }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px">Open SRB Decisions</div>
+    <a href="/governance/srb" style="font-size:11px;color:var(--navy);font-weight:700">View →</a>
+  </div>
+  <div class="card" style="text-align:center;padding:18px">
+    <div style="font-size:32px;font-weight:900;color:var(--navy)">{{ history|selectattr('is_current','eq',False)|list|length }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px">Historical AEs</div>
+  </div>
+  <div class="card" style="text-align:center;padding:18px">
+    <div style="font-size:32px;font-weight:900;color:var(--navy)">{{ recent_log|selectattr('sod_check','eq','VIOLATION')|list|length }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px">SOD Violations</div>
+    <a href="/governance/audit-log?sod=violations" style="font-size:11px;color:#dc2626;font-weight:700">Audit →</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;flex-wrap:wrap">
+
+<!-- Pending Risk Acceptances -->
+<div class="card">
+  <div style="font-weight:800;font-size:14px;margin-bottom:14px;color:var(--navy);display:flex;justify-content:space-between">
+    <span>⚠ Pending Risk Acceptances</span>
+    <a href="/governance/risk-acceptance" class="btn btn-outline btn-sm">View All</a>
+  </div>
+  {% for ra in pending_ra %}
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#fafafa;border-radius:8px;margin-bottom:8px;border-left:3px solid {% if ra.status=='Pending AE' %}#dc2626{% else %}#d97706{% endif %}">
+    <div>
+      <div style="font-size:12px;font-weight:700;color:var(--navy)">{{ ra.ref_number }}</div>
+      <div style="font-size:11px;color:var(--muted)">Risk Index: <strong>{{ ra.risk_index }}</strong> · {{ ra.submitted_date }}</div>
+    </div>
+    <div>
+      <span class="badge {% if ra.status=='Pending AE' %}b-red{% else %}b-yellow{% endif %}" style="font-size:10px">{{ ra.status }}</span>
+      <a href="/governance/risk-acceptance/{{ ra.id }}" class="btn btn-nav btn-sm" style="margin-left:6px">Review →</a>
+    </div>
+  </div>
+  {% else %}
+  <div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">✓ No pending risk acceptances</div>
+  {% endfor %}
+</div>
+
+<!-- Open SRB Decisions -->
+<div class="card">
+  <div style="font-weight:800;font-size:14px;margin-bottom:14px;color:var(--navy);display:flex;justify-content:space-between">
+    <span>📋 Open SRB Decisions</span>
+    <a href="/governance/srb" class="btn btn-outline btn-sm">All Meetings</a>
+  </div>
+  {% for dec in open_decisions %}
+  <div style="padding:10px;background:#fafafa;border-radius:8px;margin-bottom:8px;border-left:3px solid var(--navy)">
+    <div style="font-size:12px;font-weight:700;color:var(--navy)">{{ dec.decision_ref }}</div>
+    <div style="font-size:12px;color:#374151;margin-top:2px">{{ (dec.decision_text or '')[:80] }}{% if dec.decision_text and dec.decision_text|length > 80 %}…{% endif %}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">Due: {{ dec.due_date or '—' }} · {{ dec.responsible_party or 'Unassigned' }}</div>
+  </div>
+  {% else %}
+  <div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">✓ No open decisions</div>
+  {% endfor %}
+</div>
+
+</div>
+
+<!-- AE History -->
+{% if history|length > 1 %}
+<div class="card" style="margin-top:18px">
+  <div style="font-weight:800;font-size:14px;margin-bottom:14px;color:var(--navy)">AE Appointment History</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Title</th><th>Effective From</th><th>Effective To</th><th>Appointment Ref</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for h in history %}
+        <tr>
+          <td style="font-weight:600">{{ h.full_name }}</td>
+          <td style="font-size:12px">{{ h.title }}</td>
+          <td style="font-size:12px">{{ h.effective_from }}</td>
+          <td style="font-size:12px">{{ h.effective_to or '—' }}</td>
+          <td style="font-size:12px">{{ h.appointment_ref or '—' }}</td>
+          <td>{% if h.is_current %}<span class="badge b-green">Current</span>{% else %}<span class="badge b-gray">Historical</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

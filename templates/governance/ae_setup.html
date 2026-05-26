@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Designate Accountable Executive{% endblock %}
+{% block content %}
+<div class="page-title">{% if ae %}Update{% else %}Designate{% endif %} Accountable Executive</div>
+<div class="page-sub">ICAO Annex 19 §4.1 — Single named individual with ultimate responsibility for SMS</div>
+
+{% if ae %}
+<div class="card" style="margin-bottom:16px;background:#fffbeb;border:1px solid #fde68a">
+  <p style="font-size:13px;color:#92400e;margin:0">
+    <strong>⚠ Current AE:</strong> {{ ae.full_name }} ({{ ae.title }}) — effective {{ ae.effective_from }}.
+    Creating a new record will archive the current AE and create a governance log entry.
+  </p>
+</div>
+{% endif %}
+
+<form method="POST" class="card" style="max-width:700px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="grid-column:1/-1">
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Linked System User <span style="color:#9ca3af">(optional)</span></label>
+      <select name="user_id" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+        <option value="">— No linked user (external AE) —</option>
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if ae and ae.user_id == u.id %}selected{% endif %}>{{ u.full_name }} ({{ u.username }} / {{ u.role }})</option>
+        {% endfor %}
+      </select>
+      <p style="font-size:11px;color:var(--muted);margin:4px 0 0">Linking to a user enables AE approval queue integration.</p>
+    </div>
+
+    <div>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Full Name *</label>
+      <input type="text" name="full_name" required value="{{ ae.full_name if ae else '' }}"
+             style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Title / Position</label>
+      <input type="text" name="title" value="{{ ae.title if ae else 'Accountable Manager' }}"
+             style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Email</label>
+      <input type="email" name="email" value="{{ ae.email if ae else '' }}"
+             style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Phone</label>
+      <input type="text" name="phone" value="{{ ae.phone if ae else '' }}"
+             style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Employee Number</label>
+      <input type="text" name="employee_number" value="{{ ae.employee_number if ae else '' }}"
+             style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Appointment Reference</label>
+      <input type="text" name="appointment_ref" value="{{ ae.appointment_ref if ae else '' }}" placeholder="e.g. JAV/AE/2026/001"
+             style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Effective From</label>
+      <input type="date" name="effective_from" value="{{ ae.effective_from if ae else '' }}"
+             style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px">
+    </div>
+    <div style="grid-column:1/-1">
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Authority Scope & Responsibilities</label>
+      <textarea name="authority_scope" rows="4"
+                style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px;resize:vertical">{{ ae.authority_scope if ae else 'The Accountable Executive has ultimate responsibility and accountability for the effective implementation and maintenance of the SMS across all operational areas. Has authority to allocate resources required for SMS implementation and has final authority on risk acceptance decisions.' }}</textarea>
+    </div>
+    <div style="grid-column:1/-1">
+      <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Notes</label>
+      <textarea name="notes" rows="2"
+                style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:4px;font-size:13px;resize:vertical">{{ ae.notes if ae else '' }}</textarea>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;margin-top:18px">
+    <button type="submit" class="btn btn-nav">{% if ae %}Update AE Record{% else %}Designate AE{% endif %}</button>
+    <a href="/governance/ae" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}

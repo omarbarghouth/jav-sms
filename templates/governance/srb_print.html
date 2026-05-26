@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>{{ mtg.id }} — Meeting Minutes</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Arial',sans-serif;font-size:11pt;color:#000;background:#fff;padding:20mm}
+    h1{font-size:16pt;font-weight:bold;color:#0f1c3f;margin-bottom:4px}
+    h2{font-size:12pt;font-weight:bold;color:#0f1c3f;margin:16px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}
+    .header-bar{background:#0f1c3f;color:#fff;padding:10px 16px;border-radius:4px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+    .header-bar .ref{font-family:monospace;font-size:12pt;color:#c9a84c}
+    .meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+    .meta-box{border:1px solid #ddd;border-radius:4px;padding:8px;background:#f9f9f9}
+    .meta-label{font-size:8pt;text-transform:uppercase;color:#666;font-weight:bold;margin-bottom:2px}
+    .meta-val{font-size:11pt;font-weight:bold}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:10pt}
+    th{background:#0f1c3f;color:#fff;padding:6px 8px;text-align:left;font-size:9pt}
+    td{padding:6px 8px;border-bottom:1px solid #eee}
+    tr:nth-child(even) td{background:#f9f9f9}
+    .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:8pt;font-weight:bold}
+    .badge-green{background:#dcfce7;color:#15803d}
+    .badge-yellow{background:#fef3c7;color:#92400e}
+    .badge-red{background:#fee2e2;color:#dc2626}
+    .badge-blue{background:#dbeafe;color:#1e40af}
+    .badge-gray{background:#f3f4f6;color:#4b5563}
+    .minutes-body{background:#f9f9f9;border:1px solid #ddd;border-radius:4px;padding:12px;white-space:pre-wrap;font-size:10.5pt;line-height:1.7;min-height:80px}
+    .sig-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:24px}
+    .sig-box{border-top:2px solid #333;padding-top:8px;text-align:center;font-size:9pt;color:#555}
+    .icao-ref{font-size:8pt;color:#999;text-align:right;margin-top:8px}
+    @media print{body{padding:10mm}button{display:none}}
+  </style>
+</head>
+<body>
+<div class="header-bar">
+  <div>
+    <div style="font-size:14pt;font-weight:bold">Jordan Aviation</div>
+    <div style="font-size:9pt;opacity:.8">Safety Management System — Meeting Minutes</div>
+  </div>
+  <div class="ref">{{ mtg.id }}</div>
+</div>
+
+<h1>{{ mtg.title }}</h1>
+<div style="font-size:9pt;color:#666;margin-bottom:16px">
+  {{ mtg.meeting_type }} Meeting &nbsp;·&nbsp; ICAO Annex 19 §4.1
+</div>
+
+<div class="meta-grid">
+  <div class="meta-box"><div class="meta-label">Scheduled Date</div><div class="meta-val">{{ mtg.scheduled_date }}</div></div>
+  <div class="meta-box"><div class="meta-label">Actual Date</div><div class="meta-val">{{ mtg.actual_date or '—' }}</div></div>
+  <div class="meta-box"><div class="meta-label">Time</div><div class="meta-val">{{ mtg.start_time or '—' }}{% if mtg.end_time %} – {{ mtg.end_time }}{% endif %}</div></div>
+  <div class="meta-box"><div class="meta-label">Venue</div><div class="meta-val">{{ mtg.venue or '—' }}</div></div>
+  <div class="meta-box"><div class="meta-label">Chair Person</div><div class="meta-val">{{ mtg.chair_person or '—' }}</div></div>
+  <div class="meta-box"><div class="meta-label">Quorum</div><div class="meta-val {% if mtg.quorum_met %}badge-green{% else %}badge-red{% endif %}" style="display:inline-block;padding:2px 8px;border-radius:4px">{% if mtg.quorum_met %}✓ Met ({{ mtg.quorum_count }}){% else %}Not Met{% endif %}</div></div>
+</div>
+
+{% if ae %}
+<div class="meta-box" style="margin-bottom:16px">
+  <div class="meta-label">Accountable Executive</div>
+  <div class="meta-val">{{ ae.full_name }} — {{ ae.title }}</div>
+</div>
+{% endif %}
+
+<h2>1. Attendance</h2>
+<table>
+  <thead><tr><th>Name</th><th>Role / Title</th><th>Required</th><th>Attended</th><th>Apology</th></tr></thead>
+  <tbody>
+    {% for att in mtg.attendees %}
+    <tr>
+      <td>{{ att.person_name or '—' }}</td>
+      <td>{{ att.role_title }}</td>
+      <td>{% if att.is_required %}✓{% else %}—{% endif %}</td>
+      <td>{% if att.attended %}✓{% else %}—{% endif %}</td>
+      <td>{% if att.apology_given %}Yes{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>2. Agenda</h2>
+<table>
+  <thead><tr><th>#</th><th>Agenda Item</th><th>Type</th><th>Presenter</th><th>Time</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for item in mtg.agenda_items %}
+    <tr>
+      <td>{{ item.item_number }}</td>
+      <td><strong>{{ item.title }}</strong>{% if item.description %}<br><span style="font-size:9pt;color:#555">{{ item.description }}</span>{% endif %}</td>
+      <td>{{ item.item_type }}</td>
+      <td>{{ item.presenter or '—' }}</td>
+      <td>{% if item.time_allocated %}{{ item.time_allocated }}m{% else %}—{% endif %}</td>
+      <td>{{ item.status }}</td>
+    </tr>
+    {% if item.discussion_notes or item.decision %}
+    <tr>
+      <td></td>
+      <td colspan="5" style="background:#fffbeb;font-size:9.5pt;padding:6px 8px">
+        {% if item.discussion_notes %}<strong>Discussion:</strong> {{ item.discussion_notes }}<br>{% endif %}
+        {% if item.decision %}<strong>Decision:</strong> {{ item.decision }}{% endif %}
+      </td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>3. Decisions & Actions</h2>
+{% if mtg.decisions %}
+<table>
+  <thead><tr><th>Ref</th><th>Decision</th><th>Type</th><th>Responsible</th><th>Due Date</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for dec in mtg.decisions %}
+    <tr>
+      <td style="font-family:monospace;font-size:9pt">{{ dec.decision_ref }}</td>
+      <td>{{ dec.decision_text }}</td>
+      <td>{{ dec.decision_type }}</td>
+      <td>{{ dec.responsible_party or '—' }}</td>
+      <td>{{ dec.due_date or '—' }}</td>
+      <td>{{ dec.status }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#666;font-style:italic">No formal decisions recorded.</p>
+{% endif %}
+
+<h2>4. Minutes</h2>
+<div class="minutes-body">{{ mtg.minutes_text or 'No minutes recorded.' }}</div>
+
+{% if mtg.key_outcomes %}
+<h2>5. Key Outcomes</h2>
+<div class="minutes-body">{{ mtg.key_outcomes }}</div>
+{% endif %}
+
+{% if mtg.next_meeting_date %}
+<p style="margin-top:12px"><strong>Next Meeting:</strong> {{ mtg.next_meeting_date }}</p>
+{% endif %}
+
+<div class="sig-row">
+  <div class="sig-box">
+    <div>{{ mtg.chair_person or '___________________' }}</div>
+    <div style="margin-top:2px">Chair Person</div>
+  </div>
+  <div class="sig-box">
+    <div>{{ mtg.secretary or '___________________' }}</div>
+    <div style="margin-top:2px">Secretary</div>
+  </div>
+  <div class="sig-box">
+    <div>{{ ae.full_name if ae else '___________________' }}</div>
+    <div style="margin-top:2px">Accountable Executive</div>
+  </div>
+</div>
+
+{% if mtg.minutes_approved_by %}
+<div style="margin-top:20px;padding:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:4px;font-size:9pt">
+  Minutes approved by <strong>{{ mtg.minutes_approved_by }}</strong> on {{ mtg.minutes_approved_date }}
+</div>
+{% endif %}
+
+<div class="icao-ref">ICAO Annex 19 §4.1 / Doc 9859 §3.3 · Generated {{ now.strftime('%Y-%m-%d %H:%M') }} UTC</div>
+
+<div style="text-align:center;margin-top:20px">
+  <button onclick="window.print()" style="padding:8px 20px;background:#0f1c3f;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11pt">🖨 Print / Save PDF</button>
+</div>
+</body>
+</html>

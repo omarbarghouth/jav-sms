@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Safety Review Board{% endblock %}
+{% block content %}
+<div class="page-title">Safety Review Board</div>
+<div class="page-sub">ICAO Annex 19 §4.1 — Formal SMS Management Review · Doc 9859 §3.3</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">
+  <div class="card" style="text-align:center;padding:16px">
+    <div style="font-size:28px;font-weight:900;color:var(--navy)">{{ total }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Total Meetings</div>
+  </div>
+  <div class="card" style="text-align:center;padding:16px">
+    <div style="font-size:28px;font-weight:900;color:#15803d">{{ completed }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Completed</div>
+  </div>
+  <div class="card" style="text-align:center;padding:16px">
+    <div style="font-size:28px;font-weight:900;color:#d97706">{{ scheduled }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Scheduled</div>
+  </div>
+  <div class="card" style="text-align:center;padding:16px">
+    <div style="font-size:28px;font-weight:900;color:{% if open_decisions > 0 %}#dc2626{% else %}#15803d{% endif %}">{{ open_decisions }}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Open Decisions</div>
+  </div>
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px;gap:8px">
+  <a href="/governance/ae" class="btn btn-outline btn-sm">AE Dashboard</a>
+  <a href="/governance/risk-acceptance" class="btn btn-outline btn-sm">Risk Acceptances</a>
+  <a href="/governance/srb/new" class="btn btn-nav btn-sm">+ Schedule Meeting</a>
+</div>
+
+<div class="card" style="padding:0">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Meeting ID</th>
+          <th>Type</th>
+          <th>Title</th>
+          <th>Scheduled</th>
+          <th>Chair</th>
+          <th>Quorum</th>
+          <th>Agenda Items</th>
+          <th>Decisions</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in meetings %}
+        <tr>
+          <td><span class="ctrl-num">{{ m.id }}</span></td>
+          <td>
+            <span class="badge {% if m.meeting_type=='SRB' %}b-blue{% elif m.meeting_type=='MRB' %}b-yellow{% else %}b-gray{% endif %}" style="font-size:10px">{{ m.meeting_type }}</span>
+          </td>
+          <td style="font-size:13px;font-weight:600;max-width:200px">{{ m.title }}</td>
+          <td style="font-size:12px">{{ m.scheduled_date }}<br><span style="color:var(--muted);font-size:10px">{{ m.start_time or '' }}</span></td>
+          <td style="font-size:12px">{{ m.chair_person or '—' }}</td>
+          <td style="text-align:center">
+            {% if m.quorum_met %}<span class="badge b-green" style="font-size:10px">✓ Met</span>
+            {% elif m.status == 'Completed' %}<span class="badge b-red" style="font-size:10px">✗ Failed</span>
+            {% else %}<span style="color:var(--muted);font-size:11px">—</span>{% endif %}
+          </td>
+          <td style="text-align:center">
+            <span class="badge b-blue" style="font-size:10px">{{ m.agenda_items|length }}</span>
+          </td>
+          <td style="text-align:center">
+            {% set open_d = m.decisions|selectattr('status','eq','Open')|list|length %}
+            {% if open_d > 0 %}<span class="badge b-yellow" style="font-size:10px">{{ open_d }} open</span>
+            {% else %}<span style="color:var(--muted);font-size:11px">{{ m.decisions|length }}</span>{% endif %}
+          </td>
+          <td>
+            {% if m.status == 'Completed' %}<span class="badge b-green">Completed</span>
+            {% elif m.status == 'Scheduled' %}<span class="badge b-yellow">Scheduled</span>
+            {% elif m.status == 'In Progress' %}<span class="badge b-blue">In Progress</span>
+            {% elif m.status == 'Minutes Draft' %}<span class="badge b-yellow">Minutes Draft</span>
+            {% else %}<span class="badge b-gray">{{ m.status }}</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap">
+            <a href="/governance/srb/{{ m.id }}" class="btn btn-nav btn-sm">Open →</a>
+            <a href="/governance/srb/{{ m.id }}/print" class="btn btn-sm btn-outline" target="_blank">🖨</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10" style="text-align:center;color:var(--muted);padding:36px">
+            No SRB meetings recorded. <a href="/governance/srb/new" style="color:var(--navy);font-weight:700">Schedule the first meeting →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

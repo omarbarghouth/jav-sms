@@ -289,6 +289,12 @@
     <a href="/documents" class="nav-a {% if '/documents' in request.path and 'trace' not in request.path %}active{% endif %}" data-tip="Documents"><span class="nav-icon">📁</span><span class="nav-label">Document Control</span></a>
     <a href="/traceability" class="nav-a {% if request.path=='/traceability' %}active{% endif %}" data-tip="Traceability"><span class="nav-icon">🔗</span><span class="nav-label">Traceability</span></a>
 
+    <div class="sb-section">Governance &amp; Accountability</div>
+    <a href="/governance/ae" class="nav-a {% if '/governance/ae' in request.path %}active{% endif %}" data-tip="Accountable Executive"><span class="nav-icon">🏅</span><span class="nav-label">Accountable Exec</span></a>
+    <a href="/governance/srb" class="nav-a {% if '/governance/srb' in request.path %}active{% endif %}" data-tip="Safety Review Board"><span class="nav-icon">🏛</span><span class="nav-label">Safety Review Board</span></a>
+    <a href="/governance/risk-acceptance" class="nav-a {% if '/governance/risk-acceptance' in request.path %}active{% endif %}" data-tip="Risk Acceptance"><span class="nav-icon">⚖️</span><span class="nav-label">Risk Acceptance</span></a>
+    <a href="/governance/audit-log" class="nav-a {% if '/governance/audit-log' in request.path %}active{% endif %}" data-tip="Governance Audit Log"><span class="nav-icon">📋</span><span class="nav-label">Governance Log</span></a>
+
     <div class="sb-section">Safety Policy</div>
     <a href="/safety-policy" class="nav-a {% if request.path=='/safety-policy' %}active{% endif %}" data-tip="Policy"><span class="nav-icon">📜</span><span class="nav-label">Safety Policy</span></a>
     <a href="/safety-roles" class="nav-a {% if '/safety-roles' in request.path %}active{% endif %}" data-tip="Accountability"><span class="nav-icon">👥</span><span class="nav-label">Accountability</span></a>

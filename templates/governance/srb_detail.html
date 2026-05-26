@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% block title %}{{ mtg.id }} — {{ mtg.title }}{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+  <div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="ctrl-num" style="font-size:14px">{{ mtg.id }}</span>
+      <span class="badge {% if mtg.meeting_type=='SRB' %}b-blue{% elif mtg.meeting_type=='MRB' %}b-yellow{% else %}b-gray{% endif %}">{{ mtg.meeting_type }}</span>
+      {% if mtg.status=='Completed' %}<span class="badge b-green">Completed</span>
+      {% elif mtg.status=='Scheduled' %}<span class="badge b-yellow">Scheduled</span>
+      {% elif mtg.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
+      {% elif mtg.status=='Minutes Draft' %}<span class="badge b-yellow">Minutes Draft</span>
+      {% else %}<span class="badge b-gray">{{ mtg.status }}</span>{% endif %}
+    </div>
+    <div class="page-title" style="margin-top:6px">{{ mtg.title }}</div>
+    <div style="font-size:13px;color:var(--muted)">{{ mtg.scheduled_date }}{% if mtg.start_time %} · {{ mtg.start_time }}{% if mtg.end_time %}–{{ mtg.end_time }}{% endif %}{% endif %}{% if mtg.venue %} · {{ mtg.venue }}{% endif %}</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/governance/srb/{{ mtg.id }}/print" class="btn btn-outline btn-sm" target="_blank">🖨 Print Minutes</a>
+    {% if mtg.status != 'Completed' %}<a href="#update-section" class="btn btn-nav btn-sm">✏ Update</a>{% endif %}
+  </div>
+</div>
+
+<!-- Meeting Info Row -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px">
+  <div class="card" style="padding:14px">
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Chair</div>
+    <div style="font-size:14px;font-weight:700;margin-top:4px">{{ mtg.chair_person or '—' }}</div>
+  </div>
+  <div class="card" style="padding:14px">
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Secretary</div>
+    <div style="font-size:14px;font-weight:700;margin-top:4px">{{ mtg.secretary or '—' }}</div>
+  </div>
+  <div class="card" style="padding:14px">
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Quorum</div>
+    <div style="font-size:14px;font-weight:700;margin-top:4px;color:{% if mtg.quorum_met %}#15803d{% else %}#dc2626{% endif %}">
+      {% if mtg.quorum_met %}✓ Met ({{ mtg.quorum_count }}){% elif mtg.status in ['Scheduled','In Progress'] %}Pending{% else %}✗ Not Met{% endif %}
+    </div>
+  </div>
+  <div class="card" style="padding:14px">
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Open Decisions</div>
+    <div style="font-size:14px;font-weight:700;margin-top:4px;color:{% if open_decisions|length > 0 %}#dc2626{% else %}#15803d{% endif %}">{{ open_decisions|length }}</div>
+  </div>
+</div>
+
+<!-- Tabs: Agenda | Attendance | Decisions | Minutes | Update -->
+<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px">
+  {% for tab in [('agenda','Agenda','📋'),('attendance','Attendance','👥'),('decisions','Decisions','⚖'),('minutes','Minutes','📝'),('update-section','Update','✏')] %}
+  <a href="#{{ tab[0] }}" style="padding:10px 18px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-2px" onclick="showTab('{{ tab[0] }}');return false;" id="tab-{{ tab[0] }}">{{ tab[2] }} {{ tab[1] }}</a>
+  {% endfor %}
+</div>
+
+<!-- ── AGENDA ─────────────────────────────────────────────────────────────── -->
+<div id="agenda">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="font-weight:800;font-size:14px;color:var(--navy)">Agenda Items</div>
+    {% if mtg.status != 'Completed' %}
+    <button onclick="document.getElementById('add-agenda-form').style.display='block'" class="btn btn-nav btn-sm">+ Add Item</button>
+    {% endif %}
+  </div>
+
+  <div id="add-agenda-form" style="display:none;margin-bottom:14px">
+    <form method="POST" action="/governance/srb/{{ mtg.id }}/agenda/add" class="card" style="background:#f8fafc">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="grid-column:1/-1">
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Item Title *</label>
+          <input type="text" name="title" required style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Item Type</label>
+          <select name="item_type" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+            <option>Standing</option><option>SPI Review</option><option>Hazard Review</option>
+            <option>Audit Finding</option><option>Investigation</option><option>Risk Acceptance</option>
+            <option>Action Review</option><option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Presenter</label>
+          <input type="text" name="presenter" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Description</label>
+          <input type="text" name="description" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Time (mins)</label>
+          <input type="number" name="time_allocated" min="0" max="120" value="15"
+                 style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button type="submit" class="btn btn-nav btn-sm">Add</button>
+        <button type="button" onclick="document.getElementById('add-agenda-form').style.display='none'" class="btn btn-outline btn-sm">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Presenter</th><th>Time</th><th>Status</th><th>Decision</th><th></th></tr></thead>
+        <tbody>
+          {% for item in mtg.agenda_items %}
+          <tr>
+            <td><strong>{{ item.item_number }}</strong></td>
+            <td style="font-size:13px;font-weight:600">{{ item.title }}</td>
+            <td><span class="badge b-blue" style="font-size:10px">{{ item.item_type }}</span></td>
+            <td style="font-size:12px">{{ item.presenter or '—' }}</td>
+            <td style="font-size:12px">{% if item.time_allocated %}{{ item.time_allocated }}m{% else %}—{% endif %}</td>
+            <td>
+              {% if item.status=='Discussed' %}<span class="badge b-green" style="font-size:10px">Discussed</span>
+              {% elif item.status=='Deferred' %}<span class="badge b-yellow" style="font-size:10px">Deferred</span>
+              {% elif item.status=='Withdrawn' %}<span class="badge b-gray" style="font-size:10px">Withdrawn</span>
+              {% else %}<span class="badge b-gray" style="font-size:10px">Pending</span>{% endif %}
+            </td>
+            <td style="font-size:12px;max-width:180px">{{ (item.decision or '')[:60] }}{% if item.decision and item.decision|length > 60 %}…{% endif %}</td>
+            <td>
+              {% if mtg.status != 'Completed' %}
+              <button onclick="document.getElementById('agenda-edit-{{ item.id }}').style.display='block'" class="btn btn-outline btn-sm">✏</button>
+              <div id="agenda-edit-{{ item.id }}" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center">
+                <form method="POST" action="/governance/srb/{{ mtg.id }}/agenda/{{ item.id }}/update" style="background:#fff;border-radius:12px;padding:24px;width:480px;max-width:96vw">
+                  <div style="font-weight:800;margin-bottom:14px">Update Agenda Item {{ item.item_number }}</div>
+                  <label style="font-size:11px;font-weight:700;color:var(--muted)">Status</label>
+                  <select name="status" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin:4px 0 10px;font-size:13px">
+                    {% for s in ['Pending','Discussed','Deferred','Withdrawn'] %}
+                    <option {% if item.status==s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                  </select>
+                  <label style="font-size:11px;font-weight:700;color:var(--muted)">Discussion Notes</label>
+                  <textarea name="discussion_notes" rows="3" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin:4px 0 10px;font-size:13px;resize:vertical">{{ item.discussion_notes or '' }}</textarea>
+                  <label style="font-size:11px;font-weight:700;color:var(--muted)">Decision / Outcome</label>
+                  <textarea name="decision" rows="2" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin:4px 0 10px;font-size:13px;resize:vertical">{{ item.decision or '' }}</textarea>
+                  <label style="font-size:11px;font-weight:700;color:var(--muted)">Action Required?</label>
+                  <select name="action_required" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin:4px 0 10px;font-size:13px">
+                    <option value="0" {% if not item.action_required %}selected{% endif %}>No</option>
+                    <option value="1" {% if item.action_required %}selected{% endif %}>Yes</option>
+                  </select>
+                  <div style="display:flex;gap:8px">
+                    <button type="submit" class="btn btn-nav btn-sm">Save</button>
+                    <button type="button" onclick="document.getElementById('agenda-edit-{{ item.id }}').style.display='none'" class="btn btn-outline btn-sm">Cancel</button>
+                  </div>
+                </form>
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">No agenda items.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── ATTENDANCE ─────────────────────────────────────────────────────────── -->
+<div id="attendance" style="display:none">
+  <form method="POST" action="/governance/srb/{{ mtg.id }}/attendance/update">
+    <div class="card" style="padding:0">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Role</th><th>Person Name</th><th>Required</th><th>Attended</th><th>Apology</th></tr></thead>
+          <tbody>
+            {% for att in mtg.attendees %}
+            <tr>
+              <td style="font-size:12px;font-weight:600">{{ att.role_title }}</td>
+              <td><input type="text" name="name_{{ att.id }}" value="{{ att.person_name }}"
+                         style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;width:180px"></td>
+              <td style="text-align:center">{% if att.is_required %}<span class="badge b-blue" style="font-size:10px">Required</span>{% else %}—{% endif %}</td>
+              <td style="text-align:center">
+                <select name="attended_{{ att.id }}" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+                  <option value="0" {% if not att.attended %}selected{% endif %}>No</option>
+                  <option value="1" {% if att.attended %}selected{% endif %}>Yes</option>
+                </select>
+              </td>
+              <td style="text-align:center">
+                <select name="apology_{{ att.id }}" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+                  <option value="0" {% if not att.apology_given %}selected{% endif %}>No</option>
+                  <option value="1" {% if att.apology_given %}selected{% endif %}>Yes</option>
+                </select>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% if mtg.status != 'Completed' %}
+    <button type="submit" class="btn btn-nav" style="margin-top:12px">Save Attendance</button>
+    {% endif %}
+  </form>
+</div>
+
+<!-- ── DECISIONS ──────────────────────────────────────────────────────────── -->
+<div id="decisions" style="display:none">
+  {% if mtg.status != 'Completed' %}
+  <div class="card" style="background:#f8fafc;margin-bottom:14px">
+    <div style="font-weight:800;font-size:13px;margin-bottom:12px">Record New Decision</div>
+    <form method="POST" action="/governance/srb/{{ mtg.id }}/decision/add">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Agenda Item</label>
+          <select name="agenda_item_id" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+            <option value="">— General (no specific item) —</option>
+            {% for item in mtg.agenda_items %}
+            <option value="{{ item.id }}">{{ item.item_number }}. {{ item.title[:50] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Decision Type</label>
+          <select name="decision_type" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+            {% for t in ['Noted','Approved','Rejected','Deferred','Action Required','Escalated'] %}
+            <option>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="grid-column:1/-1">
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Decision Text *</label>
+          <textarea name="decision_text" required rows="3" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px;resize:vertical"></textarea>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Responsible Party</label>
+          <input type="text" name="responsible_party" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Due Date</label>
+          <input type="date" name="due_date" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-nav btn-sm" style="margin-top:12px">Record Decision</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Ref</th><th>Decision</th><th>Type</th><th>Responsible</th><th>Due</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for dec in mtg.decisions %}
+          <tr>
+            <td><span class="ctrl-num" style="font-size:11px">{{ dec.decision_ref }}</span></td>
+            <td style="font-size:13px;max-width:260px">{{ dec.decision_text }}</td>
+            <td>
+              {% if dec.decision_type == 'Approved' %}<span class="badge b-green" style="font-size:10px">Approved</span>
+              {% elif dec.decision_type == 'Rejected' %}<span class="badge b-red" style="font-size:10px">Rejected</span>
+              {% elif dec.decision_type == 'Action Required' %}<span class="badge b-yellow" style="font-size:10px">Action Req.</span>
+              {% elif dec.decision_type == 'Escalated' %}<span class="badge b-red" style="font-size:10px">Escalated</span>
+              {% else %}<span class="badge b-gray" style="font-size:10px">{{ dec.decision_type }}</span>{% endif %}
+            </td>
+            <td style="font-size:12px">{{ dec.responsible_party or '—' }}</td>
+            <td style="font-size:12px">{{ dec.due_date or '—' }}</td>
+            <td>
+              {% if dec.status == 'Closed' %}<span class="badge b-green" style="font-size:10px">Closed</span>
+              {% else %}<span class="badge b-yellow" style="font-size:10px">Open</span>{% endif %}
+            </td>
+            <td>
+              {% if dec.status == 'Open' %}
+              <form method="POST" action="/governance/srb/decision/{{ dec.id }}/close" style="display:inline" onsubmit="return confirm('Close decision {{ dec.decision_ref }}?')">
+                <button type="submit" class="btn btn-sm" style="background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:11px">Close</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No decisions recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── MINUTES ────────────────────────────────────────────────────────────── -->
+<div id="minutes" style="display:none">
+  {% if mtg.status != 'Completed' %}
+  <form method="POST" action="/governance/srb/{{ mtg.id }}/update">
+    <input type="hidden" name="status" value="{{ mtg.status }}">
+    <div class="card" style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Meeting Minutes (Narrative)</label>
+      <textarea name="minutes_text" rows="12" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:6px;font-size:13px;font-family:'IBM Plex Mono',monospace;line-height:1.6;resize:vertical">{{ mtg.minutes_text or '' }}</textarea>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Key Outcomes</label>
+      <textarea name="key_outcomes" rows="4" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;margin-top:6px;font-size:13px;resize:vertical">{{ mtg.key_outcomes or '' }}</textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button type="submit" name="status" value="Minutes Draft" class="btn btn-nav">Save Minutes</button>
+      {% if mtg.status in ['In Progress','Minutes Draft'] %}
+      <button type="submit" name="status" value="Completed" class="btn btn-outline" onclick="return confirm('Mark minutes as final and close meeting?')">Approve & Close Meeting</button>
+      {% endif %}
+    </div>
+  </form>
+  {% else %}
+  <div class="card">
+    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px">Approved Minutes</div>
+    <pre style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;white-space:pre-wrap;line-height:1.7;color:#374151">{{ mtg.minutes_text or 'No minutes recorded.' }}</pre>
+    {% if mtg.minutes_approved_by %}
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)">
+      Approved by <strong>{{ mtg.minutes_approved_by }}</strong> on {{ mtg.minutes_approved_date }}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── UPDATE ─────────────────────────────────────────────────────────────── -->
+<div id="update-section" style="display:none">
+  {% if mtg.status != 'Completed' %}
+  <form method="POST" action="/governance/srb/{{ mtg.id }}/update" class="card" style="max-width:640px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">Actual Date</label>
+        <input type="date" name="actual_date" value="{{ mtg.actual_date or '' }}"
+               style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">Status</label>
+        <select name="status" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+          {% for s in ['Scheduled','In Progress','Minutes Draft','Completed','Cancelled'] %}
+          <option {% if mtg.status==s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">Start Time</label>
+        <input type="time" name="start_time" value="{{ mtg.start_time or '' }}"
+               style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">End Time</label>
+        <input type="time" name="end_time" value="{{ mtg.end_time or '' }}"
+               style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">Quorum Met?</label>
+        <select name="quorum_met" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+          <option value="0" {% if not mtg.quorum_met %}selected{% endif %}>No</option>
+          <option value="1" {% if mtg.quorum_met %}selected{% endif %}>Yes</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">Required Members Present</label>
+        <input type="number" name="quorum_count" value="{{ mtg.quorum_count or 0 }}" min="0"
+               style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted)">Next Meeting Date</label>
+        <input type="date" name="next_meeting_date" value="{{ mtg.next_meeting_date or '' }}"
+               style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;margin-top:3px;font-size:13px">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button type="submit" class="btn btn-nav">Save Changes</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="card" style="background:#f0fdf4">
+    <p style="color:#15803d;font-size:13px">This meeting is completed and locked. Minutes approved by {{ mtg.minutes_approved_by or 'unknown' }} on {{ mtg.minutes_approved_date or '—' }}.</p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function showTab(id){
+  document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.borderBottomColor='transparent');
+  ['agenda','attendance','decisions','minutes','update-section'].forEach(s=>{
+    var el=document.getElementById(s);
+    if(el) el.style.display=s===id?'block':'none';
+  });
+  var tab=document.getElementById('tab-'+id);
+  if(tab) tab.style.borderBottomColor='var(--navy)';
+}
+showTab('agenda');
+</script>
+{% endblock %}
