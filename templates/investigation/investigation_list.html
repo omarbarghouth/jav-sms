@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render_pagination %}
 {% block title %}Investigations{% endblock %}
 {% block content %}
 <div class="page-title">Investigations</div>
@@ -56,12 +57,15 @@
         {% else %}
         <tr>
           <td colspan="9" style="text-align:center;color:var(--muted);padding:36px">
-            No investigations. <a href="/investigations/new" style="color:var(--navy);font-weight:700">Start one →</a>
+            No investigations. <
+            No investigations. <a href="/investigations/new" class="btn btn-nav btn-sm">Start Investigation</a>
           </td>
         </tr>
         {% endfor %}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+{% from "_pagination.html" import render_pagination %}
+{{ render_pagination(pagination) }}
 {% endblock %}
