@@ -263,7 +263,7 @@ def srb_new():
                            open_escalations=open_escalations,
                            open_intolerable=open_intolerable)
 
-@gov.route('/srb/<mid>')
+@gov.route('/srb/<path:mid>')
 @require_login
 def srb_detail(mid):
     mtg = SRBMeeting.query.get_or_404(mid)
@@ -274,7 +274,7 @@ def srb_detail(mid):
                            mtg=mtg, ae=ae,
                            open_decisions=open_decisions)
 
-@gov.route('/srb/<mid>/update', methods=['POST'])
+@gov.route('/srb/<path:mid>/update', methods=['POST'])
 @require_login
 def srb_update(mid):
     mtg = SRBMeeting.query.get_or_404(mid)
@@ -297,7 +297,7 @@ def srb_update(mid):
     flash('✓ Meeting updated.', 'success')
     return redirect(url_for('governance.srb_detail', mid=mid))
 
-@gov.route('/srb/<mid>/approve-minutes', methods=['POST'])
+@gov.route('/srb/<path:mid>/approve-minutes', methods=['POST'])
 @require_login
 def srb_approve_minutes(mid):
     mtg = SRBMeeting.query.get_or_404(mid)
@@ -312,7 +312,7 @@ def srb_approve_minutes(mid):
 
 # ── Agenda items ──────────────────────────────────────────────────────────────
 
-@gov.route('/srb/<mid>/agenda/add', methods=['POST'])
+@gov.route('/srb/<path:mid>/agenda/add', methods=['POST'])
 @require_login
 def srb_add_agenda(mid):
     SRBMeeting.query.get_or_404(mid)   # 404 guard
@@ -336,7 +336,7 @@ def srb_add_agenda(mid):
     flash('✓ Agenda item added.', 'success')
     return redirect(url_for('governance.srb_detail', mid=mid))
 
-@gov.route('/srb/<mid>/agenda/<int:iid>/update', methods=['POST'])
+@gov.route('/srb/<path:mid>/agenda/<int:iid>/update', methods=['POST'])
 @require_login
 def srb_update_agenda(mid, iid):
     item = SRBAgendaItem.query.get_or_404(iid)
@@ -351,7 +351,7 @@ def srb_update_agenda(mid, iid):
 
 # ── Attendance ────────────────────────────────────────────────────────────────
 
-@gov.route('/srb/<mid>/attendance/update', methods=['POST'])
+@gov.route('/srb/<path:mid>/attendance/update', methods=['POST'])
 @require_login
 def srb_update_attendance(mid):
     SRBMeeting.query.get_or_404(mid)
@@ -378,7 +378,7 @@ def srb_update_attendance(mid):
 
 # ── Decisions ─────────────────────────────────────────────────────────────────
 
-@gov.route('/srb/<mid>/decision/add', methods=['POST'])
+@gov.route('/srb/<path:mid>/decision/add', methods=['POST'])
 @require_login
 def srb_add_decision(mid):
     mtg = SRBMeeting.query.get_or_404(mid)
@@ -435,7 +435,7 @@ def srb_close_decision(did):
 
 # ── Print view ────────────────────────────────────────────────────────────────
 
-@gov.route('/srb/<mid>/print')
+@gov.route('/srb/<path:mid>/print')
 @require_login
 def srb_print(mid):
     mtg = SRBMeeting.query.get_or_404(mid)
