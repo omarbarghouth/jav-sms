@@ -185,8 +185,11 @@ def add_cors(response):
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
 def hash_pw(pw):
-    """Hash a password with werkzeug pbkdf2_sha256 (salted, slow)."""
-    return generate_password_hash(pw)
+    """Hash a password using pbkdf2:sha256 (salted, compatible with all werkzeug versions).
+    Explicitly forces pbkdf2 so we never get werkzeug 3.x scrypt hashes, which are
+    CPU-intensive and can cause timeouts on Render free tier.
+    """
+    return generate_password_hash(pw, method='pbkdf2:sha256')
 
 def _is_legacy_hash(h):
     """Return True if h is a raw SHA-256 hex digest (64 hex chars, no colon prefix)."""
@@ -1614,17 +1617,22 @@ def api_setup_check():
     return api_ok(report, 'Setup check complete')
 
 
-@app.route('/api/debug-login', methods=['POST'])
+@app.route('/api/debug-login', methods=['GET', 'POST'])
 def api_debug_login():
     """
-    Diagnostic: POST {"username":"x","password":"y"}
+    Diagnostic: GET /api/debug-login?username=x&password=y
+    or POST {"username":"x","password":"y"}
     Returns exactly which step of the login flow fails.
     REMOVE THIS ENDPOINT after login issue is resolved.
     """
     try:
-        f = request.get_json() if request.is_json else request.form.to_dict()
-        username = (f.get('username') or '').strip()
-        password = f.get('password') or ''
+        if request.method == 'GET':
+            username = (request.args.get('username') or '').strip()
+            password = request.args.get('password') or ''
+        else:
+            f = request.get_json() if request.is_json else request.form.to_dict()
+            username = (f.get('username') or '').strip()
+            password = f.get('password') or ''
         if not username or not password:
             return api_ok({'result': 'MISSING_PARAMS'}, 'Provide username and password')
 
