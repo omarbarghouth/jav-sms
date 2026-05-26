@@ -7,6 +7,8 @@
   <div style="display:flex;gap:8px">
     <a href="/hazard-reports/{{ rep.id }}/print" target="_blank"
        class="btn btn-nav" style="background:#065f46">🖨 Print Report</a>
+    <a href="/pdf/hazard-report/{{ rep.id }}" target="_blank"
+       class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c" title="Export ICAO/IOSA PDF">📄 ICAO PDF</a>
     {% if rep.hazard_id %}
     <a href="/hazard-log/{{ rep.hazard_id }}"
        class="btn btn-outline">⚠ View Hazard →</a>

@@ -172,6 +172,7 @@
           </td>
           <td style="white-space:nowrap">
             <a href="/hazard-reports/{{ r.id }}" class="btn btn-nav btn-sm">View →</a>
+            <a href="/pdf/hazard-report/{{ r.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;margin-left:4px" title="Export ICAO PDF">📄 PDF</a>
             {% if r.status in ('Awaiting Closure', 'Awaiting Safety Approval') %}
             <button type="button"
               onclick="document.getElementById('closure-modal-{{ r.id }}').style.display='flex'"

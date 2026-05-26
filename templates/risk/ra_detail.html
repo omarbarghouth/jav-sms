@@ -3,8 +3,11 @@
 {% block content %}
 <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
   <a href="/risk-assessments" style="color:var(--muted);font-size:13px">← Risk Assessments</a>
-  <a href="/risk-assessments/{{ ra.id }}/print" target="_blank" class="btn btn-nav" style="background:#065f46">🖨 Print / Export PDF</a>
-  {% if ra.hazard %}&nbsp;·&nbsp;<a href="/hazard-log/{{ ra.hazard.id }}" style="color:var(--muted);font-size:13px">Hazard: {{ ra.hazard.id }}</a>{% endif %}
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="/risk-assessments/{{ ra.id }}/print" target="_blank" class="btn btn-nav" style="background:#065f46">🖨 Print / Export PDF</a>
+    <a href="/pdf/risk-assessment/{{ ra.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c" title="ICAO/IOSA Controlled Document PDF">📄 ICAO PDF</a>
+    {% if ra.hazard %}<a href="/hazard-log/{{ ra.hazard.id }}" style="color:var(--muted);font-size:13px">Hazard: {{ ra.hazard.id }}</a>{% endif %}
+  </div>
 </div>
 
 <!-- Header banner -->

@@ -62,6 +62,10 @@
                style="padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;
                  background:rgba(201,168,76,.12);color:var(--gold);border:1px solid rgba(201,168,76,.3);
                  text-decoration:none">View</a>
+            <a href="/pdf/asr/{{ a.id }}" target="_blank"
+               style="padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;
+                 background:rgba(10,22,40,.12);color:#0a1628;border:1px solid rgba(10,22,40,.3);
+                 text-decoration:none" title="Export ICAO PDF">📄 PDF</a>
             <form method="POST" action="/delete/asr/{{ a.id }}"
                   onsubmit="return confirm('Delete ASR {{ a.id }}? This cannot be undone.')">
               <button type="submit"

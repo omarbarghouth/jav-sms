@@ -28,6 +28,7 @@
         {% if e.description %}<p style="font-size:12px;color:#374151;margin-bottom:8px">{{ e.description[:120] }}{% if e.description|length > 120 %}…{% endif %}</p>{% endif %}
         {% if e.review_date %}<p style="font-size:11px;color:var(--muted)">Review: {{ e.review_date }}</p>{% endif %}
         <a href="/erp/{{ e.id }}" class="btn btn-nav btn-sm" style="margin-top:8px">View / Edit</a>
+        <a href="/pdf/erp/{{ e.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;margin-top:6px;display:inline-block" title="ICAO PDF">📄 PDF</a>
       </div>
       {% endfor %}
     </div>

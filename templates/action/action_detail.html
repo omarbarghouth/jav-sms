@@ -53,6 +53,7 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a href="/actions/{{ a.id }}/report" target="_blank" class="btn btn-sm" style="background:#065f46;color:#fff">🖨 Print Report</a>
+    <a href="/pdf/action/{{ a.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c" title="ICAO/IOSA Controlled Document PDF">📄 ICAO PDF</a>
     <a href="/actions" class="btn btn-outline btn-sm">← Back</a>
     <form method="POST" action="/delete/action/{{ a.id }}" style="display:inline"
           onsubmit="return confirm('Permanently delete Action {{ a.id }}?')">
