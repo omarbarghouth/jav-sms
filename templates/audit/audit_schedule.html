@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render_pagination %}
 {% block title %}Audit Schedule{% endblock %}
 {% block content %}
 <div class="page-title">Audit Schedule</div>
@@ -65,10 +66,12 @@
       </form></td>
         </tr>
         {% else %}
-        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:28px">No audits scheduled. <a href="/audit-schedule/new" style="color:var(--navy)">Create one →</a></td></tr>
+        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:36px">No audits match. <a href="/audit-schedule" class="btn btn-outline btn-sm">Clear</a></td></tr>
         {% endfor %}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+{% from "_pagination.html" import render_pagination %}
+{{ render_pagination(pagination) }}
 {% endblock %}

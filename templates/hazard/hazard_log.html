@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render_pagination %}
 {% block title %}Hazard & Risk Log{% endblock %}
 {% block content %}
 <div class="page-title">Hazard &amp; Risk Log</div>
@@ -112,10 +113,6 @@
             <a href="/pdf/hazard-report/{{ h.linked_report_id }}" target="_blank"
                class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;margin-left:4px" title="ICAO PDF">📄</a>
             {% endif %}
-              <form method="POST" action="/delete/hazard/{{ h.id }}" style="display:inline"
-                    onsubmit="return confirm('Delete Hazard {{ h.id }} and all linked risks/controls?')">
-                <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
-              </form>
             <form method="POST" action="/delete/hazard/{{ h.id }}" style="display:inline"
                   onsubmit="return confirm('Delete Hazard {{ h.id }}?\nLinked Risks, Controls and Actions will also be removed.')">
               <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5">🗑</button>
@@ -134,4 +131,5 @@
     </table>
   </div>
 </div>
+{{ render_pagination(pagination) }}
 {% endblock %}
