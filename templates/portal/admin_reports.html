@@ -46,6 +46,8 @@
           <button class="btn btn-nav btn-sm">Mark Reviewing</button>
         </form>
         {% endif %}
+        <a href="/pdf/voluntary/{{ r.id }}" target="_blank"
+           class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;margin-left:4px" title="ICAO PDF">📄</a>
       </td>
     </tr>
     {% endfor %}
@@ -79,6 +81,8 @@
           <button class="btn btn-nav btn-sm">Mark Reviewing</button>
         </form>
         {% endif %}
+        <a href="/pdf/confidential/{{ r.id }}" target="_blank"
+           class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;margin-left:4px" title="ICAO PDF">📄</a>
       </td>
     </tr>
     {% endfor %}

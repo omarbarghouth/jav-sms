@@ -110,6 +110,7 @@
           </td>
           <td style="white-space:nowrap">
             <a href="/safety-promotion/training/{{ t.id }}" class="btn btn-nav btn-sm" style="font-size:11px">Edit</a>
+            <a href="/pdf/training/{{ t.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;font-size:11px" title="ICAO PDF">📄</a>
             <form method="POST" action="/delete/training/{{ t.id }}" style="display:inline"
                   onsubmit="return confirm('Delete training record for {{ t.employee_name }}?')">
               <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;font-size:11px">🗑</button>

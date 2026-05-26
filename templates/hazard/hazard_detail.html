@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ h.id }} — Hazard Detail{% endblock %}
 {% block content %}
-<div style="margin-bottom:14px"><a href="/hazard-log" style="color:var(--muted);font-size:13px">← Hazard Log</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/start-ra" style="color:#d97706;font-size:13px;font-weight:700">📋 Risk Assessment →</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/documents" style="color:#1d4ed8;font-size:13px;font-weight:700">📄 Linked Documents →</a>&nbsp;·&nbsp;<a href="/srm-dashboard" style="color:#7c3aed;font-size:13px;font-weight:700">📊 SRM Dashboard →</a></div>
+<div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+  <div><a href="/hazard-log" style="color:var(--muted);font-size:13px">← Hazard Log</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/start-ra" style="color:#d97706;font-size:13px;font-weight:700">📋 Risk Assessment →</a>&nbsp;·&nbsp;<a href="/hazard-log/{{ h.id }}/documents" style="color:#1d4ed8;font-size:13px;font-weight:700">📄 Linked Documents →</a>&nbsp;·&nbsp;<a href="/srm-dashboard" style="color:#7c3aed;font-size:13px;font-weight:700">📊 SRM Dashboard →</a></div>
+  {% if h.linked_report_id %}
+  <a href="/pdf/hazard-report/{{ h.linked_report_id }}" target="_blank"
+     class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c" title="Export ICAO Hazard Report PDF">📄 ICAO PDF</a>
+  {% endif %}
+</div>
 <div class="page-title">{{ h.id }}</div>
 {% if h.risk_assessment %}
 <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
