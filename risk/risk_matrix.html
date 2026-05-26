@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Risk Matrix{% endblock %}
+{% block content %}
+<div class="page-title">Risk Matrix Reference</div>
+<div class="page-sub">JAV Safety Risk Matrix · Jav/SMS/001 Rev 02 · ICAO Annex 19</div>
+<div class="card" style="overflow-x:auto;margin-bottom:18px">
+  <table style="border-collapse:separate;border-spacing:4px;width:100%">
+    <thead><tr>
+      <th style="background:var(--navy);color:#fff;border-radius:6px;padding:10px 14px;font-size:11px;text-align:left">Probability \ Severity</th>
+      {% for s in ['A – Catastrophic','B – Hazardous','C – Major','D – Minor','E – Negligible'] %}
+      <th style="background:var(--navy);color:#fff;border-radius:6px;padding:10px 14px;font-size:11px;text-align:center">{{ s }}</th>{% endfor %}
+    </tr></thead>
+    <tbody>
+      {% for l, lbl in [(5,'5 – Frequent'),(4,'4 – Occasional'),(3,'3 – Remote'),(2,'2 – Improbable'),(1,'1 – Ext. Improbable')] %}
+      <tr>
+        <td style="background:var(--navy);color:#fff;border-radius:6px;padding:10px 14px;font-size:11px;font-weight:700;white-space:nowrap">{{ lbl }}</td>
+        {% for s in ['A','B','C','D','E'] %}{% set ri = l|string + s %}{% set tol = get_tolerance(ri) %}
+          {% if tol=='INTOLERABLE' %}<td style="background:#dc2626;border-radius:6px;text-align:center;font-weight:800;font-size:16px;padding:16px;color:#fff">{{ ri }}</td>
+          {% elif tol=='TOLERABLE' %}<td style="background:#d97706;border-radius:6px;text-align:center;font-weight:800;font-size:16px;padding:16px;color:#fff">{{ ri }}</td>
+          {% else %}<td style="background:#16a34a;border-radius:6px;text-align:center;font-weight:800;font-size:16px;padding:16px;color:#fff">{{ ri }}</td>{% endif %}
+        {% endfor %}
+      </tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
+  {% for color, label, ranges, desc in [
+    ('#dc2626','INTOLERABLE','5A, 5B, 5C, 4A, 4B, 3A','Take immediate action to mitigate the risk or stop the activity. Perform priority safety risk mitigation.'),
+    ('#d97706','TOLERABLE','5D, 5E, 4C, 4D, 4E, 3B, 3C, 3D, 2A, 2B, 2C, 1A','Can be tolerated based on safety risk mitigation. May require management decision to accept the risk.'),
+    ('#16a34a','ACCEPTABLE','3E, 2D, 2E, 1B, 1C, 1D, 1E','Acceptable as is. No further safety risk mitigation required.')
+  ] %}
+  <div style="border:2px solid {{ color }};border-radius:10px;padding:14px;background:{{ color }}10">
+    <div style="color:{{ color }};font-weight:800;font-size:14px;margin-bottom:5px">{{ label }}</div>
+    <div style="font-size:11px;color:#374151;margin-bottom:6px;font-family:'IBM Plex Mono',monospace">{{ ranges }}</div>
+    <div style="font-size:12px;color:#6b7280">{{ desc }}</div>
+  </div>{% endfor %}
+</div>
+<div class="card"><div class="card-title">Severity & Likelihood Definitions</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+    <table><thead><tr><th>Value</th><th>Severity</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><strong>A</strong></td><td>Catastrophic</td><td style="font-size:12px">Aircraft destroyed · Multiple deaths</td></tr>
+      <tr><td><strong>B</strong></td><td>Hazardous</td><td style="font-size:12px">Serious injury · Major equipment damage</td></tr>
+      <tr><td><strong>C</strong></td><td>Major</td><td style="font-size:12px">Serious incident · Injury to persons</td></tr>
+      <tr><td><strong>D</strong></td><td>Minor</td><td style="font-size:12px">Operating limitations · Minor incident</td></tr>
+      <tr><td><strong>E</strong></td><td>Negligible</td><td style="font-size:12px">Few consequences</td></tr>
+    </tbody></table>
+    <table><thead><tr><th>Value</th><th>Likelihood</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><strong>5</strong></td><td>Frequent</td><td style="font-size:12px">Has occurred frequently</td></tr>
+      <tr><td><strong>4</strong></td><td>Occasional</td><td style="font-size:12px">Has occurred infrequently</td></tr>
+      <tr><td><strong>3</strong></td><td>Remote</td><td style="font-size:12px">Has occurred rarely</td></tr>
+      <tr><td><strong>2</strong></td><td>Improbable</td><td style="font-size:12px">Not known to have occurred</td></tr>
+      <tr><td><strong>1</strong></td><td>Ext. Improbable</td><td style="font-size:12px">Almost inconceivable</td></tr>
+    </tbody></table>
+  </div>
+</div>
+{% endblock %}

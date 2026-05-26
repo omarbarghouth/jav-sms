@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Audit Calendar — {{ month_name }} {{ year }}{% endblock %}
+{% block content %}
+
+<div class="page-title">Audit Calendar</div>
+<div class="page-sub">{{ month_name }} {{ year }} · All scheduled audits · Click to open</div>
+
+<!-- Controls -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="/audit-schedule-calendar?year={{ prev_year }}&month={{ prev_month }}{% if dept_f %}&dept={{ dept_f }}{% endif %}"
+       class="btn btn-outline btn-sm">← Prev</a>
+    <span style="font-size:16px;font-weight:800;color:var(--navy)">{{ month_name }} {{ year }}</span>
+    <a href="/audit-schedule-calendar?year={{ next_year }}&month={{ next_month }}{% if dept_f %}&dept={{ dept_f }}{% endif %}"
+       class="btn btn-outline btn-sm">Next →</a>
+    <a href="/audit-schedule-calendar?year={{ now.year }}&month={{ now.month }}"
+       class="btn btn-outline btn-sm">Today</a>
+  </div>
+  <form method="GET" style="display:flex;gap:8px;align-items:center">
+    <input type="hidden" name="year" value="{{ year }}"/>
+    <input type="hidden" name="month" value="{{ month }}"/>
+    <select name="dept" onchange="this.form.submit()"
+            style="border:1.5px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px;font-family:inherit;background:#fff">
+      <option value="">All Departments</option>
+      {% for d in all_departments %}
+      <option value="{{ d.id }}" {% if dept_f==d.id|string %}selected{% endif %}>{{ d.name }}</option>
+      {% endfor %}
+    </select>
+    <a href="/audit-schedule/new" class="btn btn-nav btn-sm">+ Schedule Audit</a>
+  </form>
+</div>
+
+<!-- Calendar grid -->
+{% set status_colors = {
+  'Planned': '#1d4ed8',
+  'In Progress': '#d97706',
+  'Completed': '#15803d',
+  'Cancelled': '#6b7280',
+  'Overdue': '#dc2626'
+} %}
+
+<div class="card" style="padding:0;overflow:hidden">
+  <!-- Day headers -->
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);background:var(--navy)">
+    {% for day_name in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+    <div style="padding:10px 8px;text-align:center;font-size:11px;font-weight:800;
+                color:{% if day_name in ('Sat','Sun') %}rgba(255,255,255,.5){% else %}rgba(255,255,255,.9){% endif %}">
+      {{ day_name }}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Calendar days -->
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(100px,auto)">
+    {% set ns = namespace(day=1, started=false) %}
+    {% for cell in range(first_weekday + days_in_month) %}
+    {% set col = cell % 7 %}
+    {% set is_padding = cell < first_weekday %}
+    {% if not is_padding %}{% set ns.started = true %}{% endif %}
+    {% set day_num = cell - first_weekday + 1 %}
+    {% set is_today = (day_num == now.day and month == now.month and year == now.year) %}
+    {% set day_audits = cal_data.get(day_num, []) %}
+
+    <div style="border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+                padding:6px;min-height:100px;
+                background:{% if is_padding %}#f8f9fc{% elif is_today %}#eff6ff{% else %}#fff{% endif %};
+                {% if col == 5 or col == 6 %}opacity:0.85{% endif %}">
+      {% if not is_padding %}
+      <!-- Day number -->
+      <div style="font-size:12px;font-weight:{% if is_today %}800{% else %}600{% endif %};
+                  color:{% if is_today %}#1d4ed8{% else %}#374151{% endif %};
+                  margin-bottom:4px;
+                  {% if is_today %}background:#dbeafe;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center{% endif %}">
+        {{ day_num }}
+      </div>
+
+      <!-- Audit events for this day -->
+      {% for s in day_audits %}
+      {% set sc = status_colors.get(s.status, '#6b7280') %}
+      <a href="/audit-schedule/{{ s.id }}"
+         style="display:block;margin-bottom:3px;padding:3px 6px;border-radius:4px;
+                background:{{ sc }}18;border-left:3px solid {{ sc }};
+                text-decoration:none;font-size:10.5px;line-height:1.4">
+        <div style="font-weight:700;color:{{ sc }};font-size:9px;text-transform:uppercase">
+          {{ s.status }}
+        </div>
+        <div style="color:#374151;font-weight:600">
+          {{ s.audit_type or 'Audit' }}
+        </div>
+        {% if s.department %}
+        <div style="color:var(--muted);font-size:9.5px">{{ s.department.name[:20] }}</div>
+        {% endif %}
+        {% if s.lead_auditor %}
+        <div style="color:var(--muted);font-size:9px">👤 {{ s.lead_auditor[:15] }}</div>
+        {% endif %}
+      </a>
+      {% endfor %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Legend -->
+<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:12px">
+  {% for status, color in status_colors.items() %}
+  <span style="display:flex;align-items:center;gap:5px">
+    <span style="width:12px;height:12px;background:{{ color }};border-radius:3px;display:inline-block"></span>
+    {{ status }}
+  </span>
+  {% endfor %}
+</div>
+
+<!-- Upcoming / this month list -->
+{% if cal_data %}
+<div class="card" style="margin-top:16px">
+  <div class="card-title">This Month — Audit Details</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Audit ID</th><th>Type</th><th>Department</th>
+        <th>Lead Auditor</th><th>Findings</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for day in cal_data|sort %}
+        {% for s in cal_data[day] %}
+        {% set sc = status_colors.get(s.status,'#6b7280') %}
+        <tr>
+          <td style="font-weight:700;font-size:12px">{{ day }} {{ month_name[:3] }}</td>
+          <td><a href="/audit-schedule/{{ s.id }}" class="mono" style="font-size:11px;color:#1d4ed8">{{ s.id }}</a></td>
+          <td style="font-size:12px">{{ s.audit_type or '—' }}</td>
+          <td style="font-size:12px">{{ s.department.name if s.department else '—' }}</td>
+          <td style="font-size:12px">{{ s.lead_auditor or '—' }}</td>
+          <td style="font-size:12px">
+            {{ s.findings|length }}
+            {% set open_f = s.findings|rejectattr('status','eq','Closed')|list|length %}
+            {% if open_f > 0 %}<span class="badge b-yellow" style="font-size:9px">{{ open_f }} open</span>{% endif %}
+          </td>
+          <td>
+            <span style="background:{{ sc }}20;color:{{ sc }};border:1px solid {{ sc }}40;
+                         padding:3px 8px;border-radius:99px;font-size:10px;font-weight:700">
+              {{ s.status }}
+            </span>
+          </td>
+          <td>
+            <a href="/audit-schedule/{{ s.id }}" class="btn btn-nav btn-sm">Open</a>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

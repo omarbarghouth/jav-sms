@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Actions{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Action Management</div>
+    <div class="page-sub">All corrective &amp; preventive actions · Centralized from all SMS modules</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/actions/dashboard" class="btn btn-outline btn-sm">📊 Dashboard</a>
+    <a href="/actions/new" class="btn btn-nav btn-sm">+ New Action</a>
+  </div>
+</div>
+
+<!-- Stats bar -->
+<div class="stat-grid" style="grid-template-columns:repeat(7,1fr);margin-bottom:20px">
+  <div class="stat-card" style="border-top:3px solid #374151;cursor:pointer" onclick="location='?'">
+    <div class="stat-val">{{ counts.total }}</div><div class="stat-lbl">Total</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #d97706;cursor:pointer" onclick="location='?status=Open'">
+    <div class="stat-val" style="color:#d97706">{{ counts.open }}</div><div class="stat-lbl">Open</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #1d4ed8;cursor:pointer" onclick="location='?status=In+Progress'">
+    <div class="stat-val" style="color:#1d4ed8">{{ counts.prog }}</div><div class="stat-lbl">In Progress</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #dc2626;cursor:pointer" onclick="location='?status=Overdue'">
+    <div class="stat-val" style="color:#dc2626">{{ counts.overdue }}</div><div class="stat-lbl">Overdue</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #15803d;cursor:pointer" onclick="location='?status=Closed'">
+    <div class="stat-val" style="color:#15803d">{{ counts.closed }}</div><div class="stat-lbl">Closed</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #ea580c;cursor:pointer" onclick="location='?priority=High'">
+    <div class="stat-val" style="color:#ea580c">{{ counts.high }}</div><div class="stat-lbl">High Priority</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #7c3aed">
+    <div class="stat-val" style="color:#7c3aed">{{ counts.pending_rev }}</div><div class="stat-lbl">Pending Review</div>
+  </div>
+</div>
+
+<!-- Overdue alert -->
+{% if counts.overdue > 0 and not stat_f %}
+<div style="background:#fee2e2;border:2px solid #fca5a5;border-radius:9px;padding:11px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:20px">⏰</span>
+  <div style="font-size:13px;font-weight:700;color:#dc2626">{{ counts.overdue }} overdue action(s) require immediate attention</div>
+  <a href="/actions?status=Overdue" class="btn btn-sm" style="background:#dc2626;color:#fff;margin-left:auto">View Overdue →</a>
+</div>
+{% endif %}
+
+<!-- Source breakdown pills -->
+{% if source_counts %}
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+  {% for src, n in source_counts.items() %}
+  <a href="?source={{ src }}" style="display:flex;align-items:center;gap:5px;padding:4px 12px;background:#fff;border:1.5px solid var(--border);border-radius:99px;font-size:11px;font-weight:700;color:var(--navy);text-decoration:none">
+    {{ src }} <span style="background:var(--navy);color:var(--gold);padding:1px 6px;border-radius:99px;font-size:10px">{{ n }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Filter bar -->
+<form method="GET" class="fbar">
+  <input type="text" name="q" value="{{ q_f }}" placeholder="🔍 Search action, owner, ID…" style="flex:1;min-width:160px"/>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Open','In Progress','Overdue','Closed'] %}
+    <option {% if stat_f==s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="priority" onchange="this.form.submit()">
+    <option value="">All Priorities</option>
+    {% for p in ['High','Medium','Low'] %}
+    <option {% if pri_f==p %}selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+  <select name="source" onchange="this.form.submit()">
+    <option value="">All Sources</option>
+    {% for s in all_sources %}
+    <option {% if src_f==s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-nav btn-sm">Search</button>
+  {% if q_f or stat_f or pri_f or src_f %}
+  <a href="/actions" class="btn btn-outline btn-sm">Clear</a>
+  {% endif %}
+  <span style="margin-left:auto;color:var(--muted);font-size:12px">{{ actions|length }} action(s)</span>
+</form>
+
+<!-- Action cards -->
+{% if actions %}
+<div style="display:flex;flex-direction:column;gap:10px">
+{% for a in actions %}
+{% set lc = {'Open':'#d97706','In Progress':'#1d4ed8','Overdue':'#dc2626','Closed':'#15803d'}.get(a.status,'#6b7280') %}
+<div style="background:#fff;border:1.5px solid {{ lc }}35;border-left:5px solid {{ lc }};border-radius:9px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.04)">
+
+  <!-- Header row -->
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:{{ lc }}06;flex-wrap:wrap">
+    <a href="/actions/{{ a.id }}" class="ctrl-num">{{ a.id }}</a>
+    {% if a.source %}
+    <span class="badge b-gray" style="font-size:10px">{{ a.source }}</span>
+    {% endif %}
+    {% if a.linked_ref_id %}
+    <span style="font-size:10.5px;color:var(--muted);font-family:monospace">→ {{ a.linked_ref_id }}</span>
+    {% endif %}
+    {% if a.hazard_id %}
+    <a href="/hazard-log/{{ a.hazard_id }}" style="font-size:10.5px;color:#1d4ed8;font-family:monospace">⚠ {{ a.hazard_id }}</a>
+    {% endif %}
+    {% if a.spi_id %}
+    <span style="font-size:10px;color:#7c3aed;font-weight:700">📈 SPI {{ a.spi_alert_level }}</span>
+    {% endif %}
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      {% if a.priority=='High' %}<span class="badge b-red" style="font-size:10px">🔴 High</span>
+      {% elif a.priority=='Medium' %}<span class="badge b-yellow" style="font-size:10px">🟡 Medium</span>
+      {% else %}<span class="badge b-gray" style="font-size:10px">⚪ Low</span>{% endif %}
+      <span class="badge {% if a.status=='Open' %}b-yellow{% elif a.status=='In Progress' %}b-blue{% elif a.status=='Overdue' %}b-red{% elif a.status=='Closed' %}b-green{% else %}b-gray{% endif %}">{{ a.status }}</span>
+      <a href="/actions/{{ a.id }}" class="btn btn-nav btn-sm" style="font-size:11px">Detail →</a>
+      <a href="/actions/{{ a.id }}/report" target="_blank" class="btn btn-outline btn-sm" style="font-size:11px">🖨</a>
+      <a href="/pdf/action/{{ a.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;font-size:11px" title="ICAO PDF">📄</a>
+      <form method="POST" action="/delete/action/{{ a.id }}" style="display:inline"
+            onsubmit="return confirm('Delete Action {{ a.id }}?')">
+        <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;font-size:11px">🗑</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div style="display:grid;grid-template-columns:3fr 1fr 1fr 1fr;gap:0;border-top:1px solid {{ lc }}20">
+    <div style="padding:10px 16px;border-right:1px solid #f0f2f8">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Description</div>
+      <div style="font-size:13px;font-weight:600;color:#111827;line-height:1.4">{{ (a.description or '—')[:120] }}</div>
+      {% if a.mitigation_description %}
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;font-style:italic">Mitigation: {{ a.mitigation_description[:60] }}</div>
+      {% endif %}
+    </div>
+    <div style="padding:10px 12px;border-right:1px solid #f0f2f8">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Owner</div>
+      <div style="font-size:12px;font-weight:600;color:#374151">{{ a.owner or '—' }}</div>
+      {% if a.assigned_by %}<div style="font-size:10px;color:var(--muted)">by {{ a.assigned_by }}</div>{% endif %}
+    </div>
+    <div style="padding:10px 12px;border-right:1px solid #f0f2f8">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Due Date</div>
+      <div style="font-size:12px;font-weight:700;color:{% if a.status=='Overdue' %}#dc2626{% else %}#374151{% endif %}">
+        {{ a.due_date or '—' }}
+      </div>
+      {% if a.closed_date %}<div style="font-size:10px;color:#15803d;margin-top:2px">Closed {{ a.closed_date }}</div>{% endif %}
+    </div>
+    <div style="padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Effectiveness</div>
+      {% if a.effectiveness=='Effective' %}<span class="badge b-green" style="font-size:10px">✓ Effective</span>
+      {% elif a.effectiveness=='Partially Effective' %}<span class="badge b-yellow" style="font-size:10px">~ Partial</span>
+      {% elif a.effectiveness=='Ineffective' %}<span class="badge b-red" style="font-size:10px">✗ Ineffective</span>
+      {% elif a.status=='Closed' %}<span style="font-size:11px;color:#d97706">⚠ Needs review</span>
+      {% else %}<span style="font-size:11px;color:var(--muted)">Pending</span>{% endif %}
+      {% if a.evidence_filename %}
+      <div style="margin-top:4px"><a href="/spi/evidence/{{ a.evidence_filename }}" target="_blank" style="font-size:10px;color:#15803d;font-weight:700">📎 Evidence</a></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+</div>
+
+{% else %}
+<div class="card" style="text-align:center;padding:48px;border:2px dashed var(--border)">
+  <div style="font-size:36px;margin-bottom:12px">✅</div>
+  <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px">
+    {% if q_f or stat_f or pri_f or src_f %}No matching actions{% else %}No actions yet{% endif %}
+  </div>
+  {% if q_f or stat_f or pri_f or src_f %}
+  <a href="/actions" class="btn btn-outline">Clear filters</a>
+  {% else %}
+  <a href="/actions/new" class="btn btn-nav">+ Create First Action</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

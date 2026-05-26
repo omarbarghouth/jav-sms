@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}All ASR Reports{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Air Safety Reports (ASR)</div>
+    <div class="page-sub">All submitted aviation occurrence reports · {{ asrs|length }} total</div>
+  </div>
+  <a href="/asr" class="btn btn-gold">+ New ASR</a>
+</div>
+
+{% if asrs %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:var(--navy);border-bottom:2px solid var(--gold)">
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.6)">Ref</th>
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.6)">Category</th>
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.6)">Flight</th>
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.6)">Date</th>
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.6)">Severity</th>
+        <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.6)">Type</th>
+        <th style="padding:12px 16px;text-align:center;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.6)">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in asrs %}
+      <tr style="border-bottom:1px solid var(--border);transition:.15s"
+          onmouseover="this.style.background='rgba(255,255,255,.03)'"
+          onmouseout="this.style.background='transparent'">
+        <td style="padding:12px 16px">
+          <span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--gold)">{{ a.id }}</span>
+        </td>
+        <td style="padding:12px 16px">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">{{ a.occurrence_type or '—' }}</span>
+        </td>
+        <td style="padding:12px 16px">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">{{ a.flight_no or '—' }}</div>
+          {% if a.route_from or a.route_to %}
+          <div style="font-size:11px;color:var(--muted)">{{ a.route_from or '' }} → {{ a.route_to or '' }}</div>
+          {% endif %}
+        </td>
+        <td style="padding:12px 16px;font-size:13px;color:var(--muted)">{{ a.date or '—' }}</td>
+        <td style="padding:12px 16px">
+          {% set sev_colors = {'E':'#dc2626','D':'#ea580c','C':'#d97706','B':'#16a34a','A':'#6b7280'} %}
+          {% set sev_labels = {'E':'Catastrophic','D':'Hazardous','C':'Major','B':'Minor','A':'Negligible'} %}
+          <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;
+            font-size:11px;font-weight:800;
+            background:{{ sev_colors.get(a.severity,'#6b7280') }}22;
+            color:{{ sev_colors.get(a.severity,'#6b7280') }};
+            border:1px solid {{ sev_colors.get(a.severity,'#6b7280') }}44">
+            {{ a.severity or '?' }} — {{ sev_labels.get(a.severity,'Unknown') }}
+          </span>
+        </td>
+        <td style="padding:12px 16px">
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">{{ a.report_type or 'Voluntary' }}</span>
+        </td>
+        <td style="padding:12px 16px;text-align:center">
+          <div style="display:flex;gap:6px;justify-content:center">
+            <a href="/asr/{{ a.id }}/print" target="_blank"
+               style="padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;
+                 background:rgba(201,168,76,.12);color:var(--gold);border:1px solid rgba(201,168,76,.3);
+                 text-decoration:none">View</a>
+            <a href="/pdf/asr/{{ a.id }}" target="_blank"
+               style="padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;
+                 background:rgba(10,22,40,.12);color:#0a1628;border:1px solid rgba(10,22,40,.3);
+                 text-decoration:none" title="Export ICAO PDF">📄 PDF</a>
+            <form method="POST" action="/delete/asr/{{ a.id }}"
+                  onsubmit="return confirm('Delete ASR {{ a.id }}? This cannot be undone.')">
+              <button type="submit"
+                style="padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;
+                  background:rgba(220,38,38,.12);color:#ef4444;border:1px solid rgba(220,38,38,.3);
+                  cursor:pointer;font-family:inherit">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="card" style="text-align:center;padding:48px">
+  <div style="font-size:48px;margin-bottom:14px">✈</div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:6px">No ASR Reports</div>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:20px">No air safety reports have been submitted yet.</div>
+  <a href="/asr" class="btn btn-gold">Submit First ASR</a>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Safety Accountability{% endblock %}
+{% block content %}
+<div class="page-title">Safety Accountability & Responsibilities</div>
+<div class="page-sub">ICAO Annex 19 §3.2 · Defined roles and accountabilities across the organisation</div>
+
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+  <a href="/safety-roles/new" class="btn btn-nav">+ Add Role</a>
+</div>
+
+<!-- Org chart style display -->
+{% set role_order = ['Accountable Manager','Safety Manager','Department Manager','Safety Officer','SMS Coordinator','Other'] %}
+{% for rtype in role_order %}
+  {% set typed_roles = roles | selectattr('role_type','equalto',rtype) | list %}
+  {% if typed_roles %}
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title" style="display:flex;align-items:center;gap:10px">
+      {% if rtype=='Accountable Manager' %}👑{% elif rtype=='Safety Manager' %}🛡{% elif rtype=='Department Manager' %}👤{% else %}🔹{% endif %}
+      {{ rtype }}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">
+      {% for r in typed_roles %}
+      <div style="border:1.5px solid var(--border);border-radius:10px;padding:14px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <div>
+            <div style="font-weight:700;font-size:14px;color:#0f1c3f">{{ r.person_name }}</div>
+            <div style="font-size:12px;color:var(--muted)">{{ r.role_name }}</div>
+          </div>
+          {% if r.department %}<span class="badge b-blue" style="height:fit-content">{{ r.department.code }}</span>{% endif %}
+        </div>
+        {% if r.responsibilities %}
+        <div style="font-size:12px;color:#374151;margin-bottom:8px;line-height:1.6">{{ r.responsibilities[:200] }}{% if r.responsibilities|length > 200 %}…{% endif %}</div>
+        {% endif %}
+        {% if r.contact_email or r.contact_phone %}
+        <div style="font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:8px">
+          {% if r.contact_email %}📧 {{ r.contact_email }}<br>{% endif %}
+          {% if r.contact_phone %}📞 {{ r.contact_phone }}{% endif %}
+        </div>
+        {% endif %}
+        <div style="margin-top:8px">
+          <span class="mono" style="font-size:10px;color:var(--muted)">{{ r.id }}</span>
+        </div>
+        <!-- Inline update -->
+        <details style="margin-top:8px">
+          <summary style="font-size:11px;cursor:pointer;color:var(--navy)">Edit</summary>
+          <form method="POST" action="/safety-roles/{{ r.id }}/update" style="margin-top:8px">
+            <div class="fg"><label>Person Name</label><input type="text" name="person_name" value="{{ r.person_name }}"/></div>
+            <div class="fg"><label>Contact Email</label><input type="email" name="contact_email" value="{{ r.contact_email or '' }}"/></div>
+            <div class="fg"><label>Contact Phone</label><input type="text" name="contact_phone" value="{{ r.contact_phone or '' }}"/></div>
+            <div class="fg"><label>Responsibilities</label><textarea name="responsibilities" rows="3">{{ r.responsibilities or '' }}</textarea></div>
+            <button type="submit" class="btn btn-nav btn-sm">Save</button>
+          </form>
+        </details>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+
+{% if not roles %}
+<div class="card" style="text-align:center;color:var(--muted);padding:36px">
+  No roles defined yet. <a href="/safety-roles/new" style="color:var(--navy)">Add the first role →</a>
+</div>
+{% endif %}
+{% endblock %}

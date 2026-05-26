@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}New Investigation{% endblock %}
+{% block content %}
+<div class="page-title">New Safety Investigation</div>
+<div class="page-sub">5-Why Root Cause Analysis · ICAO Doc 9859</div>
+<form class="form-card" method="POST" style="max-width:900px">
+  <div class="sec">General</div>
+  <div class="fg"><label>Investigation Title *</label><input type="text" name="title" required placeholder="Brief title of the occurrence being investigated"/></div>
+  <div class="g3">
+    <div class="fg"><label>Department *</label>
+      <select name="department_id" required>
+        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Date of Occurrence *</label><input type="date" name="date_of_occurrence" required/></div>
+    <div class="fg"><label>Investigator *</label><input type="text" name="investigator" required/></div>
+  </div>
+  <div class="g2">
+    <div class="fg"><label>Linked Report ID</label><input type="text" name="linked_report_id" placeholder="e.g. ASR-2024-XXXX"/></div>
+    <div class="fg"><label>Linked Hazard</label>
+      <select name="hazard_id">
+        <option value="">None</option>
+        {% for h in hazards %}<option value="{{ h.id }}">{{ h.id }} — {{ h.generic_hazard[:50] }}</option>{% endfor %}
+      </select></div>
+  </div>
+  <div class="fg"><label>Occurrence Description *</label><textarea name="description" required rows="4" placeholder="Describe what happened, when, where, and who was involved…"></textarea></div>
+
+  <div class="sec">5-Why Root Cause Analysis</div>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Start with the problem statement and ask WHY repeatedly until the root cause is identified.</p>
+  <div class="why-chain">
+    {% for n in [1,2,3,4,5] %}
+    <div class="why-item">
+      <div><div class="why-num">{{ n }}</div>{% if not loop.last %}<div class="why-line"></div>{% endif %}</div>
+      <div class="fg" style="flex:1"><label>Why {{ n }}?</label><textarea name="why{{ n }}" rows="2" placeholder="{% if n==1 %}Why did the occurrence happen?{% else %}Why did that happen?{% endif %}"></textarea></div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="fg"><label>Root Cause *</label><textarea name="root_cause" required rows="3" placeholder="Based on the 5-Why analysis, state the root cause…"></textarea></div>
+
+  <div class="sec">Contributing Factors</div>
+  <div class="g2">
+    <div class="fg"><label>Human Factors</label><textarea name="human_factors" rows="3" placeholder="Fatigue, workload, training, communication…"></textarea></div>
+    <div class="fg"><label>Technical Factors</label><textarea name="technical_factors" rows="3" placeholder="Equipment failure, design, maintenance…"></textarea></div>
+    <div class="fg"><label>Organizational Factors</label><textarea name="organizational_factors" rows="3" placeholder="Procedures, culture, resources, supervision…"></textarea></div>
+    <div class="fg"><label>Environmental Factors</label><textarea name="environmental_factors" rows="3" placeholder="Weather, terrain, workspace, lighting…"></textarea></div>
+  </div>
+
+  <div class="sec">Recommendations</div>
+  <div class="fg"><label>Recommendations *</label><textarea name="recommendations" required rows="4" placeholder="List your safety recommendations to prevent recurrence…"></textarea></div>
+  <div class="fg"><label>Action Due Date</label><input type="date" name="due_date"/></div>
+  <button type="submit" class="btn btn-nav">Submit Investigation</button>
+</form>
+{% endblock %}

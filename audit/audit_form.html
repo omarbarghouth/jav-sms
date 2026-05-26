@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}New Audit{% endblock %}
+{% block content %}
+<div class="page-title">New Audit</div>
+<form class="form-card" method="POST">
+  <div class="sec">Audit Information</div>
+  <div class="fg"><label>Audit Title *</label><input type="text" name="title" required placeholder="e.g. Annual Flight Operations Safety Audit"/></div>
+  <div class="g3">
+    <div class="fg"><label>Audit Type *</label>
+      <select name="audit_type" required><option>Internal</option><option>External</option><option>IOSA</option><option>Regulatory</option><option>IATA</option></select></div>
+    <div class="fg"><label>Department *</label>
+      <select name="department_id" required>
+        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>Planned Date *</label><input type="date" name="planned_date" required/></div>
+  </div>
+  <div class="fg"><label>Lead Auditor *</label><input type="text" name="lead_auditor" required placeholder="Name of lead auditor"/></div>
+  <button type="submit" class="btn btn-nav">Create Audit</button>
+</form>
+{% endblock %}

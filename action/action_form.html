@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{% if pre.spi_id %}SPI Action{% else %}New Action{% endif %}{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px">
+  <a href="{{ pre.return_url or '/actions' }}" style="color:var(--muted);font-size:13px">← Back</a>
+</div>
+<div class="page-title">{% if pre.spi_id %}Create SPI Alert Action{% else %}Create New Action{% endif %}</div>
+<div class="page-sub">{% if pre.spi_id %}Corrective action linked to SPI alert · Full lifecycle tracking{% else %}5 fields. That is all you need.{% endif %}</div>
+
+<form class="form-card" method="POST" enctype="multipart/form-data"
+      style="max-width:{% if pre.spi_id %}720px{% else %}600px{% endif %}">
+
+  <!-- Hidden fields -->
+  <input type="hidden" name="return_url"        value="{{ pre.return_url or '/actions' }}"/>
+  <input type="hidden" name="source"            value="{{ pre.source or 'Manual' }}"/>
+  <input type="hidden" name="hazard_id"         value="{{ pre.hazard_id or '' }}"/>
+  <input type="hidden" name="linked_ref_id"     value="{{ pre.linked_ref_id or '' }}"/>
+  <input type="hidden" name="spi_id"            value="{{ pre.spi_id or '' }}"/>
+  <input type="hidden" name="spi_alert_level"   value="{{ pre.spi_alert_level or '' }}"/>
+  <input type="hidden" name="spi_trigger_rule"  value="{{ pre.spi_trigger_rule or '' }}"/>
+  <input type="hidden" name="spi_alert_month"   value="{{ now.month }}"/>
+  <input type="hidden" name="spi_alert_year"    value="{{ now.year }}"/>
+
+  <!-- SPI Alert banner -->
+  {% if pre.spi_id %}
+  {% set level_colors = {'L1':'#d97706','L2':'#ea580c','L3':'#dc2626'} %}
+  {% set rule_labels = {
+    'A':'Rule A — One point exceeded L3 (Mean+3SD) — IMMEDIATE ESCALATION',
+    'B':'Rule B — Two consecutive exceeded L2 (Mean+2SD) — Corrective Action Required',
+    'C':'Rule C — Three consecutive exceeded L1 (Mean+1SD) — Monitoring Action Required'
+  } %}
+  {% set lc = level_colors.get(pre.spi_alert_level,'#d97706') %}
+  <div style="background:{{ lc }}18;border:2px solid {{ lc }};border-radius:9px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:{{ lc }};margin-bottom:5px;letter-spacing:.8px">
+      ⚠ SPI ALERT — {{ pre.spi_alert_level }} TRIGGERED
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#374151">{{ rule_labels.get(pre.spi_trigger_rule,'SPI Alert') }}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:5px">
+      SPI Indicator ID: <strong>{{ pre.spi_id }}</strong> ·
+      Month: <strong>{{ now.strftime('%B %Y') }}</strong> ·
+      This action will appear in the SPI Actions Report List.
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Section 1: Action Details ──────────────────────────────────────── -->
+  <div class="sec">Corrective / Mitigation Action</div>
+  <div class="fg">
+    <label>Action Description *</label>
+    <textarea name="description" required rows="3"
+      placeholder="What must be done? Be specific and measurable.">{{ pre.description or '' }}</textarea>
+  </div>
+
+  {% if pre.spi_id %}
+  <div class="fg">
+    <label>Mitigation Description</label>
+    <textarea name="mitigation_description" rows="3"
+      placeholder="Describe the mitigation measure in detail — how it reduces or eliminates the safety risk."></textarea>
+  </div>
+  <div class="fg">
+    <label>Corrective Action Description</label>
+    <textarea name="corrective_description" rows="3"
+      placeholder="Describe the corrective steps — root cause addressed, process changes, training, etc."></textarea>
+  </div>
+  <div class="fg">
+    <label>Safety Improvement Notes</label>
+    <textarea name="safety_notes" rows="2"
+      placeholder="How will this improve the safety performance indicator?"></textarea>
+  </div>
+  {% endif %}
+
+  <!-- ── Section 2: Responsible Persons ────────────────────────────────── -->
+  <div class="sec">Responsible Persons</div>
+  <div class="g2">
+    <div class="fg">
+      <label>Action Owner (Responsible) *</label>
+      <input type="text" name="owner" required placeholder="e.g. Ground Operations Manager"/>
+    </div>
+    <div class="fg">
+      <label>Assigned By</label>
+      <input type="text" name="assigned_by" placeholder="e.g. Safety Manager"/>
+    </div>
+  </div>
+
+  <!-- ── Section 3: Schedule & Priority ───────────────────────────────── -->
+  <div class="sec">Schedule &amp; Priority</div>
+  <div class="g2">
+    <div class="fg">
+      <label>Due Date *</label>
+      <input type="date" name="due_date" required/>
+    </div>
+    <div class="fg">
+      <label>Priority</label>
+      <select name="priority">
+        <option value="High"   {% if pre.priority=='High'   %}selected{% endif %}>High — Immediate action</option>
+        <option value="Medium" {% if pre.priority=='Medium' or not pre.priority %}selected{% endif %}>Medium — Within due date</option>
+        <option value="Low"    {% if pre.priority=='Low'    %}selected{% endif %}>Low — When possible</option>
+      </select>
+    </div>
+  </div>
+
+  {% if pre.spi_id %}
+  <!-- ── Section 4: Evidence ──────────────────────────────────────────── -->
+  <div class="sec">Evidence &amp; Supporting Documents</div>
+  <div class="fg">
+    <label>Evidence Description</label>
+    <textarea name="evidence" rows="2"
+      placeholder="Describe any evidence, observations, or data supporting this action…"></textarea>
+  </div>
+  <div class="fg">
+    <label>Upload Evidence File (PDF, DOCX, XLSX, Image)</label>
+    <input type="file" name="evidence_file"
+           accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg,.gif"
+           style="border:1.5px solid var(--border);border-radius:7px;padding:8px;font-family:inherit;font-size:13px;background:#fafbfe"/>
+    <div style="font-size:11px;color:var(--muted);margin-top:3px">
+      Accepted: PDF, DOCX, XLSX, PNG, JPG, GIF · Max 16MB
+    </div>
+  </div>
+
+  <!-- ── Section 5: Follow-up ─────────────────────────────────────────── -->
+  <div class="sec">Follow-up &amp; Monitoring</div>
+  <div class="fg">
+    <label>Follow-up Notes</label>
+    <textarea name="follow_up_notes" rows="2"
+      placeholder="How will this action be monitored after implementation?"></textarea>
+  </div>
+  {% endif %}
+
+  <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+    <button type="submit" class="btn btn-nav" style="font-size:14px;padding:11px 24px">
+      {% if pre.spi_id %}✅ Create SPI Action{% else %}Create Action{% endif %}
+    </button>
+    <a href="{{ pre.return_url or '/actions' }}" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}

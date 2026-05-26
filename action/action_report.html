@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><title>Action Report — {{ a.id }}</title>
+<style>
+  @page{size:A4 portrait;margin:18mm 16mm}
+  @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:10pt;color:#111;background:#fff}
+  .print-btn{position:fixed;top:12px;right:12px;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
+  .doc-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:14px}
+  .logo{font-size:20px;font-weight:900;color:#0f1c3f}.logo span{color:#c9a84c}
+  .status-pill{padding:3px 12px;border-radius:4px;font-size:10pt;font-weight:800;display:inline-block}
+  .s-open{background:#fef9c3;color:#b45309;border:1px solid #fde68a}
+  .s-prog{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
+  .s-overdue{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+  .s-closed{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+  .sec{background:#0f1c3f;color:#fff;font-weight:700;font-size:10pt;padding:5px 12px;margin:12px 0 6px;border-radius:4px}
+  .sec-trace{background:#1d4ed8;color:#fff;font-weight:700;font-size:10pt;padding:5px 12px;margin:12px 0 6px;border-radius:4px}
+  .sec-eff{background:#15803d;color:#fff;font-weight:700;font-size:10pt;padding:5px 12px;margin:12px 0 6px;border-radius:4px}
+  .info-table{width:100%;border-collapse:collapse;margin-bottom:10px}
+  .info-table td{border:1px solid #d1d5db;padding:7px 10px;font-size:9.5pt}
+  .info-table .lbl{background:#f4f6fb;font-weight:700;width:145px;color:#374151}
+  .text-box{border:1px solid #d1d5db;padding:10px 12px;min-height:36px;font-size:10pt;line-height:1.7;background:#fafbfe;margin-bottom:10px;white-space:pre-wrap}
+  .trace-box{border:2px solid #1d4ed8;border-radius:6px;padding:12px;background:#eff6ff;margin-bottom:10px}
+  .progress-bar{height:10px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:5px 0}
+  .sig-table{width:100%;border-collapse:collapse;margin-top:12px}
+  .sig-table th{background:#0f1c3f;color:#fff;padding:7px 10px;text-align:left;font-size:9pt}
+  .sig-table td{border:1px solid #d1d5db;padding:14px 10px}
+  .sig-table .role{background:#f4f6fb;font-weight:700;width:130px}
+  .footer{border-top:1px solid #d1d5db;margin-top:12px;padding-top:6px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+
+<div class="doc-header">
+  <div class="logo">JORDAN<span>AVIATION</span></div>
+  <div style="text-align:center">
+    <h1 style="font-size:15pt;font-weight:900;color:#0f1c3f">CORRECTIVE ACTION REPORT</h1>
+    <p style="font-size:9pt;color:#555">Safety Management System — Action Management</p>
+  </div>
+  <div style="text-align:right;font-size:8.5pt;color:#555;line-height:1.8">
+    <strong>{{ a.id }}</strong><br>
+    {{ now.strftime('%d %b %Y') }}<br>
+    <span class="status-pill {% if a.status=='Overdue' or a.status=='Open' %}s-open{% elif a.status=='Closed' %}s-closed{% elif a.status=='In Progress' %}s-prog{% else %}s-open{% endif %}">{{ a.status }}</span>
+  </div>
+</div>
+
+<!-- Traceability box -->
+<div class="trace-box">
+  <div style="font-size:9pt;font-weight:800;color:#1d4ed8;text-transform:uppercase;margin-bottom:8px">⛓ Traceability — Source Module</div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:10pt">
+    <div><span style="color:#6b7280">Source Module: </span><strong>{{ a.source or 'Manual' }}</strong></div>
+    {% if a.linked_ref_id %}<div><span style="color:#6b7280">Linked Record: </span><strong style="font-family:monospace">{{ a.linked_ref_id }}</strong></div>{% endif %}
+    {% if a.hazard_id %}<div><span style="color:#6b7280">Hazard: </span><strong style="font-family:monospace;color:#dc2626">{{ a.hazard_id }}</strong></div>{% endif %}
+    {% if a.spi_id %}<div><span style="color:#6b7280">SPI Alert: </span><strong style="color:#7c3aed">{{ a.spi_alert_level }} — {% if a.spi_alert_month %}Month {{ a.spi_alert_month }}/{{ a.spi_alert_year }}{% endif %}</strong></div>{% endif %}
+    {% if source_ref %}<div><span style="color:#6b7280">Finding: </span><strong>{{ source_ref.finding_ref }} — {{ (source_ref.description or '')[:50] }}</strong></div>{% endif %}
+    {% if hazard_ref %}<div><span style="color:#6b7280">Hazard Ref: </span><strong>{{ (hazard_ref.description or '')[:50] }}</strong></div>{% endif %}
+  </div>
+</div>
+
+<!-- Section 1: Action Details -->
+<div class="sec">ACTION DETAILS</div>
+<table class="info-table">
+  <tr><td class="lbl">Action ID</td><td><strong style="font-family:monospace">{{ a.id }}</strong></td>
+      <td class="lbl">Priority</td>
+      <td><strong style="color:{% if a.priority=='High' %}#dc2626{% elif a.priority=='Medium' %}#b45309{% else %}#374151{% endif %}">{{ a.priority }}</strong></td></tr>
+  <tr><td class="lbl">Status</td>
+      <td><span class="status-pill {% if a.status=='Closed' %}s-closed{% elif a.status=='Overdue' %}s-overdue{% elif a.status=='In Progress' %}s-prog{% else %}s-open{% endif %}">{{ a.status }}</span></td>
+      <td class="lbl">Mitigation Status</td><td>{{ a.mitigation_status or '—' }}</td></tr>
+  <tr><td class="lbl">Responsible Person</td><td><strong>{{ a.owner or '—' }}</strong></td>
+      <td class="lbl">Assigned By</td><td>{{ a.assigned_by or '—' }}</td></tr>
+  <tr><td class="lbl">Due Date</td><td style="{% if a.status=='Overdue' %}color:#dc2626;font-weight:700{% endif %}">{{ a.due_date or '—' }}</td>
+      <td class="lbl">Created</td><td>{{ a.created_at.strftime('%d %b %Y') }}</td></tr>
+  {% if a.status=='Closed' %}
+  <tr><td class="lbl">Closed Date</td><td>{{ a.closed_date or '—' }}</td>
+      <td class="lbl">Closed By</td><td>{{ a.closure_by or '—' }}</td></tr>
+  {% endif %}
+</table>
+
+<!-- Section 2: Action Description -->
+<div class="sec">ACTION DESCRIPTION — WHAT &amp; WHY</div>
+<div class="text-box">{{ a.description or 'Not specified.' }}</div>
+
+<!-- Section 3: Mitigation & Corrective -->
+<div class="sec">MITIGATION &amp; CORRECTIVE ACTION TAKEN</div>
+<div style="font-size:9.5pt;font-weight:700;color:#374151;margin-bottom:3px">Mitigation Description:</div>
+<div class="text-box" style="min-height:30px">{{ a.mitigation_description or 'Not yet recorded.' }}</div>
+{% if a.corrective_description %}
+<div style="font-size:9.5pt;font-weight:700;color:#374151;margin-bottom:3px">Corrective Action Description:</div>
+<div class="text-box" style="min-height:28px">{{ a.corrective_description }}</div>
+{% endif %}
+{% if a.safety_notes %}
+<div style="font-size:9.5pt;font-weight:700;color:#374151;margin-bottom:3px">Safety Improvement Notes:</div>
+<div class="text-box" style="min-height:28px">{{ a.safety_notes }}</div>
+{% endif %}
+
+<!-- Section 4: Evidence -->
+<div class="sec">EVIDENCE &amp; SUPPORTING DOCUMENTATION</div>
+<table class="info-table">
+  <tr><td class="lbl">Evidence Notes</td><td colspan="3">{{ a.evidence or 'No evidence text recorded.' }}</td></tr>
+  <tr><td class="lbl">Evidence File</td>
+      <td colspan="3">{% if a.evidence_filename %}📎 {{ a.evidence_filename.split('_',1)[-1] if '_' in a.evidence_filename else a.evidence_filename }}{% else %}No file attached.{% endif %}</td></tr>
+</table>
+{% if a.follow_up_notes %}
+<div style="font-size:9.5pt;font-weight:700;color:#374151;margin-bottom:3px">Follow-up / Monitoring Notes:</div>
+<div class="text-box" style="min-height:28px">{{ a.follow_up_notes }}</div>
+{% endif %}
+
+<!-- Section 5: Effectiveness Review -->
+<div class="sec-eff">EFFECTIVENESS VERIFICATION</div>
+<table class="info-table">
+  <tr><td class="lbl">Effectiveness</td>
+      <td><strong style="color:{% if a.effectiveness=='Effective' %}#15803d{% elif a.effectiveness=='Ineffective' %}#dc2626{% else %}#b45309{% endif %}">{{ a.effectiveness or '⚠ Pending Review' }}</strong></td>
+      <td class="lbl">Verified By</td><td>{{ a.verified_by or '—' }}</td></tr>
+  <tr><td class="lbl">Verification Date</td><td>{{ a.verified_date or '—' }}</td>
+      <td class="lbl">Closure Approved By</td><td>{{ a.closure_by or '—' }}</td></tr>
+</table>
+{% if a.effectiveness_review %}
+<div style="font-size:9.5pt;font-weight:700;color:#374151;margin-bottom:3px">Effectiveness Review Notes:</div>
+<div class="text-box" style="min-height:30px">{{ a.effectiveness_review }}</div>
+{% endif %}
+
+<!-- Signatures -->
+<div class="sec">SIGNATORIES</div>
+<table class="sig-table">
+  <thead><tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:90px">Date</th></tr></thead>
+  <tbody>
+    <tr><td class="role">Action Owner</td><td>{{ a.owner or '' }}</td><td>Responsible Manager</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
+    <tr><td class="role">Assigned By</td><td>{{ a.assigned_by or '' }}</td><td>Safety Department</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
+    <tr><td class="role">Verified By</td><td>{{ a.verified_by or '' }}</td><td>Safety Manager</td><td><div style="border-bottom:1px solid #9ca3af;height:26px"></div></td><td></td></tr>
+  </tbody>
+</table>
+
+<div class="footer">
+  <span>Jordan Aviation · Safety Management System · {{ now.strftime('%d %b %Y') }}</span>
+  <span>Corrective Action Report — ICAO Annex 19</span>
+  <span>{{ a.id }}</span>
+</div>
+</body>
+</html>

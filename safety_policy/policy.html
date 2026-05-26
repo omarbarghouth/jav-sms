@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Safety Policy{% endblock %}
+{% block content %}
+<div class="page-title">Safety Policy</div>
+<div class="page-sub">ICAO Annex 19 §3.1 · Management Commitment · Version-controlled policy statement</div>
+
+{% if active %}
+<!-- Active Policy Banner -->
+<div style="border:2px solid #16a34a;border-radius:12px;padding:24px;background:#f0fdf4;margin-bottom:20px;max-width:860px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+    <div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#15803d;margin-bottom:4px">Active Safety Policy</div>
+      <div style="font-size:20px;font-weight:800;color:#0f1c3f">{{ active.title }}</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:4px">
+        {{ active.version }} · Effective: {{ active.effective_date }} · Review due: {{ active.review_date or '—' }}
+      </div>
+    </div>
+    <div style="text-align:right;font-size:12px;color:#374151">
+      <div style="font-weight:700">{{ active.approved_by }}</div>
+      <div style="color:#6b7280">{{ active.approved_by_title }}</div>
+      <span class="badge b-green" style="margin-top:6px">Active</span>
+    </div>
+  </div>
+  <div style="background:#fff;border-radius:8px;padding:18px;font-size:13.5px;line-height:1.8;color:#1f2937;white-space:pre-line;border:1px solid #bbf7d0">{{ active.content }}</div>
+  {% if active.change_summary %}
+  <div style="margin-top:12px;font-size:12px;color:#6b7280"><strong>Notes:</strong> {{ active.change_summary }}</div>
+  {% endif %}
+
+  <!-- Edit active policy -->
+  <details style="margin-top:14px">
+    <summary style="font-size:12px;font-weight:700;cursor:pointer;color:#0f1c3f">✏ Edit This Policy</summary>
+    <form method="POST" action="/safety-policy/{{ active.id }}/edit" style="margin-top:12px;padding:14px;background:#fff;border-radius:8px;border:1px solid #d1fae5">
+      <div class="fg"><label>Policy Content</label><textarea name="content" rows="10" style="font-family:inherit">{{ active.content }}</textarea></div>
+      <div class="g3">
+        <div class="fg"><label>Approved By</label><input type="text" name="approved_by" value="{{ active.approved_by }}"/></div>
+        <div class="fg"><label>Effective Date</label><input type="date" name="effective_date" value="{{ active.effective_date }}"/></div>
+        <div class="fg"><label>Review Date</label><input type="date" name="review_date" value="{{ active.review_date or '' }}"/></div>
+      </div>
+      <div class="fg"><label>Change Notes</label><input type="text" name="change_summary" value="{{ active.change_summary or '' }}"/></div>
+      <button type="submit" class="btn btn-nav btn-sm">Save Changes</button>
+    </form>
+  </details>
+</div>
+{% else %}
+<div style="background:#fef9c3;border:1.5px solid #fde68a;border-radius:10px;padding:18px;margin-bottom:20px;max-width:860px">
+  <strong style="color:#b45309">⚠ No active Safety Policy.</strong>
+  <span style="color:#374151;font-size:13px"> Create one below and activate it to make it official.</span>
+</div>
+{% endif %}
+
+<!-- Draft policies -->
+{% if drafts %}
+<div class="card" style="max-width:860px;margin-bottom:18px">
+  <div class="card-title">Draft Policies Awaiting Activation</div>
+  {% for d in drafts %}
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+    <div>
+      <span class="mono">{{ d.id }}</span>&nbsp;
+      <strong>{{ d.version }}</strong> — {{ d.title }}
+      <span style="font-size:12px;color:var(--muted);margin-left:8px">Created: {{ d.created_at.strftime('%d %b %Y') }}</span>
+    </div>
+    <form method="POST" action="/safety-policy/{{ d.id }}/activate">
+      <button type="submit" class="btn btn-nav btn-sm" style="background:#15803d">✓ Activate</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Create new version -->
+<div class="card" style="max-width:860px;margin-bottom:20px">
+  <div class="card-title">Create New Policy Version</div>
+  <a href="/safety-policy/new" class="btn btn-nav">+ New Policy Version</a>
+</div>
+
+<!-- Version history -->
+{% if history %}
+<div class="card" style="max-width:860px">
+  <div class="card-title">Version History</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Policy ID</th><th>Version</th><th>Title</th><th>Approved By</th><th>Effective Date</th><th>Change Notes</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for h in history %}
+        <tr>
+          <td class="mono">{{ h.id }}</td>
+          <td><strong>{{ h.version }}</strong></td>
+          <td style="font-size:12px">{{ h.title }}</td>
+          <td style="font-size:12px">{{ h.approved_by }}</td>
+          <td style="font-size:12px">{{ h.effective_date }}</td>
+          <td style="font-size:12px;max-width:200px">{{ h.change_summary or '—' }}</td>
+          <td><span class="badge b-gray">Archived</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

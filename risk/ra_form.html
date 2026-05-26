@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+{% block title %}New Risk Assessment{% endblock %}
+{% block content %}
+<div class="page-title">Hazard Identification Risk Assessment</div>
+<div class="page-sub">
+  Jordan Aviation · Safety Department · Jav/SMS/001 Rev 01
+  {% if hazard %}— linked to <a href="/hazard-log/{{ hazard.id }}" style="color:#1d4ed8">{{ hazard.id }}</a>{% endif %}
+</div>
+
+<form method="POST" action="/risk-assessments/new" id="ra-form">
+  {% if hazard %}<input type="hidden" name="hazard_id" value="{{ hazard.id }}"/>{% endif %}
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       PAGE 1 — ADMINISTRATOR
+       ═════════════════════════════════════════════════════════════════════ -->
+  <div class="card" style="max-width:860px;margin-bottom:18px">
+    <div style="background:var(--navy);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">
+      Administrator
+    </div>
+    <div class="g2">
+      <div class="fg"><label>Responsible Name *</label>
+        <input type="text" name="responsible_name" required
+          value="{{ hazard.owner or '' if hazard else '' }}"
+          placeholder="Name of responsible person"/></div>
+      <div class="fg"><label>Risk Assessment Title *</label>
+        <input type="text" name="title" required
+          value="{{ hazard.generic_hazard or '' if hazard else '' }}"
+          placeholder="Descriptive title for this assessment"/></div>
+      <div class="fg"><label>Risk Assessors' Names</label>
+        <input type="text" name="assessors_names"
+          placeholder="Names separated by commas"/></div>
+      <div class="fg"><label>Control Number <span style="font-weight:400;color:var(--muted)">(auto-generated if blank)</span></label>
+        <input type="text" name="control_number" placeholder="JAV/RA/FO/2026/001"/></div>
+      <div class="fg"><label>Assessment Date *</label>
+        <input type="date" name="assessment_date" required value="{{ today }}"/></div>
+      <div class="fg"><label>Next Review Date</label>
+        <input type="date" name="next_review_date"/></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       PAGE 2 — GENERAL INFORMATION
+       ═════════════════════════════════════════════════════════════════════ -->
+  <div class="card" style="max-width:860px;margin-bottom:18px">
+    <div style="background:#1d4ed8;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">
+      General Information
+    </div>
+    <div class="fg"><label>Department Responsible *</label>
+      <select name="department_id" required>
+        <option value="">Select department…</option>
+        {% for d in all_departments %}<option value="{{ d.id }}"
+          {% if hazard and hazard.department_id==d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="fg"><label>General Description *</label>
+      <textarea name="general_description" required rows="3"
+        placeholder="Describe the activity, process, or operation being assessed…">{{ hazard.specific_components or '' if hazard else '' }}</textarea></div>
+    <div class="fg"><label>Reasons For Risk Assessment</label>
+      <textarea name="reasons" rows="2"
+        placeholder="Why is this risk assessment being performed? (Routine, incident trigger, change, etc.)">{% if hazard %}Hazard identified: {{ hazard.source }}{% endif %}</textarea></div>
+
+    <div class="g3" style="margin-top:14px">
+      <div class="fg"><label>Management Acceptance</label>
+        <select name="management_acceptance">
+          <option value="">Pending</option>
+          <option>Accepted</option><option>Not Accepted</option><option>Conditional</option>
+        </select></div>
+      <div class="fg"><label>Acceptance Date</label>
+        <input type="date" name="acceptance_date"/></div>
+    </div>
+
+    <!-- Signatures -->
+    <div style="margin-top:16px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px">Document Signatories</div>
+      <div class="tbl-wrap">
+        <table style="font-size:12px">
+          <thead><tr><th></th><th>Name</th><th>Position</th></tr></thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:700;color:#0f1c3f;padding:6px 12px;white-space:nowrap;background:#f8f9fc">Prepared By</td>
+              <td><input type="text" name="prepared_by_name" placeholder="Name" style="border:1px solid var(--border);padding:5px 8px;border-radius:5px;font-size:12px;width:100%"/></td>
+              <td><input type="text" name="prepared_by_position" placeholder="Position" style="border:1px solid var(--border);padding:5px 8px;border-radius:5px;font-size:12px;width:100%"/></td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:#0f1c3f;padding:6px 12px;white-space:nowrap;background:#f8f9fc">Review By</td>
+              <td><input type="text" name="reviewed_by_name" placeholder="Name" style="border:1px solid var(--border);padding:5px 8px;border-radius:5px;font-size:12px;width:100%"/></td>
+              <td><input type="text" name="reviewed_by_position" placeholder="Position" style="border:1px solid var(--border);padding:5px 8px;border-radius:5px;font-size:12px;width:100%"/></td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:#0f1c3f;padding:6px 12px;white-space:nowrap;background:#f8f9fc">Approval By</td>
+              <td><input type="text" name="approved_by_name" placeholder="Name" style="border:1px solid var(--border);padding:5px 8px;border-radius:5px;font-size:12px;width:100%"/></td>
+              <td><input type="text" name="approved_by_position" placeholder="Position" style="border:1px solid var(--border);padding:5px 8px;border-radius:5px;font-size:12px;width:100%"/></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       PAGE 3 — RISK TABLE
+       ═════════════════════════════════════════════════════════════════════ -->
+  <div class="card" style="max-width:100%;margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="background:#d97706;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px">
+        Risk Assessment Table
+      </div>
+      <button type="button" onclick="addRow()" class="btn btn-nav btn-sm">+ Add Row</button>
+    </div>
+
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      Enter one row per risk scenario. Each row will create a Risk record in the Risk Register.
+    </p>
+
+    <div id="rows-container">
+      <!-- Row 1 pre-populated from hazard -->
+      <div class="ra-row" data-seq="1">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="background:var(--navy);color:var(--gold);border-radius:6px;padding:4px 12px;font-size:12px;font-weight:800">Row 1</div>
+          <button type="button" onclick="removeRow(this)" style="background:#fee2e2;color:#dc2626;border:none;border-radius:5px;padding:3px 10px;font-size:11px;cursor:pointer">Remove</button>
+        </div>
+        <div class="tbl-wrap" style="overflow-x:auto">
+          <table style="width:100%;min-width:900px;font-size:12px;border-collapse:collapse">
+            <thead>
+              <tr style="background:#f8f9fc">
+                <th style="padding:6px 8px;border:1px solid var(--border);width:120px">Type of Activity</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:130px">Generic Hazard</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:160px">Specific Components</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:160px">Hazard Related Consequences</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:45px;background:#fef3c7">L</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:45px;background:#fef3c7">S</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:55px;background:#fef3c7">Index</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:150px">Current Defenses</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:160px">Further Mitigation Measures</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:45px;background:#dcfce7">L</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:45px;background:#dcfce7">S</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:55px;background:#dcfce7">Index</th>
+              </tr>
+              <tr style="background:#fffbeb;font-size:10px;color:var(--muted)">
+                <td colspan="4" style="padding:3px 8px;border:1px solid var(--border)">Hazard Identification</td>
+                <td colspan="3" style="padding:3px 8px;border:1px solid var(--border);background:#fef3c7;text-align:center">Initial Risk</td>
+                <td colspan="2" style="padding:3px 8px;border:1px solid var(--border)">Controls</td>
+                <td colspan="3" style="padding:3px 8px;border:1px solid var(--border);background:#dcfce7;text-align:center">Residual Risk</td>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="border:1px solid var(--border);padding:4px">
+                  <input type="text" name="activity_1" placeholder="e.g. Flight Operations"
+                    value="{{ hazard.type_of_activity if hazard else '' }}"
+                    style="width:100%;border:none;font-size:11px;padding:3px"/></td>
+                <td style="border:1px solid var(--border);padding:4px">
+                  <input type="text" name="generic_hazard_1" placeholder="e.g. Weather"
+                    value="{{ hazard.generic_hazard if hazard else '' }}"
+                    style="width:100%;border:none;font-size:11px;padding:3px"/></td>
+                <td style="border:1px solid var(--border);padding:4px">
+                  <textarea name="specific_1" rows="2" placeholder="Specific components…"
+                    style="width:100%;border:none;font-size:11px;padding:3px;resize:none">{{ hazard.specific_components if hazard else '' }}</textarea></td>
+                <td style="border:1px solid var(--border);padding:4px">
+                  <textarea name="consequences_1" rows="2" placeholder="What could happen?"
+                    style="width:100%;border:none;font-size:11px;padding:3px;resize:none">{{ hazard.consequences if hazard else '' }}</textarea></td>
+                <td style="border:1px solid var(--border);padding:4px;background:#fffbeb">
+                  <select name="lik_i_1" id="lik_i_1" onchange="calcIndex('1')" style="width:100%;border:none;font-size:11px;background:transparent">
+                    {% for v in [5,4,3,2,1] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
+                  </select></td>
+                <td style="border:1px solid var(--border);padding:4px;background:#fffbeb">
+                  <select name="sev_i_1" id="sev_i_1" onchange="calcIndex('1')" style="width:100%;border:none;font-size:11px;background:transparent">
+                    {% for v in ['A','B','C','D','E'] %}<option>{{ v }}</option>{% endfor %}
+                  </select></td>
+                <td style="border:1px solid var(--border);padding:4px;background:#fffbeb;text-align:center">
+                  <div id="ri_i_1" style="font-weight:800;font-size:14px"></div>
+                  <div id="tol_i_1" style="font-size:9px;margin-top:2px"></div>
+                </td>
+                <td style="border:1px solid var(--border);padding:4px">
+                  <textarea name="defenses_1" rows="2" placeholder="Current defenses in place…"
+                    style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
+                <td style="border:1px solid var(--border);padding:4px">
+                  <textarea name="mitigations_1" rows="2" placeholder="Additional mitigations required…"
+                    style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
+                <td style="border:1px solid var(--border);padding:4px;background:#f0fdf4">
+                  <select name="lik_r_1" id="lik_r_1" onchange="calcResidual('1')" style="width:100%;border:none;font-size:11px;background:transparent">
+                    <option value="">—</option>
+                    {% for v in [5,4,3,2,1] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
+                  </select></td>
+                <td style="border:1px solid var(--border);padding:4px;background:#f0fdf4">
+                  <select name="sev_r_1" id="sev_r_1" onchange="calcResidual('1')" style="width:100%;border:none;font-size:11px;background:transparent">
+                    <option value="">—</option>
+                    {% for v in ['A','B','C','D','E'] %}<option>{{ v }}</option>{% endfor %}
+                  </select></td>
+                <td style="border:1px solid var(--border);padding:4px;background:#f0fdf4;text-align:center">
+                  <div id="ri_r_1" style="font-weight:800;font-size:14px"></div>
+                  <div id="tol_r_1" style="font-size:9px;margin-top:2px"></div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- Mitigation responsibility (page 4 inline) -->
+        <div style="background:#f8f9fc;border-radius:6px;padding:10px;margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;width:100%;margin-bottom:2px">Mitigation Responsibility (Page 4)</div>
+          <div class="fg" style="margin:0;flex:2;min-width:180px">
+            <label>Responsible Manager</label>
+            <input type="text" name="resp_manager_1" placeholder="Name of responsible manager"/></div>
+          <div class="fg" style="margin:0;min-width:140px">
+            <label>Due Date</label>
+            <input type="date" name="due_date_1"/></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-nav" style="font-size:15px;padding:12px 32px">
+    Submit Risk Assessment
+  </button>
+</form>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const IT=new Set(["5A","5B","5C","4A","4B","3A"]),
+      TO=new Set(["5D","5E","4C","4D","4E","3B","3C","3D","2A","2B","2C","1A"]);
+let rowCount=1;
+
+function getTol(ri){
+  if(IT.has(ri)) return {t:'INTOLERABLE',c:'#dc2626'};
+  if(TO.has(ri)) return {t:'TOLERABLE',c:'#d97706'};
+  return {t:'ACCEPTABLE',c:'#15803d'};
+}
+
+function calcIndex(n){
+  const l=document.getElementById('lik_i_'+n)?.value;
+  const s=document.getElementById('sev_i_'+n)?.value;
+  if(!l||!s) return;
+  const ri=l+s, {t,c}=getTol(ri);
+  const el=document.getElementById('ri_i_'+n);
+  const tl=document.getElementById('tol_i_'+n);
+  if(el){el.textContent=ri;el.style.color=c;}
+  if(tl){tl.textContent=t;tl.style.color=c;}
+  // Color the initial cells
+  ['lik_i_','sev_i_'].forEach(pre=>{
+    const td=document.getElementById(pre+n)?.closest('td');
+    if(td) td.style.background=c+'15';
+  });
+  document.getElementById('ri_i_'+n)?.closest('td')?.setAttribute('style',`border:1px solid var(--border);padding:4px;background:${c}20;text-align:center`);
+}
+
+function calcResidual(n){
+  const l=document.getElementById('lik_r_'+n)?.value;
+  const s=document.getElementById('sev_r_'+n)?.value;
+  const el=document.getElementById('ri_r_'+n);
+  const tl=document.getElementById('tol_r_'+n);
+  if(!l||!s){if(el)el.textContent='';if(tl)tl.textContent='';return;}
+  const ri=l+s, {t,c}=getTol(ri);
+  if(el){el.textContent=ri;el.style.color=c;}
+  if(tl){tl.textContent=t;tl.style.color=c;}
+  document.getElementById('ri_r_'+n)?.closest('td')?.setAttribute('style',`border:1px solid var(--border);padding:4px;background:${c}20;text-align:center`);
+}
+
+function addRow(){
+  rowCount++;
+  const n=rowCount;
+  const tmpl=`<div class="ra-row" data-seq="${n}" style="margin-top:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="background:var(--navy);color:var(--gold);border-radius:6px;padding:4px 12px;font-size:12px;font-weight:800">Row ${n}</div>
+      <button type="button" onclick="removeRow(this)" style="background:#fee2e2;color:#dc2626;border:none;border-radius:5px;padding:3px 10px;font-size:11px;cursor:pointer">Remove</button>
+    </div>
+    <div class="tbl-wrap" style="overflow-x:auto">
+      <table style="width:100%;min-width:900px;font-size:12px;border-collapse:collapse">
+        <tbody>
+          <tr>
+            <td style="border:1px solid var(--border);padding:4px;width:120px"><input type="text" name="activity_${n}" placeholder="Activity" style="width:100%;border:none;font-size:11px;padding:3px"/></td>
+            <td style="border:1px solid var(--border);padding:4px;width:130px"><input type="text" name="generic_hazard_${n}" placeholder="Generic Hazard" style="width:100%;border:none;font-size:11px;padding:3px"/></td>
+            <td style="border:1px solid var(--border);padding:4px;width:160px"><textarea name="specific_${n}" rows="2" placeholder="Specific components…" style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
+            <td style="border:1px solid var(--border);padding:4px;width:160px"><textarea name="consequences_${n}" rows="2" placeholder="Consequences…" style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
+            <td style="border:1px solid var(--border);padding:4px;background:#fffbeb;width:45px">
+              <select name="lik_i_${n}" id="lik_i_${n}" onchange="calcIndex('${n}')" style="width:100%;border:none;font-size:11px;background:transparent">
+                <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
+              </select></td>
+            <td style="border:1px solid var(--border);padding:4px;background:#fffbeb;width:45px">
+              <select name="sev_i_${n}" id="sev_i_${n}" onchange="calcIndex('${n}')" style="width:100%;border:none;font-size:11px;background:transparent">
+                <option>A</option><option>B</option><option selected>C</option><option>D</option><option>E</option>
+              </select></td>
+            <td style="border:1px solid var(--border);padding:4px;background:#fffbeb;text-align:center;width:55px">
+              <div id="ri_i_${n}" style="font-weight:800;font-size:14px"></div><div id="tol_i_${n}" style="font-size:9px;margin-top:2px"></div>
+            </td>
+            <td style="border:1px solid var(--border);padding:4px;width:150px"><textarea name="defenses_${n}" rows="2" placeholder="Current defenses…" style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
+            <td style="border:1px solid var(--border);padding:4px;width:160px"><textarea name="mitigations_${n}" rows="2" placeholder="Further mitigations…" style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
+            <td style="border:1px solid var(--border);padding:4px;background:#f0fdf4;width:45px">
+              <select name="lik_r_${n}" id="lik_r_${n}" onchange="calcResidual('${n}')" style="width:100%;border:none;font-size:11px;background:transparent">
+                <option value="">—</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option>
+              </select></td>
+            <td style="border:1px solid var(--border);padding:4px;background:#f0fdf4;width:45px">
+              <select name="sev_r_${n}" id="sev_r_${n}" onchange="calcResidual('${n}')" style="width:100%;border:none;font-size:11px;background:transparent">
+                <option value="">—</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
+              </select></td>
+            <td style="border:1px solid var(--border);padding:4px;background:#f0fdf4;text-align:center;width:55px">
+              <div id="ri_r_${n}" style="font-weight:800;font-size:14px"></div><div id="tol_r_${n}" style="font-size:9px;margin-top:2px"></div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="background:#f8f9fc;border-radius:6px;padding:10px;margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">
+      <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;width:100%;margin-bottom:2px">Mitigation Responsibility</div>
+      <div style="flex:2;min-width:180px"><label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Responsible Manager</label>
+        <input type="text" name="resp_manager_${n}" placeholder="Name" style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px"/></div>
+      <div style="min-width:140px"><label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Due Date</label>
+        <input type="date" name="due_date_${n}" style="border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12px"/></div>
+    </div>
+  </div>`;
+  document.getElementById('rows-container').insertAdjacentHTML('beforeend', tmpl);
+  setTimeout(()=>calcIndex(String(n)), 50);
+}
+
+function removeRow(btn){
+  const row=btn.closest('.ra-row');
+  if(document.querySelectorAll('.ra-row').length>1) row.remove();
+  else alert('At least one row is required.');
+}
+
+// Init first row
+document.addEventListener('DOMContentLoaded',()=>calcIndex('1'));
+</script>
+{% endblock %}
