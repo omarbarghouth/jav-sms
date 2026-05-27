@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, SPIEventLink
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from werkzeug.security import generate_password_hash, check_password_hash as _wz_check
@@ -4170,7 +4170,6 @@ def _spi_link_event(event_type, event_id, event_title,
     SPIData, SPIIndicator values, or any existing calculation.
     Always safe to call from try/except.
     """
-    from models import SPIEventLink
     now = datetime.utcnow()
     event_date = event_date or now.strftime('%Y-%m-%d')
     severity = severity or _SEVERITY_MAP.get(event_type, 'Medium')
@@ -4253,7 +4252,6 @@ def _spi_link_event(event_type, event_id, event_title,
 
 def _spi_recurrence_analysis(spi_id, lookback_months=6):
     """Detect recurring patterns for a SPI indicator. Read-only analytics."""
-    from models import SPIEventLink
     from collections import Counter
     from datetime import date, timedelta
     try:
@@ -4284,7 +4282,6 @@ def _spi_recurrence_analysis(spi_id, lookback_months=6):
 
 def _spi_intelligence_summary():
     """System-wide intelligence snapshot. Read-only."""
-    from models import SPIEventLink
     from collections import Counter, defaultdict
     from datetime import date, timedelta
     try:
@@ -4688,7 +4685,6 @@ def spi_toggle_indicator(iid):
 @require_login
 def spi_indicator_detail(iid):
     """Full intelligence view for a single SPI indicator — Task #65."""
-    from models import SPIEventLink
     ind  = SPIIndicator.query.get_or_404(iid)
     data = SPIData.query.filter_by(spi_id=iid).order_by(SPIData.year, SPIData.month).all()
 
@@ -4758,7 +4754,6 @@ def spi_indicator_detail(iid):
 @require_login
 def spi_intelligence():
     """System-wide SPI analytics hub + SRB auto-feed — Task #66."""
-    from models import SPIEventLink, SRBMeeting
 
     def _safe(fn, default):
         try:
