@@ -1365,6 +1365,7 @@ class InvestigationEvent(db.Model):
     from_stage      = db.Column(db.String(40))
     to_stage        = db.Column(db.String(40))
     note            = db.Column(db.Text)
+    performed_by   = db.Column(db.String(100))
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
 
 
