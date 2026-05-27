@@ -1439,3 +1439,40 @@ class ERPActivation(db.Model):
                           backref=db.backref('activations', lazy=True))
     investigation   = db.relationship('Investigation', foreign_keys=[investigation_id],
                           backref=db.backref('erp_activations', lazy=True))
+
+
+class ComplianceObligation(db.Model):
+    """
+    Regulatory Compliance Register — ICAO Doc 9859 §4.1 / Annex 19 §2.
+    Tracks mandatory regulatory requirements, their compliance status, and evidence.
+    Covers: ICAO Standards, CAA regulations, IOSA standards, EASA/FAA if applicable.
+    """
+    __tablename__ = 'compliance_obligations'
+    id              = db.Column(db.Integer, primary_key=True)
+    ref_number      = db.Column(db.String(30), unique=True)    # e.g. COMP-2026-001
+    regulation_body = db.Column(db.String(50))    # ICAO / JCAR / EASA / FAA / IOSA / Internal
+    standard_ref    = db.Column(db.String(100))   # e.g. ICAO Annex 19 §3.1.1
+    requirement_title = db.Column(db.String(200))
+    requirement_text  = db.Column(db.Text)
+    applicability   = db.Column(db.String(200))   # Which operations / departments
+    obligation_type = db.Column(db.String(30), default='Ongoing')
+    # Ongoing / Periodic / One-Time / Conditional
+    compliance_status = db.Column(db.String(30), default='Under Review')
+    # Compliant / Non-Compliant / Partially Compliant / Under Review / Not Applicable / Exempt
+    evidence_description = db.Column(db.Text)    # What evidence demonstrates compliance
+    evidence_location    = db.Column(db.String(200))  # Where to find evidence
+    responsible_person   = db.Column(db.String(100))
+    department_id   = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    review_frequency = db.Column(db.String(20), default='Annual')
+    # Monthly / Quarterly / Semi-Annual / Annual / Event-Based
+    last_reviewed   = db.Column(db.String(20))
+    next_review_due = db.Column(db.String(20))
+    finding_ref     = db.Column(db.String(30))    # linked CAA finding if non-compliant
+    linked_action_id = db.Column(db.String(30))   # corrective action if gap exists
+    notes           = db.Column(db.Text)
+    priority        = db.Column(db.String(20), default='Medium')  # Critical / High / Medium / Low
+    created_by      = db.Column(db.String(100))
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at      = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    department      = db.relationship('Department', foreign_keys=[department_id],
+                          backref=db.backref('compliance_obligations', lazy=True))

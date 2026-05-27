@@ -9692,6 +9692,288 @@ def pdf_route_spi_summary():
 
 
 
+
+# ─── ERP DRILLS ───────────────────────────────────────────────────────────────
+
+@app.route('/erp/<eid>/drills/new', methods=['GET','POST'])
+@require_login
+def new_erp_drill(eid):
+    from models import ERPDrill
+    erp = ERPlan.query.get_or_404(eid)
+    if request.method == 'POST':
+        f = request.form
+        from datetime import date
+        drill_count = ERPDrill.query.count() + 1
+        drill = ERPDrill(
+            erp_id=eid,
+            drill_ref=f'DRILL-{date.today().year}-{drill_count:03d}',
+            drill_type=f.get('drill_type','Table-Top'),
+            drill_date=f.get('drill_date',''),
+            duration_min=int(f.get('duration_min') or 0),
+            facilitator=f.get('facilitator',''),
+            participants=f.get('participants',''),
+            participant_count=int(f.get('participant_count') or 0),
+            scenario_brief=f.get('scenario_brief',''),
+            objectives=f.get('objectives',''),
+            observations=f.get('observations',''),
+            strengths=f.get('strengths',''),
+            deficiencies=f.get('deficiencies',''),
+            recommendations=f.get('recommendations',''),
+            action_items=f.get('action_items',''),
+            erp_update_required=bool(f.get('erp_update_required')),
+            outcome=f.get('outcome','Satisfactory'),
+            next_drill_due=f.get('next_drill_due',''),
+            created_by=session.get('username','unknown'),
+        )
+        db.session.add(drill)
+        db.session.commit()
+        flash(f'\u2713 Drill {drill.drill_ref} recorded for {erp.erp_ref}.', 'success')
+        return redirect(url_for('erp_detail', eid=eid))
+    return render_template('safety_policy/erp_drill_form.html', erp=erp)
+
+@app.route('/erp/<eid>/activate', methods=['POST'])
+@require_login
+def activate_erp(eid):
+    from models import ERPActivation
+    from datetime import datetime as dt
+    erp = ERPlan.query.get_or_404(eid)
+    act_count = ERPActivation.query.count() + 1
+    act = ERPActivation(
+        erp_id=eid,
+        activation_ref=f'ACT-{dt.utcnow().year}-{act_count:03d}',
+        investigation_id=request.form.get('investigation_id') or None,
+        activated_at=dt.utcnow(),
+        activated_by=session.get('username','unknown'),
+        activation_reason=request.form.get('activation_reason',''),
+        status='Active',
+    )
+    db.session.add(act)
+    db.session.commit()
+    flash(f'\u2713 ERP {erp.erp_ref} activated — ref {act.activation_ref}.', 'success')
+    return redirect(url_for('erp_detail', eid=eid))
+
+@app.route('/erp/activation/<int:aid>/update', methods=['POST'])
+@require_login
+def update_erp_activation(aid):
+    from models import ERPActivation
+    from datetime import datetime as dt
+    act = ERPActivation.query.get_or_404(aid)
+    f = request.form
+    act.caa_notified    = bool(f.get('caa_notified'))
+    act.caa_ref         = f.get('caa_ref', act.caa_ref)
+    act.icao_notified   = bool(f.get('icao_notified'))
+    act.media_statement = bool(f.get('media_statement'))
+    act.nok_notified    = bool(f.get('nok_notified'))
+    act.actions_taken   = f.get('actions_taken', act.actions_taken)
+    act.lessons_learned = f.get('lessons_learned', act.lessons_learned)
+    act.effectiveness   = f.get('effectiveness', act.effectiveness)
+    act.erp_update_required = bool(f.get('erp_update_required'))
+    if f.get('deactivate') and act.status == 'Active':
+        act.deactivated_at = dt.utcnow()
+        act.deactivated_by = session.get('username','unknown')
+        if act.activated_at:
+            delta = act.deactivated_at - act.activated_at
+            act.duration_hours = round(delta.total_seconds() / 3600, 1)
+        act.status = 'Deactivated'
+    db.session.commit()
+    flash('\u2713 Activation record updated.', 'success')
+    return redirect(url_for('erp_detail', eid=act.erp_id))
+
+@app.route('/erp-dashboard')
+@require_login
+def erp_dashboard():
+    from models import ERPDrill, ERPActivation
+    from datetime import date, timedelta
+    plans      = ERPlan.query.filter_by(status='Active').all()
+    all_drills = ERPDrill.query.order_by(ERPDrill.drill_date.desc()).all()
+    all_acts   = ERPActivation.query.order_by(ERPActivation.activated_at.desc()).all()
+    # Drills overdue: last drill > 12 months ago or never drilled
+    overdue_erps = []
+    cutoff = (date.today() - timedelta(days=365)).isoformat()
+    for p in plans:
+        drills = ERPDrill.query.filter_by(erp_id=p.id).order_by(ERPDrill.drill_date.desc()).first()
+        if not drills or (drills.drill_date and drills.drill_date < cutoff):
+            overdue_erps.append(p)
+    return render_template('safety_policy/erp_dashboard.html',
+        plans=plans, all_drills=all_drills, all_acts=all_acts,
+        overdue_erps=overdue_erps,
+        total_plans=len(plans),
+        total_drills=len(all_drills),
+        active_acts=sum(1 for a in all_acts if a.status=='Active'),
+        overdue_count=len(overdue_erps))
+
+
+# ── COMPLIANCE REGISTER ──────────────────────────────────────────────────────
+
+COMPLIANCE_STATUSES = [
+    'Compliant', 'Partially Compliant', 'Non-Compliant',
+    'Under Review', 'Not Applicable', 'Exempt'
+]
+OBLIGATION_TYPES = ['Ongoing', 'Periodic', 'One-Time', 'Conditional']
+REVIEW_FREQUENCIES = ['Monthly', 'Quarterly', 'Semi-Annual', 'Annual', 'Event-Based']
+REGULATION_BODIES = ['ICAO', 'JCAR', 'EASA', 'FAA', 'IOSA', 'Internal', 'Other']
+
+def _next_comp_ref():
+    from models import ComplianceObligation
+    from datetime import datetime
+    year = datetime.utcnow().year
+    last = db.session.query(ComplianceObligation).filter(
+        ComplianceObligation.ref_number.like(f'COMP-{year}-%')
+    ).count()
+    return f'COMP-{year}-{last+1:03d}'
+
+
+@app.route('/compliance')
+@require_login
+def compliance_list():
+    from models import ComplianceObligation
+    status_filter = request.args.get('status', '')
+    body_filter   = request.args.get('body', '')
+    priority_filter = request.args.get('priority', '')
+    q = db.session.query(ComplianceObligation)
+    if status_filter:
+        q = q.filter(ComplianceObligation.compliance_status == status_filter)
+    if body_filter:
+        q = q.filter(ComplianceObligation.regulation_body == body_filter)
+    if priority_filter:
+        q = q.filter(ComplianceObligation.priority == priority_filter)
+    obligations = q.order_by(ComplianceObligation.priority.desc(),
+                              ComplianceObligation.next_review_due.asc()).all()
+    # KPI counts
+    total   = len(obligations) if not (status_filter or body_filter or priority_filter) else \
+              db.session.query(ComplianceObligation).count()
+    compliant     = db.session.query(ComplianceObligation).filter_by(compliance_status='Compliant').count()
+    non_compliant = db.session.query(ComplianceObligation).filter_by(compliance_status='Non-Compliant').count()
+    partial       = db.session.query(ComplianceObligation).filter_by(compliance_status='Partially Compliant').count()
+    under_review  = db.session.query(ComplianceObligation).filter_by(compliance_status='Under Review').count()
+    from datetime import date
+    today_str = date.today().isoformat()
+    overdue = db.session.query(ComplianceObligation).filter(
+        ComplianceObligation.next_review_due < today_str,
+        ComplianceObligation.compliance_status.notin_(['Not Applicable', 'Exempt'])
+    ).count()
+    return render_template('compliance/compliance_list.html',
+        obligations=obligations,
+        status_filter=status_filter,
+        body_filter=body_filter,
+        priority_filter=priority_filter,
+        statuses=COMPLIANCE_STATUSES,
+        bodies=REGULATION_BODIES,
+        total=total,
+        compliant=compliant,
+        non_compliant=non_compliant,
+        partial=partial,
+        under_review=under_review,
+        overdue=overdue)
+
+
+@app.route('/compliance/new', methods=['GET', 'POST'])
+@require_login
+def new_compliance():
+    from models import ComplianceObligation
+    if request.method == 'POST':
+        ob = ComplianceObligation(
+            ref_number         = request.form.get('ref_number') or _next_comp_ref(),
+            regulation_body    = request.form.get('regulation_body', ''),
+            standard_ref       = request.form.get('standard_ref', ''),
+            requirement_title  = request.form.get('requirement_title', ''),
+            requirement_text   = request.form.get('requirement_text', ''),
+            applicability      = request.form.get('applicability', ''),
+            obligation_type    = request.form.get('obligation_type', 'Ongoing'),
+            compliance_status  = request.form.get('compliance_status', 'Under Review'),
+            evidence_description = request.form.get('evidence_description', ''),
+            evidence_location  = request.form.get('evidence_location', ''),
+            responsible_person = request.form.get('responsible_person', ''),
+            department_id      = request.form.get('department_id') or None,
+            review_frequency   = request.form.get('review_frequency', 'Annual'),
+            last_reviewed      = request.form.get('last_reviewed', ''),
+            next_review_due    = request.form.get('next_review_due', ''),
+            finding_ref        = request.form.get('finding_ref', ''),
+            linked_action_id   = request.form.get('linked_action_id', ''),
+            notes              = request.form.get('notes', ''),
+            priority           = request.form.get('priority', 'Medium'),
+            created_by         = current_user.username if hasattr(current_user, 'username') else 'system',
+        )
+        db.session.add(ob)
+        db.session.commit()
+        flash(f'Compliance obligation {ob.ref_number} created.', 'success')
+        return redirect(url_for('compliance_detail', oid=ob.id))
+    departments = Department.query.order_by(Department.name).all()
+    suggested_ref = _next_comp_ref()
+    return render_template('compliance/compliance_form.html',
+        edit=False,
+        ob=None,
+        suggested_ref=suggested_ref,
+        departments=departments,
+        statuses=COMPLIANCE_STATUSES,
+        obligation_types=OBLIGATION_TYPES,
+        review_frequencies=REVIEW_FREQUENCIES,
+        bodies=REGULATION_BODIES)
+
+
+@app.route('/compliance/<int:oid>')
+@require_login
+def compliance_detail(oid):
+    from models import ComplianceObligation
+    ob = ComplianceObligation.query.get_or_404(oid)
+    return render_template('compliance/compliance_detail.html', ob=ob)
+
+
+@app.route('/compliance/<int:oid>/edit', methods=['GET', 'POST'])
+@require_login
+def edit_compliance(oid):
+    from models import ComplianceObligation
+    ob = ComplianceObligation.query.get_or_404(oid)
+    if request.method == 'POST':
+        ob.regulation_body    = request.form.get('regulation_body', ob.regulation_body)
+        ob.standard_ref       = request.form.get('standard_ref', ob.standard_ref)
+        ob.requirement_title  = request.form.get('requirement_title', ob.requirement_title)
+        ob.requirement_text   = request.form.get('requirement_text', ob.requirement_text)
+        ob.applicability      = request.form.get('applicability', ob.applicability)
+        ob.obligation_type    = request.form.get('obligation_type', ob.obligation_type)
+        ob.compliance_status  = request.form.get('compliance_status', ob.compliance_status)
+        ob.evidence_description = request.form.get('evidence_description', ob.evidence_description)
+        ob.evidence_location  = request.form.get('evidence_location', ob.evidence_location)
+        ob.responsible_person = request.form.get('responsible_person', ob.responsible_person)
+        ob.department_id      = request.form.get('department_id') or None
+        ob.review_frequency   = request.form.get('review_frequency', ob.review_frequency)
+        ob.last_reviewed      = request.form.get('last_reviewed', ob.last_reviewed)
+        ob.next_review_due    = request.form.get('next_review_due', ob.next_review_due)
+        ob.finding_ref        = request.form.get('finding_ref', ob.finding_ref)
+        ob.linked_action_id   = request.form.get('linked_action_id', ob.linked_action_id)
+        ob.notes              = request.form.get('notes', ob.notes)
+        ob.priority           = request.form.get('priority', ob.priority)
+        db.session.commit()
+        flash(f'Obligation {ob.ref_number} updated.', 'success')
+        return redirect(url_for('compliance_detail', oid=ob.id))
+    departments = Department.query.order_by(Department.name).all()
+    return render_template('compliance/compliance_form.html',
+        edit=True,
+        ob=ob,
+        suggested_ref=ob.ref_number,
+        departments=departments,
+        statuses=COMPLIANCE_STATUSES,
+        obligation_types=OBLIGATION_TYPES,
+        review_frequencies=REVIEW_FREQUENCIES,
+        bodies=REGULATION_BODIES)
+
+
+@app.route('/compliance/<int:oid>/update-status', methods=['POST'])
+@require_login
+def update_compliance_status(oid):
+    from models import ComplianceObligation
+    ob = ComplianceObligation.query.get_or_404(oid)
+    new_status = request.form.get('compliance_status', ob.compliance_status)
+    ob.compliance_status = new_status
+    ob.last_reviewed = request.form.get('last_reviewed', ob.last_reviewed)
+    ob.next_review_due = request.form.get('next_review_due', ob.next_review_due)
+    ob.evidence_description = request.form.get('evidence_description', ob.evidence_description)
+    ob.notes = request.form.get('notes', ob.notes)
+    db.session.commit()
+    flash(f'Status updated to {new_status}.', 'success')
+    return redirect(url_for('compliance_detail', oid=ob.id))
+
+
 with app.app_context():
     try:
         db.create_all()
@@ -9750,74 +10032,124 @@ with app.app_context():
             ('immediate_action','TEXT'),('longterm_action','TEXT'),('cap_responsible','VARCHAR(100)'),
             ('cap_due_date','VARCHAR(20)'),('cap_status','VARCHAR(30) DEFAULT "Pending"'),
             ('cap_completion_pct','INTEGER DEFAULT 0'),('cap_submitted_at','DATETIME'),
-            ('evidence_files','TEXT'),('review_notes','TEXT'),('reviewed_by','VARCHAR(100)'),
-            ('review_date','VARCHAR(20)'),('revision_reason','TEXT'),('closure_verified_by','VARCHAR(100)'),
-            ('closure_date','VARCHAR(20)'),('closure_notes','TEXT'),('sig_dept_manager','VARCHAR(100)'),
-            ('sig_auditor','VARCHAR(100)'),('sig_safety_manager','VARCHAR(100)'),('sig_date','VARCHAR(20)'),
-            ('linked_action_id','VARCHAR(30)'),('created_at','DATETIME'),('category','VARCHAR(50)'),
-            ('severity','VARCHAR(20)'),('requirement','TEXT'),('root_cause','TEXT'),('evidence','TEXT'),
-            ('standard_ref','VARCHAR(100)'),('status','VARCHAR(20) DEFAULT "Open"'),('hazard_id','VARCHAR(30)'),
-        ],
-        'risks': [
-            ('description','TEXT'),('initial_likelihood','INTEGER'),('initial_severity','VARCHAR(2)'),
-            ('initial_risk_index','VARCHAR(5)'),('initial_tolerance','VARCHAR(20)'),
-            ('residual_likelihood','INTEGER'),('residual_severity','VARCHAR(2)'),
-            ('residual_risk_index','VARCHAR(5)'),('residual_tolerance','VARCHAR(20)'),('created_at','DATETIME'),
+            ('corrective_action','TEXT'),('effectiveness_check','TEXT'),('closed_by','VARCHAR(100)'),
+            ('closed_at','DATETIME'),('created_at','DATETIME'),
         ],
         'investigations': [
-            ('title','VARCHAR(200)'),('linked_report_id','VARCHAR(30)'),('hazard_id','VARCHAR(30)'),
-            ('department_id','INTEGER'),('date_of_occurrence','VARCHAR(20)'),('investigator','VARCHAR(100)'),
-            ('description','TEXT'),('why1','TEXT'),('why2','TEXT'),('why3','TEXT'),('why4','TEXT'),
-            ('why5','TEXT'),('root_cause','TEXT'),('human_factors','TEXT'),('technical_factors','TEXT'),
-            ('organizational_factors','TEXT'),('environmental_factors','TEXT'),
-            ('recommendations','TEXT'),('status','VARCHAR(20) DEFAULT "Open"'),('created_at','DATETIME'),
-        ],
-        'moc': [
-            ('change_type','VARCHAR(50)'),('initiator','VARCHAR(100)'),('planned_date','VARCHAR(20)'),
-            ('pre_change_risk','TEXT'),('approval_status','VARCHAR(30) DEFAULT "Pending"'),
-            ('approved_by','VARCHAR(100)'),('implementation_status','VARCHAR(30) DEFAULT "Not Started"'),
-            ('post_change_review','TEXT'),('hazard_id','VARCHAR(30)'),('created_at','DATETIME'),
-        ],
-        'risk_assessments': [
-            ('control_number','VARCHAR(50)'),('responsible_name','VARCHAR(100)'),
-            ('assessors_names','VARCHAR(300)'),('assessment_date','VARCHAR(20)'),
-            ('next_review_date','VARCHAR(20)'),('general_description','TEXT'),('reasons','TEXT'),
-            ('risk_level_prior','VARCHAR(20)'),('risk_level_after','VARCHAR(20)'),
-            ('management_acceptance','VARCHAR(20)'),('acceptance_date','VARCHAR(20)'),
-            ('prepared_by_name','VARCHAR(100)'),('prepared_by_position','VARCHAR(100)'),
-            ('reviewed_by_name','VARCHAR(100)'),('reviewed_by_position','VARCHAR(100)'),
-            ('approved_by_name','VARCHAR(100)'),('approved_by_position','VARCHAR(100)'),
-            ('status','VARCHAR(20) DEFAULT "Draft"'),('created_at','DATETIME'),
+            ('classification','VARCHAR(30) DEFAULT "Incident"'),
+            ('occurrence_category','VARCHAR(50)'),
+            ('phase_of_flight','VARCHAR(50)'),
+            ('aircraft_type','VARCHAR(50)'),
+            ('aircraft_reg','VARCHAR(20)'),
+            ('location','VARCHAR(200)'),
+            ('authority_notified','BOOLEAN DEFAULT 0'),
+            ('notification_date','VARCHAR(20)'),
+            ('notification_ref','VARCHAR(50)'),
+            ('lifecycle_stage','VARCHAR(40) DEFAULT "Notified"'),
+            ('assigned_date','VARCHAR(20)'),
+            ('target_close_date','VARCHAR(20)'),
+            ('final_findings','TEXT'),
+            ('closed_date','VARCHAR(20)'),
+            ('closed_by','VARCHAR(100)'),
+            ('updated_at','DATETIME'),
         ],
         'investigation_events': [
-            ('investigation_id','VARCHAR(30)'),('event_type','VARCHAR(30)'),
-            ('from_stage','VARCHAR(40)'),('to_stage','VARCHAR(40)'),
-            ('note','TEXT'),('performed_by','VARCHAR(100)'),('created_at','DATETIME'),
+            ('investigation_id','VARCHAR(30)'),
+            ('event_type','VARCHAR(30)'),
+            ('from_stage','VARCHAR(40)'),
+            ('to_stage','VARCHAR(40)'),
+            ('note','TEXT'),
+            ('performed_by','VARCHAR(100)'),
+            ('created_at','DATETIME'),
         ],
         'governance_audit_log': [
-            ('entity_type','VARCHAR(50)'),('entity_id','VARCHAR(50)'),
-            ('action','VARCHAR(50)'),('performed_by','VARCHAR(100)'),
-            ('detail','TEXT'),('ip_address','VARCHAR(45)'),('created_at','DATETIME'),
+            ('entity_type','VARCHAR(50)'),
+            ('entity_id','VARCHAR(50)'),
+            ('action','VARCHAR(50)'),
+            ('performed_by','VARCHAR(100)'),
+            ('detail','TEXT'),
+            ('ip_address','VARCHAR(45)'),
+            ('created_at','DATETIME'),
+        ],
+        'compliance_obligations': [
+            ('regulation_body','VARCHAR(50)'),
+            ('standard_ref','VARCHAR(100)'),
+            ('requirement_title','VARCHAR(200)'),
+            ('requirement_text','TEXT'),
+            ('applicability','VARCHAR(200)'),
+            ('obligation_type','VARCHAR(30)'),
+            ('compliance_status','VARCHAR(30)'),
+            ('evidence_description','TEXT'),
+            ('evidence_location','VARCHAR(200)'),
+            ('responsible_person','VARCHAR(100)'),
+            ('department_id','INTEGER'),
+            ('review_frequency','VARCHAR(20)'),
+            ('last_reviewed','VARCHAR(20)'),
+            ('next_review_due','VARCHAR(20)'),
+            ('finding_ref','VARCHAR(30)'),
+            ('linked_action_id','VARCHAR(30)'),
+            ('notes','TEXT'),
+            ('priority','VARCHAR(20)'),
+            ('created_by','VARCHAR(100)'),
+            ('created_at','DATETIME'),
+            ('updated_at','DATETIME'),
         ],
     }
-
-    # Apply migrations: add missing columns to existing tables
-    try:
-        with db.engine.connect() as _conn:
-            _existing = db.engine.dialect.get_table_names(_conn)
-    except Exception:
-        _existing = []
 
     for _tbl, _cols in _migrations.items():
         for _col, _coltype in _cols:
             try:
-                db.session.execute(db.text(
-                    f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'))
+                db.session.execute(db.text(f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'))
             except Exception:
-                pass  # column already exists or table missing — db.create_all() handles creation
+                pass
 
-    # Ensure new Phase-2 tables exist
     _phase2_ddl = [
+        '''CREATE TABLE IF NOT EXISTS erp_drills (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            erp_id VARCHAR(30),
+            drill_ref VARCHAR(30),
+            drill_type VARCHAR(30),
+            drill_date VARCHAR(20),
+            duration_min INTEGER,
+            facilitator VARCHAR(100),
+            participants TEXT,
+            participant_count INTEGER DEFAULT 0,
+            scenario_brief TEXT,
+            objectives TEXT,
+            observations TEXT,
+            strengths TEXT,
+            deficiencies TEXT,
+            recommendations TEXT,
+            action_items TEXT,
+            erp_update_required BOOLEAN DEFAULT 0,
+            outcome VARCHAR(20) DEFAULT 'Satisfactory',
+            next_drill_due VARCHAR(20),
+            created_by VARCHAR(100),
+            created_at DATETIME)''',
+        '''CREATE TABLE IF NOT EXISTS erp_activations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            erp_id VARCHAR(30),
+            activation_ref VARCHAR(30),
+            investigation_id VARCHAR(30),
+            activated_at DATETIME,
+            activated_by VARCHAR(100),
+            activation_reason TEXT,
+            caa_notified BOOLEAN DEFAULT 0,
+            caa_notified_at DATETIME,
+            caa_ref VARCHAR(50),
+            icao_notified BOOLEAN DEFAULT 0,
+            icao_notified_at DATETIME,
+            media_statement BOOLEAN DEFAULT 0,
+            nok_notified BOOLEAN DEFAULT 0,
+            deactivated_at DATETIME,
+            deactivated_by VARCHAR(100),
+            duration_hours REAL,
+            actions_taken TEXT,
+            effectiveness VARCHAR(30),
+            lessons_learned TEXT,
+            erp_update_required BOOLEAN DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'Active',
+            created_at DATETIME)''',
         '''CREATE TABLE IF NOT EXISTS investigation_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             investigation_id VARCHAR(30),
@@ -9836,6 +10168,30 @@ with app.app_context():
             detail TEXT,
             ip_address VARCHAR(45),
             created_at DATETIME)''',
+        '''CREATE TABLE IF NOT EXISTS compliance_obligations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref_number VARCHAR(30) UNIQUE,
+            regulation_body VARCHAR(50),
+            standard_ref VARCHAR(100),
+            requirement_title VARCHAR(200),
+            requirement_text TEXT,
+            applicability VARCHAR(200),
+            obligation_type VARCHAR(30) DEFAULT 'Ongoing',
+            compliance_status VARCHAR(30) DEFAULT 'Under Review',
+            evidence_description TEXT,
+            evidence_location VARCHAR(200),
+            responsible_person VARCHAR(100),
+            department_id INTEGER,
+            review_frequency VARCHAR(20) DEFAULT 'Annual',
+            last_reviewed VARCHAR(20),
+            next_review_due VARCHAR(20),
+            finding_ref VARCHAR(30),
+            linked_action_id VARCHAR(30),
+            notes TEXT,
+            priority VARCHAR(20) DEFAULT 'Medium',
+            created_by VARCHAR(100),
+            created_at DATETIME,
+            updated_at DATETIME)''',
     ]
     for _ddl in _phase2_ddl:
         try:
