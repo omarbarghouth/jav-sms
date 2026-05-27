@@ -3167,26 +3167,37 @@ def investigations():
     dept_f = request.args.get('dept', '')
     page   = request.args.get('page', 1, type=int)
 
-    qry = Investigation.query
-    if q_f:
-        qry = qry.filter(db.or_(
-            Investigation.title.ilike(f'%{q_f}%'),
-            Investigation.id.ilike(f'%{q_f}%'),
-            Investigation.investigator.ilike(f'%{q_f}%'),
-        ))
-    if stat_f:
-        qry = qry.filter(Investigation.status == stat_f)
-    if cls_f:
-        qry = qry.filter(Investigation.classification == cls_f)
-    if dept_f:
-        qry = qry.filter(Investigation.department_id == int(dept_f))
-
-    pg      = qry.order_by(Investigation.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
-    all_inv = pg.items
+    pg = all_inv = None
+    try:
+        db.session.rollback()
+        qry = Investigation.query
+        if q_f:
+            qry = qry.filter(db.or_(
+                Investigation.title.ilike(f'%{q_f}%'),
+                Investigation.id.ilike(f'%{q_f}%'),
+                Investigation.investigator.ilike(f'%{q_f}%'),
+            ))
+        if stat_f:
+            qry = qry.filter(Investigation.status == stat_f)
+        if cls_f:
+            qry = qry.filter(Investigation.classification == cls_f)
+        if dept_f:
+            qry = qry.filter(Investigation.department_id == int(dept_f))
+        pg      = qry.order_by(Investigation.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+        all_inv = pg.items
+    except Exception:
+        db.session.rollback()
+        pg = None
+        all_inv = []
+    try:
+        depts = Department.query.order_by(Department.name).all()
+    except Exception:
+        db.session.rollback()
+        depts = []
     return render_template('investigation/investigation_list.html',
         investigations=all_inv, pagination=pg,
         q_f=q_f, stat_f=stat_f, cls_f=cls_f, dept_f=dept_f,
-        all_departments=Department.query.order_by(Department.name).all())
+        all_departments=depts)
 
 # ICAO occurrence categories (ECCAIRS taxonomy subset)
 OCCURRENCE_CATEGORIES = [
@@ -10104,7 +10115,7 @@ with app.app_context():
         'hazard_reports': [
             ("classification","VARCHAR(50) DEFAULT 'Operational'"),
             ("report_type","VARCHAR(30) DEFAULT 'Hazard Report'"),
-            ('created_at','DATETIME'),
+            ('created_at','TIMESTAMP'),
             ("status","VARCHAR(30) DEFAULT 'Submitted'"),
             ('generic_hazard','VARCHAR(200)'),
             ('consequences','TEXT'),('immediate_action','TEXT'),
@@ -10119,7 +10130,7 @@ with app.app_context():
             ('consequences','TEXT'),
             ("status","VARCHAR(30) DEFAULT 'Open'"),
             ('owner','VARCHAR(100)'),('linked_report_id','VARCHAR(30)'),
-            ('department_id','INTEGER'),('created_at','DATETIME'),
+            ('department_id','INTEGER'),('created_at','TIMESTAMP'),
         ],
         'actions': [
             ('hazard_id','VARCHAR(30)'),('spi_id','INTEGER'),
@@ -10142,11 +10153,11 @@ with app.app_context():
             ('completed_date','VARCHAR(20)'),('closed_date','VARCHAR(20)'),
             ('effectiveness','VARCHAR(30)'),('effectiveness_review','TEXT'),
             ('reopen_count','INTEGER DEFAULT 0'),('reopen_reason','TEXT'),
-            ('created_at','DATETIME'),('root_cause','TEXT'),
+            ('created_at','TIMESTAMP'),('root_cause','TEXT'),
             ('rejection_notes','TEXT'),('sag_member','VARCHAR(100)'),
         ],
         'audit_plans': [
-            ('month','INTEGER'),('created_at','DATETIME'),('objectives','TEXT'),
+            ('month','INTEGER'),('created_at','TIMESTAMP'),('objectives','TEXT'),
             ('iosa_reference','VARCHAR(100)'),('auditor_name','VARCHAR(100)'),
             ('planned_week','INTEGER'),('responsible_manager','VARCHAR(100)'),
             ('frequency','VARCHAR(30)'),('scope','TEXT'),
@@ -10157,23 +10168,24 @@ with app.app_context():
             ('opening_meeting','TEXT'),('closing_meeting','TEXT'),
             ('summary','TEXT'),('final_remarks','TEXT'),
             ('closure_date','VARCHAR(20)'),('closed_by','VARCHAR(100)'),
-            ('created_at','DATETIME'),
+            ('created_at','TIMESTAMP'),
         ],
         'audit_findings': [
             ('finding_ref','VARCHAR(30)'),('finding_title','VARCHAR(200)'),
             ('assigned_to','VARCHAR(100)'),('assigned_dept','VARCHAR(100)'),
             ('assigned_date','VARCHAR(20)'),('investigation_notes','TEXT'),
-            ('contributing_factors','TEXT'),('root_cause_submitted_at','DATETIME'),
+            ('contributing_factors','TEXT'),('root_cause_submitted_at','TIMESTAMP'),
             ('immediate_action','TEXT'),('longterm_action','TEXT'),
             ('cap_responsible','VARCHAR(100)'),('cap_due_date','VARCHAR(20)'),
             ("cap_status","VARCHAR(30) DEFAULT 'Pending'"),
             ('cap_completion_pct','INTEGER DEFAULT 0'),
-            ('cap_submitted_at','DATETIME'),('corrective_action','TEXT'),
+            ('cap_submitted_at','TIMESTAMP'),('corrective_action','TEXT'),
             ('effectiveness_check','TEXT'),('closed_by','VARCHAR(100)'),
-            ('closed_at','DATETIME'),('created_at','DATETIME'),
+            ('closed_at','TIMESTAMP'),('created_at','TIMESTAMP'),
         ],
         'investigations': [
             ("classification","VARCHAR(30) DEFAULT 'Incident'"),
+            ('severity_index','VARCHAR(5)'),
             ('occurrence_category','VARCHAR(50)'),
             ('phase_of_flight','VARCHAR(50)'),
             ('aircraft_type','VARCHAR(50)'),('aircraft_reg','VARCHAR(20)'),
@@ -10182,17 +10194,17 @@ with app.app_context():
             ("lifecycle_stage","VARCHAR(40) DEFAULT 'Notified'"),
             ('assigned_date','VARCHAR(20)'),('target_close_date','VARCHAR(20)'),
             ('final_findings','TEXT'),('closed_date','VARCHAR(20)'),
-            ('closed_by','VARCHAR(100)'),('updated_at','DATETIME'),
+            ('closed_by','VARCHAR(100)'),('updated_at','TIMESTAMP'),
         ],
         'investigation_events': [
             ('investigation_id','VARCHAR(30)'),('event_type','VARCHAR(30)'),
             ('from_stage','VARCHAR(40)'),('to_stage','VARCHAR(40)'),
-            ('note','TEXT'),('performed_by','VARCHAR(100)'),('created_at','DATETIME'),
+            ('note','TEXT'),('performed_by','VARCHAR(100)'),('created_at','TIMESTAMP'),
         ],
         'governance_audit_log': [
             ('entity_type','VARCHAR(50)'),('entity_id','VARCHAR(50)'),
             ('action','VARCHAR(50)'),('performed_by','VARCHAR(100)'),
-            ('detail','TEXT'),('ip_address','VARCHAR(45)'),('created_at','DATETIME'),
+            ('detail','TEXT'),('ip_address','VARCHAR(45)'),('created_at','TIMESTAMP'),
         ],
         'compliance_obligations': [
             ('regulation_body','VARCHAR(50)'),('standard_ref','VARCHAR(100)'),
@@ -10204,8 +10216,8 @@ with app.app_context():
             ('last_reviewed','VARCHAR(20)'),('next_review_due','VARCHAR(20)'),
             ('finding_ref','VARCHAR(30)'),('linked_action_id','VARCHAR(30)'),
             ('notes','TEXT'),('priority','VARCHAR(20)'),
-            ('created_by','VARCHAR(100)'),('created_at','DATETIME'),
-            ('updated_at','DATETIME'),
+            ('created_by','VARCHAR(100)'),('created_at','TIMESTAMP'),
+            ('updated_at','TIMESTAMP'),
         ],
     }
 
