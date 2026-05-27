@@ -242,7 +242,8 @@
   <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">🏢 Organisation-Wide Safety Exposure by Department</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
     {% set max_de = dept_exposure.values()|max %}
-    {% for did, cnt in dept_exposure.items()|sort(attribute=1,reverse=true)|list[:12] %}
+    {% for did, cnt in dept_exposure.items()|sort(attribute=1,reverse=true) %}
+    {% if loop.index0 < 12 %}
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center">
       <div style="font-size:20px;font-weight:800;color:var(--navy)">{{ cnt }}</div>
       <div style="font-size:11px;color:#374151;font-weight:600;margin-top:2px">{{ dept_names.get(did, 'Dept ' ~ did) }}</div>
@@ -250,6 +251,7 @@
         <div style="height:100%;background:var(--navy);width:{{ ((cnt / max_de) * 100)|int }}%;border-radius:4px"></div>
       </div>
     </div>
+    {% endif %}
     {% endfor %}
   </div>
 </div>
@@ -297,6 +299,11 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+</div>
+
+{% endblock %}
+le>
   </div>
 </div>
 
