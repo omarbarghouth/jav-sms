@@ -2173,6 +2173,11 @@ def dashboard():
         pass
 
     try:
+        recent_haz = Hazard.query.order_by(Hazard.created_at.desc()).limit(5).all()
+    except Exception:
+        db.session.rollback()
+        recent_haz = []
+    try:
         recent_act = Action.query.filter(Action.status != 'Closed') \
                         .order_by(Action.created_at.desc()).limit(6).all()
     except Exception:
