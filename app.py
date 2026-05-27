@@ -10335,10 +10335,15 @@ with app.app_context():
                 db.session.rollback()
 
     # ── seed default admin if none ─────────────────────────────────────────
-    if not Admin.query.first():
-        pw = os.environ.get('DEFAULT_ADMIN_PASSWORD', 'admin123')
-        db.session.add(Admin(username='admin',
-                             password=generate_password_hash(pw)))
+    if not User.query.first():
+        pw = os.environ.get('DEFAULT_ADMIN_PASSWORD', 'Jordan@SMS2026')
+        db.session.add(User(
+            username='admin',
+            password_hash=hash_pw(pw),
+            full_name='Safety Manager',
+            role='admin',
+            is_active=True,
+        ))
         db.session.commit()
 
 if __name__ == "__main__":
