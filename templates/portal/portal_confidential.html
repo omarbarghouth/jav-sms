@@ -73,6 +73,8 @@ body{background:#f0f2f8;min-height:100vh;font-family:'IBM Plex Sans',sans-serif;
   </div>
 
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
     <div class="card">
       <div class="sec-lbl">Confidential Safety Concern</div>
       <div class="fg"><label>Report Type</label>

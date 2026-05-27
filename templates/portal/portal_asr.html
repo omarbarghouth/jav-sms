@@ -47,6 +47,8 @@
   <div class="notice">ℹ This report is submitted directly to the Safety Department. It is handled under the company's non-punitive Just Culture reporting policy.</div>
   <div class="form-card">
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
     <div class="sec">Reporter Information</div>
     <div class="g2">
       <div class="fg"><label>Filed By *</label><input type="text" name="filed_by" required placeholder="Name / ID"/></div>

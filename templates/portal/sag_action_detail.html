@@ -121,6 +121,8 @@ a{text-decoration:none;color:inherit}
   <div style="display:grid;grid-template-columns:1fr 300px;gap:14px">
   <div>
   <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
 
   <!-- ═══════════════════════════════════════════════════════════════════
        WORKFLOW ROUTER — Different form per source type

@@ -34,6 +34,7 @@
   <div class="badge">✗ {{ error }}</div>
   {% endif %}
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div class="fg"><label>Username</label><input type="text" name="username" autofocus placeholder="Safety admin username"/></div>
     <div class="fg"><label>Password</label><input type="password" name="password" placeholder="Password"/></div>
     <button type="submit" class="btn">Sign In to Safety Admin →</button>

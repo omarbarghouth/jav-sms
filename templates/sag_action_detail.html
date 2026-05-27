@@ -108,6 +108,8 @@ a{text-decoration:none;color:inherit}
     <!-- Main form -->
     <div>
       <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
 
         {% if finding or hazard_rep or investigation or spi_ind or ra %}
         <div class="card" style="border-left:3px solid #1d4ed8;margin-bottom:14px">
