@@ -126,6 +126,8 @@ a{text-decoration:none;color:inherit}
   <div class="step" id="st4"></div><div class="step" id="st5"></div>
 </div>
 <form method="POST" id="asr-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
 
 <!-- PAGE 0: Flight Information -->
 <div class="pg on" id="p0">

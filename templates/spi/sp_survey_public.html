@@ -36,6 +36,8 @@
   {% if survey.end_date %}<p style="font-size:12px;color:#6b7280;margin-bottom:16px">Closes: {{ survey.end_date }}</p>{% endif %}
 </div>
 <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
   <!-- Respondent info -->
   <div class="card">
     <div class="anon-toggle">

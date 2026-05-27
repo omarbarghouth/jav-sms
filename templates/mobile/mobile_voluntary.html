@@ -97,6 +97,8 @@ a{text-decoration:none;color:inherit}
   </div>
   {% if error %}<div class="err">&#x26A0; {{ error }}</div>{% endif %}
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
     <div class="card">
       <div class="card-ttl">Safety Observation</div>
       <div class="fg"><label>Description *</label>
