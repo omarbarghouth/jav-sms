@@ -185,10 +185,15 @@
                 </form>
               </td>
               <td>
-                <form method="POST" action="/spi/indicators/{{ ind.id }}/delete"
-                      onsubmit="return confirm('Delete {{ ind.code }}?')">
-                  <button type="submit" class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px">🗑</button>
-                </form>
+                <div style="display:flex;gap:4px;align-items:center">
+                  <a href="/spi/indicators/{{ ind.id }}/detail"
+                     class="btn btn-sm" style="padding:3px 8px;font-size:11px;background:var(--navy);color:#c9a84c;border:none"
+                     title="Intelligence Detail">🔍</a>
+                  <form method="POST" action="/spi/indicators/{{ ind.id }}/delete"
+                        onsubmit="return confirm('Delete {{ ind.code }}?')">
+                    <button type="submit" class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px">🗑</button>
+                  </form>
+                </div>
               </td>
             </tr>
             {% endfor %}

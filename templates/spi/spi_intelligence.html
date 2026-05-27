@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% block title %}SPI Intelligence Hub{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+  <div>
+    <div class="page-title">SPI Intelligence Hub</div>
+    <div class="page-sub">System-Wide Safety Analytics · Cross-Module Linkage · SRB Auto-Feed · {{ now.strftime('%d %b %Y') }}</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/spi" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c">📊 SPI Dashboard</a>
+    <a href="/pdf/spi-summary" target="_blank" class="btn btn-sm" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1">📄 Export PDF</a>
+  </div>
+</div>
+
+<!-- ═══ SYSTEM KPI CARDS ═══════════════════════════════════════════════════ -->
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:18px">
+  <div class="stat-card" style="border-top:3px solid var(--navy)">
+    <div class="stat-val" style="color:var(--navy)">{{ total_links }}</div>
+    <div class="stat-lbl">Total Event Links</div>
+    <div class="stat-sub">All modules · All time</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #dc2626">
+    <div class="stat-val" style="color:#dc2626">{{ high_severity_links|length }}</div>
+    <div class="stat-lbl">High/Critical (30d)</div>
+    <div class="stat-sub">Needs attention</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #7c3aed">
+    <div class="stat-val" style="color:#7c3aed">{{ recurrence_alerts|length }}</div>
+    <div class="stat-lbl">Recurring Patterns</div>
+    <div class="stat-sub">6-month window</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #0ea5e9">
+    <div class="stat-val" style="color:#0ea5e9">{{ indicators|length }}</div>
+    <div class="stat-lbl">Active Indicators</div>
+    <div class="stat-sub">SPI/SPT tracked</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #c9a84c">
+    <div class="stat-val" style="color:#c9a84c">{{ srb_meetings|length }}</div>
+    <div class="stat-lbl">SRB Meetings</div>
+    <div class="stat-sub">Scheduled upcoming</div>
+  </div>
+</div>
+
+<!-- ═══ RECURRING HAZARD ALERTS ═══════════════════════════════════════════ -->
+{% if recurrence_alerts %}
+<div style="margin-bottom:16px">
+  <div style="font-weight:700;color:#dc2626;font-size:13px;margin-bottom:8px">🔁 Recurring Hazard Patterns — Immediate Safety Review Required</div>
+  {% for alert in recurrence_alerts %}
+  <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:12px 16px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-weight:700;font-size:13px;color:#1e293b">
+          <span style="font-family:monospace;color:#dc2626">{{ alert.indicator.code }}</span> — {{ alert.indicator.name }}
+        </div>
+        <div style="font-size:12px;color:#374151;margin-top:4px">
+          Recurring categories:
+          {% for cat, cnt in alert.recurrence.recurring_categories.items() %}
+          <span style="background:#fee2e2;color:#dc2626;padding:1px 8px;border-radius:10px;font-size:11px;margin-right:4px;font-weight:600">
+            {{ cat }} ({{ cnt }}×)
+          </span>
+          {% endfor %}
+        </div>
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">
+          Events (6mo): <strong>{{ alert.recurrence.total_6mo }}</strong> ·
+          Events (12mo): <strong>{{ alert.recurrence.total_12mo }}</strong>
+        </div>
+      </div>
+      <a href="/spi/indicators/{{ alert.indicator.id }}/detail"
+         class="btn btn-sm" style="background:#dc2626;color:#fff;white-space:nowrap;align-self:flex-start">
+        🔍 View Detail
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ═══ HIGH SEVERITY EVENTS (30 DAYS) ═══════════════════════════════════ -->
+{% if high_severity_links %}
+<div class="card" style="padding:16px;margin-bottom:16px">
+  <div style="font-weight:700;color:#dc2626;margin-bottom:12px;font-size:13px">⚡ High / Critical Events — Last 30 Days</div>
+  <div style="overflow-x:auto">
+    <table class="table" style="font-size:12px">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Severity</th>
+          <th>Type</th>
+          <th>Indicator</th>
+          <th>Title</th>
+          <th>Match Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set type_icons = {'hazard_report':'⚠','asr':'✈','investigation':'🔍','risk_assessment':'📊','audit_finding':'📋','erp_activation':'🚨','action':'✅','safety_promo':'📢'} %}
+        {% set sev_colors = {'Critical':'#dc2626','High':'#ea580c','Medium':'#d97706','Low':'#15803d'} %}
+        {% for lnk in high_severity_links %}
+        <tr>
+          <td style="white-space:nowrap;color:#6b7280">{{ lnk.event_date or '—' }}</td>
+          <td>
+            <span style="font-size:11px;font-weight:700;color:{{ sev_colors.get(lnk.severity,'#374151') }}">
+              {{ lnk.severity }}
+            </span>
+          </td>
+          <td>
+            <span style="font-size:11px;background:#f1f5f9;padding:2px 7px;border-radius:10px;white-space:nowrap">
+              {{ type_icons.get(lnk.event_type,'📌') }} {{ lnk.event_type|replace('_',' ')|title }}
+            </span>
+          </td>
+          <td>
+            <a href="/spi/indicators/{{ lnk.spi_id }}/detail" style="font-size:11px;color:var(--navy);font-weight:600">
+              {{ lnk.indicator.code if lnk.indicator else lnk.spi_id }}
+            </a>
+          </td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ lnk.event_title }}">
+            {{ lnk.event_title or '—' }}
+          </td>
+          <td style="font-size:11px;color:#6b7280;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ lnk.match_reason }}">{{ lnk.match_reason or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══ THREE-COLUMN: TOP INDICATORS · MODULES · SRB FEED ════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Top Linked Indicators -->
+  <div class="card" style="padding:16px">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">📈 Most Active Indicators</div>
+    {% if top_indicators %}
+    {% set max_cnt = ind_link_counts.values()|max if ind_link_counts else 1 %}
+    {% for ind in top_indicators %}
+    {% set cnt = ind_link_counts.get(ind.id, 0) %}
+    <div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <a href="/spi/indicators/{{ ind.id }}/detail"
+           style="font-size:12px;font-weight:600;color:var(--navy);text-decoration:none">
+          {{ ind.code }}
+        </a>
+        <span style="font-size:12px;font-weight:700;color:#1e293b">{{ cnt }}</span>
+      </div>
+      <div style="font-size:10.5px;color:#6b7280;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        {{ ind.name }}
+      </div>
+      <div style="background:#e2e8f0;border-radius:4px;height:5px;overflow:hidden">
+        <div style="height:100%;background:var(--navy);width:{{ ((cnt / max_cnt) * 100)|int if max_cnt else 0 }}%;border-radius:4px"></div>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="font-size:12px;color:#9ca3af">No indicators linked yet.</div>
+    {% endif %}
+  </div>
+
+  <!-- Module Breakdown -->
+  <div class="card" style="padding:16px">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">🗂 Events by Module</div>
+    {% set type_icons = {'hazard_report':'⚠','asr':'✈','investigation':'🔍','risk_assessment':'📊','audit_finding':'📋','erp_activation':'🚨','action':'✅','safety_promo':'📢'} %}
+    {% set module_colors = {'hazard_report':'#dc2626','asr':'#ea580c','investigation':'#7c3aed','risk_assessment':'#0ea5e9','audit_finding':'#d97706','erp_activation':'#b91c1c','action':'#15803d','safety_promo':'#0d9488'} %}
+    {% if event_type_counts %}
+    {% set max_m = event_type_counts.values()|max %}
+    {% for etype, cnt in event_type_counts.items()|sort(attribute=1,reverse=true) %}
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+      <span style="width:18px;text-align:center;font-size:13px">{{ type_icons.get(etype,'📌') }}</span>
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:2px">
+          <span style="color:#374151">{{ etype|replace('_',' ')|title }}</span>
+          <span style="font-weight:700;color:{{ module_colors.get(etype,'#334155') }}">{{ cnt }}</span>
+        </div>
+        <div style="background:#e2e8f0;border-radius:3px;height:4px;overflow:hidden">
+          <div style="height:100%;background:{{ module_colors.get(etype,'#334155') }};width:{{ ((cnt / max_m) * 100)|int }}%;border-radius:3px"></div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="font-size:12px;color:#9ca3af">No module events linked yet.</div>
+    {% endif %}
+  </div>
+
+  <!-- SRB Auto-Feed -->
+  <div class="card" style="padding:16px">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">🏛 SRB Auto-Feed</div>
+    {% if srb_meetings %}
+    {% for mtg in srb_meetings %}
+    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:#1e293b">{{ mtg.meeting_ref or 'SRB Meeting' }}</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">{{ mtg.meeting_date or '—' }}</div>
+      {% if intel.srb_feed %}
+      <div style="margin-top:8px">
+        {% for item in intel.srb_feed[:3] %}
+        <div style="font-size:11px;color:#374151;padding:3px 0;border-bottom:1px solid #f8fafc">
+          <span style="color:{% if item.status == 'CRITICAL' %}#dc2626{% elif item.status == 'WARNING' %}#ea580c{% else %}#d97706{% endif %};font-weight:700">
+            {{ item.status }}
+          </span>
+          · {{ item.code }} — {{ item.name[:40] }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <a href="{{ url_for('governance.srb_detail', mid=mtg.id) }}"
+         style="font-size:11px;color:var(--navy);font-weight:600;margin-top:6px;display:inline-block">
+        View SRB Meeting →
+      </a>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="font-size:12px;color:#9ca3af;text-align:center;padding:20px 0">
+      <div style="font-size:24px;margin-bottom:6px">🏛</div>
+      No SRB meetings scheduled.<br>
+      <a href="{{ url_for('governance.new_srb') }}" style="font-size:11px;color:var(--navy)">Schedule one →</a>
+    </div>
+    {% endif %}
+
+    {% if intel.srb_feed %}
+    <div style="margin-top:10px;border-top:1px solid #e2e8f0;padding-top:10px">
+      <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px">📋 Suggested SRB Agenda Items</div>
+      {% for item in intel.srb_feed %}
+      <div style="font-size:11px;color:#374151;padding:4px 0;display:flex;align-items:center;gap:6px">
+        <span style="color:{% if item.status == 'CRITICAL' %}#dc2626{% elif item.status == 'WARNING' %}#ea580c{% else %}#d97706{% endif %};font-weight:700;flex-shrink:0">
+          {{ item.status }}
+        </span>
+        <a href="/spi/indicators/{{ item.id }}/detail" style="color:#1e293b;font-weight:600;text-decoration:none">
+          {{ item.code }}
+        </a>
+        <span style="color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.name }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ═══ DEPARTMENT EXPOSURE MAP ════════════════════════════════════════════ -->
+{% if dept_exposure %}
+<div class="card" style="padding:16px;margin-bottom:16px">
+  <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">🏢 Organisation-Wide Safety Exposure by Department</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
+    {% set max_de = dept_exposure.values()|max %}
+    {% for did, cnt in dept_exposure.items()|sort(attribute=1,reverse=true)|list[:12] %}
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:20px;font-weight:800;color:var(--navy)">{{ cnt }}</div>
+      <div style="font-size:11px;color:#374151;font-weight:600;margin-top:2px">{{ dept_names.get(did, 'Dept ' ~ did) }}</div>
+      <div style="background:#e2e8f0;border-radius:4px;height:4px;margin-top:6px;overflow:hidden">
+        <div style="height:100%;background:var(--navy);width:{{ ((cnt / max_de) * 100)|int }}%;border-radius:4px"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══ ALL INDICATORS INTELLIGENCE GRID ══════════════════════════════════ -->
+<div class="card" style="padding:16px">
+  <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">
+    📋 All Active Indicators — Intelligence Overview
+  </div>
+  <div style="overflow-x:auto">
+    <table class="table" style="font-size:12px">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Indicator</th>
+          <th>Unit</th>
+          <th>Formula</th>
+          <th>Linked Events</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ind in indicators %}
+        {% set lc = ind_link_counts.get(ind.id, 0) %}
+        <tr>
+          <td>
+            <span style="font-family:monospace;font-weight:700;color:var(--navy)">{{ ind.code }}</span>
+          </td>
+          <td style="max-width:200px">{{ ind.name }}</td>
+          <td style="font-size:11px;color:#6b7280">{{ ind.unit or '—' }}</td>
+          <td style="font-size:11px;color:#6b7280;font-family:monospace">{{ ind.formula or '—' }}</td>
+          <td>
+            <span style="font-weight:700;color:{% if lc > 10 %}#dc2626{% elif lc > 3 %}#d97706{% else %}#15803d{% endif %}">
+              {{ lc }}
+            </span>
+          </td>
+          <td>
+            <a href="/spi/indicators/{{ ind.id }}/detail"
+               class="btn btn-sm" style="font-size:11px;padding:3px 10px;background:var(--navy);color:#c9a84c;border:none">
+              🔍 Detail
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

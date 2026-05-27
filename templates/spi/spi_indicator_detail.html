@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}{{ ind.code }} — Intelligence Detail{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+  <div>
+    <div class="page-title">{{ ind.code }} — {{ ind.name }}</div>
+    <div class="page-sub">SPI Intelligence Detail · Linked Events · Trend Drivers · Recurrence Analysis</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/spi/intelligence" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c">🧠 Intelligence Hub</a>
+    <a href="/spi" class="btn btn-sm" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1">← SPI Dashboard</a>
+  </div>
+</div>
+
+<!-- ═══ INDICATOR META CARDS ══════════════════════════════════════════════ -->
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:18px">
+  <div class="stat-card" style="border-top:3px solid var(--navy)">
+    <div class="stat-val" style="color:var(--navy)">{{ all_links|length }}</div>
+    <div class="stat-lbl">Linked Events</div>
+    <div class="stat-sub">All time</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #0ea5e9">
+    <div class="stat-val" style="color:#0ea5e9">{{ recent_links|length }}</div>
+    <div class="stat-lbl">Last 90 Days</div>
+    <div class="stat-sub">Linked events</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid {% if recurrence.recurring_categories %}#dc2626{% else %}#15803d{% endif %}">
+    <div class="stat-val" style="color:{% if recurrence.recurring_categories %}#dc2626{% else %}#15803d{% endif %}">
+      {{ recurrence.recurring_categories|length if recurrence.recurring_categories else 0 }}
+    </div>
+    <div class="stat-lbl">Recurring Patterns</div>
+    <div class="stat-sub">6-month window</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #7c3aed">
+    <div class="stat-val" style="color:#7c3aed">{{ dept_counts|length }}</div>
+    <div class="stat-lbl">Departments Exposed</div>
+    <div class="stat-sub">Unique depts</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #c9a84c">
+    <div class="stat-val" style="font-size:14px;color:#c9a84c">{{ spt_target if spt_target else 'N/A' }}</div>
+    <div class="stat-lbl">SPT Target</div>
+    <div class="stat-sub">Alert: {{ al_target if al_target else '—' }}</div>
+  </div>
+</div>
+
+<!-- ═══ TWO-COLUMN: CHART + RECURRENCE ═══════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 340px;gap:16px;margin-bottom:16px">
+
+  <!-- Trend Chart -->
+  <div class="card" style="padding:16px">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">📈 Performance Trend (Last 24 Months)</div>
+    {% if chart_labels %}
+    <canvas id="spiChart" height="90"></canvas>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+    (function(){
+      const ctx = document.getElementById('spiChart').getContext('2d');
+      const labels  = {{ chart_labels | tojson }};
+      const values  = {{ chart_values | tojson }};
+      const spt     = {{ spt_target | tojson }};
+      const al      = {{ al_target | tojson }};
+      const datasets = [{
+        label: '{{ ind.code }}',
+        data: values,
+        borderColor: '#0a1628',
+        backgroundColor: 'rgba(10,22,40,0.07)',
+        borderWidth: 2,
+        pointRadius: 3,
+        tension: 0.3,
+        fill: true,
+      }];
+      if (spt) datasets.push({ label:'SPT Target', data: labels.map(()=>spt),
+        borderColor:'#15803d', borderDash:[6,3], borderWidth:1.5, pointRadius:0 });
+      if (al) datasets.push({ label:'Alert Level', data: labels.map(()=>al),
+        borderColor:'#dc2626', borderDash:[4,4], borderWidth:1.5, pointRadius:0 });
+      new Chart(ctx, {
+        type:'line', data:{labels, datasets},
+        options:{ responsive:true, plugins:{ legend:{ position:'bottom', labels:{font:{size:11}} } },
+          scales:{ y:{ beginAtZero:true } } }
+      });
+    })();
+    </script>
+    {% else %}
+    <div style="color:#6b7280;font-size:13px;text-align:center;padding:40px 0">No data recorded yet for this indicator.</div>
+    {% endif %}
+  </div>
+
+  <!-- Recurrence + Severity -->
+  <div style="display:flex;flex-direction:column;gap:12px">
+
+    <!-- Recurrence Box -->
+    <div class="card" style="padding:14px">
+      <div style="font-weight:700;color:var(--navy);margin-bottom:10px;font-size:13px">🔁 Recurrence Analysis</div>
+      {% if recurrence.recurring_categories %}
+      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:10px;margin-bottom:8px">
+        <div style="font-size:11.5px;font-weight:700;color:#dc2626;margin-bottom:4px">⚠ Recurring hazard patterns detected</div>
+        {% for cat, cnt in recurrence.recurring_categories.items() %}
+        <div style="font-size:11px;color:#374151;padding:2px 0">• {{ cat }}: <strong>{{ cnt }} events</strong></div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="font-size:12px;color:#15803d;padding:6px 8px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0">
+        ✓ No recurring patterns in last 6 months
+      </div>
+      {% endif %}
+      <div style="margin-top:8px;font-size:11.5px;color:#6b7280">
+        Total (12 mo): <strong>{{ recurrence.total_12mo or 0 }}</strong> events ·
+        Last 6 mo: <strong>{{ recurrence.total_6mo or 0 }}</strong>
+      </div>
+    </div>
+
+    <!-- Severity Breakdown -->
+    <div class="card" style="padding:14px">
+      <div style="font-weight:700;color:var(--navy);margin-bottom:10px;font-size:13px">⚡ Severity Breakdown</div>
+      {% set sev_colors = {'Critical':'#dc2626','High':'#ea580c','Medium':'#d97706','Low':'#15803d','Information':'#6b7280','Minor':'#9ca3af'} %}
+      {% for sev, cnt in sev_counts.most_common() %}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">
+        <span style="font-size:12px;color:{{ sev_colors.get(sev,'#374151') }};font-weight:600">{{ sev }}</span>
+        <span style="font-size:12px;font-weight:700;color:#1e293b">{{ cnt }}</span>
+      </div>
+      {% else %}
+      <div style="font-size:12px;color:#9ca3af">No events linked yet.</div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ TWO-COLUMN: CATEGORIES + DEPARTMENT EXPOSURE ═════════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Top Trend Driver Categories -->
+  <div class="card" style="padding:16px">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">🏷 Top Trend Drivers (Event Categories)</div>
+    {% if top_categories %}
+    {% set max_cnt = top_categories[0][1] %}
+    {% for cat, cnt in top_categories %}
+    <div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span style="color:#374151;font-weight:500">{{ cat or 'Uncategorised' }}</span>
+        <span style="font-weight:700;color:var(--navy)">{{ cnt }}</span>
+      </div>
+      <div style="background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden">
+        <div style="height:100%;background:var(--navy);width:{{ (cnt / max_cnt * 100)|int }}%;border-radius:4px"></div>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="font-size:12px;color:#9ca3af">No categories mapped yet.</div>
+    {% endif %}
+  </div>
+
+  <!-- Department Exposure -->
+  <div class="card" style="padding:16px">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">🏢 Department Exposure</div>
+    {% if dept_counts %}
+    {% set sorted_depts = dept_counts.items()|list|sort(attribute=1,reverse=true) %}
+    {% set max_d = sorted_depts[0][1] %}
+    {% for did, cnt in sorted_depts %}
+    <div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span style="color:#374151;font-weight:500">{{ dept_names.get(did, 'Dept ' ~ did) }}</span>
+        <span style="font-weight:700;color:#7c3aed">{{ cnt }}</span>
+      </div>
+      <div style="background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden">
+        <div style="height:100%;background:#7c3aed;width:{{ (cnt / max_d * 100)|int }}%;border-radius:4px"></div>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="font-size:12px;color:#9ca3af">No department data available.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ═══ LINKED EVENTS TABLE ═══════════════════════════════════════════════ -->
+<div class="card" style="padding:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <div style="font-weight:700;color:var(--navy);font-size:13px">🔗 All Linked Events ({{ all_links|length }})</div>
+    {% if recent_links|length < all_links|length %}
+    <span style="font-size:11px;color:#6b7280;background:#f1f5f9;padding:3px 8px;border-radius:12px">
+      {{ recent_links|length }} in last 90 days
+    </span>
+    {% endif %}
+  </div>
+  {% if all_links %}
+  <div style="overflow-x:auto">
+    <table class="table" style="font-size:12px">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Event ID</th>
+          <th>Title</th>
+          <th>Category</th>
+          <th>Severity</th>
+          <th>Match Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set type_icons = {
+          'hazard_report': '⚠',
+          'asr': '✈',
+          'investigation': '🔍',
+          'risk_assessment': '📊',
+          'audit_finding': '📋',
+          'erp_activation': '🚨',
+          'action': '✅',
+          'safety_promo': '📢'
+        } %}
+        {% set sev_colors = {'Critical':'#dc2626','High':'#ea580c','Medium':'#d97706','Low':'#15803d','Information':'#6b7280','Minor':'#9ca3af'} %}
+        {% for lnk in all_links %}
+        <tr>
+          <td style="white-space:nowrap;color:#6b7280">{{ lnk.event_date or '—' }}</td>
+          <td>
+            <span style="font-size:11px;background:#f1f5f9;padding:2px 7px;border-radius:10px;white-space:nowrap">
+              {{ type_icons.get(lnk.event_type,'📌') }} {{ lnk.event_type|replace('_',' ')|title }}
+            </span>
+          </td>
+          <td style="font-family:monospace;font-size:11px;color:#334155">{{ lnk.event_id }}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ lnk.event_title }}">
+            {{ lnk.event_title or '—' }}
+          </td>
+          <td style="color:#374151">{{ lnk.category or '—' }}</td>
+          <td>
+            {% if lnk.severity %}
+            <span style="font-size:11px;font-weight:600;color:{{ sev_colors.get(lnk.severity,'#374151') }}">
+              {{ lnk.severity }}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:11px;color:#6b7280;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ lnk.match_reason }}">{{ lnk.match_reason or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:40px 0;color:#9ca3af">
+    <div style="font-size:32px;margin-bottom:8px">🔗</div>
+    <div style="font-size:13px">No events linked to this indicator yet.</div>
+    <div style="font-size:12px;margin-top:4px">Events will appear automatically as hazards, ASRs, investigations, and audits are recorded.</div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
