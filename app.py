@@ -2512,8 +2512,29 @@ def hazard_report_detail(rid):
     hazard = Hazard.query.get(rep.hazard_id) if rep.hazard_id else None
     ra     = RiskAssessment.query.filter_by(hazard_id=rep.hazard_id).first() if rep.hazard_id else None
     actions = Action.query.filter_by(hazard_id=rep.hazard_id).all() if rep.hazard_id else []
+    # SPI link context
+    spi_indicators, spi_links = [], []
+    try:
+        spi_indicators = SPIIndicator.query.filter_by(active=True).order_by(SPIIndicator.code).all()
+        if SPIEventLink is not None:
+            spi_links = SPIEventLink.query.filter_by(
+                event_type='hazard_report', event_id=str(rid)
+            ).all()
+    except Exception:
+        db.session.rollback()
     return render_template('reporting/hazard_report_detail.html',
-        rep=rep, hazard=hazard, ra=ra, actions=actions)
+        rep=rep, hazard=hazard, ra=ra, actions=actions,
+        spi_active_indicators=spi_indicators,
+        spi_existing_links=spi_links,
+        spi_link_event_type='hazard_report',
+        spi_link_event_id=str(rid),
+        spi_link_event_title=rep.generic_hazard or str(rid),
+        spi_link_event_date=str(rep.date or ''),
+        spi_link_severity=rep.reporter_severity or '',
+        spi_link_dept_id=rep.department_id or '',
+        spi_link_category=rep.classification or '',
+        spi_return_url=f'/hazard-reports/{rid}',
+    )
 
 @app.route('/hazard-reports/<rid>/update-status', methods=['POST'])
 @require_login
@@ -2713,7 +2734,28 @@ def hazard_log():
 @require_login
 def hazard_detail(hid):
     h = Hazard.query.get_or_404(hid)
-    return render_template('hazard/hazard_detail.html', h=h)
+    # SPI link context
+    spi_link_indicators, spi_link_existing = [], []
+    try:
+        spi_link_indicators = SPIIndicator.query.filter_by(active=True).order_by(SPIIndicator.code).all()
+        if SPIEventLink is not None:
+            spi_link_existing = SPIEventLink.query.filter_by(
+                event_type='hazard_report', event_id=str(hid)
+            ).all()
+    except Exception:
+        db.session.rollback()
+    return render_template('hazard/hazard_detail.html', h=h,
+        spi_active_indicators=spi_link_indicators,
+        spi_existing_links=spi_link_existing,
+        spi_link_event_type='hazard_report',
+        spi_link_event_id=str(hid),
+        spi_link_event_title=h.description[:100] if h.description else str(hid),
+        spi_link_event_date=str(h.date_reported or ''),
+        spi_link_severity=h.risk_rating or '',
+        spi_link_dept_id=h.department_id or '',
+        spi_link_category=h.classification or '',
+        spi_return_url=f'/hazard-log/{hid}',
+    )
 
 @app.route('/hazard-log/<hid>/update', methods=['POST'])
 @require_login
@@ -3180,11 +3222,32 @@ def action_detail(aid):
     # Action history
     history = ActionHistory.query.filter_by(action_id=aid)                  .order_by(ActionHistory.changed_at.desc()).limit(20).all()
 
+    # SPI link context
+    spi_link_indicators, spi_link_existing = [], []
+    try:
+        spi_link_indicators = SPIIndicator.query.filter_by(active=True).order_by(SPIIndicator.code).all()
+        if SPIEventLink is not None:
+            spi_link_existing = SPIEventLink.query.filter_by(
+                event_type='action', event_id=str(aid)
+            ).all()
+    except Exception:
+        db.session.rollback()
     return render_template('action/action_detail.html',
         a=a, hazard=hazard, hazard_rep=hazard_rep,
         finding=finding, investigation=investigation,
         spi_ind=spi_ind, ra=ra,
-        sag_members=sag_members, history=history)
+        sag_members=sag_members, history=history,
+        spi_active_indicators=spi_link_indicators,
+        spi_existing_links=spi_link_existing,
+        spi_link_event_type='action',
+        spi_link_event_id=str(aid),
+        spi_link_event_title=a.description[:100] if a.description else str(aid),
+        spi_link_event_date=str(a.due_date or ''),
+        spi_link_severity=a.priority or '',
+        spi_link_dept_id=a.department_id or '',
+        spi_link_category=a.source or '',
+        spi_return_url=f'/actions/{aid}',
+    )
 
 
 
@@ -3396,11 +3459,32 @@ def investigation_detail(iid):
     actions = Action.query.filter_by(linked_ref_id=iid).all()
     timeline = InvestigationEvent.query.filter_by(investigation_id=iid)\
         .order_by(InvestigationEvent.created_at).all()
+    # SPI link context
+    spi_indicators, spi_links = [], []
+    try:
+        spi_indicators = SPIIndicator.query.filter_by(active=True).order_by(SPIIndicator.code).all()
+        if SPIEventLink is not None:
+            spi_links = SPIEventLink.query.filter_by(
+                event_type='investigation', event_id=str(iid)
+            ).all()
+    except Exception:
+        db.session.rollback()
     return render_template('investigation/investigation_detail.html',
         inv=inv, actions=actions, timeline=timeline,
         lifecycle_stages=LIFECYCLE_STAGES,
         occurrence_categories=OCCURRENCE_CATEGORIES,
-        departments=Department.query.order_by(Department.name).all())
+        departments=Department.query.order_by(Department.name).all(),
+        spi_active_indicators=spi_indicators,
+        spi_existing_links=spi_links,
+        spi_link_event_type='investigation',
+        spi_link_event_id=str(iid),
+        spi_link_event_title=inv.title or str(iid),
+        spi_link_event_date=str(inv.date_of_occurrence or ''),
+        spi_link_severity='High' if inv.classification in ('Accident','Serious Incident') else 'Medium',
+        spi_link_dept_id=inv.department_id or '',
+        spi_link_category=inv.occurrence_category or '',
+        spi_return_url=f'/investigations/{iid}',
+    )
 
 @app.route('/investigations/<iid>/edit', methods=['GET','POST'])
 @require_login
@@ -4837,6 +4921,86 @@ def spi_intelligence():
         now=datetime.utcnow(),
     )
 
+
+# ─── Manual SPI Link ──────────────────────────────────────────────────────────
+@app.route('/spi/link', methods=['POST'])
+@require_login
+def spi_manual_link():
+    """Create a manual SPIEventLink from any report detail page — Task #69."""
+    if SPIEventLink is None:
+        flash('SPI linkage not yet available — please redeploy models.', 'warning')
+        return redirect(request.referrer or '/spi')
+
+    spi_id      = request.form.get('spi_id', type=int)
+    event_type  = request.form.get('event_type', '')
+    event_id    = request.form.get('event_id', '')
+    event_title = request.form.get('event_title', '')
+    event_date  = request.form.get('event_date', '')
+    severity    = request.form.get('severity', '')
+    dept_id     = request.form.get('department_id', type=int)
+    category    = request.form.get('category', '')
+    return_url  = request.form.get('return_url') or request.referrer or '/spi'
+
+    if not spi_id:
+        flash('Please select an SPI indicator.', 'warning')
+        return redirect(return_url)
+
+    # Check for duplicate (same event already linked to same indicator)
+    existing = None
+    try:
+        existing = SPIEventLink.query.filter_by(
+            spi_id=spi_id, event_type=event_type, event_id=event_id
+        ).first()
+    except Exception:
+        db.session.rollback()
+
+    if existing:
+        flash(f'This report is already linked to {existing.indicator.code if existing.indicator else "that indicator"}.', 'info')
+        return redirect(return_url)
+
+    try:
+        link = SPIEventLink(
+            spi_id=spi_id,
+            event_type=event_type,
+            event_id=event_id,
+            event_title=event_title,
+            event_date=event_date or datetime.utcnow().strftime('%Y-%m-%d'),
+            department_id=dept_id,
+            category=category,
+            severity=severity,
+            match_reason='Manual link by ' + (session.get('admin_user') or 'user'),
+        )
+        db.session.add(link)
+        db.session.commit()
+        ind = SPIIndicator.query.get(spi_id)
+        flash(f'✓ Report linked to SPI indicator {ind.code if ind else spi_id}.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error('spi_manual_link error: %s', e)
+        flash('Error creating SPI link. Please try again.', 'danger')
+
+    return redirect(return_url)
+
+
+@app.route('/spi/unlink/<int:link_id>', methods=['POST'])
+@require_login
+def spi_unlink(link_id):
+    """Remove a manual SPIEventLink."""
+    if SPIEventLink is None:
+        flash('SPI linkage not available.', 'warning')
+        return redirect(request.referrer or '/spi')
+    return_url = request.form.get('return_url') or request.referrer or '/spi'
+    try:
+        lnk = SPIEventLink.query.get_or_404(link_id)
+        code = lnk.indicator.code if lnk.indicator else str(link_id)
+        db.session.delete(lnk)
+        db.session.commit()
+        flash(f'✓ SPI link to {code} removed.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error('spi_unlink error: %s', e)
+        flash('Error removing SPI link.', 'danger')
+    return redirect(return_url)
 
 
 # ─── Safety Promotion ─────────────────────────────────────────────────────────
@@ -7864,12 +8028,33 @@ def finding_detail(fid):
         User.sag_role != None, User.sag_role != '', User.is_active == True
     ).all()
 
+    # SPI link context
+    spi_link_indicators, spi_link_existing = [], []
+    try:
+        spi_link_indicators = SPIIndicator.query.filter_by(active=True).order_by(SPIIndicator.code).all()
+        if SPIEventLink is not None:
+            spi_link_existing = SPIEventLink.query.filter_by(
+                event_type='audit_finding', event_id=str(fid)
+            ).all()
+    except Exception:
+        db.session.rollback()
     return render_template('audit/finding_detail.html',
                            finding=finding, schedule=schedule,
                            evidence_file_list=evidence_file_list,
                            linked_action=linked_action,
                            sag_members=sag_members,
-                           now=datetime.utcnow())
+                           now=datetime.utcnow(),
+                           spi_active_indicators=spi_link_indicators,
+                           spi_existing_links=spi_link_existing,
+                           spi_link_event_type='audit_finding',
+                           spi_link_event_id=str(fid),
+                           spi_link_event_title=(finding.description or str(fid))[:100],
+                           spi_link_event_date=str(finding.created_at.strftime('%Y-%m-%d') if finding.created_at else ''),
+                           spi_link_severity='High' if finding.severity == 'Major' else 'Medium',
+                           spi_link_dept_id='',
+                           spi_link_category=finding.finding_type or '',
+                           spi_return_url=f'/audit-findings/{fid}',
+                           )
 
 
 @app.route('/audit-findings/<fid>/report')
@@ -10700,203 +10885,80 @@ with app.app_context():
             ('location','VARCHAR(200)'),('authority_notified','BOOLEAN DEFAULT FALSE'),
             ('notification_date','VARCHAR(20)'),('notification_ref','VARCHAR(50)'),
             ("lifecycle_stage","VARCHAR(40) DEFAULT 'Notified'"),
-            ('assigned_date','VARCHAR(20)'),('target_close_date','VARCHAR(20)'),
-            ('final_findings','TEXT'),('closed_date','VARCHAR(20)'),
-            ('closed_by','VARCHAR(100)'),('updated_at','TIMESTAMP'),
-        ],
-        'investigation_events': [
-            ('investigation_id','VARCHAR(30)'),('event_type','VARCHAR(30)'),
-            ('from_stage','VARCHAR(40)'),('to_stage','VARCHAR(40)'),
-            ('note','TEXT'),('performed_by','VARCHAR(100)'),('created_at','TIMESTAMP'),
-        ],
-        'governance_audit_log': [
-            ('entity_type','VARCHAR(50)'),('entity_id','VARCHAR(50)'),
-            ('action','VARCHAR(50)'),('performed_by','VARCHAR(100)'),
-            ('detail','TEXT'),('ip_address','VARCHAR(45)'),('created_at','TIMESTAMP'),
+            ('performed_by','VARCHAR(100)'),
         ],
         'compliance_obligations': [
-            ('regulation_body','VARCHAR(50)'),('standard_ref','VARCHAR(100)'),
-            ('requirement_title','VARCHAR(200)'),('requirement_text','TEXT'),
-            ('applicability','VARCHAR(200)'),('obligation_type','VARCHAR(30)'),
-            ('compliance_status','VARCHAR(30)'),('evidence_description','TEXT'),
-            ('evidence_location','VARCHAR(200)'),('responsible_person','VARCHAR(100)'),
-            ('department_id','INTEGER'),('review_frequency','VARCHAR(20)'),
-            ('last_reviewed','VARCHAR(20)'),('next_review_due','VARCHAR(20)'),
-            ('finding_ref','VARCHAR(30)'),('linked_action_id','VARCHAR(30)'),
-            ('notes','TEXT'),('priority','VARCHAR(20)'),
-            ('created_by','VARCHAR(100)'),('created_at','TIMESTAMP'),
+            ('regulation_ref','VARCHAR(100)'),
+            ('regulation_title','VARCHAR(300)'),
+            ('authority','VARCHAR(100)'),
+            ('category','VARCHAR(50)'),
+            ('description','TEXT'),
+            ('applicability','TEXT'),
+            ('evidence_required','TEXT'),
+            ('owner','VARCHAR(100)'),
+            ('review_date','VARCHAR(20)'),
+            ('status','VARCHAR(30)'),
+            ('compliance_level','VARCHAR(30)'),
+            ('last_audit_date','VARCHAR(20)'),
+            ('next_review_date','VARCHAR(20)'),
+            ('notes','TEXT'),
+            ('created_at','TIMESTAMP'),
             ('updated_at','TIMESTAMP'),
         ],
     }
 
-    with db.engine.connect() as _mig_conn:
-        _mig_conn = _mig_conn.execution_options(isolation_level="AUTOCOMMIT")
-        for _tbl, _cols in _migrations.items():
-            for _col, _coltype in _cols:
-                try:
-                    _mig_conn.execute(db.text(
-                        f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'
-                    ))
-                except Exception:
-                    pass
-
-    _phase2_ddl = [
-        """CREATE TABLE IF NOT EXISTS erp_drills (
-            id SERIAL PRIMARY KEY,
-            erp_id VARCHAR(30),
-            drill_ref VARCHAR(30),
-            drill_type VARCHAR(30),
-            drill_date VARCHAR(20),
-            duration_min INTEGER,
-            facilitator VARCHAR(100),
-            participants TEXT,
-            participant_count INTEGER DEFAULT 0,
-            scenario_brief TEXT,
-            objectives TEXT,
-            observations TEXT,
-            strengths TEXT,
-            deficiencies TEXT,
-            recommendations TEXT,
-            action_items TEXT,
-            erp_update_required BOOLEAN DEFAULT FALSE,
-            outcome VARCHAR(20) DEFAULT 'Satisfactory',
-            next_drill_due VARCHAR(20),
-            created_by VARCHAR(100),
-            created_at TIMESTAMP)""",
-        """CREATE TABLE IF NOT EXISTS erp_activations (
-            id SERIAL PRIMARY KEY,
-            erp_id VARCHAR(30),
-            activation_ref VARCHAR(30),
-            investigation_id VARCHAR(30),
-            activated_at TIMESTAMP,
-            activated_by VARCHAR(100),
-            activation_reason TEXT,
-            caa_notified BOOLEAN DEFAULT FALSE,
-            caa_notified_at TIMESTAMP,
-            caa_ref VARCHAR(50),
-            icao_notified BOOLEAN DEFAULT FALSE,
-            icao_notified_at TIMESTAMP,
-            media_statement BOOLEAN DEFAULT FALSE,
-            nok_notified BOOLEAN DEFAULT FALSE,
-            deactivated_at TIMESTAMP,
-            deactivated_by VARCHAR(100),
-            duration_hours REAL,
-            actions_taken TEXT,
-            effectiveness VARCHAR(30),
-            lessons_learned TEXT,
-            erp_update_required BOOLEAN DEFAULT FALSE,
-            status VARCHAR(20) DEFAULT 'Active',
-            created_at TIMESTAMP)""",
-        """CREATE TABLE IF NOT EXISTS investigation_events (
-            id SERIAL PRIMARY KEY,
-            investigation_id VARCHAR(30),
-            event_type VARCHAR(30),
-            from_stage VARCHAR(40),
-            to_stage VARCHAR(40),
-            note TEXT,
-            performed_by VARCHAR(100),
-            created_at TIMESTAMP)""",
-        """CREATE TABLE IF NOT EXISTS governance_audit_log (
-            id SERIAL PRIMARY KEY,
-            entity_type VARCHAR(50),
-            entity_id VARCHAR(50),
-            action VARCHAR(50),
-            changed_by VARCHAR(100),
-            change_summary TEXT,
-            created_at TIMESTAMP)""",
-        """CREATE TABLE IF NOT EXISTS erp_drills (
-            id SERIAL PRIMARY KEY,
-            drill_date DATE,
-            drill_type VARCHAR(50),
-            scenario TEXT,
-            participants INTEGER DEFAULT 0,
-            duration_minutes INTEGER DEFAULT 0,
-            location VARCHAR(100),
-            lead_coordinator VARCHAR(100),
-            outcome VARCHAR(20) DEFAULT 'Satisfactory',
-            objectives_met BOOLEAN DEFAULT FALSE,
-            comms_effective BOOLEAN DEFAULT FALSE,
-            erp_update_required BOOLEAN DEFAULT FALSE,
-            lessons_learned TEXT,
-            corrective_actions TEXT,
-            notes TEXT,
-            created_by VARCHAR(100),
-            created_at TIMESTAMP)""",
-        """CREATE TABLE IF NOT EXISTS erp_activations (
-            id SERIAL PRIMARY KEY,
-            activation_date TIMESTAMP,
-            incident_type VARCHAR(80),
-            severity VARCHAR(20) DEFAULT 'Minor',
-            activated_by VARCHAR(100),
-            notification_time_minutes INTEGER DEFAULT 0,
-            resources_deployed TEXT,
-            external_agencies TEXT,
-            timeline TEXT,
-            outcome VARCHAR(20) DEFAULT 'Resolved',
-            duration_hours NUMERIC(6,2) DEFAULT 0,
-            lessons_learned TEXT,
-            notes TEXT,
-            created_at TIMESTAMP)""",
-        """CREATE TABLE IF NOT EXISTS compliance_obligations (
-            id SERIAL PRIMARY KEY,
-            ref_number VARCHAR(30) UNIQUE,
-            regulation_body VARCHAR(30),
-            standard_ref VARCHAR(100),
-           
-            requirement_title VARCHAR(200),
-            requirement_text TEXT,
-            applicability VARCHAR(200),
-            obligation_type VARCHAR(30),
-            compliance_status VARCHAR(30) DEFAULT 'Unknown',
-            evidence_description TEXT,
-            evidence_location VARCHAR(200),
-            responsible_person VARCHAR(100),
-            department_id INTEGER,
-            review_frequency VARCHAR(20),
-            last_reviewed VARCHAR(20),
-            next_review_due VARCHAR(20),
-            finding_ref VARCHAR(30),
-            linked_action_id VARCHAR(30),
-            notes TEXT,
-            priority VARCHAR(20) DEFAULT 'Medium',
-            created_by VARCHAR(100),
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP)""",
-        """CREATE TABLE IF NOT EXISTS spi_event_links (
-            id SERIAL PRIMARY KEY,
-            spi_id INTEGER REFERENCES spi_indicators(id),
-            event_type VARCHAR(30),
-            event_id VARCHAR(50),
-            event_title VARCHAR(200),
-            event_date VARCHAR(20),
-            department_id INTEGER,
-            category VARCHAR(100),
-            severity VARCHAR(20),
-            match_reason VARCHAR(300),
-            created_at TIMESTAMP DEFAULT NOW())""",
-    ]
-
-    with db.engine.connect() as _ddl_conn:
-        _ddl_conn = _ddl_conn.execution_options(isolation_level="AUTOCOMMIT")
-        for _stmt in _phase2_ddl:
+    for table, cols in _col_add_map.items():
+        for col, col_type in cols:
             try:
-                _ddl_conn.execute(db.text(_stmt))
-            except Exception:
-                pass
+                with engine.connect() as conn:
+                    conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+                    conn.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}"
+                    ))
+            except Exception as _ce:
+                pass  # column may already exist
+
+    # Create spi_event_links table if not exists
+    _spi_links_ddl = (
+        "CREATE TABLE IF NOT EXISTS spi_event_links ("
+        "id SERIAL PRIMARY KEY, "
+        "spi_id INTEGER REFERENCES spi_indicators(id), "
+        "event_type VARCHAR(30), "
+        "event_id VARCHAR(50), "
+        "event_title VARCHAR(200), "
+        "event_date VARCHAR(20), "
+        "department_id INTEGER, "
+        "category VARCHAR(100), "
+        "severity VARCHAR(20), "
+        "match_reason VARCHAR(300), "
+        "created_at TIMESTAMP DEFAULT NOW())"
+    )
+    try:
+        with engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn.execute(text(_spi_links_ddl))
+    except Exception as _e:
+        pass
 
     db.session.remove()
+    print("Phase-2 DDL complete.")
 
-    # Seed default admin user if no users exist
-    if not User.query.first():
-        pw = os.environ.get('DEFAULT_ADMIN_PASSWORD', 'Jordan@SMS2026')
-        db.session.add(User(
-            username='admin',
-            password_hash=hash_pw(pw),
-            full_name='Safety Manager',
-            role='admin',
-            is_active=True
-        ))
-        db.session.commit()
+
+# ---- STARTUP ----------------------------------------------------------------
+with app.app_context():
+    try:
+        db.create_all()
+    except Exception as _dce:
+        print(f"db.create_all warning: {_dce}")
+    try:
+        _phase2_ddl()
+    except Exception as _p2e:
+        print(f"Phase-2 DDL warning: {_p2e}")
+    try:
+        seed()
+    except Exception as _se:
+        print(f"Seed warning: {_se}")
+
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
