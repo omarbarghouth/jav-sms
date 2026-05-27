@@ -1849,8 +1849,8 @@ def api_mobile_stats():
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
-@require_login
 def admin_login():
+    # If already authenticated, go straight to dashboard
     if is_logged_in():
         return redirect(url_for('dashboard'))
     error = None
@@ -1869,7 +1869,16 @@ def admin_login():
             session.permanent          = True
             user.last_login            = datetime.utcnow()
             db.session.commit()
-            next_url = request.args.get('next') or url_for('dashboard')
+            # Sanitise next= to prevent open redirect: only allow same-origin paths
+            raw_next = request.args.get('next', '')
+            from urllib.parse import urlparse
+            parsed = urlparse(raw_next)
+            # Accept only relative paths that don't loop back to login
+            if raw_next and not parsed.netloc and not parsed.scheme \
+                    and not raw_next.startswith('/admin/login'):
+                next_url = raw_next
+            else:
+                next_url = url_for('dashboard')
             return redirect(next_url)
         else:
             error = 'Invalid username or password.'
@@ -1877,7 +1886,6 @@ def admin_login():
 
 
 @app.route('/admin/logout')
-@require_login
 def admin_logout():
     session.clear()
     flash('You have been logged out.', 'info')
@@ -10176,19 +10184,19 @@ with app.app_context():
             requirement_title VARCHAR(200),
             requirement_text TEXT,
             applicability VARCHAR(200),
-            obligation_type VARCHAR(30) DEFAULT 'Ongoing',
-            compliance_status VARCHAR(30) DEFAULT 'Under Review',
+            obligation_type VARCHAR(30) DEFAULT "Ongoing",
+            compliance_status VARCHAR(30) DEFAULT "Under Review",
             evidence_description TEXT,
             evidence_location VARCHAR(200),
             responsible_person VARCHAR(100),
             department_id INTEGER,
-            review_frequency VARCHAR(20) DEFAULT 'Annual',
+            review_frequency VARCHAR(20) DEFAULT "Annual",
             last_reviewed VARCHAR(20),
             next_review_due VARCHAR(20),
             finding_ref VARCHAR(30),
             linked_action_id VARCHAR(30),
             notes TEXT,
-            priority VARCHAR(20) DEFAULT 'Medium',
+            priority VARCHAR(20) DEFAULT "Medium",
             created_by VARCHAR(100),
             created_at DATETIME,
             updated_at DATETIME)''',
