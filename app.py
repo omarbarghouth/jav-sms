@@ -2361,6 +2361,18 @@ def hazard_report():
             month         = datetime.now().month,
             report_id     = rid
         )
+        try:
+            _spi_link_event(
+                event_type    = 'hazard_report',
+                event_id      = rid,
+                event_title   = f.get('generic_hazard', f.get('hazard_description',''))[:120],
+                department_id = dept_id,
+                category      = f.get('classification',''),
+                extra_text    = f.get('hazard_description','') + ' ' + f.get('consequences',''),
+                event_date    = f.get('date',''),
+            )
+        except Exception:
+            pass
         flash(f'✓ Hazard Report {rid} submitted successfully. Hazard {hid} created for assessment.', 'success')
         return redirect(url_for('hazard_report_detail', rid=rid))
     return render_template('reporting/hazard_report.html')
@@ -2646,6 +2658,19 @@ def asr():
             )
         except Exception:
             pass
+        try:
+            _spi_link_event(
+                event_type    = 'asr',
+                event_id      = aid,
+                event_title   = f.get('occurrence_description', f.get('occurrence',''))[:120],
+                department_id = _asr_dept_id,
+                category      = f.get('occurrence_category', f.get('occurrence','')),
+                severity      = 'High' if f.get('safety_effect','') in ('D','E') else 'Medium',
+                extra_text    = f.get('occurrence_description','') + ' ' + f.get('immediate_action',''),
+                event_date    = f.get('date',''),
+            )
+        except Exception:
+            pass
 
         flash(f'✓ ASR {aid} submitted successfully. Hazard {hid} created. Proceeding to Risk Assessment.', 'success')
         return redirect(url_for('ra_wizard_start', hid=hid))
@@ -2720,6 +2745,21 @@ def add_risk(hid):
         r.residual_tolerance    = get_tolerance(rri)
     db.session.add(r)
     db.session.commit()
+    # Hook 4 — SPI Intelligence linkage for new risk assessment
+    try:
+        haz = Hazard.query.get(hid)
+        _spi_link_event(
+            event_type    = 'risk_assessment',
+            event_id      = r.id,
+            event_title   = (haz.generic_hazard[:120] if haz and haz.generic_hazard else f'Risk {r.id}'),
+            department_id = haz.department_id if haz else None,
+            category      = haz.classification if haz else '',
+            severity      = 'High' if r.initial_tolerance in ('Unacceptable','High') else 'Medium',
+            extra_text    = f.get('description', '') + ' ' + (haz.consequences if haz else ''),
+            event_date    = '',
+        )
+    except Exception:
+        pass
     flash('✓ Risk added.', 'success')
     return redirect(url_for('hazard_detail', hid=hid))
 
@@ -2870,6 +2910,20 @@ def new_action():
         db.session.commit()
         sync_report_status(a.hazard_id)
         db.session.commit()
+        # Hook 7 — SPI Intelligence linkage for new corrective action
+        try:
+            _spi_link_event(
+                event_type    = 'action',
+                event_id      = a.id,
+                event_title   = a.description[:120] if a.description else '',
+                department_id = None,
+                category      = a.source or '',
+                severity      = a.priority or 'Medium',
+                extra_text    = (a.mitigation_description or '') + ' ' + (a.corrective_description or '') + ' ' + (a.safety_notes or ''),
+                event_date    = a.due_date or '',
+            )
+        except Exception:
+            pass
         flash(f'✓ Action {a.id} created successfully.', 'success')
         # Return to wherever the user came from
         return_url = f.get('return_url', url_for('actions'))
@@ -3307,6 +3361,20 @@ def new_investigation():
         if inv.hazard_id:
             sync_report_status(inv.hazard_id)
             db.session.commit()
+        # Hook 3 — SPI Intelligence linkage for new investigation
+        try:
+            _spi_link_event(
+                event_type    = 'investigation',
+                event_id      = inv.id,
+                event_title   = inv.title[:120] if inv.title else '',
+                department_id = inv.department_id,
+                category      = inv.classification or '',
+                severity      = 'Critical' if inv.classification in ('Accident','Serious Incident') else 'High',
+                extra_text    = (inv.description or '') + ' ' + (inv.occurrence_category or ''),
+                event_date    = inv.occurrence_date or '',
+            )
+        except Exception:
+            pass
         flash(f'✓ Investigation {inv.id} opened.', 'success')
         return redirect(url_for('investigation_detail', iid=inv.id))
     hazards = Hazard.query.order_by(Hazard.created_at.desc()).all()
@@ -4038,6 +4106,247 @@ def _spi_record_escalation(ind, trigger_detail, l1, l2, l3, mean, sd):
     return esc
 
 
+
+# ============================================================================
+#  SPI INTELLIGENCE LINKAGE ENGINE
+#  ICAO Annex 19 s.6.3 / Doc 9859 Chapter 7 -- Safety Performance Monitoring
+#  Additive architecture -- NEVER modifies existing SPI calculations.
+# ============================================================================
+
+# Aviation occurrence taxonomy: topic -> keyword phrases
+_SPI_TAXONOMY = {
+    'runway':     ['runway excursion','runway incursion','overrun','undershoot',
+                   'overshoot','usos','re ','ri-vap','landing roll','rejected takeoff'],
+    'approach':   ['approach','unstable approach','cfit','loc-i','controlled flight',
+                   'terrain','go-around','missed approach','glide','ils','gpws'],
+    'ground_ops': ['fod','foreign object','ground collision','gcol','pushback','towing',
+                   'ground handling','ramp','taxiway','apron','wing strike','ground damage'],
+    'technical':  ['engine failure','engine','scf-pp','scf-np','component failure',
+                   'hydraulic','electrical','avionics','pressurisation','apu','bird strike'],
+    'turbulence': ['turbulence','turb ','wake turbulence','wind shear','ws ','microburst',
+                   'icing','ice accumulation','uimc'],
+    'fatigue':    ['fatigue','rest period','duty','fdt','fdp','hours flown','sleep','roster'],
+    'fire_smoke': ['fire','smoke','f-ni','f-post','fumes','odour','odor','vapor','fume event'],
+    'fuel':       ['fuel','fuel leak','fuel exhaustion','fuel contamination','defuelling','misfuel'],
+    'airspace':   ['airspace','atc','separation','tcas','mac ','midair','collision avoidance','loss of separation'],
+    'maintenance':['maintenance','mx ','airworthiness','service bulletin','inspection','defect'],
+    'training':   ['training','simulator','recurrent','line check','proficiency','currency','competency'],
+    'security':   ['security','dangerous goods','dg ','hazmat','lithium','unauthorized'],
+    'medical':    ['medical','incapacitation','illness','injury','first aid'],
+    'sms_general':['safety report','hazard report','near miss','occurrence','safety event'],
+}
+
+_SEVERITY_MAP = {
+    'asr':            'High',
+    'investigation':  'Critical',
+    'audit_finding':  'Medium',
+    'risk_assessment':'High',
+    'erp_activation': 'Critical',
+    'hazard_report':  'Medium',
+    'action':         'Low',
+    'safety_promo':   'Low',
+}
+
+
+def _spi_detect_topics(text):
+    """Return set of taxonomy topic keys matching free text."""
+    text_lower = (text or '').lower()
+    hits = set()
+    for topic, keywords in _SPI_TAXONOMY.items():
+        for kw in keywords:
+            if kw in text_lower:
+                hits.add(topic)
+                break
+    return hits
+
+
+def _spi_link_event(event_type, event_id, event_title,
+                    department_id, category='', severity='',
+                    extra_text='', event_date=None):
+    """
+    Intelligent SPI linkage engine.
+    Matches an operational event to every relevant active SPI indicator
+    and creates SPIEventLink records. Purely additive -- never touches
+    SPIData, SPIIndicator values, or any existing calculation.
+    Always safe to call from try/except.
+    """
+    from models import SPIEventLink
+    now = datetime.utcnow()
+    event_date = event_date or now.strftime('%Y-%m-%d')
+    severity = severity or _SEVERITY_MAP.get(event_type, 'Medium')
+
+    corpus = ' '.join([str(category or ''), str(event_title or ''), str(extra_text or '')])
+    detected_topics = _spi_detect_topics(corpus)
+    cat_lower = (category or '').lower()
+    linked_spi_ids = set()
+
+    try:
+        indicators = SPIIndicator.query.filter_by(active=True).all()
+    except Exception:
+        return []
+
+    for ind in indicators:
+        reasons = []
+
+        # 1. Direct source-type + auto_category match
+        if ind.auto_source and ind.auto_source == event_type:
+            if not ind.auto_category or ind.auto_category.lower() in cat_lower:
+                reasons.append('source:' + event_type)
+
+        # 2. Taxonomy topic overlap between event and indicator
+        ind_corpus = ' '.join([(ind.name or ''), (ind.description or ''),
+                                (ind.category or '')]).lower()
+        ind_topics = _spi_detect_topics(ind_corpus)
+        overlap = detected_topics & ind_topics
+        if overlap:
+            reasons.append('topic:' + ','.join(sorted(overlap)))
+
+        # 3. Direct category string match
+        if ind.category and ind.category.lower() in cat_lower:
+            reasons.append('category:' + ind.category)
+        if ind.auto_category and ind.auto_category.lower() in cat_lower:
+            reasons.append('auto_cat:' + ind.auto_category)
+
+        if not reasons:
+            continue
+
+        # 4. Department filter
+        dept_ids = [x.strip() for x in (ind.department_ids or '').split(',') if x.strip()]
+        if dept_ids and str(department_id) not in dept_ids:
+            continue
+
+        if ind.id in linked_spi_ids:
+            continue
+
+        # Deduplication
+        try:
+            existing = SPIEventLink.query.filter_by(
+                spi_id=ind.id, event_type=event_type, event_id=str(event_id)
+            ).first()
+        except Exception:
+            existing = None
+        if existing:
+            continue
+
+        link = SPIEventLink(
+            spi_id=ind.id,
+            event_type=event_type,
+            event_id=str(event_id),
+            event_title=str(event_title or '')[:200],
+            event_date=event_date,
+            department_id=department_id,
+            category=str(category or '')[:100],
+            severity=severity,
+            match_reason=('; '.join(reasons))[:300],
+        )
+        db.session.add(link)
+        linked_spi_ids.add(ind.id)
+
+    try:
+        if linked_spi_ids:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return list(linked_spi_ids)
+
+
+def _spi_recurrence_analysis(spi_id, lookback_months=6):
+    """Detect recurring patterns for a SPI indicator. Read-only analytics."""
+    from models import SPIEventLink
+    from collections import Counter
+    from datetime import date, timedelta
+    try:
+        cutoff = (date.today() - timedelta(days=lookback_months * 30)).isoformat()
+        links  = SPIEventLink.query.filter(
+            SPIEventLink.spi_id == spi_id,
+            SPIEventLink.event_date >= cutoff).all()
+    except Exception:
+        return {'total': 0, 'category_counts': [], 'type_counts': [],
+                'dept_counts': [], 'severity_counts': {},
+                'recurring_categories': [], 'has_recurrence': False}
+
+    cat_counts  = Counter(l.category for l in links if l.category)
+    type_counts = Counter(l.event_type for l in links)
+    dept_counts = Counter(l.department_id for l in links if l.department_id)
+    sev_counts  = Counter(l.severity for l in links if l.severity)
+    recurring_cats = [(c, n) for c, n in cat_counts.most_common(5) if n >= 2]
+    return {
+        'total':                len(links),
+        'category_counts':      cat_counts.most_common(8),
+        'type_counts':          type_counts.most_common(8),
+        'dept_counts':          dept_counts.most_common(5),
+        'severity_counts':      dict(sev_counts),
+        'recurring_categories': recurring_cats,
+        'has_recurrence':       len(recurring_cats) > 0,
+    }
+
+
+def _spi_intelligence_summary():
+    """System-wide intelligence snapshot. Read-only."""
+    from models import SPIEventLink
+    from collections import Counter, defaultdict
+    from datetime import date, timedelta
+    try:
+        cutoff_90 = (date.today() - timedelta(days=90)).isoformat()
+        cutoff_30 = (date.today() - timedelta(days=30)).isoformat()
+        all_links = SPIEventLink.query.filter(
+            SPIEventLink.event_date >= cutoff_90).all()
+    except Exception:
+        return {'total_links_90d': 0, 'type_counts': [], 'dept_counts': [],
+                'critical_30d': 0, 'srb_items': [], 'top_spis': []}
+
+    spi_counts   = Counter(l.spi_id for l in all_links)
+    type_counts  = Counter(l.event_type for l in all_links)
+    dept_counts  = Counter(l.department_id for l in all_links if l.department_id)
+    cat_by_spi   = defaultdict(Counter)
+    for l in all_links:
+        if l.category:
+            cat_by_spi[l.spi_id][l.category] += 1
+    critical_30  = sum(1 for l in all_links
+                       if l.severity in ('Critical', 'High') and l.event_date >= cutoff_30)
+
+    # SRB feed: SPIs currently exceeding SPT
+    srb_items = []
+    try:
+        for ind in SPIIndicator.query.filter_by(active=True).all():
+            recent = SPIData.query.filter_by(spi_id=ind.id).order_by(
+                SPIData.year.desc(), SPIData.month.desc()).first()
+            if recent and recent.rate is not None and ind.spt_target:
+                exceeded = recent.rate > ind.spt_target
+                if exceeded:
+                    rec = _spi_recurrence_analysis(ind.id, lookback_months=3)
+                    srb_items.append({
+                        'ind':         ind,
+                        'value':       recent.rate,
+                        'spt':         ind.spt_target,
+                        'event_count': spi_counts.get(ind.id, 0),
+                        'recurring':   rec['has_recurrence'],
+                        'top_cats':    rec['recurring_categories'],
+                    })
+    except Exception:
+        pass
+
+    # Top SPIs by linked event count (90d)
+    top_spis = []
+    for spi_id, cnt in spi_counts.most_common(10):
+        try:
+            ind = SPIIndicator.query.get(spi_id)
+            if ind:
+                top_spis.append({'ind': ind, 'link_count': cnt,
+                                 'cats': cat_by_spi[spi_id].most_common(3)})
+        except Exception:
+            pass
+
+    return {
+        'total_links_90d': len(all_links),
+        'type_counts':     type_counts.most_common(),
+        'dept_counts':     dept_counts.most_common(8),
+        'critical_30d':    critical_30,
+        'srb_items':       srb_items,
+        'top_spis':        top_spis,
+    }
+
 def spi_auto_update(source_type, department_id, category, year, month,
                     report_id=None):
     """
@@ -4374,6 +4683,163 @@ def spi_toggle_indicator(iid):
     return redirect(url_for('spi_indicators'))
 
 
+# ─── SPI Intelligence: Indicator Detail ───────────────────────────────────────
+@app.route('/spi/indicators/<int:iid>/detail')
+@require_login
+def spi_indicator_detail(iid):
+    """Full intelligence view for a single SPI indicator — Task #65."""
+    from models import SPIEventLink
+    ind  = SPIIndicator.query.get_or_404(iid)
+    data = SPIData.query.filter_by(spi_id=iid).order_by(SPIData.year, SPIData.month).all()
+
+    # ── Linked events (all time) ──────────────────────────────────────────────
+    def _safe(fn, default):
+        try:
+            return fn()
+        except Exception:
+            db.session.rollback()
+            return default
+
+    all_links = _safe(
+        lambda: SPIEventLink.query.filter_by(spi_id=iid)
+                    .order_by(SPIEventLink.created_at.desc()).all(),
+        []
+    )
+
+    # ── Trend driver categories (frequency count) ─────────────────────────────
+    from collections import Counter
+    category_counts = Counter(lnk.category for lnk in all_links if lnk.category)
+    top_categories  = category_counts.most_common(5)
+
+    # ── Department exposure ───────────────────────────────────────────────────
+    dept_counts = Counter(lnk.department_id for lnk in all_links if lnk.department_id)
+    dept_names  = {}
+    for did in dept_counts:
+        d = _safe(lambda: Department.query.get(did), None)
+        dept_names[did] = d.name if d else f'Dept {did}'
+
+    # ── Recurrence analysis ───────────────────────────────────────────────────
+    recurrence = _safe(lambda: _spi_recurrence_analysis(iid, lookback_months=12), {})
+
+    # ── Severity breakdown ────────────────────────────────────────────────────
+    sev_counts = Counter(lnk.severity for lnk in all_links if lnk.severity)
+
+    # ── Recent 90-day links ───────────────────────────────────────────────────
+    from datetime import timedelta
+    cutoff_90 = (datetime.utcnow() - timedelta(days=90)).strftime('%Y-%m-%d')
+    recent_links = [lnk for lnk in all_links if (lnk.event_date or '') >= cutoff_90]
+
+    # ── Build value chart data (last 24 months) ───────────────────────────────
+    chart_labels = [f"{r.month}/{r.year}" for r in data[-24:]]
+    chart_values = [round(float(r.value), 4) if r.value is not None else None for r in data[-24:]]
+    spt_target   = float(ind.spt_target) if ind.spt_target else None
+    al_target    = float(ind.alert_level_1) if ind.alert_level_1 else None
+
+    return render_template('spi/spi_indicator_detail.html',
+        ind=ind,
+        data=data,
+        all_links=all_links,
+        recent_links=recent_links,
+        top_categories=top_categories,
+        dept_counts=dept_counts,
+        dept_names=dept_names,
+        recurrence=recurrence,
+        sev_counts=sev_counts,
+        chart_labels=chart_labels,
+        chart_values=chart_values,
+        spt_target=spt_target,
+        al_target=al_target,
+        now=datetime.utcnow(),
+    )
+
+
+# ─── SPI Intelligence Hub ─────────────────────────────────────────────────────
+@app.route('/spi/intelligence')
+@require_login
+def spi_intelligence():
+    """System-wide SPI analytics hub + SRB auto-feed — Task #66."""
+    from models import SPIEventLink, SRBMeeting
+
+    def _safe(fn, default):
+        try:
+            return fn()
+        except Exception:
+            db.session.rollback()
+            return default
+
+    # ── System-wide intelligence summary ──────────────────────────────────────
+    intel = _safe(lambda: _spi_intelligence_summary(), {})
+
+    # ── All active indicators with link counts ────────────────────────────────
+    indicators = _safe(lambda: SPIIndicator.query.filter_by(active=True).all(), [])
+
+    ind_link_counts = {}
+    for ind in indicators:
+        ind_link_counts[ind.id] = _safe(
+            lambda i=ind: SPIEventLink.query.filter_by(spi_id=i.id).count(), 0
+        )
+
+    # ── Top linked indicators (by event count) ────────────────────────────────
+    top_indicators = sorted(indicators, key=lambda i: ind_link_counts.get(i.id, 0), reverse=True)[:8]
+
+    # ── Recent high-severity links (last 30 days) ─────────────────────────────
+    from datetime import timedelta
+    cutoff_30 = (datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d')
+    high_severity_links = _safe(
+        lambda: SPIEventLink.query.filter(
+            SPIEventLink.severity.in_(['Critical','High']),
+            SPIEventLink.event_date >= cutoff_30
+        ).order_by(SPIEventLink.created_at.desc()).limit(20).all(),
+        []
+    )
+
+    # ── SRB feed: upcoming meetings that need SPI agenda items ───────────────
+    srb_meetings = _safe(
+        lambda: SRBMeeting.query.filter(SRBMeeting.status == 'Scheduled')
+                    .order_by(SRBMeeting.meeting_date).limit(3).all(),
+        []
+    )
+
+    # ── Cross-module event type breakdown ─────────────────────────────────────
+    from collections import Counter
+    all_links = _safe(
+        lambda: SPIEventLink.query.all(), []
+    )
+    event_type_counts = Counter(lnk.event_type for lnk in all_links)
+    dept_exposure = Counter(lnk.department_id for lnk in all_links if lnk.department_id)
+
+    dept_names = {}
+    for did in list(dept_exposure.keys())[:10]:
+        d = _safe(lambda: Department.query.get(did), None)
+        dept_names[did] = d.name if d else f'Dept {did}'
+
+    # ── Recurring hazard patterns ─────────────────────────────────────────────
+    recurrence_alerts = []
+    for ind in top_indicators[:5]:
+        rec = _safe(lambda i=ind: _spi_recurrence_analysis(i.id, lookback_months=6), {})
+        if rec.get('recurring_categories'):
+            recurrence_alerts.append({
+                'indicator': ind,
+                'recurrence': rec,
+            })
+
+    return render_template('spi/spi_intelligence.html',
+        intel=intel,
+        indicators=indicators,
+        ind_link_counts=ind_link_counts,
+        top_indicators=top_indicators,
+        high_severity_links=high_severity_links,
+        srb_meetings=srb_meetings,
+        event_type_counts=dict(event_type_counts),
+        dept_exposure=dict(dept_exposure),
+        dept_names=dept_names,
+        recurrence_alerts=recurrence_alerts,
+        total_links=len(all_links),
+        now=datetime.utcnow(),
+    )
+
+
+
 # ─── Safety Promotion ─────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SAFETY PROMOTION MODULE
@@ -4447,6 +4913,20 @@ def new_bulletin():
             issued_by=f.get('issued_by','Safety Department'), status='Active',
             attachment=ef, linked_hazard_id=f.get('linked_hazard_id') or None)
         db.session.add(b); db.session.commit()
+        # Hook 8 — SPI Intelligence linkage for new safety bulletin
+        try:
+            _spi_link_event(
+                event_type    = 'safety_promo',
+                event_id      = bid,
+                event_title   = f['title'][:120],
+                department_id = int(f['department_id']) if f.get('department_id') else None,
+                category      = f.get('bulletin_type', 'Bulletin'),
+                severity      = f.get('severity', 'Information'),
+                extra_text    = f.get('content', '') + ' ' + f.get('recommendations', ''),
+                event_date    = f.get('issue_date', ''),
+            )
+        except Exception:
+            pass
         flash(f'✓ Bulletin {bid} published.', 'success')
         return redirect(url_for('sp_bulletins'))
     return render_template('spi/sp_bulletin_form.html',
@@ -7173,6 +7653,21 @@ def new_finding(sid):
     db.session.add(audit_action)
     finding.status = 'Actioned'
     db.session.commit()
+    # Hook 5 — SPI Intelligence linkage for new audit finding
+    try:
+        sched = AuditSchedule.query.get(sid)
+        _spi_link_event(
+            event_type    = 'audit_finding',
+            event_id      = fid,
+            event_title   = f['description'][:120],
+            department_id = sched.department_id if sched else None,
+            category      = f.get('category', ''),
+            severity      = f.get('severity', 'Minor'),
+            extra_text    = f.get('root_cause', '') + ' ' + f.get('requirement', ''),
+            event_date    = '',
+        )
+    except Exception:
+        pass
 
     msg = f'✓ Finding {finding_ref} recorded. Action {unified_action.id} created.'
     if hid: msg += f' Hazard {hid} created in SMS Hazard Log.'
@@ -9860,6 +10355,20 @@ def activate_erp(eid):
     )
     db.session.add(act)
     db.session.commit()
+    # Hook 6 — SPI Intelligence linkage for ERP activation
+    try:
+        _spi_link_event(
+            event_type    = 'erp_activation',
+            event_id      = act.activation_ref,
+            event_title   = f'{erp.scenario_type}: {erp.erp_ref}'[:120],
+            department_id = None,
+            category      = erp.scenario_type or '',
+            severity      = 'Critical',
+            extra_text    = request.form.get('activation_reason', '') + ' ' + (erp.scenario_description or ''),
+            event_date    = act.activated_at.strftime('%Y-%m-%d') if act.activated_at else '',
+        )
+    except Exception:
+        pass
     flash(f'\u2713 ERP {erp.erp_ref} activated — ref {act.activation_ref}.', 'success')
     return redirect(url_for('erp_detail', eid=eid))
 
@@ -10334,46 +10843,51 @@ with app.app_context():
             ref_number VARCHAR(30) UNIQUE,
             regulation_body VARCHAR(30),
             standard_ref VARCHAR(100),
+           
             requirement_title VARCHAR(200),
             requirement_text TEXT,
-            applicability TEXT,
-            obligation_type VARCHAR(30) DEFAULT 'Ongoing',
-            compliance_status VARCHAR(30) DEFAULT 'Under Review',
-            priority VARCHAR(20) DEFAULT 'Medium',
+            applicability VARCHAR(200),
+            obligation_type VARCHAR(30),
+            compliance_status VARCHAR(30) DEFAULT 'Unknown',
             evidence_description TEXT,
-            evidence_location VARCHAR(300),
-            finding_ref VARCHAR(50),
-            linked_action_id VARCHAR(50),
+            evidence_location VARCHAR(200),
             responsible_person VARCHAR(100),
-            department_id INTEGER REFERENCES departments(id),
-            review_frequency VARCHAR(20) DEFAULT 'Annual',
-            last_reviewed DATE,
-            next_review_due DATE,
+            department_id INTEGER,
+            review_frequency VARCHAR(20),
+            last_reviewed VARCHAR(20),
+            next_review_due VARCHAR(20),
+            finding_ref VARCHAR(30),
+            linked_action_id VARCHAR(30),
             notes TEXT,
+            priority VARCHAR(20) DEFAULT 'Medium',
             created_by VARCHAR(100),
             created_at TIMESTAMP,
             updated_at TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS spi_event_links (
+            id SERIAL PRIMARY KEY,
+            spi_id INTEGER REFERENCES spi_indicators(id),
+            event_type VARCHAR(30),
+            event_id VARCHAR(50),
+            event_title VARCHAR(200),
+            event_date VARCHAR(20),
+            department_id INTEGER,
+            category VARCHAR(100),
+            severity VARCHAR(20),
+            match_reason VARCHAR(300),
+            created_at TIMESTAMP DEFAULT NOW())""",
     ]
 
     with db.engine.connect() as _ddl_conn:
         _ddl_conn = _ddl_conn.execution_options(isolation_level="AUTOCOMMIT")
-        for _ddl in _phase2_ddl:
+        for _stmt in _phase2_ddl:
             try:
-                _ddl_conn.execute(db.text(_ddl))
+                _ddl_conn.execute(db.text(_stmt))
             except Exception:
                 pass
-        for _tbl, _cols in _migrations.items():
-            for _col, _coltype in _cols:
-                try:
-                    _ddl_conn.execute(db.text(
-                        f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'
-                    ))
-                except Exception:
-                    pass
 
-    db.session.remove()  # reset ORM session so no aborted-txn state bleeds into requests
+    db.session.remove()
 
-    # ── seed default admin if none ─────────────────────────────────────────
+    # Seed default admin user if no users exist
     if not User.query.first():
         pw = os.environ.get('DEFAULT_ADMIN_PASSWORD', 'Jordan@SMS2026')
         db.session.add(User(
@@ -10381,9 +10895,9 @@ with app.app_context():
             password_hash=hash_pw(pw),
             full_name='Safety Manager',
             role='admin',
-            is_active=True,
+            is_active=True
         ))
         db.session.commit()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=False)
