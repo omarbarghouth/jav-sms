@@ -428,12 +428,6 @@
     <div class="card">
       <div class="card-title">Safety Intelligence Summary</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-        {% set intel = [
-          ('Total Hazard Reports', hr_cnt,     '/hazard-reports',  var(--red)),
-          ('Risk Assessments',     ra_open,    '/risk-assessments', '#c2610a'),
-          ('ASR Submissions',      asr_cnt,    '/asr',              '#1d4ed8'),
-          ('Investigations',       inv_cnt,    '/investigations',   '#374151'),
-        ] %}
         {% for label, cnt, href, color in [
           ('Total Hazards',   hr_cnt,  '/hazard-reports',   '#dc2626'),
           ('Risk Assessments',ra_open, '/risk-assessments', '#c2610a'),
