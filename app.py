@@ -1849,6 +1849,7 @@ def api_mobile_stats():
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
+@csrf.exempt
 def admin_login():
     # If already authenticated, go straight to dashboard
     if is_logged_in():
@@ -1886,6 +1887,7 @@ def admin_login():
 
 
 @app.route('/admin/logout')
+@csrf.exempt
 def admin_logout():
     session.clear()
     flash('You have been logged out.', 'info')
@@ -5915,6 +5917,7 @@ def require_sag(f):
 
 
 @app.route('/sag-login', methods=['GET', 'POST'])
+@csrf.exempt
 def sag_login():
     if is_sag_logged_in():
         return redirect(url_for('sag_dashboard'))
@@ -10212,5 +10215,5 @@ with app.app_context():
     except Exception:
         db.session.rollback()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=False)
