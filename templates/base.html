@@ -336,7 +336,11 @@
     <a href="/safety-policy" class="nav-a {% if request.path=='/safety-policy' %}active{% endif %}" data-tip="Policy"><span class="nav-icon">📜</span><span class="nav-label">Safety Policy</span></a>
     <a href="/safety-roles" class="nav-a {% if '/safety-roles' in request.path %}active{% endif %}" data-tip="Accountability"><span class="nav-icon">👥</span><span class="nav-label">Accountability</span></a>
     <a href="/safety-personnel" class="nav-a {% if '/safety-personnel' in request.path %}active{% endif %}" data-tip="Personnel"><span class="nav-icon">🪪</span><span class="nav-label">Key Personnel</span></a>
-    <a href="/erp" class="nav-a {% if '/erp' in request.path %}active{% endif %}" data-tip="ERP"><span class="nav-icon">🚨</span><span class="nav-label">Emergency Response</span></a>
+    <a href="/erp" class="nav-a {% if '/erp' in request.path and 'dashboard' not in request.path %}active{% endif %}" data-tip="ERP Plans"><span class="nav-icon">🚨</span><span class="nav-label">Emergency Response</span></a>
+    <a href="/erp-dashboard" class="nav-a {% if '/erp-dashboard' in request.path %}active{% endif %}" data-tip="ERP Dashboard"><span class="nav-icon">📊</span><span class="nav-label">ERP Dashboard</span></a>
+
+    <div class="sb-section">Regulatory Compliance</div>
+    <a href="/compliance" class="nav-a {% if '/compliance' in request.path %}active{% endif %}" data-tip="Compliance Register"><span class="nav-icon">📋</span><span class="nav-label">Compliance Register</span></a>
   </nav>
 
   <a href="/admin/employees" class="nav-a {% if request.path.startswith('/admin/employees') %}active{% endif %}" data-tip="Employees"><span class="nav-icon">👥</span><span class="nav-label">Employees</span></a>
