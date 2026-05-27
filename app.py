@@ -2151,16 +2151,15 @@ def dashboard():
     except Exception: pass
 
     # ── OTHER ─────────────────────────────────────────────────────────────────
-    moc_cnt     = MOC.query.count()
-    doc_cnt     = SMSDocument.query.filter_by(status='Approved').count()
-    ra_open     = RiskAssessment.query.filter(
-                      RiskAssessment.status.notin_(['Closed','Approved'])).count()
-
-    # ── RECENT RECORDS (defensive — any .all() can fail if column missing on PG) ──
+    moc_cnt = doc_cnt = ra_open = 0
     try:
-        recent_haz = Hazard.query.order_by(Hazard.created_at.desc()).limit(5).all()
+        moc_cnt = MOC.query.count()
+        doc_cnt = SMSDocument.query.filter_by(status='Approved').count()
+        ra_open = RiskAssessment.query.filter(
+                      RiskAssessment.status.notin_(['Closed','Approved'])).count()
     except Exception:
-        recent_haz = []
+        pass
+
     try:
         recent_act = Action.query.filter(Action.status != 'Closed') \
                         .order_by(Action.created_at.desc()).limit(6).all()
@@ -10184,14 +10183,16 @@ with app.app_context():
         ],
     }
 
-    for _tbl, _cols in _migrations.items():
-        for _col, _coltype in _cols:
-            try:
-                db.session.execute(db.text(
-                    f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'
-                ))
-            except Exception:
-                pass
+    with db.engine.connect() as _mig_conn:
+        _mig_conn = _mig_conn.execution_options(isolation_level="AUTOCOMMIT")
+        for _tbl, _cols in _migrations.items():
+            for _col, _coltype in _cols:
+                try:
+                    _mig_conn.execute(db.text(
+                        f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'
+                    ))
+                except Exception:
+                    pass
 
     _phase2_ddl = [
         """CREATE TABLE IF NOT EXISTS erp_drills (
@@ -10316,23 +10317,23 @@ with app.app_context():
             updated_at TIMESTAMP)""",
     ]
 
-    for _ddl in _phase2_ddl:
-        try:
-            db.session.execute(db.text(_ddl))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-    # ── run column migrations ──────────────────────────────────────────────
-    for _tbl, _cols in _migrations.items():
-        for _col, _coltype in _cols:
+    with db.engine.connect() as _ddl_conn:
+        _ddl_conn = _ddl_conn.execution_options(isolation_level="AUTOCOMMIT")
+        for _ddl in _phase2_ddl:
             try:
-                db.session.execute(db.text(
-                    f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'
-                ))
-                db.session.commit()
+                _ddl_conn.execute(db.text(_ddl))
             except Exception:
-                db.session.rollback()
+                pass
+        for _tbl, _cols in _migrations.items():
+            for _col, _coltype in _cols:
+                try:
+                    _ddl_conn.execute(db.text(
+                        f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'
+                    ))
+                except Exception:
+                    pass
+
+    db.session.remove()  # reset ORM session so no aborted-txn state bleeds into requests
 
     # ── seed default admin if none ─────────────────────────────────────────
     if not User.query.first():
