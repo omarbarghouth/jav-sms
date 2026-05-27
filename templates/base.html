@@ -4,243 +4,280 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>{% block title %}Jordan Aviation SMS{% endblock %}</title>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
     :root{
-      --navy:#0f1c3f;--navy2:#1a2d5a;--navy3:#07101f;
-      --gold:#c9a84c;--gold2:#e8c96e;
-      --bg:#eef0f6;--card:#fff;--text:#111827;--muted:#6b7280;
-      --border:#e5e7eb;--border2:#d1d5db;
-      --r:10px;--r2:7px;
-      --shadow:0 1px 4px rgba(15,28,63,.06),0 4px 16px rgba(15,28,63,.04);
-      --shadow2:0 4px 24px rgba(15,28,63,.12);
-      --sb-w:248px;--tb-h:52px;--trans:.13s ease;
+      /* Brand */
+      --navy:#0f1c3f;--navy2:#162848;--navy3:#06101f;
+      --gold:#c9a84c;--gold2:#ddb95e;
+      /* Surfaces */
+      --bg:#e9ecf3;--surface:#f2f4fb;--card:#ffffff;
+      /* Text */
+      --text:#0f172a;--muted:#5e6e8c;--muted2:#94a3b8;
+      /* Borders */
+      --border:#dde0ef;--border2:#c8cce0;
+      /* Operational */
+      --red:#dc2626;--red-bg:#fff1f1;--red-border:#fecaca;
+      --amber:#c2610a;--amber-bg:#fffbeb;--amber-border:#fde68a;
+      --green:#15803d;--green-bg:#f0fdf4;--green-border:#bbf7d0;
+      --blue:#1d4ed8;--blue-bg:#eff6ff;--blue-border:#bfdbfe;
+      /* Geometry */
+      --r:5px;--r2:4px;
+      /* Elevation */
+      --shadow:0 1px 3px rgba(10,20,50,.07),0 3px 10px rgba(10,20,50,.04);
+      --shadow2:0 4px 20px rgba(10,20,50,.11);
+      --shadow3:0 8px 32px rgba(10,20,50,.15);
+      /* Layout */
+      --sb-w:240px;--tb-h:46px;--trans:.12s ease;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html{scroll-behavior:smooth}
-    body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;min-height:100vh;padding-left:var(--sb-w)}
-    body.sb-collapsed{padding-left:54px}
+    body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);font-size:13.5px;display:flex;min-height:100vh;padding-left:var(--sb-w);line-height:1.45}
+    body.sb-collapsed{padding-left:50px}
     a{text-decoration:none;color:inherit}
 
-    /* ── FIXED SIDEBAR ──────────────────────────────────────── */
-    .sb{width:var(--sb-w);background:var(--navy3);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto;overflow-x:hidden;transition:width var(--trans);scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.08) transparent}
+    /* ── SIDEBAR ─────────────────────────────────────────────── */
+    .sb{width:var(--sb-w);background:var(--navy3);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto;overflow-x:hidden;transition:width var(--trans);scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.07) transparent;border-right:1px solid rgba(255,255,255,.04)}
     .sb::-webkit-scrollbar{width:3px}
-    .sb::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:99px}
-    .sb.collapsed{width:54px}
+    .sb::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:99px}
+    .sb.collapsed{width:50px}
 
-    .sb-logo{display:flex;align-items:center;gap:10px;padding:15px 13px;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0;cursor:pointer;user-select:none;transition:background var(--trans)}
-    .sb-logo:hover{background:rgba(255,255,255,.03)}
-    .sb-icon{width:34px;height:34px;flex-shrink:0;background:linear-gradient(135deg,var(--gold) 0%,#a8832a 100%);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 10px rgba(201,168,76,.3)}
+    .sb-logo{display:flex;align-items:center;gap:9px;padding:13px 11px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;cursor:pointer;user-select:none;transition:background var(--trans)}
+    .sb-logo:hover{background:rgba(255,255,255,.025)}
+    .sb-icon{width:32px;height:32px;flex-shrink:0;background:linear-gradient(135deg,var(--gold) 0%,#9e7120 100%);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(201,168,76,.28);letter-spacing:0}
     .sb-text{overflow:hidden;flex:1;min-width:0}
-    .sb-name{color:#fff;font-size:11.5px;font-weight:800;white-space:nowrap}
-    .sb-sub-name{color:var(--gold2);font-size:9px;font-weight:500;white-space:nowrap;margin-top:1px;opacity:.8}
-    .sb-toggle{margin-left:auto;color:rgba(255,255,255,.25);font-size:12px;flex-shrink:0;transition:color var(--trans)}
-    .sb-logo:hover .sb-toggle{color:rgba(255,255,255,.55)}
+    .sb-name{color:#fff;font-size:11px;font-weight:800;white-space:nowrap;letter-spacing:.2px}
+    .sb-sub-name{color:var(--gold2);font-size:8.5px;font-weight:500;white-space:nowrap;margin-top:1px;opacity:.75;letter-spacing:.3px}
+    .sb-toggle{margin-left:auto;color:rgba(255,255,255,.18);font-size:10px;flex-shrink:0;transition:color var(--trans)}
+    .sb-logo:hover .sb-toggle{color:rgba(255,255,255,.45)}
 
-    .sb-section{padding:13px 13px 4px;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.2);display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden}
-    .sb-section::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.05)}
-    .sb-sub{padding:8px 13px 2px 22px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.28);white-space:nowrap;overflow:hidden}
+    .sb-section{padding:11px 11px 3px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:1.8px;color:rgba(255,255,255,.18);display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden}
+    .sb-section::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.045)}
+    .sb-sub{padding:7px 11px 2px 20px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.22);white-space:nowrap;overflow:hidden}
 
-    .nav-a{display:flex;align-items:center;gap:9px;padding:7px 13px;min-height:34px;color:rgba(255,255,255,.5);font-size:12.5px;font-weight:500;border-left:2px solid transparent;transition:all var(--trans);white-space:nowrap;overflow:hidden}
-    .nav-a:hover{background:rgba(255,255,255,.04);color:rgba(255,255,255,.88)}
-    .nav-a.active{background:rgba(201,168,76,.1);color:var(--gold2);border-left-color:var(--gold);font-weight:600}
-    .nav-icon{font-size:14px;width:19px;text-align:center;flex-shrink:0;opacity:.6;transition:opacity var(--trans)}
+    .nav-a{display:flex;align-items:center;gap:8px;padding:6px 11px;min-height:31px;color:rgba(255,255,255,.44);font-size:12px;font-weight:500;border-left:2px solid transparent;transition:all var(--trans);white-space:nowrap;overflow:hidden}
+    .nav-a:hover{background:rgba(255,255,255,.035);color:rgba(255,255,255,.82)}
+    .nav-a.active{background:rgba(201,168,76,.09);color:var(--gold2);border-left-color:var(--gold);font-weight:600}
+    .nav-icon{font-size:13px;width:17px;text-align:center;flex-shrink:0;opacity:.55;transition:opacity var(--trans)}
     .nav-a:hover .nav-icon,.nav-a.active .nav-icon{opacity:1}
-    .nav-label{overflow:hidden;flex:1;min-width:0}
-    .nav-badge{background:#dc2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:99px;flex-shrink:0}
-    .nav-tag{background:var(--gold);color:var(--navy);font-size:8.5px;font-weight:800;padding:1px 7px;border-radius:99px;flex-shrink:0}
-    .nav-tag-blue{background:#1d4ed8;color:#fff;font-size:8.5px;font-weight:800;padding:1px 7px;border-radius:99px;flex-shrink:0}
-    .sb-foot{padding:11px 13px;border-top:1px solid rgba(255,255,255,.04);font-size:9.5px;color:rgba(255,255,255,.18);line-height:1.8;flex-shrink:0;margin-top:auto}
-    .sb-foot strong{color:rgba(255,255,255,.3)}
+    .nav-label{overflow:hidden;flex:1;min-width:0;text-overflow:ellipsis}
+    .nav-badge{background:#dc2626;color:#fff;font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:3px;flex-shrink:0;letter-spacing:.3px}
+    .nav-tag{background:var(--gold);color:var(--navy);font-size:8px;font-weight:800;padding:1px 6px;border-radius:3px;flex-shrink:0;letter-spacing:.3px}
+    .nav-tag-blue{background:#1d4ed8;color:#fff;font-size:8px;font-weight:800;padding:1px 6px;border-radius:3px;flex-shrink:0;letter-spacing:.3px}
+    .sb-foot{padding:10px 11px;border-top:1px solid rgba(255,255,255,.04);font-size:9px;color:rgba(255,255,255,.15);line-height:1.9;flex-shrink:0;margin-top:auto;letter-spacing:.3px}
+    .sb-foot strong{color:rgba(255,255,255,.28)}
 
     /* Collapsed state */
     .sb.collapsed .sb-text,.sb.collapsed .sb-section::after,.sb.collapsed .sb-sub,.sb.collapsed .nav-label,.sb.collapsed .nav-badge,.sb.collapsed .nav-tag,.sb.collapsed .nav-tag-blue,.sb.collapsed .sb-foot{display:none}
-    .sb.collapsed .sb-logo{justify-content:center;padding:15px 0}
+    .sb.collapsed .sb-logo{justify-content:center;padding:13px 0}
     .sb.collapsed .sb-icon{margin:0 auto}
     .sb.collapsed .sb-toggle{display:none}
-    .sb.collapsed .sb-section{justify-content:center;padding:10px 0 4px}
-    .sb.collapsed .nav-a{justify-content:center;padding:8px 0}
-    .sb.collapsed .nav-icon{opacity:.7}
-
-    /* Tooltip on collapsed */
+    .sb.collapsed .sb-section{justify-content:center;padding:9px 0 3px}
+    .sb.collapsed .nav-a{justify-content:center;padding:7px 0}
+    .sb.collapsed .nav-icon{opacity:.6}
     .sb.collapsed .nav-a{position:relative}
-    .sb.collapsed .nav-a:hover::after{content:attr(data-tip);position:absolute;left:58px;top:50%;transform:translateY(-50%);background:var(--navy2);color:#fff;font-size:11px;font-weight:600;padding:5px 10px;border-radius:6px;white-space:nowrap;z-index:200;box-shadow:var(--shadow2);pointer-events:none}
+    .sb.collapsed .nav-a:hover::after{content:attr(data-tip);position:absolute;left:54px;top:50%;transform:translateY(-50%);background:var(--navy2);color:#fff;font-size:11px;font-weight:600;padding:5px 10px;border-radius:5px;white-space:nowrap;z-index:200;box-shadow:var(--shadow2);pointer-events:none;border:1px solid rgba(255,255,255,.08)}
 
-    /* ── MAIN ───────────────────────────────────────────────── */
+    /* ── MAIN LAYOUT ────────────────────────────────────────── */
     .main{flex:1;display:flex;flex-direction:column;min-width:0;width:100%}
 
     /* Topbar */
-    .topbar{background:#fff;border-bottom:1px solid var(--border);height:var(--tb-h);display:flex;align-items:center;gap:12px;padding:0 28px 0 22px;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(0,0,0,.04)}
-    .topbar-brand{font-weight:800;font-size:13px;color:var(--navy);display:flex;align-items:center;gap:8px}
-    .topbar-brand span{color:var(--muted);font-weight:400;font-size:12px;border-left:1px solid var(--border);padding-left:10px}
-    .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-    .topbar-date{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
-    .topbar-ref{font-size:10px;font-weight:700;background:var(--navy);color:var(--gold);padding:3px 10px;border-radius:4px;letter-spacing:.3px}
-    .topbar-inbox{display:inline-flex;align-items:center;gap:5px;background:#fff5f5;color:#dc2626;border:1.5px solid #fca5a5;padding:5px 11px;border-radius:6px;font-size:11.5px;font-weight:700;transition:all var(--trans)}
+    .topbar{background:#fff;border-bottom:1px solid var(--border);height:var(--tb-h);display:flex;align-items:center;gap:10px;padding:0 24px 0 20px;position:sticky;top:0;z-index:50;box-shadow:0 1px 3px rgba(10,20,50,.05)}
+    .topbar-brand{font-weight:800;font-size:12.5px;color:var(--navy);display:flex;align-items:center;gap:8px;letter-spacing:.1px}
+    .topbar-brand span{color:var(--muted);font-weight:400;font-size:11.5px;border-left:1px solid var(--border);padding-left:9px}
+    .topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+    .topbar-date{font-size:10.5px;color:var(--muted);font-family:'IBM Plex Mono',monospace;letter-spacing:.3px}
+    .topbar-ref{font-size:9.5px;font-weight:700;background:var(--navy);color:var(--gold);padding:2px 9px;border-radius:3px;letter-spacing:.5px;font-family:'IBM Plex Mono',monospace}
+    .topbar-inbox{display:inline-flex;align-items:center;gap:4px;background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);padding:4px 10px;border-radius:4px;font-size:11px;font-weight:700;transition:all var(--trans)}
     .topbar-inbox:hover{background:#fee2e2}
-    .topbar-user{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:7px;background:#f8f9fc;border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--navy)}
-    .topbar-avatar{width:24px;height:24px;border-radius:50%;background:var(--navy);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
-    .topbar-logout{font-size:11.5px;color:#6b7280;font-weight:600;padding:5px 10px;border:1.5px solid var(--border);border-radius:6px;transition:all var(--trans);background:#fff}
-    .topbar-logout:hover{color:#dc2626;border-color:#fca5a5;background:#fff5f5}
+    .topbar-user{display:flex;align-items:center;gap:7px;padding:4px 9px;border-radius:4px;background:var(--surface);border:1px solid var(--border);font-size:11.5px;font-weight:600;color:var(--navy)}
+    .topbar-avatar{width:22px;height:22px;border-radius:3px;background:var(--navy);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:800;font-family:'IBM Plex Mono',monospace}
+    .topbar-logout{font-size:11px;color:var(--muted);font-weight:600;padding:4px 9px;border:1px solid var(--border);border-radius:4px;transition:all var(--trans);background:#fff}
+    .topbar-logout:hover{color:var(--red);border-color:var(--red-border);background:var(--red-bg)}
+
+    /* Status strip below topbar — operational system health */
+    .status-strip{height:3px;background:linear-gradient(90deg,var(--navy3) 0%,#0f2a5c 40%,var(--gold) 100%);flex-shrink:0}
 
     /* Content */
-    .content{padding:26px 30px;flex:1;max-width:100%}
+    .content{padding:22px 28px;flex:1;max-width:100%}
 
     /* ── FLASH ──────────────────────────────────────────────── */
-    .flash{padding:11px 16px;border-radius:8px;margin-bottom:14px;font-weight:600;font-size:13px;display:flex;align-items:center;gap:9px;animation:slideIn .18s ease}
-    @keyframes slideIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
-    .flash.success{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
-    .flash.error  {background:#fff5f5;color:#dc2626;border:1px solid #fca5a5}
-    .flash.warning{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
-    .flash.info   {background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+    .flash{padding:9px 14px;border-radius:var(--r);margin-bottom:12px;font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:8px;animation:slideIn .16s ease;border-left:3px solid}
+    @keyframes slideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+    .flash.success{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+    .flash.error  {background:var(--red-bg);color:var(--red);border-color:var(--red)}
+    .flash.warning{background:var(--amber-bg);color:var(--amber);border-color:var(--amber)}
+    .flash.info   {background:var(--blue-bg);color:var(--blue);border-color:var(--blue)}
 
     /* ── PAGE TITLES ────────────────────────────────────────── */
-    .page-title{font-size:21px;font-weight:800;color:var(--navy);letter-spacing:-.3px;margin-bottom:4px}
-    .page-sub{color:var(--muted);font-size:12.5px;margin-bottom:20px;line-height:1.6}
+    .page-title{font-size:19px;font-weight:800;color:var(--navy);letter-spacing:-.3px;margin-bottom:3px}
+    .page-sub{color:var(--muted);font-size:12px;margin-bottom:18px;line-height:1.5;letter-spacing:.1px}
 
     /* ── CARDS ──────────────────────────────────────────────── */
-    .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--border);padding:20px;margin-bottom:16px;transition:box-shadow var(--trans)}
-    .card:hover{box-shadow:var(--shadow2)}
-    .card-title{font-size:10px;font-weight:800;color:var(--navy);margin-bottom:14px;text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:10px}
+    .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--border);padding:18px;margin-bottom:14px}
+    .card-title{font-size:9.5px;font-weight:800;color:var(--navy);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;display:flex;align-items:center;gap:8px}
     .card-title::after{content:'';flex:1;height:1px;background:var(--border)}
 
     /* ── STAT CARDS ─────────────────────────────────────────── */
-    .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:22px}
-    .stat-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:16px 16px 13px;box-shadow:var(--shadow);transition:all var(--trans);position:relative;overflow:hidden;border-top:3px solid var(--accent,var(--border2))}
-    .stat-card:hover{box-shadow:var(--shadow2);transform:translateY(-1px)}
-    .stat-val{font-size:30px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-bottom:5px;line-height:1}
-    .stat-lbl{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
-    .stat-sub{font-size:10px;color:var(--muted);margin-top:4px}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:18px}
+    .stat-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:14px 14px 11px;box-shadow:var(--shadow);transition:box-shadow var(--trans);position:relative;overflow:hidden;border-top:3px solid var(--accent,var(--border2))}
+    .stat-card:hover{box-shadow:var(--shadow2)}
+    .stat-val{font-size:28px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-bottom:4px;line-height:1}
+    .stat-lbl{font-size:9.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .stat-sub{font-size:9.5px;color:var(--muted2);margin-top:3px}
 
     /* ── TABLES ─────────────────────────────────────────────── */
     .tbl-wrap{overflow-x:auto;border-radius:var(--r2);border:1px solid var(--border)}
     .tbl-sticky{max-height:65vh;overflow-y:auto}
-    table{width:100%;border-collapse:collapse;font-size:12.5px}
-    th{background:#f3f5fa;color:#374151;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:10px 14px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{background:#f0f2fa;color:#374151;font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;padding:8px 12px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2}
     .tbl-sticky th{box-shadow:0 1px 0 var(--border)}
-    td{padding:10px 14px;border-bottom:1px solid #f2f4f8;vertical-align:middle}
+    td{padding:8px 12px;border-bottom:1px solid #f0f2f8;vertical-align:middle}
     tr:last-child td{border-bottom:none}
     tbody tr{transition:background var(--trans)}
-    tbody tr:hover td{background:#f8f9fd}
+    tbody tr:hover td{background:#f5f6fd}
     .row-danger td{background:#fff8f8!important}
     .row-warn   td{background:#fffbeb!important}
     .row-ok     td{background:#f0fdf4!important}
 
     /* ── BADGES ─────────────────────────────────────────────── */
-    .badge{display:inline-flex;align-items:center;border-radius:5px;padding:2px 8px;font-size:10.5px;font-weight:700;white-space:nowrap;gap:4px}
-    .b-red   {background:#fff0f0;color:#dc2626;border:1px solid #fecaca}
-    .b-yellow{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
+    .badge{display:inline-flex;align-items:center;border-radius:3px;padding:2px 7px;font-size:10px;font-weight:700;white-space:nowrap;gap:3px;letter-spacing:.2px}
+    .b-red   {background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+    .b-yellow{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
     .b-orange{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
-    .b-green {background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
-    .b-blue  {background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+    .b-green {background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+    .b-blue  {background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
     .b-purple{background:#faf5ff;color:#7c3aed;border:1px solid #e9d5ff}
     .b-navy  {background:var(--navy);color:#fff;border:1px solid var(--navy2)}
-    .b-gray  {background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb}
+    .b-gray  {background:#f4f6fb;color:#5e6e8c;border:1px solid var(--border)}
 
     /* ── FORMS ──────────────────────────────────────────────── */
-    .form-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:26px 28px;box-shadow:var(--shadow);max-width:900px}
-    .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-    .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
-    .fg{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
-    .fg label{font-size:10px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.5px}
-    .fg input,.fg select,.fg textarea{border:1.5px solid var(--border);border-radius:7px;padding:9px 12px;background:#fafbfe;font-family:inherit;font-size:13px;width:100%;transition:border-color var(--trans),box-shadow var(--trans),background var(--trans);color:var(--text)}
+    .form-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:24px 26px;box-shadow:var(--shadow);max-width:900px}
+    .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .fg{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+    .fg label{font-size:9.5px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px}
+    .fg input,.fg select,.fg textarea{border:1.5px solid var(--border);border-radius:var(--r2);padding:8px 11px;background:#fafbfe;font-family:inherit;font-size:13px;width:100%;transition:border-color var(--trans),box-shadow var(--trans),background var(--trans);color:var(--text)}
     .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--navy);outline:none;background:#fff;box-shadow:0 0 0 3px rgba(15,28,63,.06)}
-    .fg textarea{resize:vertical;min-height:80px;line-height:1.6}
-    .sec{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--navy);padding:8px 0 6px;border-bottom:2px solid var(--gold);margin:18px 0 14px;display:flex;align-items:center;gap:8px}
+    .fg textarea{resize:vertical;min-height:78px;line-height:1.6}
+    .sec{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.3px;color:var(--navy);padding:7px 0 5px;border-bottom:2px solid var(--gold);margin:16px 0 12px;display:flex;align-items:center;gap:7px}
 
     /* ── BUTTONS ────────────────────────────────────────────── */
-    .btn{display:inline-flex;align-items:center;gap:6px;padding:8.5px 18px;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;border:none;font-family:inherit;transition:all var(--trans);white-space:nowrap;line-height:1}
+    .btn{display:inline-flex;align-items:center;gap:5px;padding:7px 16px;border-radius:var(--r2);font-weight:700;font-size:12px;cursor:pointer;border:none;font-family:inherit;transition:all var(--trans);white-space:nowrap;line-height:1;letter-spacing:.1px}
     .btn:active{transform:scale(.98)}
     .btn-nav{background:var(--navy);color:#fff}
-    .btn-nav:hover{background:var(--navy2);box-shadow:0 3px 12px rgba(15,28,63,.22);transform:translateY(-1px)}
+    .btn-nav:hover{background:var(--navy2);box-shadow:0 3px 10px rgba(15,28,63,.2)}
     .btn-gold{background:var(--gold);color:var(--navy)}
-    .btn-gold:hover{background:#b8963e;transform:translateY(-1px)}
-    .btn-sm{padding:5px 12px;font-size:11px;border-radius:6px}
-    .btn-xs{padding:3px 9px;font-size:10px;border-radius:5px}
+    .btn-gold:hover{background:#b8963e}
+    .btn-sm{padding:4px 10px;font-size:10.5px;border-radius:3px}
+    .btn-xs{padding:3px 8px;font-size:9.5px;border-radius:3px}
     .btn-outline{background:#fff;color:var(--navy);border:1.5px solid var(--border2)}
-    .btn-outline:hover{border-color:var(--navy);background:#f8f9fc}
-    .btn-danger{background:#dc2626;color:#fff}
-    .btn-danger:hover{background:#b91c1c;transform:translateY(-1px)}
+    .btn-outline:hover{border-color:var(--navy);background:var(--surface)}
+    .btn-danger{background:var(--red);color:#fff}
+    .btn-danger:hover{background:#b91c1c}
 
     /* ── FILTER BAR ─────────────────────────────────────────── */
-    .fbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#fff;padding:10px 14px;border-radius:9px;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:16px}
-    .fbar select,.fbar input{border:1.5px solid var(--border);border-radius:6px;padding:7px 11px;background:#fff;font-size:12px;font-family:inherit;transition:border-color var(--trans);color:var(--text)}
+    .fbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center;background:#fff;padding:9px 12px;border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:14px}
+    .fbar select,.fbar input{border:1.5px solid var(--border);border-radius:var(--r2);padding:6px 10px;background:#fff;font-size:11.5px;font-family:inherit;transition:border-color var(--trans);color:var(--text)}
     .fbar select:focus,.fbar input:focus{border-color:var(--navy);outline:none}
 
     /* ── ALERTS ─────────────────────────────────────────────── */
-    .alert{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;border-radius:9px;margin-bottom:16px}
-    .alert-danger{background:#fff5f5;border:1.5px solid #fca5a5;color:#dc2626}
-    .alert-warn  {background:#fffbeb;border:1.5px solid #fde68a;color:#b45309}
-    .alert-info  {background:#eff6ff;border:1.5px solid #bfdbfe;color:#1d4ed8}
-    .alert-success{background:#f0fdf4;border:1.5px solid #bbf7d0;color:#15803d}
+    .alert{display:flex;align-items:flex-start;gap:10px;padding:12px 16px;border-radius:var(--r);margin-bottom:14px;border-left:3px solid}
+    .alert-danger{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+    .alert-warn  {background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
+    .alert-info  {background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+    .alert-success{background:var(--green-bg);border-color:var(--green);color:var(--green)}
 
-    /* ── MISC ───────────────────────────────────────────────── */
+    /* ── MISC COMPONENTS ────────────────────────────────────── */
     .mono{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--navy);font-weight:600}
-    .ctrl-num{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;background:var(--navy);color:var(--gold);padding:3px 10px;border-radius:5px;letter-spacing:.5px;white-space:nowrap}
-    .progress{height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden}
+    .ctrl-num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;background:var(--navy);color:var(--gold);padding:2px 9px;border-radius:3px;letter-spacing:.5px;white-space:nowrap}
+    .progress{height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden}
     .progress-bar{height:100%;border-radius:99px;transition:width .4s ease}
-    .steps{display:flex;align-items:center;gap:0;margin-bottom:20px}
+
+    /* Workflow steps */
+    .steps{display:flex;align-items:center;gap:0;margin-bottom:18px}
     .step{flex:1;display:flex;flex-direction:column;align-items:center;position:relative}
-    .step:not(:last-child)::after{content:'';position:absolute;top:13px;left:50%;width:100%;height:2px;background:var(--border);z-index:0}
+    .step:not(:last-child)::after{content:'';position:absolute;top:12px;left:50%;width:100%;height:2px;background:var(--border);z-index:0}
     .step.done:not(:last-child)::after{background:var(--navy)}
-    .step-dot{width:26px;height:26px;border-radius:50%;z-index:1;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border:2px solid var(--border);background:#fff;color:var(--muted)}
+    .step-dot{width:24px;height:24px;border-radius:50%;z-index:1;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;border:2px solid var(--border);background:#fff;color:var(--muted)}
     .step.done .step-dot{background:var(--navy);border-color:var(--navy);color:var(--gold)}
     .step.active .step-dot{background:var(--gold);border-color:var(--gold);color:var(--navy)}
-    .step-lbl{font-size:9.5px;margin-top:6px;text-align:center;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;max-width:70px;line-height:1.3}
+    .step-lbl{font-size:9px;margin-top:5px;text-align:center;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;max-width:66px;line-height:1.3}
     .step.active .step-lbl{color:var(--navy);font-weight:800}
-    .risk-compare{display:flex;align-items:center;gap:16px;background:#f8f9fc;border-radius:10px;padding:18px;margin:14px 0}
+
+    /* Risk comparison */
+    .risk-compare{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:var(--r);padding:16px;margin:12px 0}
     .rbox{flex:1;text-align:center}
-    .rbox-lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
-    .ridx{font-size:36px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--navy);margin-bottom:5px}
-    .phases{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
-    .phase{padding:5px 13px;border:1.5px solid var(--border);border-radius:99px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s}
+    .rbox-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;letter-spacing:.4px}
+    .ridx{font-size:34px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--navy);margin-bottom:4px}
+    .phases{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+    .phase{padding:4px 12px;border:1.5px solid var(--border);border-radius:3px;font-size:11.5px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .13s}
     .phase:hover,.phase.on{background:var(--navy);color:#fff;border-color:var(--navy)}
     .phase input{display:none}
     .why-chain{display:flex;flex-direction:column;gap:0}
-    .why-item{display:flex;gap:12px;align-items:flex-start}
-    .why-num{width:28px;height:28px;background:var(--navy);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:8px}
-    .why-line{width:2px;background:var(--border);margin:4px 0 4px 13px;height:16px}
+    .why-item{display:flex;gap:10px;align-items:flex-start}
+    .why-num{width:26px;height:26px;background:var(--navy);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:7px}
+    .why-line{width:2px;background:var(--border);margin:3px 0 3px 12px;height:14px}
+
+    /* ── OPERATIONAL STATUS INDICATORS ──────────────────────── */
+    .ops-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:3px;font-size:9.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace}
+    .ops-red   {background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+    .ops-amber {background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
+    .ops-green {background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+    .ops-blue  {background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
+    .ops-dot   {width:6px;height:6px;border-radius:50%;display:inline-block}
+    .ops-dot-red   {background:var(--red)}
+    .ops-dot-amber {background:var(--amber)}
+    .ops-dot-green {background:var(--green)}
+    .ops-dot-blue  {background:var(--blue)}
+
+    /* ── SEVERITY MATRIX ────────────────────────────────────── */
+    .sev-critical{background:#7f1d1d;color:#fff;padding:1px 6px;border-radius:2px;font-size:9.5px;font-weight:700;letter-spacing:.3px}
+    .sev-major   {background:#9a3412;color:#fff;padding:1px 6px;border-radius:2px;font-size:9.5px;font-weight:700}
+    .sev-minor   {background:#92400e;color:#fff;padding:1px 6px;border-radius:2px;font-size:9.5px;font-weight:700}
+    .sev-obs     {background:#1e40af;color:#fff;padding:1px 6px;border-radius:2px;font-size:9.5px;font-weight:700}
 
     /* ── RESPONSIVE ─────────────────────────────────────────── */
     @media(max-width:900px){
       body{padding-left:0}
       .sb{transform:translateX(-100%);transition:transform .2s ease}
       .sb.mobile-open{transform:translateX(0)}
-      .content{padding:16px 18px}
+      .content{padding:14px 16px}
       .g2,.g3{grid-template-columns:1fr}
       .stat-grid{grid-template-columns:repeat(2,1fr)}
-      .form-card{padding:18px}
+      .form-card{padding:16px}
     }
     @media print{
-      .sb,.topbar,.fbar,.btn,.btn-sm{display:none!important}
+      .sb,.topbar,.status-strip,.fbar,.btn,.btn-sm{display:none!important}
       body{padding-left:0}
-      .card{box-shadow:none}
+      .card{box-shadow:none;border:1px solid #ccc}
     }
   </style>
   <meta name="csrf-token" content="{{ csrf_token() }}"/>
 </head>
 <body id="body">
 
+<!-- ── SIDEBAR ─────────────────────────────────────────────────── -->
 <aside class="sb" id="sidebar">
-  <div class="sb-logo" onclick="toggleSidebar()" title="Collapse sidebar">
+  <div class="sb-logo" onclick="toggleSidebar()" title="Toggle sidebar">
     <div class="sb-icon">✈</div>
     <div class="sb-text">
       <div class="sb-name">Jordan Aviation</div>
-      <div class="sb-sub-name">Safety Management System</div>
+      <div class="sb-sub-name">SAFETY MANAGEMENT SYSTEM</div>
     </div>
-    <div class="sb-toggle">⟨</div>
+    <div class="sb-toggle">◀</div>
   </div>
 
   <nav>
     <div class="sb-section">Overview</div>
-    <a href="/dashboard" class="nav-a {% if request.path=='/dashboard' %}active{% endif %}" data-tip="Dashboard"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</span></a>
+    <a href="/dashboard" class="nav-a {% if request.path=='/dashboard' %}active{% endif %}" data-tip="Dashboard"><span class="nav-icon">▦</span><span class="nav-label">Dashboard</span></a>
     <a href="/admin/reports" class="nav-a {% if request.path=='/admin/reports' %}active{% endif %}" data-tip="Reports Inbox"><span class="nav-icon">📬</span><span class="nav-label">Reports Inbox</span></a>
     <a href="/portal" target="_blank" class="nav-a" data-tip="Public Portal"><span class="nav-icon">🌐</span><span class="nav-label">Public Portal</span><span class="nav-tag-blue">OPEN</span></a>
 
     <div class="sb-section">Safety Reporting</div>
-    <a href="/hazard-report" class="nav-a {% if request.path=='/hazard-report' %}active{% endif %}" data-tip="Submit Hazard"><span class="nav-icon">⚠️</span><span class="nav-label">Submit Hazard Report</span></a>
+    <a href="/hazard-report" class="nav-a {% if request.path=='/hazard-report' %}active{% endif %}" data-tip="Submit Hazard"><span class="nav-icon">⚠</span><span class="nav-label">Submit Hazard Report</span></a>
     <a href="/hazard-reports" class="nav-a {% if request.path=='/hazard-reports' %}active{% endif %}" data-tip="Hazard Reports"><span class="nav-icon">📋</span><span class="nav-label">Hazard Reports</span></a>
-    <a href="/asr" class="nav-a {% if request.path=='/asr' %}active{% endif %}" data-tip="ASR"><span class="nav-icon">✈️</span><span class="nav-label">Air Safety Report</span><span class="nav-tag">FO</span></a>
+    <a href="/asr" class="nav-a {% if request.path=='/asr' %}active{% endif %}" data-tip="ASR"><span class="nav-icon">✈</span><span class="nav-label">Air Safety Report</span><span class="nav-tag">FO</span></a>
     <a href="/hazard-log" class="nav-a {% if '/hazard-log' in request.path %}active{% endif %}" data-tip="Hazard Log"><span class="nav-icon">🗂</span><span class="nav-label">Hazard &amp; Risk Log</span></a>
 
     <div class="sb-section">Risk Management</div>
@@ -250,17 +287,17 @@
     <a href="/risk-matrix" class="nav-a {% if request.path=='/risk-matrix' %}active{% endif %}" data-tip="Risk Matrix"><span class="nav-icon">🎯</span><span class="nav-label">Risk Matrix</span></a>
 
     <div class="sb-section">Action Management</div>
-    <a href="/actions/dashboard" class="nav-a {% if request.path=='/actions/dashboard' %}active{% endif %}" data-tip="Action Dashboard"><span class="nav-icon">📊</span><span class="nav-label">Action Dashboard</span></a>
-    <a href="/actions" class="nav-a {% if request.path=='/actions' and not request.args.get('status') %}active{% endif %}" data-tip="All Actions"><span class="nav-icon">✅</span><span class="nav-label">All Actions</span>{% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}</a>
-    <a href="/actions?status=Open" class="nav-a {% if request.path=='/actions' and request.args.get('status')=='Open' %}active{% endif %}" data-tip="Open"><span class="nav-icon">🔶</span><span class="nav-label">Open Actions</span></a>
-    <a href="/actions?status=Overdue" class="nav-a {% if request.args.get('status')=='Overdue' %}active{% endif %}" data-tip="Overdue"><span class="nav-icon">⏰</span><span class="nav-label">Overdue</span>{% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}</a>
+    <a href="/actions/dashboard" class="nav-a {% if request.path=='/actions/dashboard' %}active{% endif %}" data-tip="Action Dashboard"><span class="nav-icon">◈</span><span class="nav-label">Action Dashboard</span></a>
+    <a href="/actions" class="nav-a {% if request.path=='/actions' and not request.args.get('status') %}active{% endif %}" data-tip="All Actions"><span class="nav-icon">✓</span><span class="nav-label">All Actions</span>{% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}</a>
+    <a href="/actions?status=Open" class="nav-a {% if request.path=='/actions' and request.args.get('status')=='Open' %}active{% endif %}" data-tip="Open"><span class="nav-icon">◆</span><span class="nav-label">Open Actions</span></a>
+    <a href="/actions?status=Overdue" class="nav-a {% if request.args.get('status')=='Overdue' %}active{% endif %}" data-tip="Overdue"><span class="nav-icon">⏱</span><span class="nav-label">Overdue</span>{% if nav_overdue > 0 %}<span class="nav-badge">{{ nav_overdue }}</span>{% endif %}</a>
 
     <div class="sb-section">Audit &amp; Compliance</div>
     <a href="/audit-dashboard" class="nav-a {% if request.path=='/audit-dashboard' %}active{% endif %}" data-tip="Audit Dashboard"><span class="nav-icon">🏛</span><span class="nav-label">Audit Dashboard</span></a>
     <a href="/audit-plans" class="nav-a {% if '/audit-plan' in request.path %}active{% endif %}" data-tip="Audit Plans"><span class="nav-icon">📋</span><span class="nav-label">Audit Plans</span></a>
     <a href="/audit-schedule-calendar" class="nav-a {% if 'schedule-calendar' in request.path %}active{% endif %}" data-tip="Calendar"><span class="nav-icon">📅</span><span class="nav-label">Audit Calendar</span></a>
     <a href="/audit-schedule" class="nav-a {% if '/audit-schedule' in request.path and 'calendar' not in request.path and '/audit-plan' not in request.path %}active{% endif %}" data-tip="Schedule"><span class="nav-icon">🗓</span><span class="nav-label">Audit Schedule</span></a>
-    <a href="/audit-checklists" class="nav-a {% if 'checklists' in request.path %}active{% endif %}" data-tip="Checklists"><span class="nav-icon">☑️</span><span class="nav-label">Checklist Manager</span></a>
+    <a href="/audit-checklists" class="nav-a {% if 'checklists' in request.path %}active{% endif %}" data-tip="Checklists"><span class="nav-icon">☑</span><span class="nav-label">Checklist Manager</span></a>
     <a href="/audit-findings-report" class="nav-a {% if 'findings-report' in request.path %}active{% endif %}" data-tip="Findings"><span class="nav-icon">🔍</span><span class="nav-label">Findings Report</span></a>
 
     <div class="sb-section">Investigation</div>
@@ -273,16 +310,16 @@
     <a href="/spi/actions" class="nav-a {% if request.path=='/spi/actions' %}active{% endif %}" data-tip="Alerts"><span class="nav-icon">🔔</span><span class="nav-label">Alerts &amp; Actions</span></a>
 
     <div class="sb-section">Safety Promotion</div>
-    <div class="sb-sub">📢 Communications</div>
+    <div class="sb-sub">Communications</div>
     <a href="/safety-promotion" class="nav-a {% if request.path=='/safety-promotion' %}active{% endif %}" data-tip="SP Dashboard"><span class="nav-icon">🏠</span><span class="nav-label">SP Dashboard</span></a>
     <a href="/safety-promotion/bulletins" class="nav-a {% if '/bulletins' in request.path %}active{% endif %}" data-tip="Bulletins"><span class="nav-icon">🔔</span><span class="nav-label">Safety Bulletins</span></a>
     <a href="/safety-promotion/newsletters" class="nav-a {% if '/newsletters' in request.path %}active{% endif %}" data-tip="Newsletters"><span class="nav-icon">📰</span><span class="nav-label">Newsletters</span></a>
     <a href="/safety-promotion/campaigns" class="nav-a {% if '/campaigns' in request.path %}active{% endif %}" data-tip="Campaigns"><span class="nav-icon">📣</span><span class="nav-label">Campaigns</span></a>
     <a href="/safety-promotion/lessons" class="nav-a {% if '/lessons' in request.path %}active{% endif %}" data-tip="Lessons"><span class="nav-icon">📚</span><span class="nav-label">Lessons Learned</span></a>
     <a href="/safety-promotion/surveys" class="nav-a {% if '/surveys' in request.path %}active{% endif %}" data-tip="Surveys"><span class="nav-icon">📋</span><span class="nav-label">Safety Surveys</span></a>
-    <div class="sb-sub">🎓 Training</div>
-    <a href="/safety-promotion/training" class="nav-a {% if '/training' in request.path and 'promotion' in request.path and not request.args.get('status') %}active{% endif %}" data-tip="Training"><span class="nav-icon">📊</span><span class="nav-label">Training Records</span></a>
-    <a href="/safety-promotion/training?status=Expired" class="nav-a {% if request.args.get('status')=='Expired' and '/training' in request.path %}active{% endif %}" data-tip="Expiry"><span class="nav-icon">⚠️</span><span class="nav-label">Expiry Tracking</span></a>
+    <div class="sb-sub">Training</div>
+    <a href="/safety-promotion/training" class="nav-a {% if '/training' in request.path and 'promotion' in request.path and not request.args.get('status') %}active{% endif %}" data-tip="Training"><span class="nav-icon">◈</span><span class="nav-label">Training Records</span></a>
+    <a href="/safety-promotion/training?status=Expired" class="nav-a {% if request.args.get('status')=='Expired' and '/training' in request.path %}active{% endif %}" data-tip="Expiry"><span class="nav-icon">⚠</span><span class="nav-label">Expiry Tracking</span></a>
     <a href="/safety-promotion/training/export/xlsx" class="nav-a" data-tip="Export Excel"><span class="nav-icon">⬇</span><span class="nav-label">Export Excel</span><span class="nav-tag-blue">XLS</span></a>
 
     <div class="sb-section">Documents</div>
@@ -292,7 +329,7 @@
     <div class="sb-section">Governance &amp; Accountability</div>
     <a href="/governance/ae" class="nav-a {% if '/governance/ae' in request.path %}active{% endif %}" data-tip="Accountable Executive"><span class="nav-icon">🏅</span><span class="nav-label">Accountable Exec</span></a>
     <a href="/governance/srb" class="nav-a {% if '/governance/srb' in request.path %}active{% endif %}" data-tip="Safety Review Board"><span class="nav-icon">🏛</span><span class="nav-label">Safety Review Board</span></a>
-    <a href="/governance/risk-acceptance" class="nav-a {% if '/governance/risk-acceptance' in request.path %}active{% endif %}" data-tip="Risk Acceptance"><span class="nav-icon">⚖️</span><span class="nav-label">Risk Acceptance</span></a>
+    <a href="/governance/risk-acceptance" class="nav-a {% if '/governance/risk-acceptance' in request.path %}active{% endif %}" data-tip="Risk Acceptance"><span class="nav-icon">⚖</span><span class="nav-label">Risk Acceptance</span></a>
     <a href="/governance/audit-log" class="nav-a {% if '/governance/audit-log' in request.path %}active{% endif %}" data-tip="Governance Audit Log"><span class="nav-icon">📋</span><span class="nav-label">Governance Log</span></a>
 
     <div class="sb-section">Safety Policy</div>
@@ -302,9 +339,9 @@
     <a href="/erp" class="nav-a {% if '/erp' in request.path %}active{% endif %}" data-tip="ERP"><span class="nav-icon">🚨</span><span class="nav-label">Emergency Response</span></a>
   </nav>
 
-  <a href="/admin/employees" class="nav-link {% if request.path.startswith('/admin/employees') %}active{% endif %}">👥 Employees</a>
-      <a href="/admin/users" class="nav-a" style="margin-top:auto;opacity:.45;font-size:11.5px" data-tip="Users"><span class="nav-icon" style="font-size:13px">👤</span><span class="nav-label">User Management</span></a>
-  <a href="/admin/cleanup" class="nav-a" style="opacity:.28;font-size:11px;border-top:1px solid rgba(255,255,255,.05)" data-tip="Cleanup"><span class="nav-icon" style="font-size:12px">🗑</span><span class="nav-label">DB Cleanup</span></a>
+  <a href="/admin/employees" class="nav-a {% if request.path.startswith('/admin/employees') %}active{% endif %}" data-tip="Employees"><span class="nav-icon">👥</span><span class="nav-label">Employees</span></a>
+  <a href="/admin/users" class="nav-a" style="opacity:.4;font-size:11.5px" data-tip="Users"><span class="nav-icon">👤</span><span class="nav-label">User Management</span></a>
+  <a href="/admin/cleanup" class="nav-a" style="opacity:.25;font-size:11px;border-top:1px solid rgba(255,255,255,.04)" data-tip="Cleanup"><span class="nav-icon">🗑</span><span class="nav-label">DB Cleanup</span></a>
 
   <div class="sb-foot">
     <strong>ICAO</strong> Annex 19 · Doc 9859<br>
@@ -313,12 +350,13 @@
   </div>
 </aside>
 
+<!-- ── MAIN AREA ───────────────────────────────────────────────── -->
 <div class="main">
   <div class="topbar">
     <div class="topbar-brand">Jordan Aviation <span>Safety Management System</span></div>
     <div class="topbar-right">
       <a href="/admin/reports" class="topbar-inbox">📬 Inbox</a>
-      <span class="topbar-ref">Jav/SMS/001</span>
+      <span class="topbar-ref">JAV/SMS/001</span>
       <span class="topbar-date">{{ now.strftime('%d %b %Y') }}</span>
       <div class="topbar-user">
         <div class="topbar-avatar">{{ (session.get('admin_name','A')[:1])|upper }}</div>
@@ -327,11 +365,12 @@
       <a href="/admin/logout" class="topbar-logout">Logout</a>
     </div>
   </div>
+  <div class="status-strip"></div>
 
-  <div style="padding:0 30px">
+  <div style="padding:0 28px">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for cat, msg in messages %}
-        <div class="flash {{ cat }}" style="margin-top:14px">
+        <div class="flash {{ cat }}" style="margin-top:12px">
           {% if cat=='success' %}✓{% elif cat=='error' %}✗{% elif cat=='warning' %}⚠{% else %}ℹ{% endif %} {{ msg }}
         </div>
       {% endfor %}
@@ -361,14 +400,14 @@
 <script>
 /* ── Auto-inject CSRF token into every POST form ── */
 (function(){
-  var token = document.querySelector('meta[name="csrf-token"]');
+  var token=document.querySelector('meta[name="csrf-token"]');
   if(!token) return;
-  var t = token.getAttribute('content');
+  var t=token.getAttribute('content');
   document.querySelectorAll('form').forEach(function(f){
-    if(f.method && f.method.toUpperCase()==='POST'){
+    if(f.method&&f.method.toUpperCase()==='POST'){
       if(!f.querySelector('input[name="csrf_token"]')){
         var inp=document.createElement('input');
-        inp.type='hidden'; inp.name='csrf_token'; inp.value=t;
+        inp.type='hidden';inp.name='csrf_token';inp.value=t;
         f.appendChild(inp);
       }
     }
