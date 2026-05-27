@@ -16,11 +16,23 @@
 {% set open_c     = actions|rejectattr('status','eq','Closed')|list|length %}
 {% set l3_c       = actions|selectattr('spi_alert_level','eq','L3')|list|length %}
 {% set verified_c = actions|selectattr('verified_by')|list|length %}
-<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-  <div class="stat-card"><div class="stat-val" style="color:#374151">{{ actions|length }}</div><div class="stat-lbl">Total SPI Actions</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_c }}</div><div class="stat-lbl">Open / In Progress</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ closed_c }}</div><div class="stat-lbl">Closed</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#7c3aed">{{ verified_c }}</div><div class="stat-lbl">Verified</div></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--navy);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--navy)">{{ actions|length }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Total SPI Actions</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--amber)">{{ open_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Open / In Progress</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--green)">{{ closed_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Closed</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #7c3aed;border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#7c3aed">{{ verified_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Verified</div>
+  </div>
 </div>
 
 <!-- Filters -->

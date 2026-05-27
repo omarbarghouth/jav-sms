@@ -1,24 +1,88 @@
 {% extends "base.html" %}
-{% block title %}New MOC{% endblock %}
+{% block title %}New Management of Change{% endblock %}
 {% block content %}
-<div class="page-title">New Management of Change</div>
-<div class="page-sub">Pre-change safety assessment · Auto-generates Hazard entry</div>
-<form class="form-card" method="POST">
-  <div class="sec">Change Details</div>
-  <div class="fg"><label>Change Title *</label><input type="text" name="title" required placeholder="e.g. Implementation of Electronic Flight Bag (EFB)"/></div>
-  <div class="g3">
-    <div class="fg"><label>Change Type *</label>
-      <select name="change_type" required><option>Process</option><option>Equipment</option><option>Personnel</option><option>Regulatory</option><option>Organizational</option></select></div>
-    <div class="fg"><label>Department *</label>
-      <select name="department_id" required>
-        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
-      </select></div>
-    <div class="fg"><label>Planned Date *</label><input type="date" name="planned_date" required/></div>
+
+<!-- Header -->
+<div style="margin-bottom:14px">
+  <a href="/moc" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← MOC Register</a>
+</div>
+<div style="margin-bottom:20px">
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Management · ICAO Doc 9859 §7</div>
+  <div class="page-title">New Management of Change</div>
+  <div class="page-sub" style="margin-bottom:0">Pre-change safety assessment · Automatic hazard record generation</div>
+</div>
+
+<!-- ICAO info banner -->
+<div style="background:var(--blue-bg);border:1px solid var(--blue-border);border-left:4px solid var(--blue);border-radius:var(--r);
+            padding:10px 14px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">
+  <span style="font-size:16px;margin-top:1px">ℹ</span>
+  <div>
+    <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:3px">ICAO Doc 9859 §7 — Management of Change</div>
+    <div style="font-size:11px;color:var(--text);line-height:1.5">Submitting this MOC will automatically create a linked Hazard record in the Risk Register for tracking. Changes must be assessed for safety implications before implementation.</div>
   </div>
-  <div class="fg"><label>Initiator *</label><input type="text" name="initiator" required placeholder="Name of person requesting the change"/></div>
-  <div class="fg"><label>Description of Change *</label><textarea name="description" required rows="4" placeholder="Describe the change in detail — what is changing and why?"></textarea></div>
-  <div class="fg"><label>Pre-Change Risk Assessment *</label><textarea name="pre_change_risk" required rows="4" placeholder="Identify risks associated with this change. What could go wrong? What controls are needed?"></textarea></div>
-  <p style="font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:14px">⚡ A Hazard record will be automatically created from this MOC for tracking in the Risk Register.</p>
-  <button type="submit" class="btn btn-nav">Submit MOC</button>
+</div>
+
+<form class="form-card" method="POST" style="max-width:900px">
+
+  <!-- Section: Change Details -->
+  <div class="sec">Change Details</div>
+  <div class="fg">
+    <label>Change Title <span style="color:var(--red)">*</span></label>
+    <input type="text" name="title" required placeholder="e.g. Implementation of Electronic Flight Bag (EFB) — Flight Operations"/>
+  </div>
+  <div class="g3">
+    <div class="fg">
+      <label>Change Type <span style="color:var(--red)">*</span></label>
+      <select name="change_type" required>
+        <option value="">Select type…</option>
+        <option value="Process">Process</option>
+        <option value="Equipment">Equipment</option>
+        <option value="Personnel">Personnel</option>
+        <option value="Regulatory">Regulatory</option>
+        <option value="Organizational">Organizational</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Department <span style="color:var(--red)">*</span></label>
+      <select name="department_id" required>
+        <option value="">Select department…</option>
+        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Planned Implementation Date <span style="color:var(--red)">*</span></label>
+      <input type="date" name="planned_date" required/>
+    </div>
+  </div>
+  <div class="fg">
+    <label>Initiator <span style="color:var(--red)">*</span></label>
+    <input type="text" name="initiator" required placeholder="Name of person or department requesting the change"/>
+  </div>
+  <div class="fg">
+    <label>Description of Change <span style="color:var(--red)">*</span></label>
+    <textarea name="description" required rows="4" placeholder="Describe the change in detail — what is changing, why it is changing, and what the expected outcome is. Include scope and affected systems/personnel…"></textarea>
+  </div>
+
+  <!-- Section: Pre-Change Risk Assessment -->
+  <div class="sec" style="margin-top:8px">Pre-Change Risk Assessment</div>
+  <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:var(--r);padding:10px 14px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:2px">ICAO Requirement — Pre-implementation Safety Assessment</div>
+    <div style="font-size:11px;color:var(--text);line-height:1.5">Identify and assess all safety risks associated with this change before implementation. Consider: what could go wrong, probability of occurrence, severity of consequence, and required controls.</div>
+  </div>
+  <div class="fg">
+    <label>Pre-Change Risk Assessment <span style="color:var(--red)">*</span></label>
+    <textarea name="pre_change_risk" required rows="5"
+              placeholder="Identify risks associated with this change:&#10;— What could go wrong during/after implementation?&#10;— What is the likelihood and severity?&#10;— What controls and mitigations are required?&#10;— Are any regulatory approvals needed?"></textarea>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:20px">⚡</span>
+    <div style="font-size:11.5px;color:var(--text)">A <strong>Hazard record</strong> will be automatically created from this MOC and linked to the Risk Register for ongoing monitoring and action tracking.</div>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <button type="submit" class="btn btn-nav">Submit MOC</button>
+    <a href="/moc" class="btn btn-outline">Cancel</a>
+  </div>
 </form>
 {% endblock %}

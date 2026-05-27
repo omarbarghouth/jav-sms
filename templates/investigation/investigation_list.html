@@ -1,71 +1,177 @@
 {% extends "base.html" %}
 {% from "_pagination.html" import render_pagination %}
-{% block title %}Investigations{% endblock %}
+{% block title %}Investigation Register{% endblock %}
 {% block content %}
-<div class="page-title">Investigations</div>
-<div class="page-sub">5-Why root cause analysis · ICAO Annex 13 / Doc 9859 §6</div>
 
-<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-  <a href="/investigations/new" class="btn btn-nav">+ New Investigation</a>
+<!-- Page header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Investigation · ICAO Annex 13 / Doc 9859 §6</div>
+    <div class="page-title">Investigation Register</div>
+    <div class="page-sub" style="margin-bottom:0">5-Why root cause analysis · All occurrence investigations</div>
+  </div>
+  <div style="display:flex;gap:7px">
+    <a href="/moc" class="btn btn-outline btn-sm">MOC Register</a>
+    <a href="/investigations/new" class="btn btn-gold btn-sm">+ New Investigation</a>
+  </div>
 </div>
 
+<!-- KPI strip -->
+{% set inv_open   = investigations|selectattr('status','eq','Open')|list|length %}
+{% set inv_prog   = investigations|selectattr('status','eq','In Progress')|list|length %}
+{% set inv_closed = investigations|selectattr('status','eq','Closed')|list|length %}
+{% set inv_acc    = investigations|selectattr('classification','eq','Accident')|list|length %}
+{% set inv_si     = investigations|selectattr('classification','eq','Serious Incident')|list|length %}
+{% set inv_inc    = investigations|selectattr('classification','eq','Incident')|list|length %}
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px">
+  {% for label, val, col in [
+    ('Total',           investigations|length, '#374151'),
+    ('Open',            inv_open,   '#dc2626'),
+    ('In Progress',     inv_prog,   '#1d4ed8'),
+    ('Closed',          inv_closed, '#15803d'),
+    ('Accident',        inv_acc,    '#7f1d1d'),
+    ('Serious Incident',inv_si,     '#9a3412'),
+  ] %}
+  <div style="background:#fff;border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);
+              padding:11px 14px;box-shadow:var(--shadow)">
+    <div style="font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ col }};line-height:1;margin-bottom:3px">{{ val }}</div>
+    <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">{{ label }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Accident/Serious Incident alert -->
+{% if inv_acc > 0 %}
+<div style="background:#fff1f1;border:1px solid #fecaca;border-left:4px solid var(--red);border-radius:var(--r);
+            padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:18px">✈️</span>
+  <div style="font-size:12.5px;font-weight:700;color:var(--red)">{{ inv_acc }} Accident investigation(s) active — ICAO Annex 13 mandatory reporting applies</div>
+</div>
+{% endif %}
+
+<!-- Filter bar -->
+<form method="GET" class="fbar">
+  <input type="text" name="q" value="{{ q_f|default('') }}" placeholder="Search title, investigator, ID…" style="flex:1;min-width:140px"/>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in ['Open','In Progress','Closed'] %}
+    <option {% if stat_f|default('')==s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="classification" onchange="this.form.submit()">
+    <option value="">All Classifications</option>
+    {% for c in ['Accident','Serious Incident','Incident','Occurrence','Near Miss'] %}
+    <option {% if cls_f|default('')==c %}selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select>
+  <select name="dept" onchange="this.form.submit()">
+    <option value="">All Departments</option>
+    {% for d in all_departments|default([]) %}
+    <option value="{{ d.id }}" {% if dept_f|default('')==d.id|string %}selected{% endif %}>{{ d.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-nav btn-sm">Search</button>
+  {% if q_f|default('') or stat_f|default('') or cls_f|default('') or dept_f|default('') %}
+  <a href="/investigations" class="btn btn-outline btn-sm">Clear</a>
+  {% endif %}
+  <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);border-left:1px solid var(--border);padding-left:10px">{{ investigations|length }}</span>
+</form>
+
+<!-- Investigation table -->
+{% if investigations %}
 <div class="card" style="padding:0">
   <div class="tbl-wrap">
     <table>
       <thead>
         <tr>
-          <th>Ref</th>
-          <th>Title</th>
-          <th>Department</th>
-          <th>Date</th>
-          <th>Classification</th>
-          <th>Investigator</th>
-          <th>Root Cause</th>
-          <th>Status</th>
-          <th></th>
+          <th style="width:120px">Inv Ref</th>
+          <th style="width:90px">Classification</th>
+          <th>Title / Description</th>
+          <th style="width:80px">Dept</th>
+          <th style="width:110px">Date</th>
+          <th style="width:120px">Investigator</th>
+          <th style="width:160px">Root Cause</th>
+          <th style="width:100px">Status</th>
+          <th style="width:120px"></th>
         </tr>
       </thead>
       <tbody>
-        {% for inv in investigations %}
-        <tr>
-          <td><span class="ctrl-num">{{ inv.id }}</span></td>
-          <td style="font-size:13px;font-weight:600;max-width:180px">{{ inv.title or '—' }}</td>
-          <td style="font-size:12px">{{ inv.department.code if inv.department else '—' }}</td>
-          <td style="font-size:12px">{{ inv.date_of_occurrence or '—' }}</td>
-          <td>
-            {% if inv.classification == 'Accident' %}<span class="badge b-red">Accident</span>
-            {% elif inv.classification == 'Serious Incident' %}<span class="badge b-red">Serious Incident</span>
-            {% elif inv.classification == 'Incident' %}<span class="badge b-yellow">Incident</span>
-            {% else %}<span class="badge b-gray">{{ inv.classification or '—' }}</span>{% endif %}
-          </td>
-          <td style="font-size:12px">{{ inv.investigator or '—' }}</td>
-          <td style="max-width:160px;font-size:11px;color:var(--muted)">
-            {{ (inv.root_cause or '—')[:60] }}
-          </td>
-          <td>
-            {% if inv.status=='Closed' %}<span class="badge b-green">Closed</span>
-            {% elif inv.status=='In Progress' %}<span class="badge b-blue">In Progress</span>
-            {% else %}<span class="badge b-yellow">Open</span>{% endif %}
-          </td>
-          <td><a href="/investigations/{{ inv.id }}" class="btn btn-nav btn-sm">Detail →</a>
-            <a href="/pdf/investigation/{{ inv.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;margin-left:4px" title="ICAO PDF">📄</a>
-      <form method="POST" action="/delete/investigation/{{ inv.id }}" style="display:inline"
-            onsubmit="return confirm('Delete Investigation {{ inv.id }}?')">
-        <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5">🗑</button>
-      </form></td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="9" style="text-align:center;color:var(--muted);padding:36px">
-            No investigations. <
-            No investigations. <a href="/investigations/new" class="btn btn-nav btn-sm">Start Investigation</a>
-          </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
+      {% for inv in investigations %}
+      {% set cls_color = {'Accident':'#7f1d1d','Serious Incident':'#9a3412','Incident':'#c2610a','Occurrence':'#1d4ed8','Near Miss':'#7c3aed'}.get(inv.classification,'#374151') %}
+      <tr style="{% if inv.classification in ['Accident','Serious Incident'] %}background:#fff8f8{% endif %};cursor:pointer"
+          onclick="location='/investigations/{{ inv.id }}'">
+        <td onclick="event.stopPropagation()">
+          <a href="/investigations/{{ inv.id }}" class="ctrl-num" style="background:{{ cls_color }};font-size:10px">{{ inv.id }}</a>
+          {% if inv.linked_report_id %}
+          <div style="font-size:9px;color:var(--muted);margin-top:2px;font-family:'IBM Plex Mono',monospace">→ {{ inv.linked_report_id }}</div>
+          {% endif %}
+        </td>
+        <td>
+          {% if inv.classification == 'Accident' %}
+          <span class="badge" style="background:#7f1d1d;color:#fff;font-size:9px">✈ ACCIDENT</span>
+          {% elif inv.classification == 'Serious Incident' %}
+          <span class="badge b-red" style="font-size:9px">Serious Inc.</span>
+          {% elif inv.classification == 'Incident' %}
+          <span class="badge b-yellow" style="font-size:9px">Incident</span>
+          {% elif inv.classification == 'Near Miss' %}
+          <span class="badge b-purple" style="font-size:9px">Near Miss</span>
+          {% else %}
+          <span class="badge b-gray" style="font-size:9px">{{ inv.classification or '—' }}</span>
+          {% endif %}
+        </td>
+        <td style="max-width:220px">
+          <div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ (inv.title or '—')[:75] }}</div>
+          {% if inv.description %}
+          <div style="font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ inv.description[:60] }}</div>
+          {% endif %}
+        </td>
+        <td style="font-size:11px;font-weight:700;color:var(--navy)">{{ inv.department.code if inv.department else '—' }}</td>
+        <td>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--muted)">{{ inv.date_of_occurrence or '—' }}</div>
+        </td>
+        <td>
+          <div style="font-size:12px;font-weight:600;color:{% if not inv.investigator %}var(--red){% else %}var(--text){% endif %}">
+            {{ inv.investigator or '⚠ Unassigned' }}
+          </div>
+        </td>
+        <td style="max-width:160px">
+          <div style="font-size:10.5px;color:{% if inv.root_cause %}var(--text){% else %}var(--muted2){% endif %};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{ (inv.root_cause or 'Pending analysis')[:70] }}
+          </div>
+        </td>
+        <td>
+          {% if inv.status=='Closed' %}<span class="badge b-green" style="font-size:9.5px">Closed</span>
+          {% elif inv.status=='In Progress' %}<span class="badge b-blue" style="font-size:9.5px">In Progress</span>
+          {% else %}<span class="badge b-yellow" style="font-size:9.5px">Open</span>{% endif %}
+        </td>
+        <td style="white-space:nowrap" onclick="event.stopPropagation()">
+          <a href="/investigations/{{ inv.id }}" class="btn btn-nav btn-sm">Open →</a>
+          <a href="/pdf/investigation/{{ inv.id }}" target="_blank"
+             class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)" title="ICAO PDF">PDF</a>
+          <form method="POST" action="/delete/investigation/{{ inv.id }}" style="display:inline"
+                onsubmit="return confirm('Delete Investigation {{ inv.id }}?')">
+            <button type="submit" class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)">🗑</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
   </div>
-{% from "_pagination.html" import render_pagination %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:44px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:10px">🔍</div>
+  <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:8px">
+    {% if q_f|default('') or stat_f|default('') or cls_f|default('') %}No matching investigations{% else %}No investigations recorded{% endif %}
+  </div>
+  {% if q_f|default('') or stat_f|default('') or cls_f|default('') %}
+  <a href="/investigations" class="btn btn-outline btn-sm">Clear filters</a>
+  {% else %}
+  <a href="/investigations/new" class="btn btn-nav btn-sm">+ Start Investigation</a>
+  {% endif %}
+</div>
+{% endif %}
+
 {{ render_pagination(pagination) }}
 {% endblock %}

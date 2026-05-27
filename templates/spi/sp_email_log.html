@@ -5,8 +5,20 @@
 <div class="page-title">📊 Email Distribution Log</div>
 <div class="page-sub">Complete history of all Safety Promotion emails sent</div>
 
-<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-  <div class="stat-card" style="--accent:#0f1c3f"><div class="stat-val" style="color:#0f1c3f">{{ total_sent }}</div><div class="stat-lbl">Emails Sent</div></div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--navy);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--navy)">{{ total_sent }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Emails Sent</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--green)">{{ total_recipients }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Recipients</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #7c3aed;border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#7c3aed">{{ logs|length }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Log Entries</div>
+  </div>
+</div>
   <div class="stat-card" style="--accent:#15803d"><div class="stat-val" style="color:#15803d">{{ total_recipients }}</div><div class="stat-lbl">Total Recipients</div></div>
   <div class="stat-card" style="--accent:#7c3aed"><div class="stat-val" style="color:#7c3aed">{{ logs|length }}</div><div class="stat-lbl">Log Entries</div></div>
 </div>

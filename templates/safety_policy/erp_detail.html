@@ -1,45 +1,119 @@
 {% extends "base.html" %}
-{% block title %}{{ e.erp_ref }} — ERP Detail{% endblock %}
+{% block title %}{{ e.erp_ref }} — ERP{% endblock %}
 {% block content %}
-<div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
-  <a href="/erp" style="color:var(--muted);font-size:13px">← Emergency Response Plans</a>
-  <a href="/pdf/erp/{{ e.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c" title="ICAO/IOSA Controlled Document PDF">📄 ICAO PDF</a>
-</div>
-<div class="page-title">{{ e.erp_ref }} — {{ e.title }}</div>
-<div class="page-sub">{{ e.scenario_type }} · {{ e.version }} · Status: {{ e.status }}</div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+<!-- Breadcrumb -->
+<div style="margin-bottom:10px">
+  <a href="/erp" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← Emergency Response Plans</a>
+</div>
+
+<!-- Header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
   <div>
-    <div class="card"><div class="card-title">Activation Criteria</div>
-      <p style="font-size:13px;line-height:1.7;white-space:pre-line">{{ e.activation_criteria or '—' }}</p></div>
-    <div class="card"><div class="card-title">Step-by-Step Response Procedures</div>
-      <p style="font-size:13px;line-height:1.8;white-space:pre-line">{{ e.response_procedures or '—' }}</p></div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">
+      ICAO Annex 19 §3.4 · {{ e.scenario_type }} · {{ e.version }}
+    </div>
+    <div class="page-title">{{ e.erp_ref }} — {{ e.title }}</div>
+    <div style="display:flex;gap:8px;margin-top:5px">
+      {% if e.status == 'Active' %}<span class="badge b-green">Active</span>
+      {% elif e.status == 'Draft' %}<span class="badge b-yellow">Draft</span>
+      {% else %}<span class="badge b-gray">{{ e.status }}</span>{% endif %}
+      <span class="badge b-gray" style="font-size:9.5px">{{ e.version }}</span>
+      {% if e.review_date %}
+      <span style="font-size:10.5px;color:var(--muted);font-weight:600">Review: {{ e.review_date }}</span>
+      {% endif %}
+    </div>
   </div>
-  <div>
-    <div class="card"><div class="card-title">Responsible Roles</div>
-      <p style="font-size:13px;line-height:1.7;white-space:pre-line">{{ e.responsible_roles or '—' }}</p></div>
-    <div class="card"><div class="card-title">Emergency Contacts</div>
-      <p style="font-size:13px;line-height:1.7;white-space:pre-line;font-family:monospace;font-size:12px">{{ e.emergency_contacts or '—' }}</p></div>
-    <div class="card"><div class="card-title">Notification List</div>
-      <p style="font-size:13px;line-height:1.7;white-space:pre-line">{{ e.notification_list or '—' }}</p></div>
-    <div class="card"><div class="card-title">Resources Required</div>
-      <p style="font-size:13px;line-height:1.7;white-space:pre-line">{{ e.resources_required or '—' }}</p></div>
+  <a href="/pdf/erp/{{ e.id }}" target="_blank"
+     class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)">📄 ICAO PDF</a>
+</div>
+
+<!-- Split layout -->
+<div style="display:grid;grid-template-columns:1fr 380px;gap:14px;align-items:start">
+
+  <!-- LEFT -->
+  <div style="display:flex;flex-direction:column;gap:12px">
+
     <div class="card">
-      <div class="card-title">Update ERP</div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--red);margin-bottom:8px">⚡ Activation Criteria</div>
+      <div style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-line">{{ e.activation_criteria or '—' }}</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--navy);margin-bottom:8px">📋 Step-by-Step Response Procedures</div>
+      <div style="font-size:13px;line-height:1.8;color:var(--text);white-space:pre-line">{{ e.response_procedures or '—' }}</div>
+    </div>
+
+    <!-- Edit form -->
+    <div class="card" style="border:1px solid var(--border2)">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px">✏ Update ERP</div>
       <form method="POST" action="/erp/{{ e.id }}/update">
-        <div class="fg"><label>Response Procedures</label><textarea name="response_procedures" rows="6">{{ e.response_procedures or '' }}</textarea></div>
-        <div class="fg"><label>Emergency Contacts</label><textarea name="emergency_contacts" rows="4">{{ e.emergency_contacts or '' }}</textarea></div>
-        <div class="fg"><label>Responsible Roles</label><textarea name="responsible_roles" rows="3">{{ e.responsible_roles or '' }}</textarea></div>
-        <div class="fg"><label>Notification List</label><textarea name="notification_list" rows="3">{{ e.notification_list or '' }}</textarea></div>
-        <div class="fg"><label>Resources Required</label><textarea name="resources_required" rows="2">{{ e.resources_required or '' }}</textarea></div>
+        <div class="fg">
+          <label>Response Procedures</label>
+          <textarea name="response_procedures" rows="6">{{ e.response_procedures or '' }}</textarea>
+        </div>
+        <div class="fg">
+          <label>Emergency Contacts</label>
+          <textarea name="emergency_contacts" rows="4">{{ e.emergency_contacts or '' }}</textarea>
+        </div>
         <div class="g2">
-          <div class="fg"><label>Review Date</label><input type="date" name="review_date" value="{{ e.review_date or '' }}"/></div>
-          <div class="fg"><label>Status</label>
-            <select name="status"><option {% if e.status=='Active' %}selected{% endif %}>Active</option><option {% if e.status=='Archived' %}selected{% endif %}>Archived</option></select></div>
+          <div class="fg">
+            <label>Responsible Roles</label>
+            <textarea name="responsible_roles" rows="3">{{ e.responsible_roles or '' }}</textarea>
+          </div>
+          <div class="fg">
+            <label>Notification List</label>
+            <textarea name="notification_list" rows="3">{{ e.notification_list or '' }}</textarea>
+          </div>
+        </div>
+        <div class="fg">
+          <label>Resources Required</label>
+          <textarea name="resources_required" rows="2">{{ e.resources_required or '' }}</textarea>
+        </div>
+        <div class="g2">
+          <div class="fg">
+            <label>Review Date</label>
+            <input type="date" name="review_date" value="{{ e.review_date or '' }}"/>
+          </div>
+          <div class="fg">
+            <label>Status</label>
+            <select name="status">
+              {% for s in ['Draft','Active','Under Review','Archived'] %}
+              <option {% if e.status==s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
         </div>
         <button type="submit" class="btn btn-nav btn-sm">Save Changes</button>
       </form>
     </div>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div style="display:flex;flex-direction:column;gap:12px">
+
+    <div class="card">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px">👥 Responsible Roles</div>
+      <div style="font-size:12.5px;line-height:1.7;color:var(--text);white-space:pre-line">{{ e.responsible_roles or '—' }}</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px">📞 Emergency Contacts</div>
+      <div style="font-size:12px;line-height:1.8;color:var(--text);white-space:pre-line;font-family:'IBM Plex Mono',monospace">{{ e.emergency_contacts or '—' }}</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px">📣 Notification List</div>
+      <div style="font-size:12.5px;line-height:1.7;color:var(--text);white-space:pre-line">{{ e.notification_list or '—' }}</div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px">🔧 Resources Required</div>
+      <div style="font-size:12.5px;line-height:1.7;color:var(--text);white-space:pre-line">{{ e.resources_required or '—' }}</div>
+    </div>
+
   </div>
 </div>
+
 {% endblock %}

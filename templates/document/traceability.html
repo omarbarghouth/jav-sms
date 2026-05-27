@@ -4,8 +4,32 @@
 <div class="page-title">Traceability Dashboard</div>
 <div class="page-sub">Documents ↔ Hazards ↔ Risks ↔ Audits ↔ Actions ↔ MOC ↔ Training · ICAO Annex 19 §3.5</div>
 
-<div class="stat-grid">
-  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ total_docs }}</div><div class="stat-lbl">Total Documents</div></div>
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:20px">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--blue);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--blue)">{{ total_docs }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Documents</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--green)">{{ approved }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Approved</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--amber)">{{ draft }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Draft</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #0891b2;border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#0891b2">{{ review }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Under Review</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--muted);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--muted)">{{ archived }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Archived</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #7c3aed;border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#7c3aed">{{ total_links }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Traceability Links</div>
+  </div>
+</div>
   <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ approved }}</div><div class="stat-lbl">Approved</div></div>
   <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ draft }}</div><div class="stat-lbl">Draft</div></div>
   <div class="stat-card"><div class="stat-val" style="color:#0891b2">{{ review }}</div><div class="stat-lbl">Under Review</div></div>

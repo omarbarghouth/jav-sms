@@ -1,52 +1,246 @@
 {% extends "base.html" %}
-{% block title %}New Investigation{% endblock %}
+{% block title %}{% if edit %}Edit Investigation {{ inv.id }}{% else %}New Investigation{% endif %}{% endblock %}
 {% block content %}
-<div class="page-title">New Safety Investigation</div>
-<div class="page-sub">5-Why Root Cause Analysis · ICAO Doc 9859</div>
-<form class="form-card" method="POST" style="max-width:900px">
-  <div class="sec">General</div>
-  <div class="fg"><label>Investigation Title *</label><input type="text" name="title" required placeholder="Brief title of the occurrence being investigated"/></div>
+
+<div style="margin-bottom:14px">
+  <a href="/investigations" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← Investigation Register</a>
+</div>
+<div style="margin-bottom:20px">
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Investigation · ICAO Annex 13 / Doc 9859 §6</div>
+  <div class="page-title">{% if edit %}Edit Investigation {{ inv.id }}{% else %}Open New Safety Investigation{% endif %}</div>
+  <div class="page-sub" style="margin-bottom:0">Occurrence classification · 5-Why root cause analysis · Contributing factors · Regulatory notification</div>
+</div>
+
+<form class="form-card" method="POST" style="max-width:1000px">
+
+  <!-- ICAO OCCURRENCE CLASSIFICATION -->
+  <div class="sec">ICAO Occurrence Classification</div>
+  <div style="background:var(--red-bg);border:1px solid var(--red-border);border-left:4px solid var(--red);border-radius:var(--r);padding:10px 14px;margin-bottom:16px">
+    <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:2px">ICAO Annex 13 — Classification determines mandatory reporting obligations</div>
+    <div style="font-size:11px;color:var(--text);line-height:1.5">Accident and Serious Incident investigations require notification to the civil aviation authority. Incident investigations follow the operator internal process.</div>
+  </div>
+
   <div class="g3">
-    <div class="fg"><label>Department *</label>
+    <div class="fg">
+      <label>ICAO Classification <span style="color:var(--red)">*</span></label>
+      <select name="classification" required onchange="toggleNotification(this.value)">
+        <option value="">Select classification…</option>
+        <option value="Accident" {% if edit and inv.classification=='Accident' %}selected{% endif %}>Accident — Annex 13 mandatory</option>
+        <option value="Serious Incident" {% if edit and inv.classification=='Serious Incident' %}selected{% endif %}>Serious Incident — Annex 13 reportable</option>
+        <option value="Incident" {% if edit and inv.classification=='Incident' %}selected{% elif not edit %}selected{% endif %}>Incident</option>
+        <option value="Occurrence" {% if edit and inv.classification=='Occurrence' %}selected{% endif %}>Occurrence</option>
+        <option value="Near Miss" {% if edit and inv.classification=='Near Miss' %}selected{% endif %}>Near Miss</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Occurrence Category (ECCAIRS)</label>
+      <select name="occurrence_category">
+        <option value="">Select category…</option>
+        {% for cat in occurrence_categories %}
+        <option value="{{ cat }}" {% if edit and inv.occurrence_category==cat %}selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Phase of Flight</label>
+      <select name="phase_of_flight">
+        <option value="">Select phase…</option>
+        {% for ph in ['Pre-Flight','Taxi','Takeoff','Initial Climb','Climb','Cruise','Descent','Initial Approach','Final Approach','Landing','Post-Landing','Parked','Ground Operations','Unknown'] %}
+        <option value="{{ ph }}" {% if edit and inv.phase_of_flight==ph %}selected{% endif %}>{{ ph }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="g3">
+    <div class="fg">
+      <label>Aircraft Type</label>
+      <input type="text" name="aircraft_type" value="{{ inv.aircraft_type if edit else '' }}" placeholder="e.g. B737-800"/>
+    </div>
+    <div class="fg">
+      <label>Aircraft Registration</label>
+      <input type="text" name="aircraft_reg" value="{{ inv.aircraft_reg if edit else '' }}" placeholder="e.g. JY-JAA"/>
+    </div>
+    <div class="fg">
+      <label>Location / Aerodrome</label>
+      <input type="text" name="location" value="{{ inv.location if edit else '' }}" placeholder="e.g. OJAI / Amman, Jordan"/>
+    </div>
+  </div>
+
+  <!-- Regulatory notification panel (shown for Accident/Serious Incident) -->
+  <div id="notif-panel" style="{% if not edit or not inv.authority_notified %}display:none{% endif %}">
+    <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-left:4px solid var(--amber);border-radius:var(--r);padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:8px">ICAO Annex 13 §6 — Regulatory Notification</div>
+      <div class="g3">
+        <div class="fg" style="margin-bottom:0">
+          <label style="font-size:10px">Notification Date</label>
+          <input type="date" name="notification_date" value="{{ inv.notification_date if edit else '' }}"/>
+        </div>
+        <div class="fg" style="margin-bottom:0">
+          <label style="font-size:10px">CAA Reference</label>
+          <input type="text" name="notification_ref" value="{{ inv.notification_ref if edit else '' }}" placeholder="CAA ref / accident report No."/>
+        </div>
+        <div class="fg" style="margin-bottom:0;display:flex;align-items:center;gap:8px;padding-top:22px">
+          <input type="checkbox" name="authority_notified" id="auth_notified" style="width:16px;height:16px"
+                 {% if edit and inv.authority_notified %}checked{% endif %}/>
+          <label for="auth_notified" style="font-size:12px;font-weight:600;margin-bottom:0">Authority notified</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GENERAL INFORMATION -->
+  <div class="sec" style="margin-top:4px">General Information</div>
+  <div class="fg">
+    <label>Investigation Title <span style="color:var(--red)">*</span></label>
+    <input type="text" name="title" required value="{{ inv.title if edit else '' }}"
+           placeholder="Brief descriptive title of the occurrence being investigated"/>
+  </div>
+  <div class="g3">
+    <div class="fg">
+      <label>Department <span style="color:var(--red)">*</span></label>
       <select name="department_id" required>
-        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
-      </select></div>
-    <div class="fg"><label>Date of Occurrence *</label><input type="date" name="date_of_occurrence" required/></div>
-    <div class="fg"><label>Investigator *</label><input type="text" name="investigator" required/></div>
+        <option value="">Select department…</option>
+        {% for d in all_departments %}
+        <option value="{{ d.id }}" {% if edit and inv.department_id==d.id %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Date of Occurrence <span style="color:var(--red)">*</span></label>
+      <input type="date" name="date_of_occurrence" required value="{{ inv.date_of_occurrence if edit else '' }}"/>
+    </div>
+    <div class="fg">
+      <label>Lead Investigator <span style="color:var(--red)">*</span></label>
+      <input type="text" name="investigator" required value="{{ inv.investigator if edit else '' }}"
+             placeholder="Name of assigned investigator"/>
+    </div>
   </div>
   <div class="g2">
-    <div class="fg"><label>Linked Report ID</label><input type="text" name="linked_report_id" placeholder="e.g. ASR-2024-XXXX"/></div>
-    <div class="fg"><label>Linked Hazard</label>
+    <div class="fg">
+      <label>Linked Report / ASR Reference</label>
+      <input type="text" name="linked_report_id" value="{{ inv.linked_report_id if edit else '' }}"
+             placeholder="e.g. ASR-2024-XXXX"/>
+    </div>
+    <div class="fg">
+      <label>Linked Hazard Record</label>
       <select name="hazard_id">
         <option value="">None</option>
-        {% for h in hazards %}<option value="{{ h.id }}">{{ h.id }} — {{ h.generic_hazard[:50] }}</option>{% endfor %}
-      </select></div>
-  </div>
-  <div class="fg"><label>Occurrence Description *</label><textarea name="description" required rows="4" placeholder="Describe what happened, when, where, and who was involved…"></textarea></div>
-
-  <div class="sec">5-Why Root Cause Analysis</div>
-  <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Start with the problem statement and ask WHY repeatedly until the root cause is identified.</p>
-  <div class="why-chain">
-    {% for n in [1,2,3,4,5] %}
-    <div class="why-item">
-      <div><div class="why-num">{{ n }}</div>{% if not loop.last %}<div class="why-line"></div>{% endif %}</div>
-      <div class="fg" style="flex:1"><label>Why {{ n }}?</label><textarea name="why{{ n }}" rows="2" placeholder="{% if n==1 %}Why did the occurrence happen?{% else %}Why did that happen?{% endif %}"></textarea></div>
+        {% for h in hazards %}
+        <option value="{{ h.id }}" {% if edit and inv.hazard_id==h.id %}selected{% endif %}>
+          {{ h.id }} — {{ (h.generic_hazard or h.specific_components or '')[:60] }}
+        </option>
+        {% endfor %}
+      </select>
     </div>
-    {% endfor %}
   </div>
-  <div class="fg"><label>Root Cause *</label><textarea name="root_cause" required rows="3" placeholder="Based on the 5-Why analysis, state the root cause…"></textarea></div>
-
-  <div class="sec">Contributing Factors</div>
   <div class="g2">
-    <div class="fg"><label>Human Factors</label><textarea name="human_factors" rows="3" placeholder="Fatigue, workload, training, communication…"></textarea></div>
-    <div class="fg"><label>Technical Factors</label><textarea name="technical_factors" rows="3" placeholder="Equipment failure, design, maintenance…"></textarea></div>
-    <div class="fg"><label>Organizational Factors</label><textarea name="organizational_factors" rows="3" placeholder="Procedures, culture, resources, supervision…"></textarea></div>
-    <div class="fg"><label>Environmental Factors</label><textarea name="environmental_factors" rows="3" placeholder="Weather, terrain, workspace, lighting…"></textarea></div>
+    <div class="fg">
+      <label>Target Closure Date</label>
+      <input type="date" name="target_close_date" value="{{ inv.target_close_date if edit else '' }}"/>
+    </div>
+    <div class="fg">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;margin-top:22px">ICAO Investigation Timelines</div>
+      <div style="font-size:11px;color:var(--muted)">Accident: 12 months · Serious Incident: 12 months · Incident: 90 days</div>
+    </div>
+  </div>
+  <div class="fg">
+    <label>Occurrence Description <span style="color:var(--red)">*</span></label>
+    <textarea name="description" required rows="4"
+              placeholder="Describe what happened, when, where, and who was involved. Include any immediate actions taken…">{{ inv.description if edit else '' }}</textarea>
   </div>
 
-  <div class="sec">Recommendations</div>
-  <div class="fg"><label>Recommendations *</label><textarea name="recommendations" required rows="4" placeholder="List your safety recommendations to prevent recurrence…"></textarea></div>
-  <div class="fg"><label>Action Due Date</label><input type="date" name="due_date"/></div>
-  <button type="submit" class="btn btn-nav">Submit Investigation</button>
+  <!-- 5-WHY ROOT CAUSE ANALYSIS -->
+  <div class="sec" style="margin-top:8px">5-Why Root Cause Analysis</div>
+  <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:var(--r);padding:10px 14px;margin-bottom:16px">
+    <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:2px">ICAO Doc 9859 §6.4 — Systematic Cause Analysis</div>
+    <div style="font-size:11px;color:var(--text);line-height:1.5">Start with the problem statement and ask "Why?" repeatedly until the systemic root cause is identified. Typically 3–5 iterations are required for organisational causes to surface.</div>
+  </div>
+
+  {% set why_vals = [
+    inv.why1 if edit else '',
+    inv.why2 if edit else '',
+    inv.why3 if edit else '',
+    inv.why4 if edit else '',
+    inv.why5 if edit else '',
+  ] %}
+  {% for n in [1,2,3,4,5] %}
+  <div style="display:flex;gap:12px;margin-bottom:12px;align-items:flex-start">
+    <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;padding-top:26px">
+      <div style="width:30px;height:30px;border-radius:50%;
+                  background:{% if n==5 %}var(--navy){% else %}var(--surface){% endif %};
+                  border:2px solid {% if n==5 %}var(--navy){% else %}var(--border2){% endif %};
+                  display:flex;align-items:center;justify-content:center;
+                  font-size:11px;font-weight:800;font-family:'IBM Plex Mono',monospace;
+                  color:{% if n==5 %}#fff{% else %}var(--navy){% endif %}">{{ n }}</div>
+      {% if n < 5 %}<div style="width:2px;height:20px;background:var(--border);margin:3px 0"></div>{% endif %}
+    </div>
+    <div class="fg" style="flex:1;margin-bottom:0">
+      <label {% if n==5 %}style="color:var(--amber)"{% endif %}>
+        Why {{ n }}?
+        {% if n==1 %}<span style="font-weight:400;color:var(--muted)"> — Why did the occurrence happen?</span>
+        {% elif n==5 %}<span style="font-weight:400;color:var(--amber)"> — Root level systemic cause</span>
+        {% else %}<span style="font-weight:400;color:var(--muted)"> — Why did that happen?</span>{% endif %}
+      </label>
+      <textarea name="why{{ n }}" rows="2"
+                {% if n==5 %}style="border-color:var(--amber-border);background:var(--amber-bg)"{% endif %}
+                placeholder="{% if n==1 %}Immediate cause{% elif n==5 %}Underlying systemic cause{% else %}Dig deeper…{% endif %}">{{ why_vals[n-1] }}</textarea>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="fg">
+    <label style="color:var(--amber)">Identified Root Cause <span style="color:var(--red)">*</span></label>
+    <textarea name="root_cause" required rows="3"
+              style="border-color:var(--amber-border);background:var(--amber-bg)"
+              placeholder="Based on the 5-Why analysis, state the identified root cause in clear, concise terms…">{{ inv.root_cause if edit else '' }}</textarea>
+  </div>
+
+  <!-- CONTRIBUTING FACTORS -->
+  <div class="sec" style="margin-top:8px">Contributing Factors <span style="font-weight:400;font-size:11px;text-transform:none;letter-spacing:0;color:var(--muted)">(ICAO Human Factors taxonomy)</span></div>
+  <div class="g2">
+    <div class="fg">
+      <label>👤 Human Factors</label>
+      <textarea name="human_factors" rows="3" placeholder="Fatigue, stress, workload, training gaps, communication failures, decision-making errors…">{{ inv.human_factors if edit else '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>🔧 Technical Factors</label>
+      <textarea name="technical_factors" rows="3" placeholder="Equipment failure, design deficiency, maintenance shortfall, airworthiness issues…">{{ inv.technical_factors if edit else '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>🏢 Organizational Factors</label>
+      <textarea name="organizational_factors" rows="3" placeholder="Procedures, safety culture, resource constraints, supervision, organizational pressures…">{{ inv.organizational_factors if edit else '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>🌍 Environmental Factors</label>
+      <textarea name="environmental_factors" rows="3" placeholder="Weather conditions, terrain, workspace design, lighting, noise, external pressures…">{{ inv.environmental_factors if edit else '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- RECOMMENDATIONS -->
+  <div class="sec" style="margin-top:8px">Safety Recommendations</div>
+  <div class="fg">
+    <label>Recommendations <span style="color:var(--red)">*</span></label>
+    <textarea name="recommendations" required rows="5"
+              placeholder="List specific, actionable safety recommendations to prevent recurrence. Include responsible parties and suggested timelines where possible…">{{ inv.recommendations if edit else '' }}</textarea>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+    <button type="submit" class="btn btn-nav">
+      {% if edit %}Save Changes{% else %}Open Investigation{% endif %}
+    </button>
+    <a href="{% if edit %}/investigations/{{ inv.id }}{% else %}/investigations{% endif %}" class="btn btn-outline">Cancel</a>
+  </div>
 </form>
+
+<script>
+function toggleNotification(val) {
+  const panel = document.getElementById('notif-panel');
+  panel.style.display = (val === 'Accident' || val === 'Serious Incident') ? '' : 'none';
+}
+(function() {
+  const sel = document.querySelector('select[name="classification"]');
+  if (sel) toggleNotification(sel.value);
+})();
+</script>
 {% endblock %}

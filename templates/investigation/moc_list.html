@@ -1,113 +1,176 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render_pagination %}
 {% block title %}Management of Change{% endblock %}
 {% block content %}
-<div class="page-title">Management of Change (MOC)</div>
-<div class="page-sub">ICAO Doc 9859 §7 · Controlled change process with pre-change risk assessment</div>
 
-<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-  <a href="/moc/new" class="btn btn-nav">+ New MOC</a>
+<!-- Page header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Management · ICAO Doc 9859 §7</div>
+    <div class="page-title">Management of Change</div>
+    <div class="page-sub" style="margin-bottom:0">Controlled change process with pre-change risk assessment · Auto-linked hazard tracking</div>
+  </div>
+  <div style="display:flex;gap:7px">
+    <a href="/investigations" class="btn btn-outline btn-sm">Investigations</a>
+    <a href="/moc/new" class="btn btn-gold btn-sm">+ New MOC</a>
+  </div>
 </div>
 
+<!-- KPI strip -->
+{% set moc_pending  = mocs|selectattr('approval_status','eq','Pending')|list|length %}
+{% set moc_approved = mocs|selectattr('approval_status','eq','Approved')|list|length %}
+{% set moc_rejected = mocs|selectattr('approval_status','eq','Rejected')|list|length %}
+{% set moc_done     = mocs|selectattr('implementation_status','eq','Completed')|list|length %}
+{% set moc_no_rev   = mocs|selectattr('post_change_review','eq',None)|list|length %}
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px">
+  {% for label, val, col in [
+    ('Total MOCs',       mocs|length,  '#374151'),
+    ('Pending Approval', moc_pending,  '#c2610a'),
+    ('Approved',         moc_approved, '#15803d'),
+    ('Rejected',         moc_rejected, '#dc2626'),
+    ('Completed',        moc_done,     '#1d4ed8'),
+  ] %}
+  <div style="background:#fff;border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);
+              padding:11px 14px;box-shadow:var(--shadow)">
+    <div style="font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ col }};line-height:1;margin-bottom:3px">{{ val }}</div>
+    <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">{{ label }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Post-change review alert -->
+{% if moc_no_rev > 0 %}
+<div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-left:4px solid var(--amber);border-radius:var(--r);
+            padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:16px">⚠</span>
+  <div style="font-size:12.5px;font-weight:700;color:var(--amber)">{{ moc_no_rev }} MOC(s) missing post-change review documentation</div>
+</div>
+{% endif %}
+
+<!-- MOC table -->
+{% if mocs %}
 <div class="card" style="padding:0">
   <div class="tbl-wrap">
     <table>
       <thead>
         <tr>
-          <th>MOC Ref</th>
-          <th>Title</th>
-          <th>Type</th>
-          <th>Department</th>
-          <th>Initiator</th>
-          <th>Planned Date</th>
-          <th>Approval</th>
-          <th>Implementation</th>
-          <th>Post-Change Review</th>
-          <th>Linked Hazard</th>
-          <th></th>
+          <th style="width:110px">MOC Ref</th>
+          <th>Title / Description</th>
+          <th style="width:100px">Type</th>
+          <th style="width:70px">Dept</th>
+          <th style="width:120px">Initiator</th>
+          <th style="width:90px">Planned Date</th>
+          <th style="width:110px">Approval</th>
+          <th style="width:110px">Implementation</th>
+          <th style="width:90px">Post-Review</th>
+          <th style="width:80px">Hazard</th>
+          <th style="width:130px"></th>
         </tr>
       </thead>
       <tbody>
-        {% for m in mocs %}
-        <tr>
-          <td><span class="ctrl-num">{{ m.id }}</span></td>
-          <td style="font-size:13px;font-weight:600;max-width:160px">{{ m.title or '—' }}</td>
-          <td><span class="badge b-orange" style="font-size:10px">{{ m.change_type or '—' }}</span></td>
-          <td style="font-size:12px">{{ m.department.code if m.department else '—' }}</td>
-          <td style="font-size:12px">{{ m.initiator or '—' }}</td>
-          <td style="font-size:12px">{{ m.planned_date or '—' }}</td>
-          <td>
-            {% if m.approval_status=='Approved' %}<span class="badge b-green">Approved</span>
-            {% elif m.approval_status=='Rejected' %}<span class="badge b-red">Rejected</span>
-            {% elif m.approval_status=='Pending' %}<span class="badge b-yellow">Pending</span>
-            {% else %}<span class="badge b-gray">{{ m.approval_status or '—' }}</span>{% endif %}
-          </td>
-          <td>
-            {% if m.implementation_status=='Completed' %}<span class="badge b-green">Done</span>
-            {% elif m.implementation_status=='In Progress' %}<span class="badge b-blue">In Progress</span>
-            {% else %}<span class="badge b-gray">{{ m.implementation_status or 'Not Started' }}</span>{% endif %}
-          </td>
-          <td style="font-size:11px;max-width:180px;color:var(--muted)">
-            {% if m.post_change_review %}
-              <span title="{{ m.post_change_review }}">{{ m.post_change_review[:60] }}{% if m.post_change_review|length > 60 %}…{% endif %}</span>
-            {% else %}
-              <span style="color:#f59e0b;font-size:10px">⚠ Not recorded</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if m.hazard_id %}
-            <a href="/hazard-log/{{ m.hazard_id }}" class="mono" style="color:#1d4ed8;font-size:11px">{{ m.hazard_id }}</a>
-            {% else %}<span style="color:#d1d5db">—</span>{% endif %}
-          </td>
-          <td>
-            <details>
-              <summary style="font-size:11px;cursor:pointer;color:var(--navy);font-weight:700">Update</summary>
-              <form method="POST" action="/moc/{{ m.id }}/update"
-                    style="padding:10px 0;display:flex;flex-direction:column;gap:7px;min-width:240px">
-
-                <label style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:-4px">Approval Status</label>
-                <select name="approval_status" style="font-size:11px;padding:4px;border:1px solid var(--border);border-radius:5px">
-                  {% for s in ['Pending','Approved','Rejected','Conditional'] %}
-                  <option {% if m.approval_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-                </select>
-
-                <label style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:-4px">Approved By</label>
-                <input type="text" name="approved_by" value="{{ m.approved_by or '' }}"
-                       placeholder="Name of approving authority"
-                       style="font-size:11px;padding:4px;border:1px solid var(--border);border-radius:5px"/>
-
-                <label style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:-4px">Implementation Status</label>
-                <select name="implementation_status" style="font-size:11px;padding:4px;border:1px solid var(--border);border-radius:5px">
-                  {% for s in ['Not Started','In Progress','Completed','Cancelled'] %}
-                  <option {% if m.implementation_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-                </select>
-
-                <label style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:-4px">
-                  Post-Change Review <span style="color:#ef4444">*</span>
-                  <span style="font-weight:400;color:var(--muted)">(required to mark Completed)</span>
-                </label>
-                <textarea name="post_change_review"
-                          placeholder="Document post-change verification findings, effectiveness assessment, and any residual risks identified..."
-                          rows="3"
-                          style="font-size:11px;padding:5px;border:1px solid var(--border);border-radius:5px;resize:vertical;font-family:inherit">{{ m.post_change_review or '' }}</textarea>
-
-                <button type="submit" class="btn btn-nav btn-sm">Save</button>
+      {% for m in mocs %}
+      <tr style="cursor:default;{% if not m.post_change_review and m.implementation_status=='Completed' %}background:var(--amber-bg){% endif %}">
+        <td>
+          <span class="ctrl-num" style="font-size:10px">{{ m.id }}</span>
+          {% if m.created_at %}
+          <div style="font-size:9px;color:var(--muted2);margin-top:2px;font-family:'IBM Plex Mono',monospace">{{ m.created_at.strftime('%d %b %Y') }}</div>
+          {% endif %}
+        </td>
+        <td style="max-width:200px">
+          <div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ (m.title or '—')[:70] }}</div>
+          {% if m.description %}
+          <div style="font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.description[:60] }}</div>
+          {% endif %}
+        </td>
+        <td>
+          {% set type_colors = {'Process':'b-blue','Equipment':'b-navy','Personnel':'b-purple','Regulatory':'b-orange','Organizational':'b-gray'} %}
+          <span class="badge {{ type_colors.get(m.change_type,'b-gray') }}" style="font-size:9px">{{ m.change_type or '—' }}</span>
+        </td>
+        <td style="font-size:11px;font-weight:700;color:var(--navy)">{{ m.department.code if m.department else '—' }}</td>
+        <td style="font-size:12px;color:var(--text)">{{ m.initiator or '—' }}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--muted)">{{ m.planned_date or '—' }}</td>
+        <td>
+          {% if m.approval_status=='Approved' %}<span class="badge b-green" style="font-size:9.5px">✓ Approved</span>
+          {% elif m.approval_status=='Rejected' %}<span class="badge b-red" style="font-size:9.5px">✗ Rejected</span>
+          {% elif m.approval_status=='Conditional' %}<span class="badge b-yellow" style="font-size:9.5px">~ Conditional</span>
+          {% else %}<span class="badge b-yellow" style="font-size:9.5px">Pending</span>{% endif %}
+          {% if m.approved_by %}
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">by {{ m.approved_by }}</div>
+          {% endif %}
+        </td>
+        <td>
+          {% if m.implementation_status=='Completed' %}<span class="badge b-green" style="font-size:9.5px">Done</span>
+          {% elif m.implementation_status=='In Progress' %}<span class="badge b-blue" style="font-size:9.5px">In Progress</span>
+          {% elif m.implementation_status=='Cancelled' %}<span class="badge b-red" style="font-size:9.5px">Cancelled</span>
+          {% else %}<span class="badge b-gray" style="font-size:9.5px">Not Started</span>{% endif %}
+        </td>
+        <td style="text-align:center">
+          {% if m.post_change_review %}
+          <span class="badge b-green" style="font-size:9px" title="{{ m.post_change_review }}">✓ Done</span>
+          {% else %}
+          <span class="badge b-yellow" style="font-size:9px">Pending</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if m.hazard_id %}
+          <a href="/hazard-log/{{ m.hazard_id }}" class="ctrl-num" style="font-size:9px;background:var(--red)">{{ m.hazard_id }}</a>
+          {% else %}
+          <span style="color:var(--muted2);font-size:10px">—</span>
+          {% endif %}
+        </td>
+        <td onclick="event.stopPropagation()">
+          <!-- Inline update via details -->
+          <details style="margin-bottom:6px">
+            <summary style="font-size:10px;cursor:pointer;color:var(--navy);font-weight:700;list-style:none;display:inline-flex;align-items:center;gap:4px;
+                           padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r2)">
+              ✎ Update
+            </summary>
+            <div style="position:absolute;z-index:100;background:#fff;border:1px solid var(--border2);border-radius:var(--r);
+                        box-shadow:var(--shadow2);padding:12px;min-width:260px;margin-top:4px">
+              <form method="POST" action="/moc/{{ m.id }}/update" style="display:flex;flex-direction:column;gap:8px">
+                <div class="fg" style="margin-bottom:0">
+                  <label style="font-size:9.5px">Approval Status</label>
+                  <select name="approval_status" style="font-size:11px;padding:5px">
+                    {% for s in ['Pending','Approved','Rejected','Conditional'] %}
+                    <option {% if m.approval_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="fg" style="margin-bottom:0">
+                  <label style="font-size:9.5px">Approved By</label>
+                  <input type="text" name="approved_by" value="{{ m.approved_by or '' }}" placeholder="Approving authority" style="font-size:11px;padding:5px"/>
+                </div>
+                <div class="fg" style="margin-bottom:0">
+                  <label style="font-size:9.5px">Implementation Status</label>
+                  <select name="implementation_status" style="font-size:11px;padding:5px">
+                    {% for s in ['Not Started','In Progress','Completed','Cancelled'] %}
+                    <option {% if m.implementation_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="fg" style="margin-bottom:0">
+                  <label style="font-size:9.5px">Post-Change Review <span style="color:var(--red)">*</span></label>
+                  <textarea name="post_change_review" rows="3" style="font-size:11px;padding:5px"
+                            placeholder="Document verification findings, effectiveness, residual risks…">{{ m.post_change_review or '' }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-nav btn-sm">Save Changes</button>
               </form>
-            </details>
-            <a href="/pdf/moc/{{ m.id }}" target="_blank"
-               style="display:inline-block;margin-top:6px;padding:4px 10px;border-radius:6px;
-                 font-size:11px;font-weight:700;background:#0a1628;color:#c9a84c;
-                 border:1px solid #c9a84c;text-decoration:none" title="Export ICAO PDF">📄 PDF</a>
-          </td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="11" style="text-align:center;color:var(--muted);padding:36px">
-            No MOC records. <a href="/moc/new" style="color:var(--navy);font-weight:700">Create one →</a>
-          </td>
-        </tr>
-        {% endfor %}
+            </div>
+          </details>
+          <a href="/pdf/moc/{{ m.id }}" target="_blank"
+             class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)" title="ICAO PDF">PDF</a>
+        </td>
+      </tr>
+      {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+{% else %}
+<div class="card" style="text-align:center;padding:44px;border:2px dashed var(--border)">
+  <div style="font-size:32px;margin-bottom:10px">🔄</div>
+  <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:8px">No Management of Change records</div>
+  <a href="/moc/new" class="btn btn-nav btn-sm">+ Create First MOC</a>
+</div>
+{% endif %}
+
+{{ render_pagination(pagination) }}
 {% endblock %}

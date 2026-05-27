@@ -21,14 +21,35 @@
 {% endif %}
 
 <!-- Stats row -->
-<div class="stat-grid" style="grid-template-columns:repeat(7,1fr);margin-bottom:20px">
-  <div class="stat-card"><div class="stat-val" style="color:#374151">{{ stats.total }}</div><div class="stat-lbl">Total</div></div>
-  <div class="stat-card" style="border-top:3px solid #1d4ed8"><div class="stat-val" style="color:#1d4ed8">{{ stats.scheduled }}</div><div class="stat-lbl">📅 Scheduled</div></div>
-  <div class="stat-card" style="border-top:3px solid #7c3aed"><div class="stat-val" style="color:#7c3aed">{{ stats.in_progress }}</div><div class="stat-lbl">▶ In Progress</div></div>
-  <div class="stat-card" style="border-top:3px solid #15803d"><div class="stat-val" style="color:#15803d">{{ stats.completed }}</div><div class="stat-lbl">✓ Completed</div></div>
-  <div class="stat-card" style="border-top:3px solid #d97706"><div class="stat-val" style="color:#d97706">{{ stats.due_soon }}</div><div class="stat-lbl">🕐 Due Soon</div></div>
-  <div class="stat-card" style="border-top:3px solid #dc2626"><div class="stat-val" style="color:#dc2626">{{ stats.expired }}</div><div class="stat-lbl">🔴 Expired</div></div>
-  <div class="stat-card" style="border-top:3px solid #dc2626"><div class="stat-val" style="color:#dc2626">{{ stats.overdue }}</div><div class="stat-lbl">⚠ Overdue</div></div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:20px">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--navy);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--navy)">{{ stats.total }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Total</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--blue);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--blue)">{{ stats.scheduled }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Scheduled</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #7c3aed;border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#7c3aed">{{ stats.in_progress }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">In Progress</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--green)">{{ stats.completed }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Completed</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--amber)">{{ stats.due_soon }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Due Soon</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--red)">{{ stats.expired }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Expired</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--red)">{{ stats.overdue }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Overdue</div>
+  </div>
 </div>
 
 <!-- Controls -->
@@ -118,8 +139,8 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="12" style="text-align:center;padding:32px;color:var(--muted)">
-          No training records found. <a href="/safety-promotion/training/new" style="color:#1d4ed8">Schedule one →</a>
+        <tr><td colspan="12" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">
+          No training records yet.
         </td></tr>
         {% endfor %}
       </tbody>
