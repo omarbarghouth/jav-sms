@@ -2067,28 +2067,34 @@ def conf_report_review(rid):
 def dashboard():
     check_overdue_actions()
     from sqlalchemy import func as sqf
+    db.session.rollback()  # ensure clean PostgreSQL transaction state
 
     # ── HAZARDS & REPORTS ─────────────────────────────────────────────────────
     try:
         total_haz = Hazard.query.count()
         open_haz  = Hazard.query.filter_by(status='Open').count()
     except Exception:
+        db.session.rollback()
         total_haz = open_haz = 0
     try:
         intol = Risk.query.filter_by(initial_tolerance='INTOLERABLE').count()
     except Exception:
+        db.session.rollback()
         intol = 0
     try:
         asr_cnt = ASRReport.query.count()
     except Exception:
+        db.session.rollback()
         asr_cnt = 0
     try:
         inv_cnt = Investigation.query.count()
     except Exception:
+        db.session.rollback()
         inv_cnt = 0
     try:
         hr_cnt = HazardReport.query.count()
     except Exception:
+        db.session.rollback()
         hr_cnt = 0
 
     # ── ACTIONS ───────────────────────────────────────────────────────────────
@@ -2106,6 +2112,7 @@ def dashboard():
                              (Action.sag_member == None) | (Action.sag_member == ''),
                              Action.status.notin_(['Closed'])).count()
     except Exception:
+        db.session.rollback()
         open_act = overdue_act = pending_review = closed_act = 0
         total_act = closure_rate = unassigned_act = 0
 
@@ -2124,6 +2131,7 @@ def dashboard():
         critical_findings = AuditFinding.query.filter_by(severity='Critical').filter(
                                 AuditFinding.status.notin_(['Closed'])).count()
     except Exception:
+        db.session.rollback()
         audit_cnt = active_audits = open_findings = closed_findings = 0
         total_findings = major_findings = critical_findings = 0
         finding_close_rate = 100
@@ -2142,13 +2150,16 @@ def dashboard():
     active_surveys = active_bulletins = active_campaigns = 0
     try:
         active_surveys = SafetySurvey.query.filter_by(status='Active').count()
-    except Exception: pass
+    except Exception:
+        db.session.rollback()
     try:
         active_bulletins = SafetyBulletin.query.filter_by(status='Active').count()
-    except Exception: pass
+    except Exception:
+        db.session.rollback()
     try:
         active_campaigns = SafetyCampaign.query.filter_by(status='Active').count()
-    except Exception: pass
+    except Exception:
+        db.session.rollback()
 
     # ── OTHER ─────────────────────────────────────────────────────────────────
     moc_cnt = doc_cnt = ra_open = 0
@@ -2158,34 +2169,40 @@ def dashboard():
         ra_open = RiskAssessment.query.filter(
                       RiskAssessment.status.notin_(['Closed','Approved'])).count()
     except Exception:
+        db.session.rollback()
         pass
 
     try:
         recent_act = Action.query.filter(Action.status != 'Closed') \
                         .order_by(Action.created_at.desc()).limit(6).all()
     except Exception:
+        db.session.rollback()
         recent_act = []
     try:
         overdue_actions = Action.query.filter_by(status='Overdue') \
                             .order_by(Action.due_date).limit(8).all()
     except Exception:
+        db.session.rollback()
         overdue_actions = []
     try:
         pending_review_list = Action.query.filter(
             Action.status.in_(['Mitigation Implemented','Under Safety Review'])) \
             .order_by(Action.due_date).limit(6).all()
     except Exception:
+        db.session.rollback()
         pending_review_list = []
     try:
         critical_act = Action.query.filter_by(priority='High') \
                         .filter(Action.status.notin_(['Closed'])).limit(6).all()
     except Exception:
+        db.session.rollback()
         critical_act = []
     try:
         recent_findings = AuditFinding.query.filter(
             AuditFinding.status.notin_(['Closed'])) \
             .order_by(AuditFinding.created_at.desc()).limit(5).all()
     except Exception:
+        db.session.rollback()
         recent_findings = []
 
     # ── DEPT ANALYTICS ────────────────────────────────────────────────────────
@@ -2207,6 +2224,7 @@ def dashboard():
                 })
         dept_perf.sort(key=lambda x: x['overdue'], reverse=True)
     except Exception:
+        db.session.rollback()
         dept_perf = []
 
     # ── SEVERITY BREAKDOWN ────────────────────────────────────────────────────
@@ -2218,6 +2236,7 @@ def dashboard():
             'Obs':      AuditFinding.query.filter_by(severity='Observation').count(),
         }
     except Exception:
+        db.session.rollback()
         sev_data = {'Critical': 0, 'Major': 0, 'Minor': 0, 'Obs': 0}
 
     # ── AUDIT PLAN ALERTS ─────────────────────────────────────────────────────
@@ -2230,6 +2249,7 @@ def dashboard():
             AuditPlan.year == now_year, AuditPlan.month < now_month,
             AuditPlan.month != None, AuditPlan.status != 'Completed').all()
     except Exception:
+        db.session.rollback()
         plan_this_month = []
         plan_overdue = []
 
@@ -2240,7 +2260,8 @@ def dashboard():
         vol_total = VoluntaryReport.query.count()
         conf_new  = ConfidentialReport.query.filter_by(status='Submitted').count()
         conf_total= ConfidentialReport.query.count()
-    except Exception: pass
+    except Exception:
+        db.session.rollback()
 
     return render_template('dashboard/dashboard.html',
         # Hazards
