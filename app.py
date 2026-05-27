@@ -3062,24 +3062,104 @@ def update_audit(aid):
 @app.route('/investigations')
 @require_login
 def investigations():
+    q_f    = request.args.get('q', '').strip()
+    stat_f = request.args.get('status', '')
+    cls_f  = request.args.get('classification', '')
+    dept_f = request.args.get('dept', '')
     page   = request.args.get('page', 1, type=int)
-    pg     = Investigation.query.order_by(Investigation.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+
+    qry = Investigation.query
+    if q_f:
+        qry = qry.filter(db.or_(
+            Investigation.title.ilike(f'%{q_f}%'),
+            Investigation.id.ilike(f'%{q_f}%'),
+            Investigation.investigator.ilike(f'%{q_f}%'),
+        ))
+    if stat_f:
+        qry = qry.filter(Investigation.status == stat_f)
+    if cls_f:
+        qry = qry.filter(Investigation.classification == cls_f)
+    if dept_f:
+        qry = qry.filter(Investigation.department_id == int(dept_f))
+
+    pg      = qry.order_by(Investigation.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
     all_inv = pg.items
-    return render_template('investigation/investigation_list.html', investigations=all_inv, pagination=pg)
+    return render_template('investigation/investigation_list.html',
+        investigations=all_inv, pagination=pg,
+        q_f=q_f, stat_f=stat_f, cls_f=cls_f, dept_f=dept_f,
+        all_departments=Department.query.order_by(Department.name).all())
+
+# ICAO occurrence categories (ECCAIRS taxonomy subset)
+OCCURRENCE_CATEGORIES = [
+    'ARC – Abnormal Runway Contact',
+    'CFIT – Controlled Flight Into Terrain',
+    'EVAC – Evacuation',
+    'F-NI – Fire/Smoke Not Related to Ignition',
+    'F-POST – Post Impact Fire',
+    'FUEL – Fuel Related',
+    'GCOL – Ground Collision',
+    'GTOW – Glider Towing Related',
+    'ICE – Icing',
+    'LOC-G – Loss of Control on Ground',
+    'LOC-I – Loss of Control In-Flight',
+    'LOLI – Loss of Lifting Conditions',
+    'MAC – Midair Collision',
+    'MED – Medical',
+    'RAMP – Ground Handling',
+    'RE – Runway Excursion',
+    'RI-VAP – Runway Incursion – Vehicle, Aircraft or Person',
+    'SCF-NP – System/Component Failure – Non-Powerplant',
+    'SCF-PP – System/Component Failure – Powerplant',
+    'TURB – Turbulence Encounter',
+    'UIMC – Unintended Flight in IMC',
+    'UNK – Unknown / Undetermined',
+    'USOS – Undershoot/Overshoot',
+    'WS – Wind Shear / Microburst',
+    'Other',
+]
+
+LIFECYCLE_STAGES = [
+    'Notified',
+    'Initial Assessment',
+    'Under Investigation',
+    'Root Cause Analysis',
+    'Recommendations',
+    'Pending Closure',
+    'Closed',
+]
+
+def _next_lifecycle_stage(current):
+    try:
+        idx = LIFECYCLE_STAGES.index(current)
+        return LIFECYCLE_STAGES[idx + 1] if idx + 1 < len(LIFECYCLE_STAGES) else current
+    except ValueError:
+        return 'Initial Assessment'
 
 @app.route('/investigations/new', methods=['GET','POST'])
 @require_login
 def new_investigation():
     if request.method == 'POST':
         f = request.form
+        classification = f.get('classification', 'Incident')
         inv = Investigation(id=new_id('INV'),
             title=f['title'],
             linked_report_id=f.get('linked_report_id',''),
             hazard_id=f.get('hazard_id') or None,
-            department_id=int(f['department_id']),
-            date_of_occurrence=f['date_of_occurrence'],
-            investigator=f['investigator'],
-            description=f['description'],
+            department_id=int(f['department_id']) if f.get('department_id') else None,
+            date_of_occurrence=f.get('date_of_occurrence',''),
+            investigator=f.get('investigator',''),
+            description=f.get('description',''),
+            classification=classification,
+            occurrence_category=f.get('occurrence_category',''),
+            phase_of_flight=f.get('phase_of_flight',''),
+            aircraft_type=f.get('aircraft_type',''),
+            aircraft_reg=f.get('aircraft_reg',''),
+            location=f.get('location',''),
+            authority_notified=bool(f.get('authority_notified')),
+            notification_date=f.get('notification_date',''),
+            notification_ref=f.get('notification_ref',''),
+            lifecycle_stage='Notified',
+            target_close_date=f.get('target_close_date',''),
             why1=f.get('why1',''), why2=f.get('why2',''),
             why3=f.get('why3',''), why4=f.get('why4',''),
             why5=f.get('why5',''),
@@ -3091,29 +3171,174 @@ def new_investigation():
             recommendations=f.get('recommendations',''),
             status='Open')
         db.session.add(inv)
+        db.session.flush()
+        # Record initial timeline event
+        from models import InvestigationEvent
+        evt = InvestigationEvent(
+            investigation_id=inv.id,
+            event_type='stage_advance',
+            from_stage=None,
+            to_stage='Notified',
+            note='Investigation opened.',
+            performed_by=session.get('username','system'))
+        db.session.add(evt)
         # Auto-create action from recommendations
         if f.get('recommendations'):
             act = Action(id=new_id('ACT'), source='Investigation',
                          hazard_id=f.get('hazard_id') or None,
                          linked_ref_id=inv.id,
                          description=f['recommendations'],
-                         owner=f['investigator'],
-                         due_date=f.get('due_date',''),
-                         priority='High', status='Open')
+                         owner=f.get('investigator',''),
+                         due_date=f.get('target_close_date',''),
+                         priority='High' if classification in ('Accident','Serious Incident') else 'Medium',
+                         status='Open')
             db.session.add(act)
         db.session.commit()
-        sync_report_status(inv.hazard_id)
-        db.session.commit()
-        flash(f'✓ Investigation {inv.id} created.', 'success')
-        return redirect(url_for('investigations'))
+        if inv.hazard_id:
+            sync_report_status(inv.hazard_id)
+            db.session.commit()
+        flash(f'✓ Investigation {inv.id} opened.', 'success')
+        return redirect(url_for('investigation_detail', iid=inv.id))
     hazards = Hazard.query.order_by(Hazard.created_at.desc()).all()
-    return render_template('investigation/investigation_form.html', hazards=hazards)
+    departments = Department.query.order_by(Department.name).all()
+    return render_template('investigation/investigation_form.html',
+        hazards=hazards, departments=departments,
+        occurrence_categories=OCCURRENCE_CATEGORIES,
+        lifecycle_stages=LIFECYCLE_STAGES)
 
 @app.route('/investigations/<iid>')
 @require_login
 def investigation_detail(iid):
+    from models import InvestigationEvent
     inv = Investigation.query.get_or_404(iid)
-    return render_template('investigation/investigation_detail.html', inv=inv)
+    actions = Action.query.filter_by(linked_ref_id=iid).all()
+    timeline = InvestigationEvent.query.filter_by(investigation_id=iid)\
+        .order_by(InvestigationEvent.created_at).all()
+    return render_template('investigation/investigation_detail.html',
+        inv=inv, actions=actions, timeline=timeline,
+        lifecycle_stages=LIFECYCLE_STAGES,
+        occurrence_categories=OCCURRENCE_CATEGORIES,
+        departments=Department.query.order_by(Department.name).all())
+
+@app.route('/investigations/<iid>/edit', methods=['GET','POST'])
+@require_login
+def edit_investigation(iid):
+    from models import InvestigationEvent
+    inv = Investigation.query.get_or_404(iid)
+    if request.method == 'POST':
+        f = request.form
+        inv.title                   = f.get('title', inv.title)
+        inv.date_of_occurrence      = f.get('date_of_occurrence', inv.date_of_occurrence)
+        inv.investigator            = f.get('investigator', inv.investigator)
+        inv.description             = f.get('description', inv.description)
+        inv.classification          = f.get('classification', inv.classification)
+        inv.occurrence_category     = f.get('occurrence_category', inv.occurrence_category)
+        inv.phase_of_flight         = f.get('phase_of_flight', inv.phase_of_flight)
+        inv.aircraft_type           = f.get('aircraft_type', inv.aircraft_type)
+        inv.aircraft_reg            = f.get('aircraft_reg', inv.aircraft_reg)
+        inv.location                = f.get('location', inv.location)
+        inv.authority_notified      = bool(f.get('authority_notified'))
+        inv.notification_date       = f.get('notification_date', inv.notification_date)
+        inv.notification_ref        = f.get('notification_ref', inv.notification_ref)
+        inv.target_close_date       = f.get('target_close_date', inv.target_close_date)
+        inv.why1                    = f.get('why1', inv.why1)
+        inv.why2                    = f.get('why2', inv.why2)
+        inv.why3                    = f.get('why3', inv.why3)
+        inv.why4                    = f.get('why4', inv.why4)
+        inv.why5                    = f.get('why5', inv.why5)
+        inv.root_cause              = f.get('root_cause', inv.root_cause)
+        inv.human_factors           = f.get('human_factors', inv.human_factors)
+        inv.technical_factors       = f.get('technical_factors', inv.technical_factors)
+        inv.organizational_factors  = f.get('organizational_factors', inv.organizational_factors)
+        inv.environmental_factors   = f.get('environmental_factors', inv.environmental_factors)
+        inv.recommendations         = f.get('recommendations', inv.recommendations)
+        if f.get('department_id'):
+            inv.department_id = int(f['department_id'])
+        db.session.commit()
+        flash(f'✓ Investigation {inv.id} updated.', 'success')
+        return redirect(url_for('investigation_detail', iid=iid))
+    hazards = Hazard.query.order_by(Hazard.created_at.desc()).all()
+    departments = Department.query.order_by(Department.name).all()
+    return render_template('investigation/investigation_form.html',
+        inv=inv, hazards=hazards, departments=departments,
+        occurrence_categories=OCCURRENCE_CATEGORIES,
+        lifecycle_stages=LIFECYCLE_STAGES, edit=True)
+
+@app.route('/investigations/<iid>/advance', methods=['POST'])
+@require_login
+def advance_investigation(iid):
+    from models import InvestigationEvent
+    inv  = Investigation.query.get_or_404(iid)
+    note = request.form.get('note', '')
+    prev = inv.lifecycle_stage or 'Notified'
+    nxt  = _next_lifecycle_stage(prev)
+    if nxt == prev:
+        flash('Investigation is already at the final stage.', 'info')
+        return redirect(url_for('investigation_detail', iid=iid))
+    inv.lifecycle_stage = nxt
+    if nxt == 'Under Investigation':
+        inv.status = 'In Progress'
+    elif nxt == 'Closed':
+        inv.status = 'Closed'
+    evt = InvestigationEvent(
+        investigation_id=iid,
+        event_type='stage_advance',
+        from_stage=prev,
+        to_stage=nxt,
+        note=note,
+        performed_by=session.get('username','system'))
+    db.session.add(evt)
+    db.session.commit()
+    flash(f'✓ Investigation advanced to "{nxt}".', 'success')
+    return redirect(url_for('investigation_detail', iid=iid))
+
+@app.route('/investigations/<iid>/close', methods=['POST'])
+@require_login
+def close_investigation(iid):
+    from models import InvestigationEvent
+    inv = Investigation.query.get_or_404(iid)
+    if inv.status == 'Closed':
+        flash('Investigation is already closed.', 'info')
+        return redirect(url_for('investigation_detail', iid=iid))
+    final_findings = request.form.get('final_findings', '')
+    from datetime import date
+    inv.status          = 'Closed'
+    inv.lifecycle_stage = 'Closed'
+    inv.final_findings  = final_findings
+    inv.closed_date     = date.today().isoformat()
+    inv.closed_by       = session.get('username', 'unknown')
+    evt = InvestigationEvent(
+        investigation_id=iid,
+        event_type='closure',
+        from_stage=inv.lifecycle_stage,
+        to_stage='Closed',
+        note=final_findings or 'Investigation closed.',
+        performed_by=session.get('username','system'))
+    db.session.add(evt)
+    db.session.commit()
+    flash(f'✓ Investigation {inv.id} closed.', 'success')
+    return redirect(url_for('investigation_detail', iid=iid))
+
+@app.route('/investigations/<iid>/notify', methods=['POST'])
+@require_login
+def notify_investigation(iid):
+    from models import InvestigationEvent
+    from datetime import date
+    inv = Investigation.query.get_or_404(iid)
+    inv.authority_notified = True
+    inv.notification_date  = request.form.get('notification_date', date.today().isoformat())
+    inv.notification_ref   = request.form.get('notification_ref', '')
+    evt = InvestigationEvent(
+        investigation_id=iid,
+        event_type='notification',
+        from_stage=inv.lifecycle_stage,
+        to_stage=inv.lifecycle_stage,
+        note=f'Authority notified. Ref: {inv.notification_ref}',
+        performed_by=session.get('username','system'))
+    db.session.add(evt)
+    db.session.commit()
+    flash('✓ Regulatory notification recorded.', 'success')
+    return redirect(url_for('investigation_detail', iid=iid))
 
 # ─── MOC ─────────────────────────────────────────────────────────────────────
 @app.route('/moc')
@@ -9562,170 +9787,66 @@ with app.app_context():
             ('prepared_by_name','VARCHAR(100)'),('prepared_by_position','VARCHAR(100)'),
             ('reviewed_by_name','VARCHAR(100)'),('reviewed_by_position','VARCHAR(100)'),
             ('approved_by_name','VARCHAR(100)'),('approved_by_position','VARCHAR(100)'),
-            ('status','VARCHAR(20) DEFAULT "Draft"'),('submitted_date','VARCHAR(20)'),
-            ('activated_date','VARCHAR(20)'),('closed_date','VARCHAR(20)'),
-            ('revision','INTEGER DEFAULT 0'),('parent_ra_id','VARCHAR(30)'),('created_at','DATETIME'),
-        ],
-        'employees': [
-            ('employee_id','VARCHAR(30)'),('full_name','VARCHAR(100)'),('email','VARCHAR(150)'),
-            ('phone','VARCHAR(30)'),('department_id','INTEGER'),('position','VARCHAR(100)'),
-            ('role','VARCHAR(30) DEFAULT "viewer"'),('is_active','BOOLEAN DEFAULT TRUE'),
-            ('last_login','DATETIME'),('created_at','DATETIME'),
-        ],
-        'api_tokens': [
-            ('token','VARCHAR(64)'),('user_id','VARCHAR(30)'),('username','VARCHAR(80)'),
-            ('expires_at','DATETIME'),('created_at','DATETIME'),
-        ],
-        'trainings': [
-            ('employee_name','VARCHAR(100)'),('employee_id','VARCHAR(50)'),('department_id','INTEGER'),
-            ('position','VARCHAR(100)'),('training_type','VARCHAR(50)'),('training_program','VARCHAR(200)'),
-            ('course_code','VARCHAR(50)'),('instructor','VARCHAR(100)'),('location','VARCHAR(100)'),
-            ('scheduled_date','VARCHAR(20)'),('training_date','VARCHAR(20)'),('completion_date','VARCHAR(20)'),
-            ('expiry_date','VARCHAR(20)'),('duration_hours','FLOAT'),('status','VARCHAR(20) DEFAULT "Scheduled"'),
-            ('certificate','VARCHAR(200)'),('evidence','TEXT'),('is_recurrent','BOOLEAN DEFAULT 0'),
-            ('recurrence_months','INTEGER'),('notes','TEXT'),('updated_at','DATETIME'),('created_at','DATETIME'),
-        ],
-        'spi_indicators': [
-            ('auto_source','VARCHAR(50)'),('auto_category','VARCHAR(50)'),
-            ('baseline_months','INTEGER DEFAULT 3'),('improvement_pct','FLOAT DEFAULT 5.0'),
-            ('stat_mode','BOOLEAN DEFAULT FALSE'),('active','BOOLEAN DEFAULT TRUE'),('created_at','DATETIME'),
-        ],
-        'spi_data': [
-            ('total_events','INTEGER DEFAULT 0'),('source','VARCHAR(20) DEFAULT "manual"'),
-            ('notes','TEXT'),('mean_at_time','FLOAT'),('sd_at_time','FLOAT'),
-        ],
-        'voluntary_reports': [
-            ('ref_number','VARCHAR(30)'),('position','VARCHAR(100)'),('department_id','INTEGER'),
-            ('report_type','VARCHAR(50)'),('consequences','TEXT'),('suggestion','TEXT'),
-            ('status','VARCHAR(20) DEFAULT "Submitted"'),('is_confidential','BOOLEAN DEFAULT FALSE'),
-            ('created_at','DATETIME'),
-        ],
-        'confidential_reports': [
-            ('ref_number','VARCHAR(30)'),('position','VARCHAR(100)'),('department_id','INTEGER'),
-            ('report_type','VARCHAR(50)'),('consequences','TEXT'),('suggestion','TEXT'),
-            ('status','VARCHAR(20) DEFAULT "Submitted"'),('created_at','DATETIME'),
-        ],
-        'safety_surveys': [
-            ('title','VARCHAR(200)'),('survey_type','VARCHAR(50)'),
-            ('department_id','INTEGER'),('start_date','VARCHAR(20)'),
-            ('end_date','VARCHAR(20)'),('description','TEXT'),('questions','TEXT'),
-            ('status','VARCHAR(20) DEFAULT "Draft"'),
-            ('target_count','INTEGER DEFAULT 0'),('response_count','INTEGER DEFAULT 0'),
-            ('created_at','DATETIME'),
-        ],
-        'safety_bulletins': [
-            ('title','VARCHAR(200)'),('content','TEXT'),('bulletin_type','VARCHAR(50)'),
-            ('department_id','INTEGER'),('issued_by','VARCHAR(100)'),
-            ('issue_date','VARCHAR(20)'),('expiry_date','VARCHAR(20)'),
             ('status','VARCHAR(20) DEFAULT "Draft"'),('created_at','DATETIME'),
         ],
-        'safety_newsletters': [
-            ('title','VARCHAR(200)'),('content','TEXT'),('edition','VARCHAR(30)'),
-            ('published_by','VARCHAR(100)'),('publish_date','VARCHAR(20)'),
-            ('status','VARCHAR(20) DEFAULT "Draft"'),('created_at','DATETIME'),
-        ],
-        'safety_campaigns': [
-            ('title','VARCHAR(200)'),('description','TEXT'),('campaign_type','VARCHAR(50)'),
-            ('department_id','INTEGER'),('start_date','VARCHAR(20)'),('end_date','VARCHAR(20)'),
-            ('owner','VARCHAR(100)'),('status','VARCHAR(20) DEFAULT "Draft"'),
-            ('target_audience','VARCHAR(200)'),('created_at','DATETIME'),
-        ],
-        'lessons_learned': [
-            ('title','VARCHAR(200)'),('description','TEXT'),('lesson_type','VARCHAR(50)'),
-            ('department_id','INTEGER'),('source_ref','VARCHAR(50)'),
-            ('applicability','TEXT'),('status','VARCHAR(20) DEFAULT "Draft"'),
-            ('approved_by','VARCHAR(100)'),('approved_date','VARCHAR(20)'),
-            ('created_at','DATETIME'),
-        ],
-        # ── ICAO Governance tables (Phase 1) ──────────────────────────────────
-        'accountable_executives': [
-            ('user_id','INTEGER'),('full_name','VARCHAR(120)'),('title','VARCHAR(120)'),
-            ('email','VARCHAR(200)'),('phone','VARCHAR(30)'),('employee_number','VARCHAR(30)'),
-            ('authority_scope','TEXT'),('appointment_ref','VARCHAR(80)'),
-            ('effective_from','VARCHAR(20)'),('effective_to','VARCHAR(20)'),
-            ('is_current','BOOLEAN DEFAULT TRUE'),('appointment_doc','VARCHAR(200)'),
-            ('notes','TEXT'),('created_by','VARCHAR(80)'),('created_at','DATETIME'),
-        ],
-        'srb_meetings': [
-            ('meeting_type','VARCHAR(20) DEFAULT "SRB"'),('title','VARCHAR(200)'),
-            ('scheduled_date','VARCHAR(20)'),('actual_date','VARCHAR(20)'),
-            ('start_time','VARCHAR(10)'),('end_time','VARCHAR(10)'),
-            ('venue','VARCHAR(200)'),('chair_person','VARCHAR(120)'),
-            ('secretary','VARCHAR(120)'),('status','VARCHAR(30) DEFAULT "Scheduled"'),
-            ('quorum_met','BOOLEAN DEFAULT FALSE'),('quorum_count','INTEGER DEFAULT 0'),
-            ('objectives','TEXT'),('minutes_text','TEXT'),('key_outcomes','TEXT'),
-            ('next_meeting_date','VARCHAR(20)'),('minutes_approved_by','VARCHAR(80)'),
-            ('minutes_approved_date','VARCHAR(20)'),('ae_id','INTEGER'),
-            ('created_by','VARCHAR(80)'),('created_at','DATETIME'),('updated_at','DATETIME'),
-        ],
-        'srb_agenda_items': [
-            ('meeting_id','VARCHAR(30)'),('item_number','INTEGER'),('title','VARCHAR(200)'),
-            ('description','TEXT'),('item_type','VARCHAR(30) DEFAULT "Standard"'),
-            ('source_type','VARCHAR(30)'),('source_id','VARCHAR(30)'),
-            ('presenter','VARCHAR(120)'),('time_allocated','INTEGER'),
-            ('status','VARCHAR(20) DEFAULT "Pending"'),('discussion_notes','TEXT'),
-            ('decision','TEXT'),('action_required','BOOLEAN DEFAULT FALSE'),
-            ('deferred_to_meeting_id','VARCHAR(30)'),('created_at','DATETIME'),
-        ],
-        'srb_attendees': [
-            ('meeting_id','VARCHAR(30)'),('person_name','VARCHAR(120)'),
-            ('role_title','VARCHAR(120)'),('department','VARCHAR(100)'),
-            ('is_required','BOOLEAN DEFAULT FALSE'),('attended','BOOLEAN DEFAULT FALSE'),
-            ('apology_given','BOOLEAN DEFAULT FALSE'),('proxy_for','VARCHAR(120)'),
-            ('sort_order','INTEGER DEFAULT 0'),('created_at','DATETIME'),
-        ],
-        'srb_decisions': [
-            ('meeting_id','VARCHAR(30)'),('agenda_item_id','INTEGER'),
-            ('decision_ref','VARCHAR(30)'),('decision_text','TEXT'),
-            ('decision_type','VARCHAR(30) DEFAULT "Action Required"'),
-            ('responsible_party','VARCHAR(120)'),('due_date','VARCHAR(20)'),
-            ('linked_action_id','VARCHAR(30)'),('status','VARCHAR(20) DEFAULT "Open"'),
-            ('closed_date','VARCHAR(20)'),('closure_notes','TEXT'),('created_at','DATETIME'),
-        ],
-        'risk_acceptances': [
-            ('ref_number','VARCHAR(30)'),('risk_id','VARCHAR(30)'),
-            ('hazard_id','VARCHAR(30)'),('risk_tolerance','VARCHAR(20)'),
-            ('risk_index','VARCHAR(5)'),('risk_description','TEXT'),
-            ('justification','TEXT'),('mitigations_in_place','TEXT'),
-            ('conditions','TEXT'),('valid_until','VARCHAR(20)'),
-            ('review_date','VARCHAR(20)'),('submitted_by','VARCHAR(80)'),
-            ('submitted_date','VARCHAR(20)'),('safety_mgr_review','TEXT'),
-            ('safety_mgr_by','VARCHAR(80)'),('safety_mgr_date','VARCHAR(20)'),
-            ('ae_id','INTEGER'),('ae_decision','VARCHAR(20)'),
-            ('ae_decision_by','VARCHAR(80)'),('ae_decision_date','VARCHAR(20)'),
-            ('ae_notes','TEXT'),('status','VARCHAR(30) DEFAULT "Pending Safety Review"'),
-            ('created_at','DATETIME'),
+        'investigation_events': [
+            ('investigation_id','VARCHAR(30)'),('event_type','VARCHAR(30)'),
+            ('from_stage','VARCHAR(40)'),('to_stage','VARCHAR(40)'),
+            ('note','TEXT'),('performed_by','VARCHAR(100)'),('created_at','DATETIME'),
         ],
         'governance_audit_log': [
             ('entity_type','VARCHAR(50)'),('entity_id','VARCHAR(50)'),
-            ('action','VARCHAR(50)'),('actor_username','VARCHAR(80)'),
-            ('actor_role','VARCHAR(50)'),('previous_state','TEXT'),
-            ('new_state','TEXT'),('sod_check','VARCHAR(20) DEFAULT "OK"'),
-            ('sod_note','TEXT'),('ip_address','VARCHAR(50)'),
-            ('notes','TEXT'),('created_at','DATETIME'),
+            ('action','VARCHAR(50)'),('performed_by','VARCHAR(100)'),
+            ('detail','TEXT'),('ip_address','VARCHAR(45)'),('created_at','DATETIME'),
         ],
     }
 
-    _db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-    _is_pg  = _db_uri.startswith('postgresql')
+    # Apply migrations: add missing columns to existing tables
+    try:
+        with db.engine.connect() as _conn:
+            _existing = db.engine.dialect.get_table_names(_conn)
+    except Exception:
+        _existing = []
 
     for _tbl, _cols in _migrations.items():
-        for _col, _col_type in _cols:
+        for _col, _coltype in _cols:
             try:
-                if _is_pg:
-                    db.session.execute(db.text(
-                        f'ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS {_col} {_col_type}'
-                    ))
-                else:
-                    _existing = [row[1] for row in
-                                 db.session.execute(db.text(f'PRAGMA table_info({_tbl})')).fetchall()]
-                    if _col not in _existing:
-                        db.session.execute(db.text(
-                            f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_col_type}'
-                        ))
+                db.session.execute(db.text(
+                    f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'))
             except Exception:
-                db.session.rollback()
+                pass  # column already exists or table missing — db.create_all() handles creation
+
+    # Ensure new Phase-2 tables exist
+    _phase2_ddl = [
+        '''CREATE TABLE IF NOT EXISTS investigation_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            investigation_id VARCHAR(30),
+            event_type VARCHAR(30),
+            from_stage VARCHAR(40),
+            to_stage VARCHAR(40),
+            note TEXT,
+            performed_by VARCHAR(100),
+            created_at DATETIME)''',
+        '''CREATE TABLE IF NOT EXISTS governance_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type VARCHAR(50),
+            entity_id VARCHAR(50),
+            action VARCHAR(50),
+            performed_by VARCHAR(100),
+            detail TEXT,
+            ip_address VARCHAR(45),
+            created_at DATETIME)''',
+    ]
+    for _ddl in _phase2_ddl:
+        try:
+            db.session.execute(db.text(_ddl))
+        except Exception:
+            pass
+
     try:
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+if __name__ == '__main__':
+    app.run(debug=False)

@@ -308,9 +308,34 @@ class Investigation(db.Model):
     organizational_factors = db.Column(db.Text)
     environmental_factors  = db.Column(db.Text)
     recommendations     = db.Column(db.Text)
+    # ICAO Annex 13 / Doc 9859 classification + lifecycle
+    classification      = db.Column(db.String(30), default='Incident')
+    # Accident / Serious Incident / Incident / Occurrence / Near Miss
+    severity_index      = db.Column(db.String(5))
+    occurrence_category = db.Column(db.String(50))   # ARC/CFIT/LOC-I/MAC/RE/UIMC/etc.
+    phase_of_flight     = db.Column(db.String(50))
+    aircraft_type       = db.Column(db.String(50))
+    aircraft_reg        = db.Column(db.String(20))
+    location            = db.Column(db.String(200))
+    # Regulatory notification (ICAO Annex 13 §6.1)
+    authority_notified  = db.Column(db.Boolean, default=False)
+    notification_date   = db.Column(db.String(20))
+    notification_ref    = db.Column(db.String(50))
+    # Investigation lifecycle
+    lifecycle_stage     = db.Column(db.String(40), default='Notified')
+    # Notified → Initial Assessment → Under Investigation →
+    # Root Cause Analysis → Recommendations → Pending Closure → Closed
+    assigned_date       = db.Column(db.String(20))
+    target_close_date   = db.Column(db.String(20))
+    final_findings      = db.Column(db.Text)
+    closed_date         = db.Column(db.String(20))
+    closed_by           = db.Column(db.String(100))
     status              = db.Column(db.String(20), default='Open')
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at          = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     department          = db.relationship('Department', foreign_keys=[department_id])
+    timeline            = db.relationship('InvestigationEvent', backref='investigation',
+                              lazy=True, order_by='InvestigationEvent.created_at')
 
 class MOC(db.Model):
     __tablename__ = 'moc'
@@ -1319,15 +1344,98 @@ class GovernanceAuditLog(db.Model):
     """
     __tablename__ = 'governance_audit_log'
     id              = db.Column(db.Integer, primary_key=True)
-    entity_type     = db.Column(db.String(40))        # hazard / risk / action / srb / risk_acceptance / audit_finding
-    entity_id       = db.Column(db.String(50))
-    action          = db.Column(db.String(40))        # submitted / approved / rejected / closed / reopened / escalated
-    actor_username  = db.Column(db.String(100))
-    actor_role      = db.Column(db.String(50))
-    previous_state  = db.Column(db.String(50))
-    new_state       = db.Column(db.String(50))
-    sod_check       = db.Column(db.String(20), default='OK')   # OK / VIOLATION / BYPASSED
-    sod_note        = db.Column(db.Text)              # populated if violation
-    ip_address      = db.Column(db.String(50))
-    notes           = db.Column(db.Text)
+    entity_type    = db.Column(db.String(50))    # SRBMeeting / RiskAcceptance / AccountableExecutive
+    entity_id      = db.Column(db.String(50))
+    action         = db.Column(db.String(50))    # Created / Updated / Approved / Rejected / Deleted
+    performed_by   = db.Column(db.String(100))
+    detail         = db.Column(db.Text)
+    ip_address     = db.Column(db.String(45))
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class InvestigationEvent(db.Model):
+    """
+    Immutable audit trail for every lifecycle stage transition in an investigation.
+    ICAO Doc 9859 §6.3 — investigation progress must be formally documented.
+    """
+    __tablename__ = 'investigation_events'
+    id              = db.Column(db.Integer, primary_key=True)
+    investigation_id = db.Column(db.String(30), db.ForeignKey('investigations.id'), nullable=False)
+    event_type      = db.Column(db.String(30))   # stage_advance / note / notification / closure
+    from_stage      = db.Column(db.String(40))
+    to_stage        = db.Column(db.String(40))
+    note            = db.Column(db.Text)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ERPDrill(db.Model):
+    """
+    ICAO Annex 19 §8.3 / Doc 9859 §9 — Emergency drill records.
+    Drills must be conducted periodically and outcomes documented to verify ERP effectiveness.
+    """
+    __tablename__ = 'erp_drills'
+    id              = db.Column(db.Integer, primary_key=True)
+    erp_id          = db.Column(db.String(30), db.ForeignKey('erp.id'), nullable=False)
+    drill_ref       = db.Column(db.String(30))         # e.g. DRILL-2026-001
+    drill_type      = db.Column(db.String(30), default='Table-Top')
+    # Table-Top / Full-Scale / Partial / Communications / Notification
+    drill_date      = db.Column(db.String(20))
+    duration_min    = db.Column(db.Integer)            # Duration in minutes
+    facilitator     = db.Column(db.String(100))
+    participants    = db.Column(db.Text)               # Names / departments involved
+    participant_count = db.Column(db.Integer, default=0)
+    scenario_brief  = db.Column(db.Text)               # What was simulated
+    objectives      = db.Column(db.Text)               # What was being tested
+    observations    = db.Column(db.Text)               # What was observed during
+    strengths       = db.Column(db.Text)               # What worked well
+    deficiencies    = db.Column(db.Text)               # Gaps found
+    recommendations = db.Column(db.Text)               # Improvement actions
+    action_items    = db.Column(db.Text)               # Specific follow-up items
+    erp_update_required = db.Column(db.Boolean, default=False)
+    erp_updated_date    = db.Column(db.String(20))
+    outcome         = db.Column(db.String(20), default='Satisfactory')
+    # Satisfactory / Needs Improvement / Unsatisfactory
+    next_drill_due  = db.Column(db.String(20))
+    created_by      = db.Column(db.String(100))
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    erp             = db.relationship('ERPlan', foreign_keys=[erp_id],
+                          backref=db.backref('drills', lazy=True, order_by='ERPDrill.drill_date.desc()'))
+
+
+class ERPActivation(db.Model):
+    """
+    Record of actual ERP activations (real emergencies).
+    ICAO Doc 9859 §9.3 — actual activation history must be maintained.
+    """
+    __tablename__ = 'erp_activations'
+    id              = db.Column(db.Integer, primary_key=True)
+    erp_id          = db.Column(db.String(30), db.ForeignKey('erp.id'), nullable=False)
+    activation_ref  = db.Column(db.String(30))         # e.g. ACT-2026-001
+    investigation_id = db.Column(db.String(30), db.ForeignKey('investigations.id'), nullable=True)
+    activated_at    = db.Column(db.DateTime)
+    activated_by    = db.Column(db.String(100))
+    activation_reason = db.Column(db.Text)
+    # Notification tracking
+    caa_notified    = db.Column(db.Boolean, default=False)
+    caa_notified_at = db.Column(db.DateTime, nullable=True)
+    caa_ref         = db.Column(db.String(50))
+    icao_notified   = db.Column(db.Boolean, default=False)
+    icao_notified_at = db.Column(db.DateTime, nullable=True)
+    media_statement  = db.Column(db.Boolean, default=False)
+    nok_notified     = db.Column(db.Boolean, default=False)   # Next of Kin (accidents)
+    # Timeline
+    deactivated_at   = db.Column(db.DateTime, nullable=True)
+    deactivated_by   = db.Column(db.String(100))
+    duration_hours   = db.Column(db.Float)
+    # Post-activation
+    actions_taken    = db.Column(db.Text)
+    effectiveness    = db.Column(db.String(30))   # Effective / Partially Effective / Ineffective
+    lessons_learned  = db.Column(db.Text)
+    erp_update_required = db.Column(db.Boolean, default=False)
+    status          = db.Column(db.String(20), default='Active')
+    # Active / Deactivated / Closed
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    erp             = db.relationship('ERPlan', foreign_keys=[erp_id],
+                          backref=db.backref('activations', lazy=True))
+    investigation   = db.relationship('Investigation', foreign_keys=[investigation_id],
+                          backref=db.backref('erp_activations', lazy=True))
