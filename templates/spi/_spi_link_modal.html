@@ -1,0 +1,154 @@
+{#
+  _spi_link_modal.html — Reusable SPI Manual Link panel + modal.
+  Include with:
+    {% include 'spi/_spi_link_modal.html' %}
+
+  Required context variables (pass from the route):
+    spi_link_event_type   : str   e.g. 'hazard_report'
+    spi_link_event_id     : str   e.g. 'HR-SMS-001'
+    spi_link_event_title  : str   short title of the report
+    spi_link_event_date   : str   YYYY-MM-DD
+    spi_link_severity     : str   Critical / High / Medium / Low (or '')
+    spi_link_dept_id      : int   department id (or '')
+    spi_link_category     : str   hazard category (or '')
+    spi_active_indicators : list  SPIIndicator objects (active=True)
+    spi_existing_links    : list  SPIEventLink objects already for this event
+    spi_return_url        : str   URL to redirect back to after form POST
+#}
+
+<!-- ═══ SPI LINK PANEL ══════════════════════════════════════════════════════ -->
+<div class="card" style="padding:16px;margin-top:16px;border-top:3px solid #c9a84c">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-weight:700;color:var(--navy);font-size:13px">🔗 SPI Indicator Links</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">
+        Connect this report to Safety Performance Indicators for intelligence tracking
+      </div>
+    </div>
+    {% if spi_active_indicators %}
+    <button type="button"
+            onclick="document.getElementById('spi-link-modal').style.display='flex'"
+            class="btn btn-sm"
+            style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;white-space:nowrap">
+      + Link to SPI
+    </button>
+    {% endif %}
+  </div>
+
+  <!-- Existing links list -->
+  {% if spi_existing_links %}
+  <div style="display:flex;flex-direction:column;gap:6px">
+    {% set sev_colors = {'Critical':'#dc2626','High':'#ea580c','Medium':'#d97706','Low':'#15803d'} %}
+    {% for lnk in spi_existing_links %}
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:8px 12px;flex-wrap:wrap;gap:6px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <a href="/spi/indicators/{{ lnk.spi_id }}/detail"
+           style="font-family:monospace;font-weight:700;color:var(--navy);font-size:12px;text-decoration:none">
+          {{ lnk.indicator.code if lnk.indicator else lnk.spi_id }}
+        </a>
+        <span style="font-size:11.5px;color:#374151">
+          {{ lnk.indicator.name if lnk.indicator else '—' }}
+        </span>
+        {% if lnk.severity %}
+        <span style="font-size:10px;font-weight:700;color:{{ sev_colors.get(lnk.severity,'#374151') }}">
+          {{ lnk.severity }}
+        </span>
+        {% endif %}
+        {% if 'Manual link' in (lnk.match_reason or '') %}
+        <span style="font-size:9px;background:#eff6ff;color:#1d4ed8;padding:1px 7px;border-radius:10px;border:1px solid #bfdbfe">Manual</span>
+        {% else %}
+        <span style="font-size:9px;background:#f0fdf4;color:#15803d;padding:1px 7px;border-radius:10px;border:1px solid #bbf7d0">Auto</span>
+        {% endif %}
+        <span style="font-size:10px;color:#9ca3af">{{ lnk.match_reason or '' }}</span>
+      </div>
+      <!-- Unlink button -->
+      <form method="POST" action="/spi/unlink/{{ lnk.id }}"
+            onsubmit="return confirm('Remove this SPI link?')" style="display:inline">
+        <input type="hidden" name="return_url" value="{{ spi_return_url }}">
+        <button type="submit"
+                style="background:none;border:none;cursor:pointer;color:#9ca3af;font-size:13px;padding:2px 6px;border-radius:4px"
+                title="Remove link">✕</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:18px 0;color:#9ca3af;font-size:12px">
+    <div style="font-size:22px;margin-bottom:4px">🔗</div>
+    No SPI indicators linked yet.
+    {% if spi_active_indicators %}
+    <br>Click <strong>+ Link to SPI</strong> to connect this report to an indicator.
+    {% else %}
+    <br><a href="/spi/indicators" style="color:var(--navy)">Create SPI indicators first →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ═══ MODAL ═══════════════════════════════════════════════════════════════ -->
+{% if spi_active_indicators %}
+<div id="spi-link-modal"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;
+            align-items:center;justify-content:center;padding:16px"
+     onclick="if(event.target===this)this.style.display='none'">
+
+  <div style="background:#fff;border-radius:12px;padding:24px;width:100%;max-width:480px;
+              box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative">
+
+    <button type="button"
+            onclick="document.getElementById('spi-link-modal').style.display='none'"
+            style="position:absolute;top:12px;right:16px;background:none;border:none;
+                   font-size:20px;color:#9ca3af;cursor:pointer;line-height:1">✕</button>
+
+    <div style="font-weight:800;color:var(--navy);font-size:15px;margin-bottom:4px">
+      🔗 Link to SPI Indicator
+    </div>
+    <div style="font-size:11.5px;color:#6b7280;margin-bottom:18px">
+      Manually associate <strong>{{ spi_link_event_id }}</strong> with a Safety Performance Indicator
+    </div>
+
+    <form method="POST" action="/spi/link">
+      <input type="hidden" name="event_type"   value="{{ spi_link_event_type }}">
+      <input type="hidden" name="event_id"     value="{{ spi_link_event_id }}">
+      <input type="hidden" name="event_title"  value="{{ spi_link_event_title }}">
+      <input type="hidden" name="event_date"   value="{{ spi_link_event_date }}">
+      <input type="hidden" name="severity"     value="{{ spi_link_severity }}">
+      <input type="hidden" name="department_id" value="{{ spi_link_dept_id }}">
+      <input type="hidden" name="category"     value="{{ spi_link_category }}">
+      <input type="hidden" name="return_url"   value="{{ spi_return_url }}">
+
+      <div class="fg" style="margin-bottom:16px">
+        <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px">
+          SPI Indicator *
+        </label>
+        <select name="spi_id" required
+                style="width:100%;border:1.5px solid #e2e8f0;border-radius:7px;
+                       padding:9px 12px;font-size:13px;color:#1e293b;background:#fff">
+          <option value="">— Select indicator —</option>
+          {% for ind in spi_active_indicators %}
+          <option value="{{ ind.id }}">
+            {{ ind.code }} — {{ ind.name[:60] }}{% if ind.name|length > 60 %}…{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;
+                  padding:10px 13px;margin-bottom:16px;font-size:11.5px;color:#1e40af">
+        <strong>Note:</strong> Automatic links are created when reports are submitted.
+        Manual links let you explicitly flag cross-module relationships for SRB review.
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button type="button"
+                onclick="document.getElementById('spi-link-modal').style.display='none'"
+                class="btn btn-outline btn-sm">Cancel</button>
+        <button type="submit" class="btn btn-nav btn-sm"
+                style="background:#0a1628;color:#c9a84c;border:none">
+          ✓ Create Link
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
