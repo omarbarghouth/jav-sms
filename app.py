@@ -2069,37 +2069,64 @@ def dashboard():
     from sqlalchemy import func as sqf
 
     # ── HAZARDS & REPORTS ─────────────────────────────────────────────────────
-    total_haz   = Hazard.query.count()
-    open_haz    = Hazard.query.filter_by(status='Open').count()
-    intol       = Risk.query.filter_by(initial_tolerance='INTOLERABLE').count()
-    asr_cnt     = ASRReport.query.count()
-    inv_cnt     = Investigation.query.count()
-    hr_cnt      = HazardReport.query.count()
+    try:
+        total_haz = Hazard.query.count()
+        open_haz  = Hazard.query.filter_by(status='Open').count()
+    except Exception:
+        total_haz = open_haz = 0
+    try:
+        intol = Risk.query.filter_by(initial_tolerance='INTOLERABLE').count()
+    except Exception:
+        intol = 0
+    try:
+        asr_cnt = ASRReport.query.count()
+    except Exception:
+        asr_cnt = 0
+    try:
+        inv_cnt = Investigation.query.count()
+    except Exception:
+        inv_cnt = 0
+    try:
+        hr_cnt = HazardReport.query.count()
+    except Exception:
+        hr_cnt = 0
 
     # ── ACTIONS ───────────────────────────────────────────────────────────────
-    open_act        = Action.query.filter(Action.status.in_(['Open','In Progress','Overdue'])).count()
-    overdue_act     = Action.query.filter_by(status='Overdue').count()
-    pending_review  = Action.query.filter(
-                          Action.status.in_(['Mitigation Implemented','Under Safety Review'])).count()
-    closed_act      = Action.query.filter_by(status='Closed').count()
-    total_act       = Action.query.count()
-    closure_rate    = round(closed_act / total_act * 100) if total_act > 0 else 0
-    unassigned_act  = Action.query.filter(
-                          (Action.sag_member == None) | (Action.sag_member == ''),
-                          Action.status.notin_(['Closed'])).count()
+    try:
+        open_act       = Action.query.filter(
+                             Action.status.in_(['Open','In Progress','Overdue'])).count()
+        overdue_act    = Action.query.filter_by(status='Overdue').count()
+        pending_review = Action.query.filter(
+                             Action.status.in_(['Mitigation Implemented',
+                                               'Under Safety Review'])).count()
+        closed_act     = Action.query.filter_by(status='Closed').count()
+        total_act      = Action.query.count()
+        closure_rate   = round(closed_act / total_act * 100) if total_act > 0 else 0
+        unassigned_act = Action.query.filter(
+                             (Action.sag_member == None) | (Action.sag_member == ''),
+                             Action.status.notin_(['Closed'])).count()
+    except Exception:
+        open_act = overdue_act = pending_review = closed_act = 0
+        total_act = closure_rate = unassigned_act = 0
 
     # ── AUDITS ────────────────────────────────────────────────────────────────
-    audit_cnt       = AuditSchedule.query.count()
-    active_audits   = AuditSchedule.query.filter_by(status='In Progress').count()
-    open_findings   = AuditFinding.query.filter(
-                          AuditFinding.status.notin_(['Closed','Accepted'])).count()
-    closed_findings = AuditFinding.query.filter_by(status='Closed').count()
-    total_findings  = AuditFinding.query.count()
-    finding_close_rate = round(closed_findings / total_findings * 100) if total_findings > 0 else 100
-    major_findings  = AuditFinding.query.filter_by(severity='Major').filter(
-                          AuditFinding.status.notin_(['Closed'])).count()
-    critical_findings = AuditFinding.query.filter_by(severity='Critical').filter(
-                          AuditFinding.status.notin_(['Closed'])).count()
+    try:
+        audit_cnt       = AuditSchedule.query.count()
+        active_audits   = AuditSchedule.query.filter_by(status='In Progress').count()
+        open_findings   = AuditFinding.query.filter(
+                              AuditFinding.status.notin_(['Closed','Accepted'])).count()
+        closed_findings = AuditFinding.query.filter_by(status='Closed').count()
+        total_findings  = AuditFinding.query.count()
+        finding_close_rate = round(closed_findings / total_findings * 100) \
+                             if total_findings > 0 else 100
+        major_findings    = AuditFinding.query.filter_by(severity='Major').filter(
+                                AuditFinding.status.notin_(['Closed'])).count()
+        critical_findings = AuditFinding.query.filter_by(severity='Critical').filter(
+                                AuditFinding.status.notin_(['Closed'])).count()
+    except Exception:
+        audit_cnt = active_audits = open_findings = closed_findings = 0
+        total_findings = major_findings = critical_findings = 0
+        finding_close_rate = 100
 
     # ── SPI ───────────────────────────────────────────────────────────────────
     spi_alerts = spi_l2 = spi_l3 = 0
@@ -2129,46 +2156,83 @@ def dashboard():
     ra_open     = RiskAssessment.query.filter(
                       RiskAssessment.status.notin_(['Closed','Approved'])).count()
 
-    # ── RECENT RECORDS ────────────────────────────────────────────────────────
-    recent_haz      = Hazard.query.order_by(Hazard.created_at.desc()).limit(5).all()
-    recent_act      = Action.query.filter(Action.status != 'Closed')                          .order_by(Action.created_at.desc()).limit(6).all()
-    overdue_actions = Action.query.filter_by(status='Overdue')                          .order_by(Action.due_date).limit(8).all()
-    pending_review_list = Action.query.filter(
-                          Action.status.in_(['Mitigation Implemented','Under Safety Review']))                          .order_by(Action.due_date).limit(6).all()
-    critical_act    = Action.query.filter_by(priority='High')                          .filter(Action.status.notin_(['Closed'])).limit(6).all()
-    recent_findings = AuditFinding.query.filter(
-                          AuditFinding.status.notin_(['Closed']))                          .order_by(AuditFinding.created_at.desc()).limit(5).all()
+    # ── RECENT RECORDS (defensive — any .all() can fail if column missing on PG) ──
+    try:
+        recent_haz = Hazard.query.order_by(Hazard.created_at.desc()).limit(5).all()
+    except Exception:
+        recent_haz = []
+    try:
+        recent_act = Action.query.filter(Action.status != 'Closed') \
+                        .order_by(Action.created_at.desc()).limit(6).all()
+    except Exception:
+        recent_act = []
+    try:
+        overdue_actions = Action.query.filter_by(status='Overdue') \
+                            .order_by(Action.due_date).limit(8).all()
+    except Exception:
+        overdue_actions = []
+    try:
+        pending_review_list = Action.query.filter(
+            Action.status.in_(['Mitigation Implemented','Under Safety Review'])) \
+            .order_by(Action.due_date).limit(6).all()
+    except Exception:
+        pending_review_list = []
+    try:
+        critical_act = Action.query.filter_by(priority='High') \
+                        .filter(Action.status.notin_(['Closed'])).limit(6).all()
+    except Exception:
+        critical_act = []
+    try:
+        recent_findings = AuditFinding.query.filter(
+            AuditFinding.status.notin_(['Closed'])) \
+            .order_by(AuditFinding.created_at.desc()).limit(5).all()
+    except Exception:
+        recent_findings = []
 
     # ── DEPT ANALYTICS ────────────────────────────────────────────────────────
     dept_perf = []
-    for dept in Department.query.all():
-        d_total   = Action.query.filter_by(department_id=dept.id).count()
-        d_open    = Action.query.filter_by(department_id=dept.id)                        .filter(Action.status.notin_(['Closed'])).count()
-        d_overdue = Action.query.filter_by(department_id=dept.id, status='Overdue').count()
-        d_closed  = Action.query.filter_by(department_id=dept.id, status='Closed').count()
-        if d_total > 0:
-            dept_perf.append({
-                'dept': dept, 'total': d_total, 'open': d_open,
-                'overdue': d_overdue, 'closed': d_closed,
-                'rate': round(d_closed / d_total * 100)
-            })
-    dept_perf.sort(key=lambda x: x['overdue'], reverse=True)
+    try:
+        for dept in Department.query.all():
+            d_total   = Action.query.filter_by(department_id=dept.id).count()
+            d_open    = Action.query.filter_by(department_id=dept.id) \
+                            .filter(Action.status.notin_(['Closed'])).count()
+            d_overdue = Action.query.filter_by(department_id=dept.id,
+                                               status='Overdue').count()
+            d_closed  = Action.query.filter_by(department_id=dept.id,
+                                               status='Closed').count()
+            if d_total > 0:
+                dept_perf.append({
+                    'dept': dept, 'total': d_total, 'open': d_open,
+                    'overdue': d_overdue, 'closed': d_closed,
+                    'rate': round(d_closed / d_total * 100)
+                })
+        dept_perf.sort(key=lambda x: x['overdue'], reverse=True)
+    except Exception:
+        dept_perf = []
 
     # ── SEVERITY BREAKDOWN ────────────────────────────────────────────────────
-    sev_data = {
-        'Critical': AuditFinding.query.filter_by(severity='Critical').count(),
-        'Major':    AuditFinding.query.filter_by(severity='Major').count(),
-        'Minor':    AuditFinding.query.filter_by(severity='Minor').count(),
-        'Obs':      AuditFinding.query.filter_by(severity='Observation').count(),
-    }
+    try:
+        sev_data = {
+            'Critical': AuditFinding.query.filter_by(severity='Critical').count(),
+            'Major':    AuditFinding.query.filter_by(severity='Major').count(),
+            'Minor':    AuditFinding.query.filter_by(severity='Minor').count(),
+            'Obs':      AuditFinding.query.filter_by(severity='Observation').count(),
+        }
+    except Exception:
+        sev_data = {'Critical': 0, 'Major': 0, 'Minor': 0, 'Obs': 0}
 
     # ── AUDIT PLAN ALERTS ─────────────────────────────────────────────────────
     now_month = datetime.now().month
     now_year  = datetime.now().year
-    plan_this_month = AuditPlan.query.filter_by(year=now_year, month=now_month)                          .filter(AuditPlan.status != 'Completed').all()
-    plan_overdue = AuditPlan.query.filter(
-        AuditPlan.year == now_year, AuditPlan.month < now_month,
-        AuditPlan.month != None, AuditPlan.status != 'Completed').all()
+    try:
+        plan_this_month = AuditPlan.query.filter_by(year=now_year, month=now_month) \
+                            .filter(AuditPlan.status != 'Completed').all()
+        plan_overdue = AuditPlan.query.filter(
+            AuditPlan.year == now_year, AuditPlan.month < now_month,
+            AuditPlan.month != None, AuditPlan.status != 'Completed').all()
+    except Exception:
+        plan_this_month = []
+        plan_overdue = []
 
     # ── VOLUNTARY & CONFIDENTIAL ─────────────────────────────────────────────
     vol_new  = 0; conf_new = 0; vol_total = 0; conf_total = 0
@@ -9992,117 +10056,130 @@ with app.app_context():
         print(f'Warning: db.create_all() skipped: {_e}')
 
     _migrations = {
-        'distribution_lists': [('name','VARCHAR(100)'),('email','VARCHAR(200)'),('department_id','INTEGER'),('position','VARCHAR(100)'),('is_active','BOOLEAN DEFAULT TRUE')],
-        'email_logs': [('subject','VARCHAR(300)'),('content_type','VARCHAR(30)'),('content_ref','VARCHAR(50)'),('sent_by','VARCHAR(100)'),('recipient_count','INTEGER DEFAULT 0'),('dept_filter','VARCHAR(200)'),('status',"VARCHAR(20) DEFAULT 'Sent'"),('error_message','TEXT')],
-        'survey_responses': [('survey_id','INTEGER'),('respondent_name','VARCHAR(100)'),('respondent_email','VARCHAR(200)'),('department_id','INTEGER'),('is_anonymous','BOOLEAN DEFAULT FALSE'),('answers','TEXT'),('ip_address','VARCHAR(50)')],
-        'departments': [('color','VARCHAR(20) DEFAULT "#1e40af"')],
+        'distribution_lists': [
+            ('name','VARCHAR(100)'),('email','VARCHAR(200)'),
+            ('department_id','INTEGER'),('position','VARCHAR(100)'),
+            ('is_active','BOOLEAN DEFAULT TRUE'),
+        ],
+        'email_logs': [
+            ('subject','VARCHAR(300)'),('content_type','VARCHAR(30)'),
+            ('content_ref','VARCHAR(50)'),('sent_by','VARCHAR(100)'),
+            ('recipient_count','INTEGER DEFAULT 0'),('dept_filter','VARCHAR(200)'),
+            ('status',"VARCHAR(20) DEFAULT 'Sent'"),('error_message','TEXT'),
+        ],
+        'survey_responses': [
+            ('survey_id','INTEGER'),('respondent_name','VARCHAR(100)'),
+            ('respondent_email','VARCHAR(200)'),('department_id','INTEGER'),
+            ('is_anonymous','BOOLEAN DEFAULT FALSE'),('answers','TEXT'),
+            ('ip_address','VARCHAR(50)'),
+        ],
+        'departments': [
+            ("color","VARCHAR(20) DEFAULT '#1e40af'"),
+        ],
         'hazard_reports': [
-            ('classification','VARCHAR(50) DEFAULT "Operational"'),('report_type','VARCHAR(30) DEFAULT "Hazard Report"'),
-            ('created_at','DATETIME'),('status','VARCHAR(30) DEFAULT "Submitted"'),('generic_hazard','VARCHAR(200)'),
-            ('consequences','TEXT'),('immediate_action','TEXT'),('suggested_mitigation','TEXT'),
-            ('reporter_severity','VARCHAR(20)'),('reporter','VARCHAR(100) DEFAULT "Anonymous"'),
-            ('hazard_id','VARCHAR(30)'),('severity','VARCHAR(2)'),('likelihood','INTEGER'),('risk_index','VARCHAR(5)'),
+            ("classification","VARCHAR(50) DEFAULT 'Operational'"),
+            ("report_type","VARCHAR(30) DEFAULT 'Hazard Report'"),
+            ('created_at','DATETIME'),
+            ("status","VARCHAR(30) DEFAULT 'Submitted'"),
+            ('generic_hazard','VARCHAR(200)'),
+            ('consequences','TEXT'),('immediate_action','TEXT'),
+            ('suggested_mitigation','TEXT'),('reporter_severity','VARCHAR(20)'),
+            ("reporter","VARCHAR(100) DEFAULT 'Anonymous'"),
+            ('hazard_id','VARCHAR(30)'),('severity','VARCHAR(2)'),
+            ('likelihood','INTEGER'),('risk_index','VARCHAR(5)'),
         ],
         'hazards': [
-            ('classification','VARCHAR(50)'),('type_of_activity','VARCHAR(100)'),('generic_hazard','VARCHAR(200)'),
-            ('specific_components','TEXT'),('consequences','TEXT'),('status','VARCHAR(30) DEFAULT "Open"'),
-            ('owner','VARCHAR(100)'),('linked_report_id','VARCHAR(30)'),('department_id','INTEGER'),('created_at','DATETIME'),
+            ('classification','VARCHAR(50)'),('type_of_activity','VARCHAR(100)'),
+            ('generic_hazard','VARCHAR(200)'),('specific_components','TEXT'),
+            ('consequences','TEXT'),
+            ("status","VARCHAR(30) DEFAULT 'Open'"),
+            ('owner','VARCHAR(100)'),('linked_report_id','VARCHAR(30)'),
+            ('department_id','INTEGER'),('created_at','DATETIME'),
         ],
         'actions': [
-            ('hazard_id','VARCHAR(30)'),('spi_id','INTEGER'),('spi_alert_level','VARCHAR(5)'),
-            ('spi_trigger_rule','VARCHAR(2)'),('evidence','TEXT'),('follow_up_notes','TEXT'),
-            ('mitigation_status','VARCHAR(30) DEFAULT "Pending"'),('verified_by','VARCHAR(100)'),
-            ('verified_date','VARCHAR(20)'),('spi_alert_month','INTEGER'),('spi_alert_year','INTEGER'),
-            ('spi_escalation_id','INTEGER'),('safety_review_notes','TEXT'),('safety_reviewer','VARCHAR(100)'),
-            ('safety_review_date','VARCHAR(20)'),('implementation_date','VARCHAR(20)'),
-            ('evidence_filename','VARCHAR(200)'),('mitigation_description','TEXT'),
-            ('corrective_description','TEXT'),('safety_notes','TEXT'),('assigned_by','VARCHAR(100)'),
-            ('closure_by','VARCHAR(100)'),('linked_ref_id','VARCHAR(30)'),('linked_risk_id','VARCHAR(30)'),
-            ('linked_audit_id','VARCHAR(30)'),('linked_ra_id','VARCHAR(30)'),('department_id','INTEGER'),
-            ('action_type','VARCHAR(20) DEFAULT "Corrective"'),('owner','VARCHAR(100)'),('due_date','VARCHAR(20)'),
-            ('priority','VARCHAR(20) DEFAULT "Medium"'),('completed_date','VARCHAR(20)'),
-            ('closed_date','VARCHAR(20)'),('effectiveness','VARCHAR(30)'),('effectiveness_review','TEXT'),
-            ('reopen_count','INTEGER DEFAULT 0'),('reopen_reason','TEXT'),('created_at','DATETIME'),
-            ('root_cause','TEXT'),('rejection_notes','TEXT'),('sag_member','VARCHAR(100)'),
+            ('hazard_id','VARCHAR(30)'),('spi_id','INTEGER'),
+            ('spi_alert_level','VARCHAR(5)'),('spi_trigger_rule','VARCHAR(2)'),
+            ('evidence','TEXT'),('follow_up_notes','TEXT'),
+            ("mitigation_status","VARCHAR(30) DEFAULT 'Pending'"),
+            ('verified_by','VARCHAR(100)'),('verified_date','VARCHAR(20)'),
+            ('spi_alert_month','INTEGER'),('spi_alert_year','INTEGER'),
+            ('spi_escalation_id','INTEGER'),('safety_review_notes','TEXT'),
+            ('safety_reviewer','VARCHAR(100)'),('safety_review_date','VARCHAR(20)'),
+            ('implementation_date','VARCHAR(20)'),('evidence_filename','VARCHAR(200)'),
+            ('mitigation_description','TEXT'),('corrective_description','TEXT'),
+            ('safety_notes','TEXT'),('assigned_by','VARCHAR(100)'),
+            ('closure_by','VARCHAR(100)'),('linked_ref_id','VARCHAR(30)'),
+            ('linked_risk_id','VARCHAR(30)'),('linked_audit_id','VARCHAR(30)'),
+            ('linked_ra_id','VARCHAR(30)'),('department_id','INTEGER'),
+            ("action_type","VARCHAR(20) DEFAULT 'Corrective'"),
+            ('owner','VARCHAR(100)'),('due_date','VARCHAR(20)'),
+            ("priority","VARCHAR(20) DEFAULT 'Medium'"),
+            ('completed_date','VARCHAR(20)'),('closed_date','VARCHAR(20)'),
+            ('effectiveness','VARCHAR(30)'),('effectiveness_review','TEXT'),
+            ('reopen_count','INTEGER DEFAULT 0'),('reopen_reason','TEXT'),
+            ('created_at','DATETIME'),('root_cause','TEXT'),
+            ('rejection_notes','TEXT'),('sag_member','VARCHAR(100)'),
         ],
         'audit_plans': [
-            ('month','INTEGER'),('created_at','DATETIME'),('objectives','TEXT'),('iosa_reference','VARCHAR(100)'),
-            ('auditor_name','VARCHAR(100)'),('planned_week','INTEGER'),('responsible_manager','VARCHAR(100)'),
+            ('month','INTEGER'),('created_at','DATETIME'),('objectives','TEXT'),
+            ('iosa_reference','VARCHAR(100)'),('auditor_name','VARCHAR(100)'),
+            ('planned_week','INTEGER'),('responsible_manager','VARCHAR(100)'),
             ('frequency','VARCHAR(30)'),('scope','TEXT'),
         ],
         'audit_schedules': [
-            ('plan_id','VARCHAR(30)'),('audit_team','VARCHAR(200)'),('scope','TEXT'),('objectives','TEXT'),
-            ('actual_date','VARCHAR(20)'),('opening_meeting','TEXT'),('closing_meeting','TEXT'),
-            ('summary','TEXT'),('final_remarks','TEXT'),('closure_date','VARCHAR(20)'),
-            ('closed_by','VARCHAR(100)'),('created_at','DATETIME'),
+            ('plan_id','VARCHAR(30)'),('audit_team','VARCHAR(200)'),
+            ('scope','TEXT'),('objectives','TEXT'),('actual_date','VARCHAR(20)'),
+            ('opening_meeting','TEXT'),('closing_meeting','TEXT'),
+            ('summary','TEXT'),('final_remarks','TEXT'),
+            ('closure_date','VARCHAR(20)'),('closed_by','VARCHAR(100)'),
+            ('created_at','DATETIME'),
         ],
         'audit_findings': [
-            ('finding_ref','VARCHAR(30)'),('finding_title','VARCHAR(200)'),('assigned_to','VARCHAR(100)'),
-            ('assigned_dept','VARCHAR(100)'),('assigned_date','VARCHAR(20)'),('investigation_notes','TEXT'),
+            ('finding_ref','VARCHAR(30)'),('finding_title','VARCHAR(200)'),
+            ('assigned_to','VARCHAR(100)'),('assigned_dept','VARCHAR(100)'),
+            ('assigned_date','VARCHAR(20)'),('investigation_notes','TEXT'),
             ('contributing_factors','TEXT'),('root_cause_submitted_at','DATETIME'),
-            ('immediate_action','TEXT'),('longterm_action','TEXT'),('cap_responsible','VARCHAR(100)'),
-            ('cap_due_date','VARCHAR(20)'),('cap_status','VARCHAR(30) DEFAULT "Pending"'),
-            ('cap_completion_pct','INTEGER DEFAULT 0'),('cap_submitted_at','DATETIME'),
-            ('corrective_action','TEXT'),('effectiveness_check','TEXT'),('closed_by','VARCHAR(100)'),
+            ('immediate_action','TEXT'),('longterm_action','TEXT'),
+            ('cap_responsible','VARCHAR(100)'),('cap_due_date','VARCHAR(20)'),
+            ("cap_status","VARCHAR(30) DEFAULT 'Pending'"),
+            ('cap_completion_pct','INTEGER DEFAULT 0'),
+            ('cap_submitted_at','DATETIME'),('corrective_action','TEXT'),
+            ('effectiveness_check','TEXT'),('closed_by','VARCHAR(100)'),
             ('closed_at','DATETIME'),('created_at','DATETIME'),
         ],
         'investigations': [
-            ('classification','VARCHAR(30) DEFAULT "Incident"'),
+            ("classification","VARCHAR(30) DEFAULT 'Incident'"),
             ('occurrence_category','VARCHAR(50)'),
             ('phase_of_flight','VARCHAR(50)'),
-            ('aircraft_type','VARCHAR(50)'),
-            ('aircraft_reg','VARCHAR(20)'),
-            ('location','VARCHAR(200)'),
-            ('authority_notified','BOOLEAN DEFAULT 0'),
-            ('notification_date','VARCHAR(20)'),
-            ('notification_ref','VARCHAR(50)'),
-            ('lifecycle_stage','VARCHAR(40) DEFAULT "Notified"'),
-            ('assigned_date','VARCHAR(20)'),
-            ('target_close_date','VARCHAR(20)'),
-            ('final_findings','TEXT'),
-            ('closed_date','VARCHAR(20)'),
-            ('closed_by','VARCHAR(100)'),
-            ('updated_at','DATETIME'),
+            ('aircraft_type','VARCHAR(50)'),('aircraft_reg','VARCHAR(20)'),
+            ('location','VARCHAR(200)'),('authority_notified','BOOLEAN DEFAULT FALSE'),
+            ('notification_date','VARCHAR(20)'),('notification_ref','VARCHAR(50)'),
+            ("lifecycle_stage","VARCHAR(40) DEFAULT 'Notified'"),
+            ('assigned_date','VARCHAR(20)'),('target_close_date','VARCHAR(20)'),
+            ('final_findings','TEXT'),('closed_date','VARCHAR(20)'),
+            ('closed_by','VARCHAR(100)'),('updated_at','DATETIME'),
         ],
         'investigation_events': [
-            ('investigation_id','VARCHAR(30)'),
-            ('event_type','VARCHAR(30)'),
-            ('from_stage','VARCHAR(40)'),
-            ('to_stage','VARCHAR(40)'),
-            ('note','TEXT'),
-            ('performed_by','VARCHAR(100)'),
-            ('created_at','DATETIME'),
+            ('investigation_id','VARCHAR(30)'),('event_type','VARCHAR(30)'),
+            ('from_stage','VARCHAR(40)'),('to_stage','VARCHAR(40)'),
+            ('note','TEXT'),('performed_by','VARCHAR(100)'),('created_at','DATETIME'),
         ],
         'governance_audit_log': [
-            ('entity_type','VARCHAR(50)'),
-            ('entity_id','VARCHAR(50)'),
-            ('action','VARCHAR(50)'),
-            ('performed_by','VARCHAR(100)'),
-            ('detail','TEXT'),
-            ('ip_address','VARCHAR(45)'),
-            ('created_at','DATETIME'),
+            ('entity_type','VARCHAR(50)'),('entity_id','VARCHAR(50)'),
+            ('action','VARCHAR(50)'),('performed_by','VARCHAR(100)'),
+            ('detail','TEXT'),('ip_address','VARCHAR(45)'),('created_at','DATETIME'),
         ],
         'compliance_obligations': [
-            ('regulation_body','VARCHAR(50)'),
-            ('standard_ref','VARCHAR(100)'),
-            ('requirement_title','VARCHAR(200)'),
-            ('requirement_text','TEXT'),
-            ('applicability','VARCHAR(200)'),
-            ('obligation_type','VARCHAR(30)'),
-            ('compliance_status','VARCHAR(30)'),
-            ('evidence_description','TEXT'),
-            ('evidence_location','VARCHAR(200)'),
-            ('responsible_person','VARCHAR(100)'),
-            ('department_id','INTEGER'),
-            ('review_frequency','VARCHAR(20)'),
-            ('last_reviewed','VARCHAR(20)'),
-            ('next_review_due','VARCHAR(20)'),
-            ('finding_ref','VARCHAR(30)'),
-            ('linked_action_id','VARCHAR(30)'),
-            ('notes','TEXT'),
-            ('priority','VARCHAR(20)'),
-            ('created_by','VARCHAR(100)'),
-            ('created_at','DATETIME'),
+            ('regulation_body','VARCHAR(50)'),('standard_ref','VARCHAR(100)'),
+            ('requirement_title','VARCHAR(200)'),('requirement_text','TEXT'),
+            ('applicability','VARCHAR(200)'),('obligation_type','VARCHAR(30)'),
+            ('compliance_status','VARCHAR(30)'),('evidence_description','TEXT'),
+            ('evidence_location','VARCHAR(200)'),('responsible_person','VARCHAR(100)'),
+            ('department_id','INTEGER'),('review_frequency','VARCHAR(20)'),
+            ('last_reviewed','VARCHAR(20)'),('next_review_due','VARCHAR(20)'),
+            ('finding_ref','VARCHAR(30)'),('linked_action_id','VARCHAR(30)'),
+            ('notes','TEXT'),('priority','VARCHAR(20)'),
+            ('created_by','VARCHAR(100)'),('created_at','DATETIME'),
             ('updated_at','DATETIME'),
         ],
     }
@@ -10110,13 +10187,15 @@ with app.app_context():
     for _tbl, _cols in _migrations.items():
         for _col, _coltype in _cols:
             try:
-                db.session.execute(db.text(f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'))
+                db.session.execute(db.text(
+                    f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'
+                ))
             except Exception:
                 pass
 
     _phase2_ddl = [
-        '''CREATE TABLE IF NOT EXISTS erp_drills (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        """CREATE TABLE IF NOT EXISTS erp_drills (
+            id SERIAL PRIMARY KEY,
             erp_id VARCHAR(30),
             drill_ref VARCHAR(30),
             drill_type VARCHAR(30),
@@ -10132,88 +10211,135 @@ with app.app_context():
             deficiencies TEXT,
             recommendations TEXT,
             action_items TEXT,
-            erp_update_required BOOLEAN DEFAULT 0,
+            erp_update_required BOOLEAN DEFAULT FALSE,
             outcome VARCHAR(20) DEFAULT 'Satisfactory',
             next_drill_due VARCHAR(20),
             created_by VARCHAR(100),
-            created_at DATETIME)''',
-        '''CREATE TABLE IF NOT EXISTS erp_activations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS erp_activations (
+            id SERIAL PRIMARY KEY,
             erp_id VARCHAR(30),
             activation_ref VARCHAR(30),
             investigation_id VARCHAR(30),
-            activated_at DATETIME,
+            activated_at TIMESTAMP,
             activated_by VARCHAR(100),
             activation_reason TEXT,
-            caa_notified BOOLEAN DEFAULT 0,
-            caa_notified_at DATETIME,
+            caa_notified BOOLEAN DEFAULT FALSE,
+            caa_notified_at TIMESTAMP,
             caa_ref VARCHAR(50),
-            icao_notified BOOLEAN DEFAULT 0,
-            icao_notified_at DATETIME,
-            media_statement BOOLEAN DEFAULT 0,
-            nok_notified BOOLEAN DEFAULT 0,
-            deactivated_at DATETIME,
+            icao_notified BOOLEAN DEFAULT FALSE,
+            icao_notified_at TIMESTAMP,
+            media_statement BOOLEAN DEFAULT FALSE,
+            nok_notified BOOLEAN DEFAULT FALSE,
+            deactivated_at TIMESTAMP,
             deactivated_by VARCHAR(100),
             duration_hours REAL,
             actions_taken TEXT,
             effectiveness VARCHAR(30),
             lessons_learned TEXT,
-            erp_update_required BOOLEAN DEFAULT 0,
+            erp_update_required BOOLEAN DEFAULT FALSE,
             status VARCHAR(20) DEFAULT 'Active',
-            created_at DATETIME)''',
-        '''CREATE TABLE IF NOT EXISTS investigation_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS investigation_events (
+            id SERIAL PRIMARY KEY,
             investigation_id VARCHAR(30),
             event_type VARCHAR(30),
             from_stage VARCHAR(40),
             to_stage VARCHAR(40),
             note TEXT,
             performed_by VARCHAR(100),
-            created_at DATETIME)''',
-        '''CREATE TABLE IF NOT EXISTS governance_audit_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS governance_audit_log (
+            id SERIAL PRIMARY KEY,
             entity_type VARCHAR(50),
             entity_id VARCHAR(50),
             action VARCHAR(50),
-            performed_by VARCHAR(100),
-            detail TEXT,
-            ip_address VARCHAR(45),
-            created_at DATETIME)''',
-        '''CREATE TABLE IF NOT EXISTS compliance_obligations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            changed_by VARCHAR(100),
+            change_summary TEXT,
+            created_at TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS erp_drills (
+            id SERIAL PRIMARY KEY,
+            drill_date DATE,
+            drill_type VARCHAR(50),
+            scenario TEXT,
+            participants INTEGER DEFAULT 0,
+            duration_minutes INTEGER DEFAULT 0,
+            location VARCHAR(100),
+            lead_coordinator VARCHAR(100),
+            outcome VARCHAR(20) DEFAULT 'Satisfactory',
+            objectives_met BOOLEAN DEFAULT FALSE,
+            comms_effective BOOLEAN DEFAULT FALSE,
+            erp_update_required BOOLEAN DEFAULT FALSE,
+            lessons_learned TEXT,
+            corrective_actions TEXT,
+            notes TEXT,
+            created_by VARCHAR(100),
+            created_at TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS erp_activations (
+            id SERIAL PRIMARY KEY,
+            activation_date TIMESTAMP,
+            incident_type VARCHAR(80),
+            severity VARCHAR(20) DEFAULT 'Minor',
+            activated_by VARCHAR(100),
+            notification_time_minutes INTEGER DEFAULT 0,
+            resources_deployed TEXT,
+            external_agencies TEXT,
+            timeline TEXT,
+            outcome VARCHAR(20) DEFAULT 'Resolved',
+            duration_hours NUMERIC(6,2) DEFAULT 0,
+            lessons_learned TEXT,
+            notes TEXT,
+            created_at TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS compliance_obligations (
+            id SERIAL PRIMARY KEY,
             ref_number VARCHAR(30) UNIQUE,
-            regulation_body VARCHAR(50),
+            regulation_body VARCHAR(30),
             standard_ref VARCHAR(100),
             requirement_title VARCHAR(200),
             requirement_text TEXT,
-            applicability VARCHAR(200),
-            obligation_type VARCHAR(30) DEFAULT "Ongoing",
-            compliance_status VARCHAR(30) DEFAULT "Under Review",
+            applicability TEXT,
+            obligation_type VARCHAR(30) DEFAULT 'Ongoing',
+            compliance_status VARCHAR(30) DEFAULT 'Under Review',
+            priority VARCHAR(20) DEFAULT 'Medium',
             evidence_description TEXT,
-            evidence_location VARCHAR(200),
+            evidence_location VARCHAR(300),
+            finding_ref VARCHAR(50),
+            linked_action_id VARCHAR(50),
             responsible_person VARCHAR(100),
-            department_id INTEGER,
-            review_frequency VARCHAR(20) DEFAULT "Annual",
-            last_reviewed VARCHAR(20),
-            next_review_due VARCHAR(20),
-            finding_ref VARCHAR(30),
-            linked_action_id VARCHAR(30),
+            department_id INTEGER REFERENCES departments(id),
+            review_frequency VARCHAR(20) DEFAULT 'Annual',
+            last_reviewed DATE,
+            next_review_due DATE,
             notes TEXT,
-            priority VARCHAR(20) DEFAULT "Medium",
             created_by VARCHAR(100),
-            created_at DATETIME,
-            updated_at DATETIME)''',
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP)""",
     ]
+
     for _ddl in _phase2_ddl:
         try:
             db.session.execute(db.text(_ddl))
+            db.session.commit()
         except Exception:
-            pass
+            db.session.rollback()
 
-    try:
+    # ── run column migrations ──────────────────────────────────────────────
+    for _tbl, _cols in _migrations.items():
+        for _col, _coltype in _cols:
+            try:
+                db.session.execute(db.text(
+                    f'ALTER TABLE {_tbl} ADD COLUMN {_col} {_coltype}'
+                ))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+    # ── seed default admin if none ─────────────────────────────────────────
+    if not Admin.query.first():
+        pw = os.environ.get('DEFAULT_ADMIN_PASSWORD', 'admin123')
+        db.session.add(Admin(username='admin',
+                             password=generate_password_hash(pw)))
         db.session.commit()
-    except Exception:
-        db.session.rollback()
 
 if __name__ == "__main__":
     app.run(debug=False)
