@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block title %}{{ ob.ref_number }} — Compliance Detail{% endblock %}
+{% block content %}
+<style>
+.det-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;gap:16px}
+.det-header .left h2{font-size:1.25rem;font-weight:700;color:var(--text);margin:0 0 4px}
+.det-header .left .sub{font-size:.78rem;color:var(--muted)}
+.det-header .badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.main-layout{display:grid;grid-template-columns:1fr 320px;gap:18px}
+.card{background:var(--surface);border-radius:8px;border:1px solid var(--border);margin-bottom:18px}
+.card-hdr{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.card-hdr h3{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0}
+.card-body{padding:18px}
+.kv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.kv{display:flex;flex-direction:column;gap:3px}
+.kv .k{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.kv .v{font-size:.84rem;color:var(--text);font-weight:500}
+.kv .v.mono{font-family:'IBM Plex Mono',monospace;font-size:.8rem}
+.badge-status{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:4px;
+  font-size:.78rem;font-weight:700;letter-spacing:.04em}
+.badge-status.compliant{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
+.badge-status.partial{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)}
+.badge-status.non{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)}
+.badge-status.review{background:rgba(59,130,246,.15);color:#3b82f6;border:1px solid rgba(59,130,246,.3)}
+.badge-status.na{background:rgba(100,116,139,.15);color:#94a3b8;border:1px solid rgba(100,116,139,.3)}
+.badge-priority{display:inline-block;padding:4px 10px;border-radius:3px;font-size:.72rem;font-weight:700}
+.badge-priority.critical{background:rgba(239,68,68,.2);color:#ef4444}
+.badge-priority.high{background:rgba(245,158,11,.2);color:#f59e0b}
+.badge-priority.medium{background:rgba(59,130,246,.2);color:#3b82f6}
+.badge-priority.low{background:rgba(100,116,139,.2);color:#94a3b8}
+.evidence-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 16px;
+  font-size:.82rem;color:var(--text);line-height:1.6}
+.evidence-path{background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:4px;
+  padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:.76rem;color:#3b82f6;word-break:break-all}
+.status-update-form label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.status-update-form select,.status-update-form input,.status-update-form textarea{
+  width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:8px 10px;border-radius:4px;font-size:.82rem;font-family:inherit;margin-top:4px;margin-bottom:10px}
+.status-update-form textarea{resize:vertical;min-height:60px}
+.alert-non{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);border-radius:6px;
+  padding:12px 16px;margin-bottom:18px}
+.alert-non strong{color:#ef4444}
+.alert-non p{font-size:.82rem;color:var(--muted);margin:4px 0 0}
+.timeline-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.timeline-item:last-child{border-bottom:none}
+.timeline-dot{width:8px;height:8px;border-radius:50%;background:var(--gold);margin-top:5px;flex-shrink:0}
+.timeline-content .ts{font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace}
+.timeline-content .msg{font-size:.82rem;color:var(--text)}
+</style>
+
+<!-- Header -->
+<div class="det-header">
+  <div class="left">
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:4px">
+      <a href="{{ url_for('compliance_list') }}" style="color:var(--gold);text-decoration:none">Compliance Register</a>
+      &rsaquo; {{ ob.ref_number }}
+    </div>
+    <h2>{{ ob.requirement_title or '(untitled)' }}</h2>
+    <div class="sub">{{ ob.standard_ref or '' }}{% if ob.regulation_body %} &bull; {{ ob.regulation_body }}{% endif %}</div>
+    <div class="badges">
+      {% set s = ob.compliance_status or 'Under Review' %}
+      {% if s == 'Compliant' %}
+        <span class="badge-status compliant">✓ Compliant</span>
+      {% elif s == 'Non-Compliant' %}
+        <span class="badge-status non">✗ Non-Compliant</span>
+      {% elif s == 'Partially Compliant' %}
+        <span class="badge-status partial">~ Partially Compliant</span>
+      {% elif s == 'Under Review' %}
+        <span class="badge-status review">⟳ Under Review</span>
+      {% else %}
+        <span class="badge-status na">{{ s }}</span>
+      {% endif %}
+      <span class="badge-priority {{ ob.priority|lower if ob.priority else 'medium' }}">
+        {{ ob.priority or 'Medium' }} Priority
+      </span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-shrink:0">
+    <a href="{{ url_for('edit_compliance', oid=ob.id) }}" class="btn btn-sm"
+       style="background:var(--surface-alt);color:var(--text)">✏️ Edit</a>
+    <a href="{{ url_for('compliance_list') }}" class="btn btn-sm"
+       style="background:var(--surface-alt);color:var(--muted)">← Register</a>
+  </div>
+</div>
+
+{% if ob.compliance_status == 'Non-Compliant' %}
+<div class="alert-non">
+  <strong>⚠️ Non-Compliant — Immediate Action Required</strong>
+  <p>This obligation is currently non-compliant. A corrective action plan must be established and linked below.
+     {% if ob.finding_ref %}Finding reference: <strong>{{ ob.finding_ref }}</strong>.{% endif %}
+  </p>
+</div>
+{% endif %}
+
+<div class="main-layout">
+  <!-- LEFT COLUMN -->
+  <div>
+
+    <!-- Requirement Detail -->
+    <div class="card">
+      <div class="card-hdr"><h3>Regulatory Requirement</h3></div>
+      <div class="card-body">
+        <div class="kv-grid" style="margin-bottom:14px">
+          <div class="kv">
+            <span class="k">Regulation Body</span>
+            <span class="v">
+              <span style="background:rgba(59,130,246,.12);color:#3b82f6;padding:3px 10px;
+                border-radius:3px;font-size:.75rem;font-weight:700">{{ ob.regulation_body or '—' }}</span>
+            </span>
+          </div>
+          <div class="kv">
+            <span class="k">Standard Reference</span>
+            <span class="v mono">{{ ob.standard_ref or '—' }}</span>
+          </div>
+          <div class="kv">
+            <span class="k">Obligation Type</span>
+            <span class="v">{{ ob.obligation_type or 'Ongoing' }}</span>
+          </div>
+          <div class="kv">
+            <span class="k">Applicability</span>
+            <span class="v">{{ ob.applicability or '—' }}</span>
+          </div>
+        </div>
+        {% if ob.requirement_text %}
+        <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px">
+          Regulatory Text
+        </div>
+        <div class="evidence-box" style="border-left:3px solid var(--blue)">{{ ob.requirement_text }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Evidence -->
+    <div class="card">
+      <div class="card-hdr"><h3>📁 Evidence of Compliance</h3></div>
+      <div class="card-body">
+        {% if ob.evidence_description %}
+        <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px">
+          Evidence Description
+        </div>
+        <div class="evidence-box" style="margin-bottom:14px">{{ ob.evidence_description }}</div>
+        {% else %}
+        <div style="color:var(--muted);font-size:.82rem;font-style:italic;margin-bottom:14px">
+          No evidence description recorded.
+        </div>
+        {% endif %}
+        {% if ob.evidence_location %}
+        <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px">
+          Evidence Location
+        </div>
+        <div class="evidence-path">{{ ob.evidence_location }}</div>
+        {% endif %}
+        {% if ob.finding_ref or ob.linked_action_id %}
+        <div style="display:flex;gap:12px;margin-top:14px">
+          {% if ob.finding_ref %}
+          <div class="kv">
+            <span class="k">CAA Finding Ref</span>
+            <span class="v mono" style="color:var(--red)">{{ ob.finding_ref }}</span>
+          </div>
+          {% endif %}
+          {% if ob.linked_action_id %}
+          <div class="kv">
+            <span class="k">Linked Action</span>
+            <span class="v mono" style="color:var(--gold)">{{ ob.linked_action_id }}</span>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% if not ob.evidence_description and not ob.finding_ref %}
+        <div style="margin-top:10px">
+          <a href="{{ url_for('edit_compliance', oid=ob.id) }}"
+             style="color:var(--gold);font-size:.82rem;text-decoration:none">+ Add evidence description →</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Notes -->
+    {% if ob.notes %}
+    <div class="card">
+      <div class="card-hdr"><h3>📝 Notes</h3></div>
+      <div class="card-body">
+        <div style="font-size:.84rem;color:var(--text);line-height:1.6">{{ ob.notes }}</div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div>
+
+    <!-- Metadata -->
+    <div class="card">
+      <div class="card-hdr"><h3>Obligation Metadata</h3></div>
+      <div class="card-body">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="kv">
+            <span class="k">Reference</span>
+            <span class="v mono" style="color:var(--gold);font-size:.88rem">{{ ob.ref_number }}</span>
+          </div>
+          <div class="kv">
+            <span class="k">Responsible Person</span>
+            <span class="v">{{ ob.responsible_person or '—' }}</span>
+          </div>
+          <div class="kv">
+            <span class="k">Department</span>
+            <span class="v">{{ ob.department.name if ob.department else '—' }}</span>
+          </div>
+          <div class="kv">
+            <span class="k">Review Frequency</span>
+            <span class="v">{{ ob.review_frequency or 'Annual' }}</span>
+          </div>
+          <div class="kv">
+            <span class="k">Last Reviewed</span>
+            <span class="v mono">{{ ob.last_reviewed or '—' }}</span>
+          </div>
+          <div class="kv">
+            <span class="k">Next Review Due</span>
+            <span class="v mono {% if ob.next_review_due %}{% endif %}" style="color:var(--amber)">
+              {{ ob.next_review_due or '—' }}
+            </span>
+          </div>
+          <div class="kv">
+            <span class="k">Created</span>
+            <span class="v mono" style="font-size:.75rem">
+              {{ ob.created_at.strftime('%Y-%m-%d') if ob.created_at else '—' }}
+            </span>
+          </div>
+          {% if ob.created_by %}
+          <div class="kv">
+            <span class="k">Created By</span>
+            <span class="v">{{ ob.created_by }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Status Update -->
+    <div class="card">
+      <div class="card-hdr"><h3>Update Status</h3></div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('update_compliance_status', oid=ob.id) }}"
+              class="status-update-form">
+          <label>New Status</label>
+          <select name="compliance_status">
+            {% for s in ['Compliant','Partially Compliant','Non-Compliant','Under Review','Not Applicable','Exempt'] %}
+            <option value="{{ s }}" {% if ob.compliance_status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+          <label>Last Reviewed Date</label>
+          <input type="date" name="last_reviewed" value="{{ ob.last_reviewed or '' }}">
+          <label>Next Review Due</label>
+          <input type="date" name="next_review_due" value="{{ ob.next_review_due or '' }}">
+          <label>Evidence Description (updated)</label>
+          <textarea name="evidence_description" rows="2"
+            placeholder="Briefly describe evidence reviewed…">{{ ob.evidence_description or '' }}</textarea>
+          <label>Review Notes</label>
+          <textarea name="notes" rows="2"
+            placeholder="Any notes from this review…">{{ ob.notes or '' }}</textarea>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%">
+            Save Status Update
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ICAO Compliance Reference -->
+    <div class="card" style="border-color:rgba(59,130,246,.2)">
+      <div class="card-hdr" style="border-color:rgba(59,130,246,.15)">
+        <h3 style="color:#3b82f6">ICAO Compliance Context</h3>
+      </div>
+      <div class="card-body" style="font-size:.78rem;color:var(--muted);line-height:1.6">
+        {% if ob.regulation_body == 'ICAO' %}
+        ICAO Standards (Annex provisions) are mandatory for member states. ICAO Recommended Practices
+        (Appendix provisions) should be implemented where practicable.
+        {% elif ob.regulation_body == 'JCAR' %}
+        Jordan Civil Aviation Regulations implement ICAO SARPs at national level.
+        Non-compliance may trigger CAA enforcement action or certificate suspension.
+        {% elif ob.regulation_body == 'IOSA' %}
+        IOSA standards require documented evidence during the audit cycle.
+        Non-compliant items generate Findings that must be closed before certification.
+        {% else %}
+        Maintain documented evidence of compliance and conduct periodic reviews to ensure
+        the obligation remains current and fully met.
+        {% endif %}
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <a href="https://www.icao.int/safety/safetymanagement/Pages/default.aspx"
+             target="_blank" style="color:#3b82f6;text-decoration:none;font-size:.74rem">
+            ICAO SMS Resources →
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

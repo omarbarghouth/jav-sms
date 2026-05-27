@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}ERP Dashboard{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">ICAO Annex 19 §8.3 · Doc 9859 §9</div>
+    <div class="page-title">Emergency Response Dashboard</div>
+    <div class="page-sub" style="margin-bottom:0">ERP readiness · Drill compliance · Activation history</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/erp" class="btn btn-outline btn-sm">All ERPs</a>
+    <a href="/erp/new" class="btn btn-nav btn-sm">+ New ERP</a>
+  </div>
+</div>
+
+<!-- KPI strip -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">
+  {% for label, val, col in [
+    ('Active ERPs',     total_plans,   'var(--navy)'),
+    ('Total Drills',    total_drills,  'var(--blue)'),
+    ('Active Activations', active_acts, 'var(--red)'),
+    ('Drills Overdue',  overdue_count, '#dc2626' if overdue_count > 0 else 'var(--green)'),
+  ] %}
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:24px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:{{ col }}">{{ val }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">{{ label }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if overdue_erps %}
+<div style="background:var(--red-bg);border:1px solid var(--red-border);border-left:4px solid var(--red);border-radius:var(--r);padding:12px 16px;margin-bottom:16px">
+  <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px">🚨 {{ overdue_erps|length }} ERP(s) have not been drilled in 12+ months — ICAO Annex 19 §8.3 compliance at risk</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    {% for p in overdue_erps %}
+    <a href="/erp/{{ p.id }}" style="background:#fff;border:1px solid var(--red-border);border-radius:var(--r2);padding:4px 10px;font-size:11px;font-weight:700;color:var(--red);text-decoration:none">{{ p.erp_ref }} — {{ p.title[:35] }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if active_acts > 0 %}
+<div style="background:#7f1d1d;color:#fff;border-radius:var(--r);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+  <span style="font-size:20px">🚨</span>
+  <div style="font-size:13px;font-weight:800">{{ active_acts }} ERP CURRENTLY ACTIVE — Emergency operations ongoing</div>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Recent drills -->
+  <div class="card">
+    <div class="card-title">🧪 Recent Drills</div>
+    {% if all_drills %}
+    {% for d in all_drills[:8] %}
+    {% set oc = {'Satisfactory':'var(--green)','Needs Improvement':'var(--amber)','Unsatisfactory':'var(--red)'}.get(d.outcome,'var(--muted)') %}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);gap:8px">
+      <div style="min-width:0">
+        <div style="font-size:11px;font-weight:700;color:var(--navy)">{{ d.drill_ref }}</div>
+        <div style="font-size:10px;color:var(--muted)">{{ d.drill_type }} · {{ d.erp.erp_ref if d.erp else '—' }}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">{{ d.drill_date or '—' }}</div>
+        <span style="font-size:9px;font-weight:700;color:{{ oc }}">{{ d.outcome }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--muted);font-size:12px;text-align:center;padding:16px">No drills recorded yet</p>
+    {% endif %}
+  </div>
+
+  <!-- ERP readiness table -->
+  <div class="card">
+    <div class="card-title">📋 ERP Drill Compliance</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ERP</th><th>Scenario</th><th>Last Drill</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for p in plans %}
+        {% set last = p.drills[0] if p.drills else none %}
+        {% set overdue = p in overdue_erps %}
+        <tr {% if overdue %}style="background:var(--red-bg)"{% endif %}>
+          <td><a href="/erp/{{ p.id }}" class="ctrl-num" style="font-size:9.5px">{{ p.erp_ref }}</a></td>
+          <td style="font-size:11px">{{ p.scenario_type }}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:{% if overdue %}var(--red){% else %}var(--muted){% endif %}">
+            {{ last.drill_date if last else '—' }}
+          </td>
+          <td>{% if overdue %}<span class="badge b-red" style="font-size:9px">Overdue</span>
+              {% elif last %}<span class="badge b-green" style="font-size:9px">✓ Current</span>
+              {% else %}<span class="badge b-gray" style="font-size:9px">Never</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Activation history -->
+{% if all_acts %}
+<div class="card" style="padding:0">
+  <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+    <div class="card-title" style="margin-bottom:0">⚡ ERP Activation History</div>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Ref</th><th>ERP</th><th>Activated</th><th>By</th><th>Duration</th><th>CAA</th><th>ICAO</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for a in all_acts %}
+      <tr {% if a.status=='Active' %}style="background:var(--red-bg)"{% endif %}>
+        <td><span class="ctrl-num" style="font-size:9px;background:{% if a.status=='Active' %}var(--red){% else %}var(--navy){% endif %}">{{ a.activation_ref }}</span></td>
+        <td style="font-size:11px">{{ a.erp.erp_ref if a.erp else '—' }}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:10px">{{ a.activated_at.strftime('%d %b %Y %H:%M') if a.activated_at else '—' }}</td>
+        <td style="font-size:11px">{{ a.activated_by or '—' }}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:10px">{{ (a.duration_hours|string + 'h') if a.duration_hours else '—' }}</td>
+        <td>{% if a.caa_notified %}<span class="badge b-green" style="font-size:9px">✓</span>{% else %}<span class="badge b-red" style="font-size:9px">✗</span>{% endif %}</td>
+        <td>{% if a.icao_notified %}<span class="badge b-green" style="font-size:9px">✓</span>{% else %}<span class="badge b-gray" style="font-size:9px">—</span>{% endif %}</td>
+        <td>{% if a.status=='Active' %}<span class="badge b-red" style="font-size:9px">🔴 Active</span>
+            {% else %}<span class="badge b-green" style="font-size:9px">Closed</span>{% endif %}</td>
+        <td><a href="/erp/{{ a.erp_id }}" class="btn btn-nav btn-sm">View →</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

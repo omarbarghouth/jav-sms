@@ -2,19 +2,29 @@
 {% block title %}{{ e.erp_ref }} — ERP{% endblock %}
 {% block content %}
 
-<!-- Breadcrumb -->
 <div style="margin-bottom:10px">
   <a href="/erp" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← Emergency Response Plans</a>
 </div>
 
-<!-- Header -->
+{% set sc_colors = {'Accident':'#7f1d1d','Serious Incident':'#dc2626','Incident':'#c2610a','Crisis':'#d97706','Security':'#7c3aed','Medical':'#15803d'} %}
+{% set sc_color = sc_colors.get(e.scenario_type,'#374151') %}
+
+{% if e.activations and e.activations|selectattr('status','eq','Active')|list %}
+<div style="background:#7f1d1d;color:#fff;border-radius:var(--r);padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:20px">🚨</span>
+  <div style="font-size:13px;font-weight:800">ERP CURRENTLY ACTIVE — Emergency operations in progress</div>
+  <span class="badge" style="margin-left:auto;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)">ACTIVE</span>
+</div>
+{% endif %}
+
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
   <div>
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">
       ICAO Annex 19 §3.4 · {{ e.scenario_type }} · {{ e.version }}
     </div>
     <div class="page-title">{{ e.erp_ref }} — {{ e.title }}</div>
-    <div style="display:flex;gap:8px;margin-top:5px">
+    <div style="display:flex;gap:8px;margin-top:5px;flex-wrap:wrap">
+      <span class="badge" style="background:{{ sc_color }};color:#fff;font-size:9px">{{ e.scenario_type }}</span>
       {% if e.status == 'Active' %}<span class="badge b-green">Active</span>
       {% elif e.status == 'Draft' %}<span class="badge b-yellow">Draft</span>
       {% else %}<span class="badge b-gray">{{ e.status }}</span>{% endif %}
@@ -24,11 +34,31 @@
       {% endif %}
     </div>
   </div>
-  <a href="/pdf/erp/{{ e.id }}" target="_blank"
-     class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)">📄 ICAO PDF</a>
+  <div style="display:flex;gap:7px;flex-wrap:wrap">
+    <a href="/erp/{{ e.id }}/drills/new" class="btn btn-outline btn-sm">🧪 Record Drill</a>
+    <a href="/pdf/erp/{{ e.id }}" target="_blank"
+       class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)">📄 PDF</a>
+  </div>
 </div>
 
-<!-- Split layout -->
+<!-- KPI strip: drill + activation summary -->
+{% set drill_count = e.drills|length if e.drills else 0 %}
+{% set last_drill = e.drills[0] if e.drills else none %}
+{% set act_count = e.activations|length if e.activations else 0 %}
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+  {% for label, val, col in [
+    ('Total Drills', drill_count, 'var(--blue)'),
+    ('Last Drill', last_drill.drill_date if last_drill else 'Never', 'var(--navy)'),
+    ('Activations', act_count, '#dc2626' if act_count > 0 else 'var(--muted)'),
+    ('ERP Status', e.status, 'var(--green)' if e.status=='Active' else 'var(--amber)'),
+  ] %}
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);padding:11px 12px">
+    <div style="font-size:18px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:{{ col }};line-height:1.1;margin-bottom:3px">{{ val }}</div>
+    <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">{{ label }}</div>
+  </div>
+  {% endfor %}
+</div>
+
 <div style="display:grid;grid-template-columns:1fr 380px;gap:14px;align-items:start">
 
   <!-- LEFT -->
@@ -44,17 +74,94 @@
       <div style="font-size:13px;line-height:1.8;color:var(--text);white-space:pre-line">{{ e.response_procedures or '—' }}</div>
     </div>
 
-    <!-- Edit form -->
+    <!-- Drill history -->
+    <div class="card" style="padding:0">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title" style="margin-bottom:0">🧪 Drill History</div>
+        <a href="/erp/{{ e.id }}/drills/new" class="btn btn-nav btn-sm">+ Record Drill</a>
+      </div>
+      {% if e.drills %}
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Ref</th><th>Type</th><th>Date</th><th>Facilitator</th><th>Participants</th><th>Outcome</th><th>ERP Update?</th></tr></thead>
+          <tbody>
+          {% for d in e.drills %}
+          {% set oc = {'Satisfactory':'b-green','Needs Improvement':'b-yellow','Unsatisfactory':'b-red'}.get(d.outcome,'b-gray') %}
+          <tr>
+            <td><span class="ctrl-num" style="font-size:9px">{{ d.drill_ref }}</span></td>
+            <td><span class="badge b-gray" style="font-size:9px">{{ d.drill_type }}</span></td>
+            <td style="font-family:'IBM Plex Mono',monospace;font-size:10px">{{ d.drill_date or '—' }}</td>
+            <td style="font-size:11px">{{ d.facilitator or '—' }}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-align:center">{{ d.participant_count or '—' }}</td>
+            <td><span class="badge {{ oc }}" style="font-size:9px">{{ d.outcome }}</span></td>
+            <td style="text-align:center">
+              {% if d.erp_update_required %}
+              <span class="badge b-red" style="font-size:9px">Required</span>
+              {% else %}<span style="color:var(--muted);font-size:10px">—</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align:center;padding:32px;color:var(--muted)">
+        <div style="font-size:13px;font-weight:700;margin-bottom:6px">No drills recorded</div>
+        <div style="font-size:11px;margin-bottom:12px">ICAO Annex 19 §8.3 requires periodic ERP drills</div>
+        <a href="/erp/{{ e.id }}/drills/new" class="btn btn-nav btn-sm">+ Record First Drill</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Activation history -->
+    {% if e.activations %}
+    <div class="card" style="padding:0">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div class="card-title" style="margin-bottom:0">⚡ Activation History</div>
+      </div>
+      {% for a in e.activations %}
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);{% if a.status=='Active' %}background:var(--red-bg){% endif %}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <div>
+            <span class="ctrl-num" style="font-size:9px;background:{% if a.status=='Active' %}var(--red){% else %}var(--navy){% endif %}">{{ a.activation_ref }}</span>
+            <span style="font-size:11px;font-weight:600;color:var(--text);margin-left:8px">{{ a.activation_reason[:60] if a.activation_reason else '—' }}</span>
+          </div>
+          {% if a.status=='Active' %}<span class="badge b-red" style="font-size:9px">🔴 Active</span>
+          {% else %}<span class="badge b-green" style="font-size:9px">Closed</span>{% endif %}
+        </div>
+        <div style="display:flex;gap:16px;font-size:10px;color:var(--muted);flex-wrap:wrap">
+          <span>Activated: <strong>{{ a.activated_at.strftime('%d %b %Y %H:%M') if a.activated_at else '—' }}</strong></span>
+          <span>By: <strong>{{ a.activated_by or '—' }}</strong></span>
+          {% if a.duration_hours %}<span>Duration: <strong>{{ a.duration_hours }}h</strong></span>{% endif %}
+          <span>CAA: <strong style="color:{% if a.caa_notified %}var(--green){% else %}var(--red){% endif %}">{% if a.caa_notified %}✓ Notified{% else %}✗ Pending{% endif %}</strong></span>
+          <span>ICAO: <strong style="color:{% if a.icao_notified %}var(--green){% else %}var(--muted){% endif %}">{% if a.icao_notified %}✓{% else %}—{% endif %}</strong></span>
+        </div>
+        {% if a.status == 'Active' %}
+        <form method="POST" action="/erp/activation/{{ a.id }}/update" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <label style="font-size:10px;display:flex;align-items:center;gap:4px"><input type="checkbox" name="caa_notified" {% if a.caa_notified %}checked{% endif %}/> CAA notified</label>
+          <input type="text" name="caa_ref" value="{{ a.caa_ref or '' }}" placeholder="CAA ref…" style="font-size:10px;padding:3px 7px;border:1px solid var(--border);border-radius:4px;width:120px"/>
+          <label style="font-size:10px;display:flex;align-items:center;gap:4px"><input type="checkbox" name="icao_notified" {% if a.icao_notified %}checked{% endif %}/> ICAO</label>
+          <label style="font-size:10px;display:flex;align-items:center;gap:4px"><input type="checkbox" name="nok_notified" {% if a.nok_notified %}checked{% endif %}/> NOK</label>
+          <label style="font-size:10px;display:flex;align-items:center;gap:4px"><input type="checkbox" name="deactivate"/> Deactivate ERP</label>
+          <button type="submit" class="btn btn-nav btn-sm">Update</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ERP update form -->
     <div class="card" style="border:1px solid var(--border2)">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px">✏ Update ERP</div>
       <form method="POST" action="/erp/{{ e.id }}/update">
         <div class="fg">
           <label>Response Procedures</label>
-          <textarea name="response_procedures" rows="6">{{ e.response_procedures or '' }}</textarea>
+          <textarea name="response_procedures" rows="5">{{ e.response_procedures or '' }}</textarea>
         </div>
         <div class="fg">
           <label>Emergency Contacts</label>
-          <textarea name="emergency_contacts" rows="4">{{ e.emergency_contacts or '' }}</textarea>
+          <textarea name="emergency_contacts" rows="3">{{ e.emergency_contacts or '' }}</textarea>
         </div>
         <div class="g2">
           <div class="fg">
@@ -70,10 +177,14 @@
           <label>Resources Required</label>
           <textarea name="resources_required" rows="2">{{ e.resources_required or '' }}</textarea>
         </div>
-        <div class="g2">
+        <div class="g3">
           <div class="fg">
             <label>Review Date</label>
             <input type="date" name="review_date" value="{{ e.review_date or '' }}"/>
+          </div>
+          <div class="fg">
+            <label>Version</label>
+            <input type="text" name="version" value="{{ e.version or 'REV0' }}" style="font-family:'IBM Plex Mono',monospace"/>
           </div>
           <div class="fg">
             <label>Status</label>
@@ -87,11 +198,36 @@
         <button type="submit" class="btn btn-nav btn-sm">Save Changes</button>
       </form>
     </div>
-
   </div>
 
   <!-- RIGHT -->
   <div style="display:flex;flex-direction:column;gap:12px">
+
+    <!-- Activate ERP button (real emergency) -->
+    {% if e.status == 'Active' and not (e.activations and e.activations|selectattr('status','eq','Active')|list) %}
+    <div class="card" style="background:#7f1d1d;border:none">
+      <div style="font-size:11px;font-weight:800;color:#fff;margin-bottom:8px">⚡ ACTIVATE THIS ERP</div>
+      <div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-bottom:10px">For REAL emergencies only. This records an official ERP activation with mandatory regulatory notification tracking.</div>
+      <form method="POST" action="/erp/{{ e.id }}/activate">
+        <div class="fg" style="margin-bottom:8px">
+          <label style="color:rgba(255,255,255,.7);font-size:10px;text-transform:uppercase;letter-spacing:.4px">Activation Reason</label>
+          <textarea name="activation_reason" rows="2" required
+                    style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);color:#fff;font-size:12px"
+                    placeholder="Briefly describe the emergency triggering this ERP activation…"></textarea>
+        </div>
+        <div class="fg" style="margin-bottom:10px">
+          <label style="color:rgba(255,255,255,.7);font-size:10px;text-transform:uppercase;letter-spacing:.4px">Linked Investigation (optional)</label>
+          <input type="text" name="investigation_id"
+                 style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);color:#fff;font-size:12px"
+                 placeholder="INV-XXXX"/>
+        </div>
+        <button type="submit" onclick="return confirm('⚠ Activate this ERP for a REAL emergency? This creates an official activation record.')"
+                style="width:100%;background:#dc2626;color:#fff;border:none;cursor:pointer;font-family:inherit;font-weight:800;padding:10px;border-radius:7px;font-size:12px">
+          🚨 ACTIVATE ERP
+        </button>
+      </form>
+    </div>
+    {% endif %}
 
     <div class="card">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px">👥 Responsible Roles</div>
@@ -113,7 +249,15 @@
       <div style="font-size:12.5px;line-height:1.7;color:var(--text);white-space:pre-line">{{ e.resources_required or '—' }}</div>
     </div>
 
+    <!-- ICAO compliance note -->
+    <div class="card" style="background:var(--surface);border:1px dashed var(--border2)">
+      <div style="font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">ICAO Compliance Notes</div>
+      <div style="font-size:10.5px;color:var(--muted);line-height:1.6">
+        Annex 13 §6: Accident/Serious Incident requires immediate CAA notification<br>
+        Annex 19 §8.3: ERP must be drilled at least annually<br>
+        Doc 9859 §9.3: All activations must be formally documented
+      </div>
+    </div>
   </div>
 </div>
-
 {% endblock %}

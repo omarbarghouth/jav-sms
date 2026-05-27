@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Regulatory Compliance Register{% endblock %}
+{% block content %}
+<style>
+.comp-kpi{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:24px}
+.comp-kpi .kcard{background:var(--surface);border-radius:6px;padding:14px 16px;border-top:3px solid var(--blue)}
+.comp-kpi .kcard.green{border-top-color:var(--green)}
+.comp-kpi .kcard.red{border-top-color:var(--red)}
+.comp-kpi .kcard.amber{border-top-color:var(--amber)}
+.comp-kpi .kcard.gold{border-top-color:var(--gold)}
+.comp-kpi .kcard .val{font-size:1.9rem;font-weight:700;font-family:'IBM Plex Mono',monospace;color:var(--text)}
+.comp-kpi .kcard .lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:2px}
+.filter-bar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.filter-bar select,.filter-bar input{background:var(--surface);border:1px solid var(--border);color:var(--text);
+  padding:7px 10px;border-radius:4px;font-size:.82rem}
+.filter-bar .btn-sm{padding:7px 14px;font-size:.82rem}
+table.comp-tbl{width:100%;border-collapse:collapse;font-size:.83rem}
+table.comp-tbl th{background:var(--surface-alt);color:var(--muted);font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.07em;padding:9px 12px;text-align:left;border-bottom:1px solid var(--border)}
+table.comp-tbl td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
+table.comp-tbl tr:hover td{background:rgba(255,255,255,.03)}
+.badge-status{display:inline-block;padding:3px 9px;border-radius:3px;font-size:.7rem;font-weight:600;letter-spacing:.04em}
+.badge-status.compliant{background:rgba(16,185,129,.15);color:#10b981}
+.badge-status.partial{background:rgba(245,158,11,.15);color:#f59e0b}
+.badge-status.non{background:rgba(239,68,68,.15);color:#ef4444}
+.badge-status.review{background:rgba(59,130,246,.15);color:#3b82f6}
+.badge-status.na{background:rgba(100,116,139,.15);color:#94a3b8}
+.badge-priority{display:inline-block;padding:2px 7px;border-radius:3px;font-size:.68rem;font-weight:700}
+.badge-priority.critical{background:rgba(239,68,68,.2);color:#ef4444}
+.badge-priority.high{background:rgba(245,158,11,.2);color:#f59e0b}
+.badge-priority.medium{background:rgba(59,130,246,.2);color:#3b82f6}
+.badge-priority.low{background:rgba(100,116,139,.2);color:#94a3b8}
+.overdue-chip{display:inline-block;background:rgba(239,68,68,.15);color:#ef4444;
+  padding:2px 7px;border-radius:3px;font-size:.68rem;font-weight:600;margin-left:4px}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.page-header h2{font-size:1.25rem;font-weight:700;color:var(--text);margin:0}
+.page-header .sub{font-size:.78rem;color:var(--muted);margin-top:2px}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-state .icon{font-size:3rem;margin-bottom:12px;opacity:.4}
+</style>
+
+<div class="page-header">
+  <div>
+    <h2>Regulatory Compliance Register</h2>
+    <div class="sub">ICAO Annex 19 §2 · Doc 9859 §4.1 · JCAR obligation tracking</div>
+  </div>
+  <a href="{{ url_for('new_compliance') }}" class="btn btn-primary btn-sm">+ New Obligation</a>
+</div>
+
+<!-- KPI Strip -->
+<div class="comp-kpi">
+  <div class="kcard">
+    <div class="val">{{ total }}</div>
+    <div class="lbl">Total Obligations</div>
+  </div>
+  <div class="kcard green">
+    <div class="val">{{ compliant }}</div>
+    <div class="lbl">Compliant</div>
+  </div>
+  <div class="kcard amber">
+    <div class="val">{{ partial }}</div>
+    <div class="lbl">Partially Compliant</div>
+  </div>
+  <div class="kcard red">
+    <div class="val">{{ non_compliant }}</div>
+    <div class="lbl">Non-Compliant</div>
+  </div>
+  <div class="kcard">
+    <div class="val">{{ under_review }}</div>
+    <div class="lbl">Under Review</div>
+  </div>
+  <div class="kcard {% if overdue > 0 %}red{% else %}green{% endif %}">
+    <div class="val">{{ overdue }}</div>
+    <div class="lbl">Review Overdue</div>
+  </div>
+</div>
+
+{% if non_compliant > 0 %}
+<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;
+  padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:1.1rem">⚠️</span>
+  <div>
+    <strong style="color:#ef4444">{{ non_compliant }} Non-Compliant Obligation{{ 's' if non_compliant != 1 }}</strong>
+    <span style="color:var(--muted);font-size:.82rem;margin-left:8px">Immediate corrective action required — filter by Non-Compliant to review.</span>
+  </div>
+</div>
+{% endif %}
+
+<!-- Filter Bar -->
+<form method="GET" class="filter-bar">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for s in statuses %}
+    <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="body" onchange="this.form.submit()">
+    <option value="">All Regulators</option>
+    {% for b in bodies %}
+    <option value="{{ b }}" {% if b == body_filter %}selected{% endif %}>{{ b }}</option>
+    {% endfor %}
+  </select>
+  <select name="priority" onchange="this.form.submit()">
+    <option value="">All Priorities</option>
+    <option value="Critical" {% if priority_filter == 'Critical' %}selected{% endif %}>Critical</option>
+    <option value="High" {% if priority_filter == 'High' %}selected{% endif %}>High</option>
+    <option value="Medium" {% if priority_filter == 'Medium' %}selected{% endif %}>Medium</option>
+    <option value="Low" {% if priority_filter == 'Low' %}selected{% endif %}>Low</option>
+  </select>
+  {% if status_filter or body_filter or priority_filter %}
+  <a href="{{ url_for('compliance_list') }}" class="btn btn-sm" style="background:var(--surface-alt)">Clear Filters</a>
+  {% endif %}
+  <span style="color:var(--muted);font-size:.8rem;margin-left:auto">{{ obligations|length }} result{{ 's' if obligations|length != 1 }}</span>
+</form>
+
+<!-- Table -->
+<div style="background:var(--surface);border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+{% if obligations %}
+<table class="comp-tbl">
+  <thead>
+    <tr>
+      <th>Ref</th>
+      <th>Regulator</th>
+      <th>Standard</th>
+      <th>Requirement</th>
+      <th>Priority</th>
+      <th>Status</th>
+      <th>Responsible</th>
+      <th>Next Review</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for ob in obligations %}
+    {% set today = namespace(val='') %}
+    <tr>
+      <td>
+        <a href="{{ url_for('compliance_detail', oid=ob.id) }}"
+           style="color:var(--gold);font-family:'IBM Plex Mono',monospace;font-size:.78rem;font-weight:600;text-decoration:none">
+          {{ ob.ref_number }}
+        </a>
+      </td>
+      <td>
+        <span style="background:rgba(59,130,246,.12);color:#3b82f6;padding:2px 8px;border-radius:3px;
+          font-size:.7rem;font-weight:600">{{ ob.regulation_body or '—' }}</span>
+      </td>
+      <td style="color:var(--muted);font-size:.78rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="{{ ob.standard_ref }}">{{ ob.standard_ref or '—' }}</td>
+      <td style="max-width:220px">
+        <a href="{{ url_for('compliance_detail', oid=ob.id) }}"
+           style="color:var(--text);text-decoration:none;font-weight:500">
+          {{ ob.requirement_title or '(untitled)' }}
+        </a>
+        {% if ob.applicability %}
+        <div style="font-size:.72rem;color:var(--muted)">{{ ob.applicability }}</div>
+        {% endif %}
+      </td>
+      <td>
+        <span class="badge-priority {{ ob.priority|lower if ob.priority else 'medium' }}">
+          {{ ob.priority or 'Medium' }}
+        </span>
+      </td>
+      <td>
+        {% set s = ob.compliance_status or 'Under Review' %}
+        {% if s == 'Compliant' %}
+          <span class="badge-status compliant">✓ Compliant</span>
+        {% elif s == 'Non-Compliant' %}
+          <span class="badge-status non">✗ Non-Compliant</span>
+        {% elif s == 'Partially Compliant' %}
+          <span class="badge-status partial">~ Partial</span>
+        {% elif s == 'Under Review' %}
+          <span class="badge-status review">⟳ Under Review</span>
+        {% elif s in ['Not Applicable','Exempt'] %}
+          <span class="badge-status na">{{ s }}</span>
+        {% else %}
+          <span class="badge-status review">{{ s }}</span>
+        {% endif %}
+      </td>
+      <td style="font-size:.8rem;color:var(--text)">{{ ob.responsible_person or '—' }}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:.76rem">
+        {% if ob.next_review_due %}
+          {{ ob.next_review_due }}
+          {# Simple overdue check — compare strings (ISO dates compare lexicographically) #}
+        {% else %}
+          <span style="color:var(--muted)">—</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{{ url_for('edit_compliance', oid=ob.id) }}"
+           style="color:var(--muted);font-size:.78rem;text-decoration:none">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <div class="icon">📋</div>
+  <div style="font-weight:600;color:var(--text);margin-bottom:6px">No obligations found</div>
+  <div style="font-size:.82rem">
+    {% if status_filter or body_filter or priority_filter %}
+      No obligations match the current filters.
+    {% else %}
+      Start by adding your first regulatory obligation.
+      <br><a href="{{ url_for('new_compliance') }}" style="color:var(--gold)">+ Add Obligation</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+</div>
+
+<!-- ICAO Quick-Reference -->
+<div style="margin-top:24px;background:var(--surface);border-radius:8px;padding:16px 20px;
+  border:1px solid var(--border)">
+  <div style="font-size:.78rem;font-weight:700;color:var(--gold);text-transform:uppercase;
+    letter-spacing:.08em;margin-bottom:10px">ICAO Doc 9859 §4 — SMS Compliance Framework</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font-size:.78rem;color:var(--muted)">
+    <div>
+      <div style="color:var(--text);font-weight:600;margin-bottom:4px">Annex 19 Obligations</div>
+      SMS policy, hazard identification, risk management, safety assurance, safety promotion — all require documented compliance evidence.
+    </div>
+    <div>
+      <div style="color:var(--text);font-weight:600;margin-bottom:4px">JCAR Requirements</div>
+      Jordan Civil Aviation Regulations align with ICAO Standards. CAA audits may request evidence against specific JCAR articles.
+    </div>
+    <div>
+      <div style="color:var(--text);font-weight:600;margin-bottom:4px">Review Cycle</div>
+      Critical obligations: quarterly review. High: semi-annual. Medium/Low: annual. Non-compliant findings trigger immediate corrective action.
+    </div>
+  </div>
+</div>
+{% endblock %}

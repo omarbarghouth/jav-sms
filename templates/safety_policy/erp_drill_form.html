@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Record ERP Drill — {{ erp.erp_ref }}{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:14px">
+  <a href="/erp/{{ erp.id }}" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← {{ erp.erp_ref }} — {{ erp.title }}</a>
+</div>
+<div style="margin-bottom:20px">
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">ICAO Annex 19 §8.3 · Emergency Drill Record</div>
+  <div class="page-title">Record ERP Drill</div>
+  <div class="page-sub" style="margin-bottom:0">{{ erp.erp_ref }} — {{ erp.title }} · {{ erp.scenario_type }}</div>
+</div>
+
+<form class="form-card" method="POST" style="max-width:900px">
+
+  <div class="sec">Drill Identity</div>
+  <div class="g3">
+    <div class="fg">
+      <label>Drill Type <span style="color:var(--red)">*</span></label>
+      <select name="drill_type" required>
+        {% for dt in ['Table-Top','Full-Scale','Partial','Communications','Notification Chain','Evacuation'] %}
+        <option value="{{ dt }}">{{ dt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Drill Date <span style="color:var(--red)">*</span></label>
+      <input type="date" name="drill_date" required/>
+    </div>
+    <div class="fg">
+      <label>Duration (minutes)</label>
+      <input type="number" name="duration_min" min="0" placeholder="e.g. 120"/>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="fg">
+      <label>Facilitator / Lead <span style="color:var(--red)">*</span></label>
+      <input type="text" name="facilitator" required placeholder="Name of drill facilitator"/>
+    </div>
+    <div class="fg">
+      <label>Number of Participants</label>
+      <input type="number" name="participant_count" min="0" placeholder="Total headcount"/>
+    </div>
+  </div>
+  <div class="fg">
+    <label>Participants / Departments</label>
+    <textarea name="participants" rows="2" placeholder="List key participants and departments involved…"></textarea>
+  </div>
+
+  <div class="sec" style="margin-top:8px">Drill Scenario</div>
+  <div class="fg">
+    <label>Scenario Brief <span style="color:var(--red)">*</span></label>
+    <textarea name="scenario_brief" required rows="3" placeholder="Describe the emergency scenario that was simulated…"></textarea>
+  </div>
+  <div class="fg">
+    <label>Drill Objectives</label>
+    <textarea name="objectives" rows="3" placeholder="What specific ERP elements or procedures were being tested?"></textarea>
+  </div>
+
+  <div class="sec" style="margin-top:8px">Observations & Findings</div>
+  <div class="fg">
+    <label>Observations During Drill</label>
+    <textarea name="observations" rows="4" placeholder="Describe what was observed during the drill exercise…"></textarea>
+  </div>
+  <div class="g2">
+    <div class="fg">
+      <label style="color:var(--green)">✓ Strengths — What Worked Well</label>
+      <textarea name="strengths" rows="4" style="border-color:var(--green-border);background:var(--green-bg)"
+                placeholder="Areas where the ERP performed as expected…"></textarea>
+    </div>
+    <div class="fg">
+      <label style="color:var(--red)">✗ Deficiencies — Gaps Identified</label>
+      <textarea name="deficiencies" rows="4" style="border-color:var(--red-border);background:var(--red-bg)"
+                placeholder="Areas where the ERP fell short or gaps were identified…"></textarea>
+    </div>
+  </div>
+
+  <div class="sec" style="margin-top:8px">Improvement Actions</div>
+  <div class="fg">
+    <label>Recommendations</label>
+    <textarea name="recommendations" rows="3" placeholder="What changes should be made to improve ERP effectiveness?"></textarea>
+  </div>
+  <div class="fg">
+    <label>Action Items</label>
+    <textarea name="action_items" rows="3" placeholder="Specific action items with responsible parties and timelines…"></textarea>
+  </div>
+  <div class="g3">
+    <div class="fg">
+      <label>Overall Outcome <span style="color:var(--red)">*</span></label>
+      <select name="outcome" required>
+        <option value="Satisfactory">Satisfactory</option>
+        <option value="Needs Improvement">Needs Improvement</option>
+        <option value="Unsatisfactory">Unsatisfactory</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Next Drill Due</label>
+      <input type="date" name="next_drill_due"/>
+    </div>
+    <div class="fg" style="display:flex;align-items:center;gap:8px;padding-top:22px">
+      <input type="checkbox" name="erp_update_required" id="erp_upd" style="width:16px;height:16px"/>
+      <label for="erp_upd" style="font-size:12px;font-weight:600;margin-bottom:0">ERP document update required</label>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+    <button type="submit" class="btn btn-nav">Record Drill</button>
+    <a href="/erp/{{ erp.id }}" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}
