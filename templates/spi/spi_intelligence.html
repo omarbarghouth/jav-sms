@@ -155,14 +155,14 @@
     <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:10px">
       <div style="font-size:12px;font-weight:700;color:#1e293b">{{ mtg.meeting_ref or 'SRB Meeting' }}</div>
       <div style="font-size:11px;color:#6b7280;margin-top:2px">{{ mtg.meeting_date or '—' }}</div>
-      <a href="{{ url_for('governance.srb_detail', mid=mtg.id) }}" style="font-size:11px;color:var(--navy);font-weight:600;margin-top:6px;display:inline-block">View SRB Meeting →</a>
+      <a href="{{ url_for('governance.srb_detail', mid=mtg.id) if mtg.id else '#' }}" style="font-size:11px;color:var(--navy);font-weight:600;margin-top:6px;display:inline-block">View SRB Meeting →</a>
     </div>
     {% endfor %}
     {% else %}
     <div style="font-size:12px;color:#9ca3af;text-align:center;padding:20px 0">
       <div style="font-size:24px;margin-bottom:6px">🏛</div>
       No SRB meetings scheduled.<br>
-      <a href="{{ url_for('governance.new_srb') }}" style="font-size:11px;color:var(--navy)">Schedule one →</a>
+      <a href="{{ url_for('governance.srb_new') }}" style="font-size:11px;color:var(--navy)">Schedule one →</a>
     </div>
     {% endif %}
     {% if intel and intel.srb_feed %}
