@@ -10907,7 +10907,7 @@ with app.app_context():
         ],
     }
 
-    for table, cols in _col_add_map.items():
+    for table, cols in _migrations.items():
         for col, col_type in cols:
             try:
                 with engine.connect() as conn:
@@ -10940,24 +10940,12 @@ with app.app_context():
     except Exception as _e:
         pass
 
-    db.session.remove()
-    print("Phase-2 DDL complete.")
-
-
-# ---- STARTUP ----------------------------------------------------------------
-with app.app_context():
-    try:
-        db.create_all()
-    except Exception as _dce:
-        print(f"db.create_all warning: {_dce}")
-    try:
-        _phase2_ddl()
-    except Exception as _p2e:
-        print(f"Phase-2 DDL warning: {_p2e}")
     try:
         seed()
     except Exception as _se:
-        print(f"Seed warning: {_se}")
+        print(f'Seed warning: {_se}')
+
+    db.session.remove()
 
 
 if __name__ == '__main__':
