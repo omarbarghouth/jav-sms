@@ -13,27 +13,34 @@
 </div>
 
 <!-- KPI Row -->
-<div class="stat-grid" style="grid-template-columns:repeat(7,1fr);margin-bottom:22px">
-  <div class="stat-card" style="border-top:3px solid #374151">
-    <div class="stat-val">{{ total }}</div><div class="stat-lbl">Total</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:22px">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--navy);border-radius:var(--r);padding:13px 10px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--navy)">{{ total }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Total</div>
   </div>
-  <div class="stat-card" style="border-top:3px solid #d97706">
-    <div class="stat-val" style="color:#d97706">{{ open_c }}</div><div class="stat-lbl">Open</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:var(--r);padding:13px 10px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--amber)">{{ open_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Open</div>
   </div>
-  <div class="stat-card" style="border-top:3px solid #1d4ed8">
-    <div class="stat-val" style="color:#1d4ed8">{{ prog_c }}</div><div class="stat-lbl">In Progress</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--blue);border-radius:var(--r);padding:13px 10px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--blue)">{{ prog_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">In Progress</div>
   </div>
-  <div class="stat-card" style="border-top:3px solid #dc2626">
-    <div class="stat-val" style="color:#dc2626">{{ overdue_c }}</div><div class="stat-lbl">Overdue</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:var(--r);padding:13px 10px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--red)">{{ overdue_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Overdue</div>
   </div>
-  <div class="stat-card" style="border-top:3px solid #15803d">
-    <div class="stat-val" style="color:#15803d">{{ closed_c }}</div><div class="stat-lbl">Closed</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:var(--r);padding:13px 10px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--green)">{{ closed_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Closed</div>
   </div>
-  <div class="stat-card" style="border-top:3px solid #ea580c">
-    <div class="stat-val" style="color:#ea580c">{{ high_c }}</div><div class="stat-lbl">High Priority</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #ea580c;border-radius:var(--r);padding:13px 10px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#ea580c">{{ high_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">High Priority</div>
   </div>
-  <div class="stat-card" style="border-top:3px solid #7c3aed">
-    <div class="stat-val" style="color:#7c3aed">{{ pend_eff }}</div><div class="stat-lbl">Pending Review</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #7c3aed;border-radius:var(--r);padding:13px 10px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#7c3aed">{{ pend_eff }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Pending Review</div>
   </div>
 </div>
 

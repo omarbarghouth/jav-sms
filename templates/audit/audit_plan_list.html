@@ -6,10 +6,10 @@
 
 <!-- ═══ ALERT BANNERS ════════════════════════════════════════════════════════ -->
 {% if alerts_this_month %}
-<div style="background:#fef9c3;border:2px solid #f59e0b;border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
+<div style="background:var(--amber-bg);border:1.5px solid var(--amber-border);border-radius:var(--r);padding:14px 18px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
   <span style="font-size:22px;flex-shrink:0">🔔</span>
   <div>
-    <div style="font-weight:800;font-size:13.5px;color:#92400e;margin-bottom:4px">
+    <div style="font-weight:800;font-size:13.5px;color:var(--amber);margin-bottom:4px">
       {{ alerts_this_month|length }} audit{{ 's' if alerts_this_month|length > 1 }} planned for THIS MONTH
     </div>
     {% for p in alerts_this_month %}
@@ -31,10 +31,10 @@
 {% endif %}
 
 {% if overdue_plans %}
-<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
+<div style="background:var(--red-bg);border:1.5px solid var(--red-border);border-radius:var(--r);padding:14px 18px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">
   <span style="font-size:22px;flex-shrink:0">⚠️</span>
   <div>
-    <div style="font-weight:800;font-size:13.5px;color:#991b1b;margin-bottom:4px">
+    <div style="font-weight:800;font-size:13.5px;color:var(--red);margin-bottom:4px">
       {{ overdue_plans|length }} overdue audit{{ 's' if overdue_plans|length > 1 }} — planned month has passed
     </div>
     {% for p in overdue_plans %}
@@ -50,8 +50,8 @@
 {% endif %}
 
 {% if upcoming %}
-<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 18px;margin-bottom:14px">
-  <span style="font-weight:700;font-size:12.5px;color:#1e40af">📅 Upcoming in next 2 months: </span>
+<div style="background:var(--blue-bg);border:1.5px solid var(--blue-border);border-radius:var(--r);padding:12px 18px;margin-bottom:14px">
+  <span style="font-weight:700;font-size:12.5px;color:var(--blue)">📅 Upcoming in next 2 months: </span>
   {% for p in upcoming %}
   {% set MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
   <span style="font-size:12px;color:#374151;margin-left:6px">
@@ -103,23 +103,23 @@
   </div>
 </div>
 
-<!-- ═══ STAT CARDS ════════════════════════════════════════════════════════════ -->
-<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-  <div class="stat-card">
-    <div class="stat-val" style="color:#1e40af">{{ total_p }}</div>
-    <div class="stat-lbl">Total — {{ year_f }}</div>
+<!-- ═══ STAT STRIP ════════════════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--navy);border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:26px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--navy)">{{ total_p }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Total — {{ year_f }}</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-val" style="color:#15803d">{{ completed_p }}</div>
-    <div class="stat-lbl">Completed</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:26px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--green)">{{ completed_p }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Completed</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-val" style="color:#d97706">{{ active_p }}</div>
-    <div class="stat-lbl">Active / Planned</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:26px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--amber)">{{ active_p }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Active / Planned</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-val" style="color:#dc2626">{{ overdue_plans|length }}</div>
-    <div class="stat-lbl">Overdue</div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:26px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--red)">{{ overdue_plans|length }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Overdue</div>
   </div>
 </div>
 

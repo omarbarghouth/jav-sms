@@ -2,422 +2,581 @@
 {% block title %}Safety Operations Center — Jordan Aviation{% endblock %}
 {% block content %}
 
-<!-- Page Header -->
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+<!-- ── SOC HEADER ─────────────────────────────────────────────── -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
   <div>
-    <div class="page-title" style="font-size:22px">✈ Safety Operations Center</div>
-    <div class="page-sub">Real-time safety governance dashboard · Jordan Aviation SMS · {{ now.strftime('%d %B %Y %H:%M') }} UTC</div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">Jordan Aviation · JAV/SMS/001</div>
+    <div class="page-title" style="font-size:20px;display:flex;align-items:center;gap:10px">
+      Safety Operations Center
+      {% if spi_l3 > 0 %}
+        <span class="ops-chip ops-red"><span class="ops-dot ops-dot-red"></span>L3 ALERT</span>
+      {% elif spi_l2 > 0 %}
+        <span class="ops-chip ops-amber"><span class="ops-dot ops-dot-amber"></span>L2 ALERT</span>
+      {% else %}
+        <span class="ops-chip ops-green"><span class="ops-dot ops-dot-green"></span>NORMAL</span>
+      {% endif %}
+    </div>
+    <div class="page-sub" style="margin-bottom:0">ICAO Annex 19 §3 · Doc 9859 §5 — Real-time safety governance · {{ now.strftime('%d %B %Y  %H:%M UTC') }}</div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
+  <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">
     <a href="/hazard-reports/new" class="btn btn-gold btn-sm">+ Hazard Report</a>
-    <a href="/audit-dashboard"    class="btn btn-nav btn-sm">📋 Audits</a>
-    <a href="/sag/governance"     class="btn btn-nav btn-sm">🛡 SAG</a>
-    <a href="/spi"                class="btn btn-nav btn-sm">📈 SPI</a>
+    <a href="/audit-dashboard"    class="btn btn-nav btn-sm">Audits</a>
+    <a href="/sag/governance"     class="btn btn-nav btn-sm">SAG</a>
+    <a href="/spi"                class="btn btn-nav btn-sm">SPI</a>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     SECTION 1 — EXECUTIVE KPI OVERVIEW
-════════════════════════════════════════════════════════════════ -->
-<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
-  {% set kpis = [
-    ('Open Hazards',       open_haz,         '/hazard-log',        '#dc2626', '⚠'),
-    ('Open Findings',      open_findings,     '/audit-findings-report', '#dc2626', '📋'),
-    ('Overdue Actions',    overdue_act,       '/actions',           '#dc2626', '🔴'),
-    ('Pending SAG Review', pending_review,    '/sag/governance',    '#d97706', '⏳'),
-    ('SPI Alerts',         spi_alerts,        '/spi',               '#d97706' if spi_alerts>0 else '#15803d', '📈'),
-    ('Open RA',            ra_open,           '/risk-assessments',  '#374151', '🔺'),
-    ('Unassigned Actions', unassigned_act,    '/sag/governance',    '#6b7280', '👤'),
-    ('Active Surveys',     active_surveys,    '/safety-promotion',  '#1d4ed8', '📊'),
-    ('Closure Rate',       closure_rate,      '/actions',           '#15803d', '✓'),
-    ('Finding Close Rate', finding_close_rate,'/audit-findings-report', '#15803d', '📑'),
-  ] %}
-  {% for label, val, href, color, icon in kpis %}
-  <a href="{{ href }}" style="text-decoration:none">
-    <div class="stat-card" style="--accent:{{ color }};border-top:3px solid {{ color }};cursor:pointer;transition:.15s;display:block"
-         onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
-      <div style="font-size:18px;margin-bottom:4px">{{ icon }}</div>
-      <div class="stat-val" style="color:{{ color }};font-size:22px">{{ val }}{% if 'Rate' in label %}%{% endif %}</div>
-      <div class="stat-lbl">{{ label }}</div>
-    </div>
-  </a>
+<!-- ── TAB NAV ───────────────────────────────────────────────── -->
+<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:18px">
+  {% for tid, tlbl in [('executive','Executive Safety'),('operational','Operational'),('intelligence','Safety Intelligence'),('governance','Governance')] %}
+  <button onclick="switchTab('{{ tid }}')" id="tab-btn-{{ tid }}"
+          style="padding:8px 18px;font-size:11.5px;font-weight:700;border:none;background:none;cursor:pointer;
+                 border-bottom:2px solid transparent;margin-bottom:-2px;letter-spacing:.2px;transition:.12s;
+                 color:var(--muted);font-family:inherit">
+    {{ tlbl }}
+  </button>
   {% endfor %}
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     SECTION 2 — ALERTS CENTER + ACTION GOVERNANCE
-════════════════════════════════════════════════════════════════ -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+<!-- ══════════════════════════════════════════════════════════════
+     TAB 1 — EXECUTIVE SAFETY
+═══════════════════════════════════════════════════════════════ -->
+<div id="tab-executive">
 
-  <!-- Overdue Actions Alert -->
-  <div class="card" style="border-left:4px solid #dc2626;padding:0">
-    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <div class="card-title" style="margin:0;color:#dc2626">🚨 Overdue Actions ({{ overdue_act }})</div>
-      <a href="/actions" class="btn btn-sm btn-outline" style="font-size:11px">View All →</a>
+  <!-- KPI STRIP: 10 indicators in 2 rows of 5 -->
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+    {% set kpis = [
+      ('Open Hazards',       open_haz,          '/hazard-log',             '#dc2626'),
+      ('Open Findings',      open_findings,     '/audit-findings-report',  '#dc2626'),
+      ('Overdue Actions',    overdue_act,       '/actions?status=Overdue', '#dc2626'),
+      ('Pending SAG Review', pending_review,    '/sag/governance',         '#c2610a'),
+      ('SPI Alerts',         spi_alerts,        '/spi',                    '#c2610a' if spi_alerts>0 else '#15803d'),
+      ('Open RA',            ra_open,           '/risk-assessments',       '#374151'),
+      ('Unassigned Actions', unassigned_act,    '/sag/governance',         '#5e6e8c'),
+      ('Active Surveys',     active_surveys,    '/safety-promotion',       '#1d4ed8'),
+      ('Closure Rate',       closure_rate,      '/actions',                '#15803d'),
+      ('Finding Close Rate', finding_close_rate,'/audit-findings-report',  '#15803d'),
+    ] %}
+    {% for label, val, href, color in kpis %}
+    <a href="{{ href }}" style="text-decoration:none">
+      <div style="background:#fff;border:1px solid var(--border);border-top:3px solid {{ color }};border-radius:var(--r);
+                  padding:12px 14px 10px;box-shadow:var(--shadow);transition:.12s"
+           onmouseover="this.style.boxShadow='var(--shadow2)'" onmouseout="this.style.boxShadow='var(--shadow)'">
+        <div style="font-size:24px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ color }};line-height:1;margin-bottom:4px">
+          {{ val }}{% if 'Rate' in label %}<span style="font-size:13px">%</span>{% endif %}
+        </div>
+        <div style="font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">{{ label }}</div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- SPI STATUS + INBOX ALERT -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+
+    <!-- SPI Banner -->
+    <div style="background:{% if spi_l3>0 %}var(--red-bg){% elif spi_l2>0 %}var(--amber-bg){% else %}var(--green-bg){% endif %};
+                border:1px solid {% if spi_l3>0 %}var(--red-border){% elif spi_l2>0 %}var(--amber-border){% else %}var(--green-border){% endif %};
+                border-left:4px solid {% if spi_l3>0 %}var(--red){% elif spi_l2>0 %}var(--amber){% else %}var(--green){% endif %};
+                border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <div style="font-size:28px">{% if spi_l3>0 %}🔴{% elif spi_l2>0 %}🟡{% else %}🟢{% endif %}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:13px;color:{% if spi_l3>0 %}var(--red){% elif spi_l2>0 %}var(--amber){% else %}var(--green){% endif %}">
+          SPI Status:
+          {% if spi_l3>0 %}{{ spi_l3 }} Level-3 Alert{{ 's' if spi_l3>1 }}
+          {% elif spi_l2>0 %}{{ spi_l2 }} Level-2 Alert{{ 's' if spi_l2>1 }}
+          {% else %}All Indicators Normal{% endif %}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ spi_alerts }} total indicators in alert state</div>
+      </div>
+      <a href="/spi" class="btn btn-sm btn-outline" style="white-space:nowrap">SPI →</a>
     </div>
-    {% if overdue_actions %}
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:#fef2f2">
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626">Action</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626">Description</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626">SAG Member</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626">Due</th>
-        </tr></thead>
-        <tbody>
-        {% for a in overdue_actions %}
-        <tr style="border-bottom:1px solid #fee2e2" onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background=''">
-          <td style="padding:7px 12px"><a href="/actions/{{ a.id }}" style="font-family:monospace;font-weight:700;font-size:11px;color:#dc2626">{{ a.id }}</a></td>
-          <td style="padding:7px 12px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ (a.description or '')[:45] }}</td>
-          <td style="padding:7px 12px;color:{% if not a.sag_member %}#dc2626;font-weight:700{% else %}#374151{% endif %}">{{ a.sag_member or '⚠ Unassigned' }}</td>
-          <td style="padding:7px 12px;font-family:monospace;font-size:11px;color:#dc2626;font-weight:700">{{ a.due_date or '—' }}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
+
+    <!-- Reports Inbox -->
+    {% if vol_new > 0 or conf_new > 0 %}
+    <a href="/admin/reports" style="text-decoration:none;display:block">
+      <div style="background:#faf5ff;border:1px solid #e9d5ff;border-left:4px solid #7c3aed;border-radius:var(--r);
+                  padding:12px 16px;display:flex;align-items:center;gap:12px;height:100%">
+        <span style="font-size:26px">📬</span>
+        <div>
+          <div style="font-weight:800;font-size:13px;color:#7c3aed">New Reports in Inbox</div>
+          <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+            {% if vol_new %}<span class="badge b-green">{{ vol_new }} Voluntary</span>{% endif %}
+            {% if conf_new %}<span class="badge b-purple">{{ conf_new }} Confidential</span>{% endif %}
+          </div>
+        </div>
+      </div>
+    </a>
     {% else %}
-    <div style="padding:24px;text-align:center;color:#15803d;font-weight:600">✓ No overdue actions</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:24px">✅</span>
+      <div>
+        <div style="font-weight:700;font-size:13px;color:var(--green)">Inbox Clear</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">No unreviewed safety reports</div>
+      </div>
+    </div>
     {% endif %}
   </div>
 
-  <!-- Pending Safety Review -->
-  <div class="card" style="border-left:4px solid #d97706;padding:0">
-    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <div class="card-title" style="margin:0;color:#d97706">⏳ Pending Safety Review ({{ pending_review }})</div>
-      <a href="/sag/governance" class="btn btn-sm btn-outline" style="font-size:11px">Review →</a>
-    </div>
-    {% if pending_review_list %}
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:#fffbeb">
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#b45309">Action</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#b45309">Description</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#b45309">SAG Member</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;color:#b45309">Status</th>
-        </tr></thead>
-        <tbody>
-        {% for a in pending_review_list %}
-        <tr style="border-bottom:1px solid #fde68a" onmouseover="this.style.background='#fffbeb'" onmouseout="this.style.background=''">
-          <td style="padding:7px 12px"><a href="/actions/{{ a.id }}" style="font-family:monospace;font-weight:700;font-size:11px;color:#1d4ed8">{{ a.id }}</a></td>
-          <td style="padding:7px 12px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ (a.description or '')[:45] }}</td>
-          <td style="padding:7px 12px">{{ a.sag_member or '—' }}</td>
-          <td style="padding:7px 12px"><span style="background:#fef3c7;color:#92400e;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700">{{ a.status }}</span></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div style="padding:24px;text-align:center;color:#15803d;font-weight:600">✓ No pending reviews</div>
-    {% endif %}
-  </div>
-</div>
+  <!-- OVERDUE ACTIONS + PENDING REVIEW -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
 
-<!-- ═══════════════════════════════════════════════════════════════
-     SECTION 3 — AUDIT GOVERNANCE + DEPT PERFORMANCE
-════════════════════════════════════════════════════════════════ -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-
-  <!-- Open Findings -->
-  <div class="card" style="padding:0">
-    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <div class="card-title" style="margin:0">📋 Open Audit Findings ({{ open_findings }})</div>
-      <a href="/audit-findings-report" class="btn btn-sm btn-outline" style="font-size:11px">All Findings →</a>
-    </div>
-    <!-- Severity breakdown bar -->
-    <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
-      <div style="display:flex;gap:8px;font-size:11px;margin-bottom:6px">
-        {% for sev, cnt, col in [('Critical', sev_data.Critical, '#dc2626'), ('Major', sev_data.Major, '#ea580c'), ('Minor', sev_data.Minor, '#d97706'), ('Obs', sev_data.Obs, '#1d4ed8')] %}
-        <span style="display:flex;align-items:center;gap:3px">
-          <span style="width:8px;height:8px;border-radius:50%;background:{{ col }};display:inline-block"></span>
-          {{ sev }}: <strong>{{ cnt }}</strong>
-        </span>
-        {% endfor %}
+    <div class="card" style="padding:0;border-left:3px solid var(--red)">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:#fafafa">
+        <div style="font-size:9.5px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px">🚨 Overdue Actions ({{ overdue_act }})</div>
+        <a href="/actions?status=Overdue" class="btn btn-sm btn-outline">View All →</a>
       </div>
-      {% set total_sev = sev_data.Critical + sev_data.Major + sev_data.Minor + sev_data.Obs %}
-      {% if total_sev > 0 %}
-      <div style="height:8px;background:#f3f4f6;border-radius:99px;overflow:hidden;display:flex">
-        {% for val, col in [(sev_data.Critical,'#dc2626'),(sev_data.Major,'#ea580c'),(sev_data.Minor,'#d97706'),(sev_data.Obs,'#1d4ed8')] %}
-        {% if val > 0 %}<div style="width:{{ (val/total_sev*100)|round|int }}%;background:{{ col }}"></div>{% endif %}
-        {% endfor %}
+      {% if overdue_actions %}
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th style="color:var(--red)">ID</th>
+              <th style="color:var(--red)">Description</th>
+              <th style="color:var(--red)">Owner</th>
+              <th style="color:var(--red)">Due</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for a in overdue_actions %}
+          <tr onclick="location='/actions/{{ a.id }}'" style="cursor:pointer">
+            <td><span class="ctrl-num" style="background:var(--red)">{{ a.id }}</span></td>
+            <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ (a.description or '')[:40] }}</td>
+            <td style="color:{% if not a.sag_member %}var(--red);font-weight:700{% else %}var(--text){% endif %}">{{ a.sag_member or '⚠ Unassigned' }}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--red);font-weight:700">{{ a.due_date or '—' }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
       </div>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:var(--green);font-weight:700;font-size:12px">✓ No overdue actions</div>
       {% endif %}
     </div>
-    {% if recent_findings %}
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:#f9fafb">
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Ref</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Description</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Sev</th>
-          <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Status</th>
-        </tr></thead>
-        <tbody>
-        {% for f in recent_findings %}
-        <tr style="border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <td style="padding:7px 12px"><a href="/audit-findings/{{ f.id }}" style="font-family:monospace;font-weight:700;font-size:11px;color:#0f1c3f">{{ f.finding_ref or f.id }}</a></td>
-          <td style="padding:7px 12px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ (f.description or '')[:50] }}</td>
-          <td style="padding:7px 12px">
-            {% if f.severity=='Critical' or f.severity=='Major' %}
-            <span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ f.severity }}</span>
-            {% elif f.severity=='Minor' %}
-            <span style="background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ f.severity }}</span>
-            {% else %}
-            <span style="background:#eff6ff;color:#1d4ed8;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ f.severity or 'Obs' }}</span>
-            {% endif %}
-          </td>
-          <td style="padding:7px 12px">
-            <span style="background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ f.status }}</span>
-          </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
+
+    <div class="card" style="padding:0;border-left:3px solid var(--amber)">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:#fafafa">
+        <div style="font-size:9.5px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:.8px">⏳ Pending Safety Review ({{ pending_review }})</div>
+        <a href="/sag/governance" class="btn btn-sm btn-outline">Review →</a>
+      </div>
+      {% if pending_review_list %}
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th style="color:var(--amber)">ID</th>
+              <th style="color:var(--amber)">Description</th>
+              <th style="color:var(--amber)">Member</th>
+              <th style="color:var(--amber)">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for a in pending_review_list %}
+          <tr onclick="location='/actions/{{ a.id }}'" style="cursor:pointer">
+            <td><span class="ctrl-num">{{ a.id }}</span></td>
+            <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ (a.description or '')[:40] }}</td>
+            <td>{{ a.sag_member or '—' }}</td>
+            <td><span class="badge b-yellow">{{ a.status }}</span></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:var(--green);font-weight:700;font-size:12px">✓ No pending reviews</div>
+      {% endif %}
     </div>
-    {% else %}
-    <div style="padding:24px;text-align:center;color:#15803d;font-weight:600">✓ No open findings</div>
-    {% endif %}
   </div>
 
-  <!-- Department Performance -->
-  <div class="card">
-    <div class="card-title">🏢 Department Action Performance</div>
-    {% if dept_perf %}
-    {% for dp in dept_perf[:7] %}
-    <div style="margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:3px">
-        <span>{{ dp.dept.name }}</span>
-        <span style="color:{% if dp.overdue>0 %}#dc2626{% else %}var(--muted){% endif %}">
-          {{ dp.open }} open{% if dp.overdue %} · <strong style="color:#dc2626">{{ dp.overdue }} overdue</strong>{% endif %}
-        </span>
-      </div>
-      <div class="progress">
-        <div class="progress-bar" style="width:{{ dp.rate }}%;background:{% if dp.rate>=75 %}#15803d{% elif dp.rate>=50 %}#d97706{% else %}#dc2626{% endif %}"></div>
-      </div>
-      <div style="font-size:10px;color:var(--muted);margin-top:2px">{{ dp.rate }}% closure · {{ dp.total }} total actions</div>
-    </div>
-    {% endfor %}
-    {% else %}
-    <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No department data yet.</div>
-    {% endif %}
-    <a href="/sag/governance" class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:4px">Full Governance View →</a>
-  </div>
-</div>
+  <!-- DEPT PERFORMANCE + MODULE GRID -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
 
-<!-- ═══════════════════════════════════════════════════════════════
-     SECTION 4 — HAZARD INTELLIGENCE + SPI STATUS
-════════════════════════════════════════════════════════════════ -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-
-  <!-- Recent Hazards -->
-  <div class="card" style="padding:0">
-    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <div class="card-title" style="margin:0">⚠ Recent Hazards ({{ open_haz }} open)</div>
-      <a href="/hazard-log" class="btn btn-sm btn-outline" style="font-size:11px">All →</a>
-    </div>
-    {% if recent_haz %}
-    {% for h in recent_haz %}
-    <a href="/hazard-log/{{ h.id }}" style="text-decoration:none;color:inherit">
-      <div style="padding:10px 16px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center"
-           onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-        <div>
-          <div style="font-size:12px;font-weight:700;color:#0f1c3f">{{ (h.specific_components or h.generic_hazard or '')[:55] }}</div>
-          <div style="font-size:10px;color:var(--muted)">{{ h.classification or '—' }} · {{ h.source or '—' }}</div>
+    <div class="card">
+      <div class="card-title">Department Action Performance</div>
+      {% if dept_perf %}
+      {% for dp in dept_perf[:7] %}
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:600;margin-bottom:3px">
+          <span>{{ dp.dept.name }}</span>
+          <span style="color:{% if dp.overdue>0 %}var(--red){% else %}var(--muted){% endif %};font-size:11px">
+            {{ dp.open }} open{% if dp.overdue %} · <strong>{{ dp.overdue }} overdue</strong>{% endif %}
+          </span>
         </div>
-        <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;
-          {% if h.status=='Open' %}background:#fee2e2;color:#dc2626{% else %}background:#dcfce7;color:#15803d{% endif %}">
-          {{ h.status }}
-        </span>
-      </div>
-    </a>
-    {% endfor %}
-    {% else %}
-    <div style="padding:24px;text-align:center;color:#15803d;font-weight:600">✓ No open hazards</div>
-    {% endif %}
-  </div>
-
-  <!-- SPI + Module Summary -->
-  <div class="card">
-    <div class="card-title">📈 Safety Performance Overview</div>
-
-    <!-- New Reports Inbox alert -->
-    {% if vol_new > 0 or conf_new > 0 %}
-    <a href="/admin/reports" style="text-decoration:none;display:block;margin-bottom:10px">
-      <div style="background:#faf5ff;border:1.5px solid #e9d5ff;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px">
-        <span style="font-size:20px">📬</span>
-        <div>
-          <div style="font-weight:700;font-size:13px;color:#7c3aed">
-            New Reports in Inbox
-            {% if vol_new %}<span style="background:#dcfce7;color:#15803d;padding:1px 8px;border-radius:99px;font-size:11px;margin-left:6px">{{ vol_new }} Voluntary</span>{% endif %}
-            {% if conf_new %}<span style="background:#f3e8ff;color:#7c3aed;padding:1px 8px;border-radius:99px;font-size:11px;margin-left:4px">{{ conf_new }} Confidential</span>{% endif %}
-          </div>
-          <div style="font-size:11px;color:var(--muted)">Click to review in Safety Reports Inbox →</div>
+        <div class="progress">
+          <div class="progress-bar" style="width:{{ dp.rate }}%;background:{% if dp.rate>=75 %}var(--green){% elif dp.rate>=50 %}var(--amber){% else %}var(--red){% endif %}"></div>
         </div>
+        <div style="font-size:9.5px;color:var(--muted2);margin-top:2px">{{ dp.rate }}% closure · {{ dp.total }} total</div>
       </div>
-    </a>
-    {% endif %}
-
-    <!-- SPI Alert summary -->
-    <div style="background:{% if spi_l3>0 %}#fff5f5{% elif spi_l2>0 %}#fffbeb{% else %}#f0fdf4{% endif %};
-                border:1px solid {% if spi_l3>0 %}#fca5a5{% elif spi_l2>0 %}#fde68a{% else %}#bbf7d0{% endif %};
-                border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
-      <div style="font-size:24px">{% if spi_l3>0 %}🔴{% elif spi_l2>0 %}🟡{% else %}🟢{% endif %}</div>
-      <div>
-        <div style="font-weight:700;font-size:13px">SPI Status: {% if spi_l3>0 %}{{ spi_l3 }} Level-3 Alert(s){% elif spi_l2>0 %}{{ spi_l2 }} Level-2 Alert(s){% else %}Normal{% endif %}</div>
-        <div style="font-size:11px;color:var(--muted)">{{ spi_alerts }} total indicators in alert state</div>
-      </div>
-      <a href="/spi" class="btn btn-sm btn-outline" style="margin-left:auto;font-size:11px">SPI Dashboard →</a>
+      {% endfor %}
+      {% else %}
+      <div style="text-align:center;padding:18px;color:var(--muted);font-size:12px">No department data yet.</div>
+      {% endif %}
+      <a href="/sag/governance" class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:6px">Full Governance View →</a>
     </div>
 
-    <!-- Module summary grid -->
-    {% set modules = [
-      ('Hazard Reports', hr_cnt, '/hazard-reports', '#dc2626'),
-      ('Investigations', inv_cnt, '/investigations', '#374151'),
-      ('ASR Reports', asr_cnt, '/asr', '#1d4ed8'),
-      ('Risk Assessments', ra_open, '/risk-assessments', '#d97706'),
-      ('Active Audits', active_audits, '/audit-dashboard', '#0f1c3f'),
-      ('Safety Bulletins', active_bulletins, '/safety-promotion', '#15803d'),
-      ('Voluntary Reports', vol_total, '/admin/reports', '#15803d'),
-      ('Confidential Rpts', conf_total, '/admin/reports', '#7c3aed'),
-    ] %}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    {% for label, cnt, href, color in modules %}
-    <a href="{{ href }}" style="text-decoration:none">
-      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:7px;padding:10px 12px;
-                  border-left:3px solid {{ color }};transition:.15s"
-           onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='#f9fafb'">
-        <div style="font-size:16px;font-weight:800;color:{{ color }}">{{ cnt }}</div>
-        <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.3px">{{ label }}</div>
-      </div>
-    </a>
-    {% endfor %}
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════
-     SECTION 5 — AUDIT PLANS + QUICK ACCESS
-════════════════════════════════════════════════════════════════ -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-
-  <!-- Audit Plan Alerts -->
-  <div class="card">
-    <div class="card-title">📅 Audit Schedule Alerts</div>
-    {% if plan_overdue %}
-    <div style="margin-bottom:10px">
-      <div style="font-size:10px;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">⚠ Overdue Plans ({{ plan_overdue|length }})</div>
-      {% for p in plan_overdue[:4] %}
-      <a href="/audit-plan/{{ p.id }}" style="text-decoration:none;color:inherit">
-        <div style="padding:7px 10px;background:#fff5f5;border:1px solid #fca5a5;border-radius:6px;margin-bottom:5px;font-size:12px"
-             onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff5f5'">
-          <div style="font-weight:700;color:#dc2626">{{ p.title or p.id }}</div>
-          <div style="font-size:10px;color:#6b7280">{{ p.department.name if p.department else '—' }} · {{ p.month }}/{{ p.year }}</div>
+    <div class="card">
+      <div class="card-title">Module Status Overview</div>
+      {% set modules = [
+        ('Hazard Reports',    hr_cnt,           '/hazard-reports',        '#dc2626'),
+        ('Investigations',    inv_cnt,          '/investigations',        '#374151'),
+        ('ASR Reports',       asr_cnt,          '/asr',                   '#1d4ed8'),
+        ('Risk Assessments',  ra_open,          '/risk-assessments',      '#c2610a'),
+        ('Active Audits',     active_audits,    '/audit-dashboard',       '#0f1c3f'),
+        ('Safety Bulletins',  active_bulletins, '/safety-promotion',      '#15803d'),
+        ('Voluntary Reports', vol_total,        '/admin/reports',         '#15803d'),
+        ('Confidential Rpts', conf_total,       '/admin/reports',         '#7c3aed'),
+      ] %}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+      {% for label, cnt, href, color in modules %}
+      <a href="{{ href }}" style="text-decoration:none">
+        <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid {{ color }};
+                    border-radius:var(--r2);padding:9px 11px;transition:.12s"
+             onmouseover="this.style.background='#edf0ff'" onmouseout="this.style.background='var(--surface)'">
+          <div style="font-size:18px;font-weight:800;color:{{ color }};font-family:'IBM Plex Mono',monospace;line-height:1;margin-bottom:3px">{{ cnt }}</div>
+          <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">{{ label }}</div>
         </div>
       </a>
       {% endfor %}
+      </div>
     </div>
+  </div>
+
+</div><!-- /tab-executive -->
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     TAB 2 — OPERATIONAL
+═══════════════════════════════════════════════════════════════ -->
+<div id="tab-operational" style="display:none">
+
+  <!-- Recent Hazards + Audit Findings -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+
+    <div class="card" style="padding:0;border-left:3px solid var(--red)">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:9.5px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.8px">⚠ Recent Hazards ({{ open_haz }} open)</div>
+        <a href="/hazard-log" class="btn btn-sm btn-outline">All →</a>
+      </div>
+      {% if recent_haz %}
+      {% for h in recent_haz %}
+      <a href="/hazard-log/{{ h.id }}" style="text-decoration:none;color:inherit;display:block">
+        <div style="padding:9px 14px;border-bottom:1px solid #f0f2f8;display:flex;justify-content:space-between;align-items:center"
+             onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:12px;font-weight:700;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              {{ (h.specific_components or h.generic_hazard or '')[:52] }}
+            </div>
+            <div style="font-size:9.5px;color:var(--muted);margin-top:2px">{{ h.classification or '—' }} · {{ h.source or '—' }}</div>
+          </div>
+          <span class="badge {% if h.status=='Open' %}b-red{% else %}b-green{% endif %}" style="margin-left:8px;flex-shrink:0">{{ h.status }}</span>
+        </div>
+      </a>
+      {% endfor %}
+      {% else %}
+      <div style="padding:20px;text-align:center;color:var(--green);font-weight:700;font-size:12px">✓ No open hazards</div>
+      {% endif %}
+    </div>
+
+    <div class="card" style="padding:0">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.8px">📋 Open Audit Findings ({{ open_findings }})</div>
+        <a href="/audit-findings-report" class="btn btn-sm btn-outline">All →</a>
+      </div>
+      <!-- Severity bar -->
+      <div style="padding:8px 14px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;gap:10px;font-size:10.5px;margin-bottom:5px;align-items:center">
+          {% for sev, cnt, col in [('Critical',sev_data.Critical,'#7f1d1d'),('Major',sev_data.Major,'#9a3412'),('Minor',sev_data.Minor,'#92400e'),('Obs',sev_data.Obs,'#1e40af')] %}
+          <span style="display:flex;align-items:center;gap:3px">
+            <span style="width:7px;height:7px;border-radius:50%;background:{{ col }};display:inline-block;flex-shrink:0"></span>
+            <span style="font-size:9.5px;font-weight:600;color:var(--muted)">{{ sev }}: <strong style="color:var(--text)">{{ cnt }}</strong></span>
+          </span>
+          {% endfor %}
+        </div>
+        {% set total_sev = sev_data.Critical + sev_data.Major + sev_data.Minor + sev_data.Obs %}
+        {% if total_sev > 0 %}
+        <div style="height:5px;background:#e5e7eb;border-radius:99px;overflow:hidden;display:flex">
+          {% for val, col in [(sev_data.Critical,'#7f1d1d'),(sev_data.Major,'#9a3412'),(sev_data.Minor,'#92400e'),(sev_data.Obs,'#1e40af')] %}
+          {% if val > 0 %}<div style="width:{{ (val/total_sev*100)|round|int }}%;background:{{ col }}"></div>{% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% if recent_findings %}
+      <table>
+        <thead>
+          <tr>
+            <th>Ref</th>
+            <th>Description</th>
+            <th>Sev</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for f in recent_findings %}
+        <tr onclick="location='/audit-findings/{{ f.id }}'" style="cursor:pointer">
+          <td><a href="/audit-findings/{{ f.id }}" class="ctrl-num">{{ f.finding_ref or f.id }}</a></td>
+          <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ (f.description or '')[:48] }}</td>
+          <td>
+            {% if f.severity=='Critical' %}<span class="sev-critical">Critical</span>
+            {% elif f.severity=='Major' %}<span class="sev-major">Major</span>
+            {% elif f.severity=='Minor' %}<span class="sev-minor">Minor</span>
+            {% else %}<span class="sev-obs">{{ f.severity or 'Obs' }}</span>{% endif %}
+          </td>
+          <td><span class="badge b-yellow">{{ f.status }}</span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:var(--green);font-weight:700;font-size:12px">✓ No open findings</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Active Actions Feed -->
+  <div class="card" style="padding:0">
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.8px">Active Actions Register</div>
+      <a href="/actions" class="btn btn-sm btn-outline">All Actions →</a>
+    </div>
+    {% if recent_act %}
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Action ID</th>
+            <th>Source</th>
+            <th>Description</th>
+            <th>Priority</th>
+            <th>Owner</th>
+            <th>Due</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for a in recent_act %}
+        <tr onclick="location='/actions/{{ a.id }}'" style="cursor:pointer">
+          <td><span class="ctrl-num">{{ a.id }}</span></td>
+          <td><span class="badge b-gray">{{ a.source or 'Manual' }}</span></td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ (a.description or '')[:55] }}</td>
+          <td>
+            {% if a.priority=='High' %}<span class="badge b-red">High</span>
+            {% elif a.priority=='Medium' %}<span class="badge b-yellow">Medium</span>
+            {% else %}<span class="badge b-gray">{{ a.priority or 'Low' }}</span>{% endif %}
+          </td>
+          <td style="font-size:11px;color:{% if not a.sag_member %}var(--red);font-weight:700{% else %}var(--text){% endif %}">{{ a.sag_member or '⚠ Unassigned' }}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{% if a.status=='Overdue' %}var(--red);font-weight:700{% else %}var(--muted){% endif %}">{{ a.due_date or '—' }}</td>
+          <td>
+            {% set sc={'Open':'b-blue','Assigned':'b-navy','In Progress':'b-blue','Overdue':'b-red','Returned':'b-yellow','Mitigation Implemented':'b-purple','Closed':'b-green'} %}
+            <span class="badge {{ sc.get(a.status,'b-gray') }}">{{ a.status }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="padding:28px;text-align:center;color:var(--green);font-weight:700;font-size:12px">✓ No active actions</div>
     {% endif %}
-    {% if plan_this_month %}
-    <div style="font-size:10px;font-weight:800;color:#0f1c3f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">📋 This Month ({{ plan_this_month|length }})</div>
-    {% for p in plan_this_month[:4] %}
-    <a href="/audit-plan/{{ p.id }}" style="text-decoration:none;color:inherit">
-      <div style="padding:7px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;margin-bottom:5px;font-size:12px"
-           onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
-        <div style="font-weight:700;color:#1d4ed8">{{ p.title or p.id }}</div>
-        <div style="font-size:10px;color:#6b7280">{{ p.department.name if p.department else '—' }} · Status: {{ p.status }}</div>
+  </div>
+
+</div><!-- /tab-operational -->
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     TAB 3 — SAFETY INTELLIGENCE
+═══════════════════════════════════════════════════════════════ -->
+<div id="tab-intelligence" style="display:none">
+
+  <!-- Audit Schedule + Quick Access -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+
+    <div class="card">
+      <div class="card-title">Audit Schedule Alerts</div>
+      {% if plan_overdue %}
+      <div style="margin-bottom:10px">
+        <div style="font-size:9px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">⚠ Overdue Plans ({{ plan_overdue|length }})</div>
+        {% for p in plan_overdue[:4] %}
+        <a href="/audit-plan/{{ p.id }}" style="text-decoration:none;color:inherit;display:block">
+          <div style="padding:7px 10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--r2);margin-bottom:5px;font-size:12px"
+               onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='var(--red-bg)'">
+            <div style="font-weight:700;color:var(--red)">{{ p.title or p.id }}</div>
+            <div style="font-size:9.5px;color:var(--muted)">{{ p.department.name if p.department else '—' }} · {{ p.month }}/{{ p.year }}</div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if plan_this_month %}
+      <div style="font-size:9px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">This Month ({{ plan_this_month|length }})</div>
+      {% for p in plan_this_month[:4] %}
+      <a href="/audit-plan/{{ p.id }}" style="text-decoration:none;color:inherit;display:block">
+        <div style="padding:7px 10px;background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:var(--r2);margin-bottom:5px;font-size:12px"
+             onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='var(--blue-bg)'">
+          <div style="font-weight:700;color:var(--blue)">{{ p.title or p.id }}</div>
+          <div style="font-size:9.5px;color:var(--muted)">{{ p.department.name if p.department else '—' }} · {{ p.status }}</div>
+        </div>
+      </a>
+      {% endfor %}
+      {% endif %}
+      {% if not plan_overdue and not plan_this_month %}
+      <div style="text-align:center;padding:20px;color:var(--green);font-weight:700;font-size:12px">✓ All audit plans on schedule</div>
+      {% endif %}
+      <a href="/audit-dashboard" class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:8px">Full Audit Dashboard →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Safety Intelligence Summary</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        {% set intel = [
+          ('Total Hazard Reports', hr_cnt,     '/hazard-reports',  var(--red)),
+          ('Risk Assessments',     ra_open,    '/risk-assessments', '#c2610a'),
+          ('ASR Submissions',      asr_cnt,    '/asr',              '#1d4ed8'),
+          ('Investigations',       inv_cnt,    '/investigations',   '#374151'),
+        ] %}
+        {% for label, cnt, href, color in [
+          ('Total Hazards',   hr_cnt,  '/hazard-reports',   '#dc2626'),
+          ('Risk Assessments',ra_open, '/risk-assessments', '#c2610a'),
+          ('ASR Submissions', asr_cnt, '/asr',              '#1d4ed8'),
+          ('Investigations',  inv_cnt, '/investigations',   '#374151'),
+        ] %}
+        <a href="{{ href }}" style="text-decoration:none">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:12px;border-left:3px solid {{ color }};transition:.12s"
+               onmouseover="this.style.background='#edf0ff'" onmouseout="this.style.background='var(--surface)'">
+            <div style="font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ color }};margin-bottom:3px">{{ cnt }}</div>
+            <div style="font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">{{ label }}</div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+      <div style="background:var(--surface);border-radius:var(--r2);padding:12px;border:1px solid var(--border)">
+        <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px">Action Performance</div>
+        <div style="display:flex;gap:4px;align-items:center;font-size:12px;margin-bottom:5px">
+          <span style="font-weight:700;color:var(--navy)">Overall Closure Rate:</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-weight:800;color:{% if closure_rate>=75 %}var(--green){% elif closure_rate>=50 %}var(--amber){% else %}var(--red){% endif %}">{{ closure_rate }}%</span>
+        </div>
+        <div class="progress" style="height:8px">
+          <div class="progress-bar" style="width:{{ closure_rate }}%;background:{% if closure_rate>=75 %}var(--green){% elif closure_rate>=50 %}var(--amber){% else %}var(--red){% endif %}"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted2);margin-top:4px">Finding Close Rate: {{ finding_close_rate }}% · {{ overdue_act }} overdue · {{ unassigned_act }} unassigned</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trend snapshot placeholder -->
+  <div class="card">
+    <div class="card-title">Hazard Classification Breakdown — Recent Period</div>
+  <!-- Trend snapshot placeholder -->
+  <div class="card">
+    <div class="card-title">Hazard Classification Breakdown — Recent Period</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      {% for cls, col in [
+        ('Airspace','#1d4ed8'),
+        ('Ground Operations','#c2610a'),
+        ('Maintenance','#dc2626'),
+        ('Cabin Safety','#15803d')
+      ] %}
+      <div style="background:var(--surface);border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r2);padding:12px;text-align:center">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">{{ cls }}</div>
+        <div style="font-size:20px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ col }}">—</div>
+        <div style="font-size:9px;color:var(--muted2);margin-top:3px">reports</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div style="text-align:center;padding:8px 0 0;font-size:11px;color:var(--muted2)">
+      Detailed classification data available in the <a href="/hazard-log" style="color:var(--blue)">Hazard Log</a>
+    </div>
+  </div>
+
+</div><!-- /tab-intelligence -->
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     TAB 4 — GOVERNANCE
+════════════════════════════════════════════════════════════════ -->
+<div id="tab-governance" style="display:none">
+
+  <!-- Governance quick links -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+    {% for label, href, icon, col in [
+      ('Accountable Exec',    '/governance/ae',              '🏅', '#0f1c3f'),
+      ('Safety Review Board', '/governance/srb',             '🏛', '#1d4ed8'),
+      ('Risk Acceptance',     '/governance/risk-acceptance', '⚖',  '#c2610a'),
+      ('Governance Log',      '/governance/audit-log',       '📋', '#374151'),
+    ] %}
+    <a href="{{ href }}" style="text-decoration:none">
+      <div style="background:#fff;border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);
+                  padding:16px;text-align:center;box-shadow:var(--shadow);transition:.12s"
+           onmouseover="this.style.boxShadow='var(--shadow2)'" onmouseout="this.style.boxShadow='var(--shadow)'">
+        <div style="font-size:24px;margin-bottom:6px">{{ icon }}</div>
+        <div style="font-size:11.5px;font-weight:700;color:{{ col }}">{{ label }}</div>
       </div>
     </a>
     {% endfor %}
-    {% endif %}
-    {% if not plan_overdue and not plan_this_month %}
-    <div style="text-align:center;padding:20px;color:#15803d;font-weight:600">✓ All audit plans on schedule</div>
-    {% endif %}
-    <a href="/audit-dashboard" class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:8px">Full Audit Dashboard →</a>
   </div>
 
-  <!-- Quick Access -->
+  <!-- Quick Access Control Center -->
   <div class="card">
-    <div class="card-title">⚡ Quick Access Control Center</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      {% set quick = [
-        ('⚠ Report Hazard',       '/hazard-reports/new',   '#dc2626'),
-        ('📋 Open Audit',          '/audit-dashboard',      '#0f1c3f'),
-        ('🔺 Risk Assessment',     '/risk-assessments',     '#d97706'),
-        ('🔬 Investigation',       '/investigations',       '#374151'),
-        ('📈 SPI Dashboard',       '/spi',                  '#1d4ed8'),
-        ('🛡 SAG Governance',      '/sag/governance',       '#0f1c3f'),
-        ('📢 Safety Bulletins',    '/safety-promotion',     '#15803d'),
-        ('📊 Surveys',             '/safety-promotion',     '#7c3aed'),
-        ('📁 Documents',           '/documents',            '#6b7280'),
-        ('👥 User Management',     '/admin/users',          '#374151'),
-        ('☑️ Checklist Manager',   '/audit-checklists',    '#1d4ed8'),
-        ('🔒 Action Management',   '/actions',              '#0f1c3f'),
+    <div class="card-title">Quick Access — All Modules</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px">
+      {% for label, href, color in [
+        ('⚠ Report Hazard',       '/hazard-reports/new',       '#dc2626'),
+        ('📋 Open Audit',          '/audit-dashboard',          '#0f1c3f'),
+        ('🔺 Risk Assessment',     '/risk-assessments',         '#c2610a'),
+        ('🔬 Investigation',       '/investigations',           '#374151'),
+        ('📈 SPI Dashboard',       '/spi',                      '#1d4ed8'),
+        ('🛡 SAG Governance',      '/sag/governance',           '#0f1c3f'),
+        ('📢 Safety Bulletins',    '/safety-promotion',         '#15803d'),
+        ('📊 Safety Surveys',      '/safety-promotion/surveys', '#7c3aed'),
+        ('📁 Document Control',    '/documents',                '#5e6e8c'),
+        ('👥 User Management',     '/admin/users',              '#374151'),
+        ('☑ Checklists',           '/audit-checklists',         '#1d4ed8'),
+        ('🔒 Action Register',     '/actions',                  '#0f1c3f'),
       ] %}
-      {% for label, href, color in quick %}
       <a href="{{ href }}" style="text-decoration:none">
-        <div style="padding:10px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:7px;
-                    border-left:3px solid {{ color }};font-size:12px;font-weight:700;color:#0f1c3f;
-                    transition:.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
-             onmouseover="this.style.background='#f0f4ff';this.style.borderColor='{{ color }}'"
-             onmouseout="this.style.background='#f9fafb'">
+        <div style="padding:9px 11px;background:var(--surface);border:1px solid var(--border);border-left:3px solid {{ color }};
+                    border-radius:var(--r2);font-size:11.5px;font-weight:700;color:var(--navy);transition:.12s;
+                    overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+             onmouseover="this.style.background='#edf0ff';this.style.borderColor='{{ color }}'" onmouseout="this.style.background='var(--surface)';this.style.borderColor='var(--border)'">
           {{ label }}
         </div>
       </a>
       {% endfor %}
     </div>
   </div>
-</div>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     SECTION 6 — RECENT ACTIVITY FEED
-════════════════════════════════════════════════════════════════ -->
-<div class="card" style="padding:0">
-  <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-    <div class="card-title" style="margin:0">🔄 Active Actions Feed</div>
-    <a href="/actions" class="btn btn-sm btn-outline" style="font-size:11px">All Actions →</a>
-  </div>
-  {% if recent_act %}
-  <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="background:#f9fafb">
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Action ID</th>
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Source</th>
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Description</th>
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Priority</th>
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">SAG Member</th>
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Due</th>
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase">Status</th>
-      </tr></thead>
-      <tbody>
-      {% for a in recent_act %}
-      <tr style="border-bottom:1px solid #f3f4f6;cursor:pointer"
-          onclick="window.location='/actions/{{ a.id }}'"
-          onmouseover="this.style.background='#f8f9fd'" onmouseout="this.style.background=''">
-        <td style="padding:8px 12px"><span style="font-family:monospace;font-weight:700;font-size:11px;color:#0f1c3f">{{ a.id }}</span></td>
-        <td style="padding:8px 12px"><span style="background:#f3f4f6;color:#374151;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">{{ a.source or 'Manual' }}</span></td>
-        <td style="padding:8px 12px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ (a.description or '')[:60] }}</td>
-        <td style="padding:8px 12px">
-          {% if a.priority=='High' %}<span style="background:#fee2e2;color:#dc2626;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700">High</span>
-          {% elif a.priority=='Medium' %}<span style="background:#fef9c3;color:#92400e;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700">Medium</span>
-          {% else %}<span style="background:#f3f4f6;color:#6b7280;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700">{{ a.priority }}</span>{% endif %}
-        </td>
-        <td style="padding:8px 12px;font-size:11px;color:{% if not a.sag_member %}#dc2626;font-weight:700{% else %}#374151{% endif %}">{{ a.sag_member or '⚠ Unassigned' }}</td>
-        <td style="padding:8px 12px;font-family:monospace;font-size:11px;color:{% if a.status=='Overdue' %}#dc2626;font-weight:700{% else %}#374151{% endif %}">{{ a.due_date or '—' }}</td>
-        <td style="padding:8px 12px">
-          {% set sc={'Open':'#3b82f6','Assigned':'#0f1c3f','In Progress':'#3b82f6','Overdue':'#dc2626','Returned':'#d97706','Mitigation Implemented':'#7c3aed','Closed':'#15803d'} %}
-          <span style="background:{{ sc.get(a.status,'#6b7280') }}20;color:{{ sc.get(a.status,'#6b7280') }};padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;border:1px solid {{ sc.get(a.status,'#6b7280') }}40">
-            {{ a.status }}
-          </span>
-        </td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div style="padding:32px;text-align:center;color:#15803d;font-weight:600">✓ No active actions</div>
-  {% endif %}
-</div>
+</div><!-- /tab-governance -->
+
+<script>
+(function(){
+  var TABS=['executive','operational','intelligence','governance'];
+  var KEY='jav_soc_tab';
+
+  function switchTab(id){
+    TABS.forEach(function(t){
+      var panel=document.getElementById('tab-'+t);
+      var btn=document.getElementById('tab-btn-'+t);
+      if(t===id){
+        panel.style.display='';
+        btn.style.color='var(--navy)';
+        btn.style.borderBottomColor='var(--navy)';
+        btn.style.fontWeight='800';
+      } else {
+        panel.style.display='none';
+        btn.style.color='var(--muted)';
+        btn.style.borderBottomColor='transparent';
+        btn.style.fontWeight='700';
+      }
+    });
+    try{ localStorage.setItem(KEY,id); } catch(e){}
+  }
+
+  var saved;
+  try{ saved=localStorage.getItem(KEY); } catch(e){}
+  switchTab(TABS.indexOf(saved)>=0 ? saved : 'executive');
+
+  window.switchTab=switchTab;
+})();
+</script>
 
 {% endblock %}

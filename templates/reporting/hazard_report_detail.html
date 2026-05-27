@@ -238,10 +238,15 @@
             {% endfor %}
           </select>
         </div>
-        <button type="submit" class="btn btn-nav btn-sm">Update</button>
+        <div class="fg">
+          <label>Notes</label>
+          <textarea name="notes" rows="3" placeholder="Assessment notes…">{{ rep.notes or '' }}</textarea>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="submit" class="btn btn-nav">Save Changes</button>
+        </div>
       </form>
     </div>
   </div>
-
 </div>
 {% endblock %}

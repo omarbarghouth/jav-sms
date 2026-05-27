@@ -83,12 +83,11 @@
 </div>
 
 {% else %}
-<div class="card" style="text-align:center;padding:48px">
-  <div style="font-size:48px;margin-bottom:14px">✈</div>
-  <div style="font-size:18px;font-weight:800;margin-bottom:6px">No ASR Reports</div>
-  <div style="color:var(--muted);font-size:13px;margin-bottom:20px">No air safety reports have been submitted yet.</div>
-  <a href="/asr" class="btn btn-gold">Submit First ASR</a>
+<div class="card" style="text-align:center;padding:48px;border:2px dashed var(--border)">
+  <div style="font-size:40px;margin-bottom:12px">✈️</div>
+  <div style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:8px">No ASR Reports</div>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:20px">Air Safety Reports submitted via the mobile app will appear here.</div>
+  <a href="/asr/new" class="btn btn-nav">+ Submit ASR</a>
 </div>
 {% endif %}
-{{ render_pagination(pagination) }}
 {% endblock %}

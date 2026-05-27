@@ -1,93 +1,119 @@
 {% extends "base.html" %}
 {% block title %}Safety Review Board{% endblock %}
 {% block content %}
-<div class="page-title">Safety Review Board</div>
-<div class="page-sub">ICAO Annex 19 §4.1 — Formal SMS Management Review · Doc 9859 §3.3</div>
 
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">
-  <div class="card" style="text-align:center;padding:16px">
-    <div style="font-size:28px;font-weight:900;color:var(--navy)">{{ total }}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Total Meetings</div>
+<!-- Page header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">SMS Governance · ICAO Annex 19 §4.1 · Doc 9859 §3.3</div>
+    <div class="page-title">Safety Review Board</div>
+    <div class="page-sub" style="margin-bottom:0">Formal SMS management review · All SRB/MRB meetings and decisions</div>
   </div>
-  <div class="card" style="text-align:center;padding:16px">
-    <div style="font-size:28px;font-weight:900;color:#15803d">{{ completed }}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Completed</div>
-  </div>
-  <div class="card" style="text-align:center;padding:16px">
-    <div style="font-size:28px;font-weight:900;color:#d97706">{{ scheduled }}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Scheduled</div>
-  </div>
-  <div class="card" style="text-align:center;padding:16px">
-    <div style="font-size:28px;font-weight:900;color:{% if open_decisions > 0 %}#dc2626{% else %}#15803d{% endif %}">{{ open_decisions }}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase">Open Decisions</div>
+  <div style="display:flex;gap:7px;flex-wrap:wrap">
+    <a href="/governance/ae" class="btn btn-outline btn-sm">AE Dashboard</a>
+    <a href="/governance/risk-acceptance" class="btn btn-outline btn-sm">Risk Acceptances</a>
+    <a href="/governance/srb/new" class="btn btn-gold btn-sm">+ Schedule Meeting</a>
   </div>
 </div>
 
-<div style="display:flex;justify-content:flex-end;margin-bottom:14px;gap:8px">
-  <a href="/governance/ae" class="btn btn-outline btn-sm">AE Dashboard</a>
-  <a href="/governance/risk-acceptance" class="btn btn-outline btn-sm">Risk Acceptances</a>
-  <a href="/governance/srb/new" class="btn btn-nav btn-sm">+ Schedule Meeting</a>
+<!-- KPI strip -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+  {% for label, val, col in [
+    ('Total Meetings',  total,          '#374151'),
+    ('Completed',       completed,      '#15803d'),
+    ('Scheduled',       scheduled,      '#c2610a'),
+    ('Open Decisions',  open_decisions, '#dc2626' if open_decisions > 0 else '#15803d'),
+  ] %}
+  <div style="background:#fff;border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);
+              padding:11px 14px;box-shadow:var(--shadow)">
+    <div style="font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ col }};line-height:1;margin-bottom:3px">{{ val }}</div>
+    <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">{{ label }}</div>
+  </div>
+  {% endfor %}
 </div>
 
+<!-- Open decisions alert -->
+{% if open_decisions > 0 %}
+<div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-left:4px solid var(--amber);border-radius:var(--r);
+            padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:16px">⚠</span>
+  <div style="font-size:12.5px;font-weight:700;color:var(--amber)">{{ open_decisions }} open SRB decision(s) awaiting implementation confirmation</div>
+</div>
+{% endif %}
+
+<!-- SRB table -->
 <div class="card" style="padding:0">
   <div class="tbl-wrap">
     <table>
       <thead>
         <tr>
-          <th>Meeting ID</th>
-          <th>Type</th>
+          <th style="width:120px">Meeting ID</th>
+          <th style="width:80px">Type</th>
           <th>Title</th>
-          <th>Scheduled</th>
-          <th>Chair</th>
-          <th>Quorum</th>
-          <th>Agenda Items</th>
-          <th>Decisions</th>
-          <th>Status</th>
-          <th></th>
+          <th style="width:110px">Scheduled</th>
+          <th style="width:130px">Chair</th>
+          <th style="width:80px;text-align:center">Quorum</th>
+          <th style="width:70px;text-align:center">Agenda</th>
+          <th style="width:80px;text-align:center">Decisions</th>
+          <th style="width:110px">Status</th>
+          <th style="width:110px"></th>
         </tr>
       </thead>
       <tbody>
         {% for m in meetings %}
-        <tr>
-          <td><span class="ctrl-num">{{ m.id }}</span></td>
+        <tr style="cursor:pointer" onclick="location='/governance/srb/{{ m.id }}'">
+          <td onclick="event.stopPropagation()">
+            <a href="/governance/srb/{{ m.id }}" class="ctrl-num" style="font-size:10px">{{ m.id }}</a>
+          </td>
           <td>
-            <span class="badge {% if m.meeting_type=='SRB' %}b-blue{% elif m.meeting_type=='MRB' %}b-yellow{% else %}b-gray{% endif %}" style="font-size:10px">{{ m.meeting_type }}</span>
+            <span class="badge {% if m.meeting_type=='SRB' %}b-navy{% elif m.meeting_type=='MRB' %}b-yellow{% else %}b-gray{% endif %}" style="font-size:9.5px">{{ m.meeting_type }}</span>
           </td>
-          <td style="font-size:13px;font-weight:600;max-width:200px">{{ m.title }}</td>
-          <td style="font-size:12px">{{ m.scheduled_date }}<br><span style="color:var(--muted);font-size:10px">{{ m.start_time or '' }}</span></td>
-          <td style="font-size:12px">{{ m.chair_person or '—' }}</td>
+          <td style="max-width:220px">
+            <div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.title }}</div>
+          </td>
+          <td>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--muted)">{{ m.scheduled_date }}</div>
+            {% if m.start_time %}<div style="font-size:9.5px;color:var(--muted2)">{{ m.start_time }}</div>{% endif %}
+          </td>
+          <td style="font-size:12px;font-weight:600">{{ m.chair_person or '—' }}</td>
           <td style="text-align:center">
-            {% if m.quorum_met %}<span class="badge b-green" style="font-size:10px">✓ Met</span>
-            {% elif m.status == 'Completed' %}<span class="badge b-red" style="font-size:10px">✗ Failed</span>
-            {% else %}<span style="color:var(--muted);font-size:11px">—</span>{% endif %}
+            {% if m.quorum_met %}<span class="badge b-green" style="font-size:9px">✓ Met</span>
+            {% elif m.status == 'Completed' %}<span class="badge b-red" style="font-size:9px">✗ Failed</span>
+            {% else %}<span style="color:var(--muted2);font-size:10px">—</span>{% endif %}
           </td>
           <td style="text-align:center">
-            <span class="badge b-blue" style="font-size:10px">{{ m.agenda_items|length }}</span>
+            <span class="badge b-blue" style="font-size:9.5px">{{ m.agenda_items|length }}</span>
           </td>
           <td style="text-align:center">
             {% set open_d = m.decisions|selectattr('status','eq','Open')|list|length %}
-            {% if open_d > 0 %}<span class="badge b-yellow" style="font-size:10px">{{ open_d }} open</span>
-            {% else %}<span style="color:var(--muted);font-size:11px">{{ m.decisions|length }}</span>{% endif %}
+            {% if open_d > 0 %}
+            <span class="badge b-yellow" style="font-size:9.5px">{{ open_d }} open</span>
+            {% else %}
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">{{ m.decisions|length }}</span>
+            {% endif %}
           </td>
           <td>
-            {% if m.status == 'Completed' %}<span class="badge b-green">Completed</span>
-            {% elif m.status == 'Scheduled' %}<span class="badge b-yellow">Scheduled</span>
-            {% elif m.status == 'In Progress' %}<span class="badge b-blue">In Progress</span>
-            {% elif m.status == 'Minutes Draft' %}<span class="badge b-yellow">Minutes Draft</span>
-            {% else %}<span class="badge b-gray">{{ m.status }}</span>{% endif %}
+            {% if m.status == 'Completed' %}<span class="badge b-green" style="font-size:9.5px">Completed</span>
+            {% elif m.status == 'Scheduled' %}<span class="badge b-yellow" style="font-size:9.5px">Scheduled</span>
+            {% elif m.status == 'In Progress' %}<span class="badge b-blue" style="font-size:9.5px">In Progress</span>
+            {% elif m.status == 'Minutes Draft' %}<span class="badge b-yellow" style="font-size:9.5px">Minutes Draft</span>
+            {% else %}<span class="badge b-gray" style="font-size:9.5px">{{ m.status }}</span>{% endif %}
           </td>
-          <td style="white-space:nowrap">
+          <td style="white-space:nowrap" onclick="event.stopPropagation()">
             <a href="/governance/srb/{{ m.id }}" class="btn btn-nav btn-sm">Open →</a>
-            <a href="/governance/srb/{{ m.id }}/print" class="btn btn-sm btn-outline" target="_blank">🖨</a>
-            <form method="POST" action="/governance/srb/{{ m.id }}/delete" style="display:inline" onsubmit="return confirm('Delete {{ m.id }}? This cannot be undone.')">
-              <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;font-size:11px">🗑</button>
+            <a href="/governance/srb/{{ m.id }}/print" target="_blank"
+               class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)" title="Print Minutes">🖨</a>
+            <form method="POST" action="/governance/srb/{{ m.id }}/delete" style="display:inline"
+                  onsubmit="return confirm('Delete {{ m.id }}? This cannot be undone.')">
+              <button type="submit" class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)">🗑</button>
             </form>
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="10" style="text-align:center;color:var(--muted);padding:36px">
-            No SRB meetings recorded. <a href="/governance/srb/new" style="color:var(--navy);font-weight:700">Schedule the first meeting →</a>
+          <td colspan="10" style="text-align:center;color:var(--muted);padding:36px;font-size:13px">
+            No SRB meetings recorded.
+            <a href="/governance/srb/new" class="btn btn-nav btn-sm" style="margin-left:8px">Schedule First Meeting →</a>
           </td>
         </tr>
         {% endfor %}
@@ -95,4 +121,5 @@
     </table>
   </div>
 </div>
+
 {% endblock %}

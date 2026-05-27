@@ -60,15 +60,39 @@
 </div>
 {% endif %}
 
-<div class="stat-grid" style="grid-template-columns:repeat(8,1fr);margin-bottom:22px">
-  <div class="stat-card"><div class="stat-val" style="color:#1e40af">{{ total_haz }}</div><div class="stat-lbl">Hazards</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ intol }}</div><div class="stat-lbl">Intolerable</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_act }}</div><div class="stat-lbl">Actions</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ overdue_act }}</div><div class="stat-lbl">Overdue</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#0891b2">{{ asr_cnt }}</div><div class="stat-lbl">ASRs</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#065f46">{{ audit_cnt }}</div><div class="stat-lbl">Audits</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#92400e">{{ moc_cnt }}</div><div class="stat-lbl">MOC</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#374151">{{ doc_cnt }}</div><div class="stat-lbl">Docs</div></div>
+<div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:20px">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--blue);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--blue)">{{ total_haz }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Hazards</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--red)">{{ intol }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Intolerable</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--amber)">{{ open_act }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Actions Open</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--red)">{{ overdue_act }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Overdue</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #0891b2;border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:#0891b2">{{ asr_cnt }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">ASRs</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--green)">{{ audit_cnt }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Audits</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--amber)">{{ moc_cnt }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">MOC</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--navy);border-radius:var(--r);padding:13px 11px">
+    <div style="font-size:22px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--navy)">{{ doc_cnt }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Documents</div>
+  </div>
 </div>
 
 {% if total_haz == 0 %}

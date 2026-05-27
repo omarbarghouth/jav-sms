@@ -4,16 +4,28 @@
 <div class="page-title">Audit Corrective Actions</div>
 <div class="page-sub">Actions generated from audit findings · Open → In Progress → Closed</div>
 
-<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-  {% set all_a = actions %}
-  {% set open_c = all_a|selectattr('status','eq','Open')|list|length %}
-  {% set prog_c = all_a|selectattr('status','eq','In Progress')|list|length %}
-  {% set over_c = all_a|selectattr('status','eq','Overdue')|list|length %}
-  {% set done_c = all_a|selectattr('status','eq','Closed')|list|length %}
-  <div class="stat-card"><div class="stat-val" style="color:#d97706">{{ open_c }}</div><div class="stat-lbl">Open</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#1d4ed8">{{ prog_c }}</div><div class="stat-lbl">In Progress</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#dc2626">{{ over_c }}</div><div class="stat-lbl">Overdue</div></div>
-  <div class="stat-card"><div class="stat-val" style="color:#15803d">{{ done_c }}</div><div class="stat-lbl">Closed</div></div>
+{% set all_a = actions %}
+{% set open_c = all_a|selectattr('status','eq','Open')|list|length %}
+{% set prog_c = all_a|selectattr('status','eq','In Progress')|list|length %}
+{% set over_c = all_a|selectattr('status','eq','Overdue')|list|length %}
+{% set done_c = all_a|selectattr('status','eq','Closed')|list|length %}
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:24px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--amber)">{{ open_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Open</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--blue);border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:24px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--blue)">{{ prog_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">In Progress</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:24px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--red)">{{ over_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Overdue</div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:var(--r);padding:14px 12px">
+    <div style="font-size:24px;font-weight:900;font-family:'IBM Plex Mono',monospace;color:var(--green)">{{ done_c }}</div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Closed</div>
+  </div>
 </div>
 
 <div class="card" style="padding:0">

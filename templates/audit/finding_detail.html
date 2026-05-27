@@ -472,10 +472,8 @@
 {% else %}
 <!-- Reopen -->
 <div style="margin-top:16px;text-align:right">
-  <form method="POST" onsubmit="return confirm('Reopen this finding?')">
-    <input type="hidden" name="form_action" value="reopen"/>
-    <button type="submit" class="btn btn-outline btn-sm">↩ Reopen Finding</button>
-  </form>
-</div>
+  <form method="POST" onsubmit="return confirm('Reopen this finding?')" action="/audit-findings/{{ finding.id }}/reopen">
+  <button type="submit" class="btn btn-outline btn-sm">↩ Reopen Finding</button>
+</form>
 {% endif %}
 {% endblock %}

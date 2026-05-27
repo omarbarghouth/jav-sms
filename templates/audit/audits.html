@@ -1,36 +1,79 @@
 {% extends "base.html" %}
-{% block title %}Audits{% endblock %}
+{% from "_pagination.html" import render_pagination %}
+{% block title %}Audit Register{% endblock %}
 {% block content %}
-<div class="page-title">Audit Management</div>
-<div class="page-sub">Internal, External, IOSA and Regulatory audits</div>
-<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-  <a href="/audits/new" class="btn btn-nav">+ New Audit</a>
+
+<!-- Header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Assurance · ICAO Annex 19 §5.3</div>
+    <div class="page-title">Audit Register</div>
+    <div class="page-sub" style="margin-bottom:0">Internal, External, IOSA and Regulatory audits</div>
+  </div>
+  <div style="display:flex;gap:7px">
+    <a href="/audit-dashboard" class="btn btn-outline btn-sm">Dashboard</a>
+    <a href="/audits/new" class="btn btn-gold btn-sm">+ New Audit</a>
+  </div>
 </div>
+
 <div class="card" style="padding:0">
   <div class="tbl-wrap">
     <table>
-      <thead><tr><th>Audit ID</th><th>Title</th><th>Type</th><th>Department</th><th>Lead Auditor</th><th>Planned Date</th><th>Findings</th><th>Status</th><th></th></tr></thead>
+      <thead>
+        <tr>
+          <th style="width:110px">Audit ID</th>
+          <th>Title</th>
+          <th style="width:100px">Type</th>
+          <th style="width:80px">Dept</th>
+          <th style="width:130px">Lead Auditor</th>
+          <th style="width:90px">Planned Date</th>
+          <th style="width:70px;text-align:center">Findings</th>
+          <th style="width:100px">Status</th>
+          <th style="width:110px"></th>
+        </tr>
+      </thead>
       <tbody>
         {% for a in audits %}
-        <tr>
-          <td class="mono">{{ a.id }}</td>
-          <td style="max-width:200px;font-size:12px">{{ a.title }}</td>
-          <td><span class="badge b-blue">{{ a.audit_type }}</span></td>
-          <td>{{ a.department.code if a.department else '—' }}</td>
-          <td style="font-size:12px">{{ a.lead_auditor }}</td>
-          <td style="font-size:12px">{{ a.planned_date }}</td>
-          <td style="text-align:center"><span class="badge {% if a.findings|length > 0 %}b-orange{% else %}b-gray{% endif %}">{{ a.findings|length }}</span></td>
-          <td>{% if a.status=='Closed' %}<span class="badge b-green">Closed</span>{% elif a.status=='In Progress' %}<span class="badge b-blue">In Progress</span>{% else %}<span class="badge b-gray">Planned</span>{% endif %}</td>
+        <tr style="cursor:pointer" onclick="location='/audits/{{ a.id }}'">
+          <td onclick="event.stopPropagation()">
+            <a href="/audits/{{ a.id }}" class="ctrl-num" style="font-size:10px">{{ a.id }}</a>
+          </td>
+          <td style="max-width:220px">
+            <div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.title or '—' }}</div>
+          </td>
+          <td><span class="badge b-blue" style="font-size:9.5px">{{ a.audit_type }}</span></td>
+          <td style="font-size:11px;font-weight:700;color:var(--navy)">{{ a.department.code if a.department else '—' }}</td>
+          <td style="font-size:12px">{{ a.lead_auditor or '—' }}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">{{ a.planned_date or '—' }}</td>
+          <td style="text-align:center">
+            {% if a.findings|length > 0 %}
+            <span class="badge b-orange" style="font-size:10px">{{ a.findings|length }}</span>
+            {% else %}
+            <span style="color:var(--muted2);font-size:11px">—</span>
+            {% endif %}
+          </td>
           <td>
-            <a href="/audits/{{ a.id }}" class="btn btn-nav btn-sm">View</a>
-            <a href="/pdf/audit/{{ a.id }}" target="_blank" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;margin-left:4px" title="ICAO PDF">📄</a>
+            {% if a.status=='Closed' %}<span class="badge b-green" style="font-size:9.5px">Closed</span>
+            {% elif a.status=='In Progress' %}<span class="badge b-blue" style="font-size:9.5px">In Progress</span>
+            {% elif a.status=='Cancelled' %}<span class="badge b-gray" style="font-size:9.5px">Cancelled</span>
+            {% else %}<span class="badge b-yellow" style="font-size:9.5px">Planned</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap" onclick="event.stopPropagation()">
+            <a href="/audits/{{ a.id }}" class="btn btn-nav btn-sm">Open →</a>
+            <a href="/pdf/audit/{{ a.id }}" target="_blank"
+               class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)" title="ICAO PDF">PDF</a>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">No audits yet.</td></tr>
+        <tr>
+          <td colspan="9" style="text-align:center;color:var(--muted);padding:36px;font-size:13px">
+            No audits recorded. <a href="/audits/new" class="btn btn-nav btn-sm" style="margin-left:8px">+ New Audit</a>
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+{{ render_pagination(pagination) if pagination is defined }}
 {% endblock %}
