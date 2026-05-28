@@ -8862,9 +8862,22 @@ def avi_detail(avi_id):
                 avi.followup_required = True
 
         elif action == 'schedule':
-            avi.status          = 'Scheduled'
-            avi.due_audit_cycle = f.get('due_audit_cycle', avi.due_audit_cycle)
-            avi.due_date        = f.get('due_date', avi.due_date)
+            avi.status             = 'Scheduled'
+            new_cycle = f.get('due_audit_cycle', '').strip()
+            new_date  = f.get('due_date', '').strip()
+            new_auditor = f.get('verified_by', '').strip()
+            sched_id    = f.get('scheduled_audit_id', '').strip()
+            sched_notes = f.get('effectiveness_notes', '').strip()
+            if new_cycle:
+                avi.due_audit_cycle = new_cycle
+            if new_date:
+                avi.due_date = new_date
+            if new_auditor:
+                avi.verified_by = new_auditor
+            if sched_id:
+                avi.scheduled_audit_id = sched_id
+            if sched_notes and not avi.effectiveness_notes:
+                avi.effectiveness_notes = sched_notes
 
         elif action == 'escalate':
             avi.status               = 'Escalated'
