@@ -390,8 +390,8 @@
         {% for sched in audit_schedules %}
         <div style="padding:10px 0;border-bottom:1px solid rgba(48,54,61,.4);display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <div style="font-size:13px;font-weight:600;color:var(--avi-text);">{{ sched.checklist_name or 'Audit Schedule' }}</div>
-            <div style="font-size:12px;color:var(--avi-muted);">{{ (sched.scheduled_date|string)[:10] if sched.scheduled_date else '—' }} — {{ sched.assigned_to or 'Unassigned' }}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--avi-text);">{{ sched.audit_type or sched.id or 'Audit Schedule' }}</div>
+            <div style="font-size:12px;color:var(--avi-muted);">{{ (sched.scheduled_date|string)[:10] if sched.scheduled_date else '—' }} — {{ sched.lead_auditor or 'Unassigned' }}</div>
           </div>
           <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:rgba(88,166,255,.15);color:#58a6ff;">{{ sched.status or 'Scheduled' }}</span>
         </div>
@@ -501,15 +501,39 @@
 
           <!-- Schedule -->
           <div class="action-panel" id="panel-schedule">
+            {% if audit_schedules %}
+            <div class="form-group">
+              <label>Link to Audit Schedule <span style="color:var(--avi-muted);font-weight:400">(optional)</span></label>
+              <select name="scheduled_audit_id" style="background:var(--avi-card2);border:1px solid var(--avi-border);border-radius:8px;padding:9px 12px;color:var(--avi-text);font-size:13px;width:100%">
+                <option value="">— Standalone verification (no audit link) —</option>
+                {% for sched in audit_schedules %}
+                <option value="{{ sched.id }}" {% if avi.scheduled_audit_id == sched.id %}selected{% endif %}>
+                  {{ sched.id }} · {{ sched.audit_type or 'Audit' }} · {{ (sched.scheduled_date|string)[:10] if sched.scheduled_date else '?' }} ({{ sched.status }})
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            {% else %}
+            <input type="hidden" name="scheduled_audit_id" value="">
+            {% endif %}
+            <div class="form-group">
+              <label>Assigned Verifier / Auditor</label>
+              <input type="text" name="verified_by" placeholder="Full name of assigned auditor" value="{{ avi.verified_by or session.get('user','') or '' }}" style="background:var(--avi-card2);border:1px solid var(--avi-border);border-radius:8px;padding:9px 12px;color:var(--avi-text);font-size:13px;width:100%;box-sizing:border-box">
+            </div>
             <div class="form-group">
               <label>Target Due Date</label>
-              <input type="date" name="due_date" value="{{ due_str }}">
+              <input type="date" name="due_date" value="{{ due_str }}" style="background:var(--avi-card2);border:1px solid var(--avi-border);border-radius:8px;padding:9px 12px;color:var(--avi-text);font-size:13px;width:100%;box-sizing:border-box">
             </div>
             <div class="form-group">
-              <label>Due Cycle</label>
-              <input type="text" name="due_audit_cycle" placeholder="e.g. Q3-2026" value="{{ avi.due_audit_cycle or '' }}">
+              <label>Audit Cycle</label>
+              <input type="text" name="due_audit_cycle" placeholder="e.g. Q3-2026" value="{{ avi.due_audit_cycle or '' }}" style="background:var(--avi-card2);border:1px solid var(--avi-border);border-radius:8px;padding:9px 12px;color:var(--avi-text);font-size:13px;width:100%;box-sizing:border-box">
             </div>
-            <button type="submit" class="form-btn btn-schedule" onclick="setAction('schedule')">Save Schedule</button>
+            <div class="form-group">
+              <label>Scheduling Notes <span style="color:var(--avi-muted);font-weight:400">(optional)</span></label>
+              <textarea name="effectiveness_notes" placeholder="Record any pre-scheduling context, audit scope notes, or instructions for the verifier…" style="background:var(--avi-card2);border:1px solid var(--avi-border);border-radius:8px;padding:9px 12px;color:var(--avi-text);font-size:13px;width:100%;box-sizing:border-box;resize:vertical;min-height:70px">{{ avi.effectiveness_notes or '' }}</textarea>
+            </div>
+            <button type="submit" formnovalidate class="form-btn btn-schedule" onclick="setAction('schedule')">📅 Confirm Schedule</button>
+            <p style="font-size:11px;color:var(--avi-muted);margin-top:8px;text-align:center;">Status → <strong>Scheduled</strong> · Auditor will be notified to conduct verification in the nominated cycle.</p>
           </div>
 
           <!-- Escalate -->
@@ -523,7 +547,7 @@
               ↺ Recurrence detected ({{ recurrence_count }}×) — escalation recommended under ICAO Doc 9859 §6.4
             </div>
             {% endif %}
-            <button type="submit" class="form-btn btn-escalate" onclick="setAction('escalate')">Escalate Issue</button>
+            <button type="submit" formnovalidate class="form-btn btn-escalate" onclick="setAction('escalate')">Escalate Issue</button>
           </div>
 
           <!-- Close -->
@@ -535,7 +559,7 @@
             <div style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#f85149;">
               ⚠ Administrative closure bypasses effectiveness verification. Use only with management approval.
             </div>
-            <button type="submit" class="form-btn btn-close" onclick="setAction('close')">Close Without Verification</button>
+            <button type="submit" formnovalidate class="form-btn btn-close" onclick="setAction('close')">Close Without Verification</button>
           </div>
 
         </form>
