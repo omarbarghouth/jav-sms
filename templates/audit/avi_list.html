@@ -235,8 +235,8 @@
       <tbody>
         {% for item in items %}
         {% set today_str = now.strftime('%Y-%m-%d') if now else '' %}
-        {% set is_overdue = item.due_date and item.due_date.strftime('%Y-%m-%d') < today_str and item.status not in ('Verified','Closed') %}
-        {% set days_left = ((item.due_date - now)|string).split(',')[0] if item.due_date and now else '' %}
+        {% set due_str = (item.due_date|string)[:10] if item.due_date else '' %}
+        {% set is_overdue = due_str and due_str < today_str and item.status not in ('Verified','Closed') %}
         <tr>
           <td>
             <a href="{{ url_for('avi_detail', avi_id=item.id) }}" class="avi-id-link">
@@ -269,8 +269,8 @@
           <td style="font-family:monospace;font-size:12px;color:var(--avi-muted);">{{ item.due_cycle or '—' }}</td>
           <td>
             {% if item.due_date %}
-            <span class="{% if is_overdue %}due-overdue{% elif item.due_date and (item.due_date - now).days <= 14 %}due-soon{% else %}due-ok{% endif %}">
-              {{ item.due_date.strftime('%d %b %Y') }}
+            <span class="{% if is_overdue %}due-overdue{% else %}due-ok{% endif %}">
+              {{ due_str }}
               {% if is_overdue %} ⚠{% endif %}
             </span>
             {% else %}—{% endif %}
