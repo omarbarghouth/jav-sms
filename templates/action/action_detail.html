@@ -504,7 +504,7 @@ function assignSAG(aid) {
   var form = document.createElement('form');
   form.method = 'POST';
   form.action = '/sag/assign/' + aid;
-  var fields = { sag_member: member, department_id: dept, return_url: window.location.pathname };
+  var fields = { sag_member: member, department_id: dept, return_url: window.location.pathname, csrf_token: '{{ csrf_token() }}' };
   for (var k in fields) {
     var inp = document.createElement('input');
     inp.type = 'hidden'; inp.name = k; inp.value = fields[k];
