@@ -7828,6 +7828,25 @@ def audit_execution(sid):
         all_actions_closed
     )
 
+    # ── Safety Assurance: AVIs linked to this audit schedule ─────────────────
+    linked_avis = []
+    avi_pending_count = 0
+    try:
+        if AuditVerificationItem:
+            linked_avis = AuditVerificationItem.query.filter_by(
+                scheduled_audit_id=sid
+            ).order_by(AuditVerificationItem.operational_risk).all()
+            avi_pending_count = sum(
+                1 for a in linked_avis
+                if a.status in ('Scheduled', 'In Verification', 'Pending')
+            )
+    except Exception:
+        linked_avis = []
+
+    # can_close is also blocked if there are unverified AVIs linked to this audit
+    if avi_pending_count > 0:
+        can_close = False
+
     return render_template('audit/audit_execution.html',
         s=s, checklist=checklist, total=total, done=done, nc=nc,
         can_close=can_close,
@@ -7837,6 +7856,8 @@ def audit_execution(sid):
         all_findings_actioned=all_findings_actioned,
         all_actions_closed=all_actions_closed,
         all_verified=all_verified,
+        linked_avis=linked_avis,
+        avi_pending_count=avi_pending_count,
         today_date=date.today().isoformat())
 
 @app.route('/audit-schedule/<sid>/start', methods=['POST'])
@@ -7846,6 +7867,18 @@ def start_audit(sid):
     s.status       = 'In Progress'
     s.actual_date  = date.today().isoformat()
     s.opening_meeting = request.form.get('opening_meeting', date.today().isoformat())
+
+    # ── Safety Assurance: move linked AVIs Scheduled → In Verification ────────
+    try:
+        if AuditVerificationItem:
+            avis = AuditVerificationItem.query.filter_by(
+                scheduled_audit_id=sid, status='Scheduled'
+            ).all()
+            for avi in avis:
+                avi.status = 'In Verification'
+                db.session.add(avi)
+    except Exception:
+        pass
 
     # Always load LATEST active checklist template when starting audit
     if s.department_id:
@@ -8018,6 +8051,24 @@ def close_audit(sid):
     try:
         s.audit_result      = request.form.get('audit_result', 'Satisfactory')
         s.followup_required = request.form.get('followup_required', 'No')
+    except Exception:
+        pass
+    # ── Safety Assurance: handle AVIs linked to this completed audit ──────────
+    try:
+        if AuditVerificationItem:
+            unverified = AuditVerificationItem.query.filter(
+                AuditVerificationItem.scheduled_audit_id == sid,
+                AuditVerificationItem.status.in_(['Scheduled', 'In Verification'])
+            ).all()
+            for avi in unverified:
+                # Return to Pending — auditor must reschedule in a future cycle
+                avi.status = 'Pending'
+                avi.scheduled_audit_id = None
+                note = f'[Returned to Pending: Audit {sid} closed without verification — must be rescheduled]'
+                avi.effectiveness_notes = ((avi.effectiveness_notes or '') + '\n' + note).strip()
+                db.session.add(avi)
+            if unverified:
+                flash(f'⚠ {len(unverified)} verification item(s) were not verified during this audit and have been returned to Pending for rescheduling.', 'warning')
     except Exception:
         pass
     db.session.commit()
