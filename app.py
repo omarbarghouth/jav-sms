@@ -4816,8 +4816,10 @@ def spi_indicator_detail(iid):
     # ── Build value chart data (last 24 months) ───────────────────────────────
     chart_labels = [f"{r.month}/{r.year}" for r in data[-24:]]
     chart_values = [round(float(r.value), 4) if r.value is not None else None for r in data[-24:]]
-    spt_target   = float(ind.spt_target) if ind.spt_target else None
-    al_target    = float(ind.alert_l1) if getattr(ind, 'alert_l1', None) else None
+    spt_target = float(ind.spt_target) if ind.spt_target else None
+    al1 = float(getattr(ind, 'alert_l1', None)) if getattr(ind, 'alert_l1', None) else None
+    al2 = float(getattr(ind, 'alert_l2', None)) if getattr(ind, 'alert_l2', None) else None
+    al3 = float(getattr(ind, 'alert_l3', None)) if getattr(ind, 'alert_l3', None) else None
 
     return render_template('spi/spi_indicator_detail.html',
         ind=ind,
@@ -4832,7 +4834,7 @@ def spi_indicator_detail(iid):
         chart_labels=chart_labels,
         chart_values=chart_values,
         spt_target=spt_target,
-        al_target=al_target,
+        al1=al1, al2=al2, al3=al3,
         now=datetime.utcnow(),
     )
 
