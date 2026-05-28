@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Continuous Assurance Engine{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+  <div>
+    <div class="page-title">Continuous Compliance & Assurance Engine</div>
+    <div class="page-sub">ICAO Annex 19 · Doc 9859 · IOSA ISM · EASA SMS Oversight · Safety Assurance Loop</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/audit-assurance/items" class="btn btn-sm" style="background:var(--navy);color:#fff;border:1.5px solid var(--navy)">📋 All Verification Items</a>
+    <a href="/audit-dashboard" class="btn btn-sm btn-outline">← Audit Dashboard</a>
+  </div>
+</div>
+
+<!-- ═══ PHILOSOPHY BANNER ═══════════════════════════════════════════════════ -->
+<div style="background:linear-gradient(135deg,#0a1628 0%,#1e3a5f 100%);border-radius:10px;padding:14px 20px;margin-bottom:18px;display:flex;align-items:center;gap:16px">
+  <div style="font-size:28px">🔄</div>
+  <div>
+    <div style="color:#c9a84c;font-weight:800;font-size:13px;letter-spacing:.5px">SAFETY ASSURANCE PHILOSOPHY</div>
+    <div style="color:#cbd5e1;font-size:12px;margin-top:2px">
+      Every corrective action, mitigation, investigation recommendation, and SPI response is
+      <strong style="color:#fff">automatically tracked</strong> until an auditor confirms operational effectiveness.
+      The system <strong style="color:#c9a84c">never forgets</strong> an implementation after closure.
+    </div>
+  </div>
+</div>
+
+<!-- ═══ KPI CARDS ═══════════════════════════════════════════════════════════ -->
+<div class="stat-grid" style="grid-template-columns:repeat(8,1fr);margin-bottom:20px">
+  <div class="stat-card" style="border-top:3px solid #6b7280">
+    <div class="stat-val">{{ total_avis }}</div>
+    <div class="stat-lbl">Total AVIs</div>
+    <div class="stat-sub">All time</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #d97706">
+    <div class="stat-val" style="color:#d97706">{{ pending_avis }}</div>
+    <div class="stat-lbl">⏳ Pending</div>
+    <div class="stat-sub">Awaiting audit</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #2563eb">
+    <div class="stat-val" style="color:#2563eb">{{ in_verify }}</div>
+    <div class="stat-lbl">🔍 In Verification</div>
+    <div class="stat-sub">Scheduled/Active</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #15803d">
+    <div class="stat-val" style="color:#15803d">{{ effective }}</div>
+    <div class="stat-lbl">✅ Effective</div>
+    <div class="stat-sub">Verified closed</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #dc2626">
+    <div class="stat-val" style="color:#dc2626">{{ ineffective }}</div>
+    <div class="stat-lbl">❌ Ineffective</div>
+    <div class="stat-sub">Reopened cycle</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #dc2626">
+    <div class="stat-val" style="color:#dc2626">{{ overdue }}</div>
+    <div class="stat-lbl">🚨 Overdue</div>
+    <div class="stat-sub">Past due date</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #9333ea">
+    <div class="stat-val" style="color:#9333ea">{{ systemic }}</div>
+    <div class="stat-lbl">⚠ Systemic</div>
+    <div class="stat-sub">Recurring issues</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid #ea580c">
+    <div class="stat-val" style="color:#ea580c">{{ escalated }}</div>
+    <div class="stat-lbl">🔺 Escalated</div>
+    <div class="stat-sub">SRB/SM required</div>
+  </div>
+</div>
+
+<!-- ═══ TWO-COLUMN LAYOUT ════════════════════════════════════════════════════ -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- Open Assurance Loops -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="background:var(--navy);padding:11px 18px;display:flex;justify-content:space-between;align-items:center">
+      <strong style="color:#c9a84c;font-size:13px">🔓 Open Assurance Loops</strong>
+      <span style="background:#d97706;color:#fff;padding:2px 9px;border-radius:99px;font-size:10px;font-weight:800">{{ open_loops|length }} pending</span>
+    </div>
+    {% if open_loops %}
+    <div style="max-height:360px;overflow-y:auto">
+      {% for avi in open_loops %}
+      {% set risk_colors = {'Critical':('#fee2e2','#dc2626'),'High':('#ffedd5','#ea580c'),'Medium':('#fef9c3','#d97706'),'Low':('#f0fdf4','#15803d')} %}
+      {% set rbg, rc = risk_colors.get(avi.operational_risk, ('#f8fafc','#6b7280')) %}
+      <a href="/audit-assurance/items/{{ avi.id }}" style="text-decoration:none;color:inherit">
+        <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px;background:{{ rbg }}10;transition:background .15s"
+             onmouseover="this.style.background='{{ rbg }}'" onmouseout="this.style.background='{{ rbg }}10'">
+          <div style="flex-shrink:0;width:8px;height:8px;border-radius:50%;background:{{ rc }};margin-top:4px"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;font-weight:700;color:#0a1628;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              {{ avi.verification_objective[:80] if avi.verification_objective else '—' }}
+            </div>
+            <div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap">
+              <span style="font-size:9px;background:#e2e8f0;color:#475569;padding:1px 6px;border-radius:3px;font-weight:700">{{ avi.source_module|upper }}</span>
+              <span style="font-size:9px;color:{{ rc }};font-weight:700">{{ avi.operational_risk }}</span>
+              {% if avi.due_date %}<span style="font-size:9px;color:#6b7280">Due: {{ avi.due_date }}</span>{% endif %}
+            </div>
+          </div>
+          <span style="font-size:9px;background:#e2e8f0;padding:2px 7px;border-radius:99px;white-space:nowrap;flex-shrink:0">{{ avi.status }}</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding:32px;text-align:center;color:var(--muted);font-size:12px">
+      <div style="font-size:28px;margin-bottom:8px">✅</div>
+      No open assurance loops. All implementations verified.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Module Breakdown + Systemic Issues -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- Source module breakdown -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="background:var(--navy);padding:11px 18px">
+        <strong style="color:#c9a84c;font-size:13px">📊 AVI Source Breakdown</strong>
+      </div>
+      <div style="padding:14px 16px">
+        {% set module_icons = {'asr':'✈','hazard':'⚠','investigation':'🔍','risk':'⚖','action':'✅','spi':'📈','audit_finding':'📋','moc':'🔄','erp':'🚨','safety_promo':'📢','cap':'🎯'} %}
+        {% for module, count in module_counts %}
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:14px;width:20px;text-align:center">{{ module_icons.get(module,'📌') }}</span>
+          <span style="font-size:11px;font-weight:700;color:#374151;flex:1;text-transform:capitalize">{{ module.replace('_',' ') }}</span>
+          <div style="flex:2;height:8px;background:#f1f5f9;border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:{% if total_avis > 0 %}{{ [(count / total_avis * 100)|int, 100]|min }}{% else %}0{% endif %}%;background:var(--navy);border-radius:99px"></div>
+          </div>
+          <span style="font-size:11px;font-weight:800;color:var(--navy);min-width:24px;text-align:right">{{ count }}</span>
+        </div>
+        {% else %}
+        <div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">No data yet</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Systemic / Recurring -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="background:#7c3aed;padding:11px 18px;display:flex;justify-content:space-between;align-items:center">
+        <strong style="color:#fff;font-size:13px">🔁 Systemic / Recurring Issues</strong>
+        <span style="background:rgba(255,255,255,.2);color:#fff;padding:2px 9px;border-radius:99px;font-size:10px">{{ systemic_items|length }}</span>
+      </div>
+      {% if systemic_items %}
+      <div style="max-height:200px;overflow-y:auto">
+        {% for avi in systemic_items %}
+        <a href="/audit-assurance/items/{{ avi.id }}" style="text-decoration:none;color:inherit">
+          <div style="padding:9px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px"
+               onmouseover="this.style.background='#faf5ff'" onmouseout="this.style.background=''">
+            <span style="font-size:18px">{% if avi.is_systemic %}🔴{% else %}🟠{% endif %}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:11px;font-weight:700;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                {{ avi.verification_area }} — {{ avi.source_module|upper }}
+              </div>
+              <div style="font-size:10px;color:#7c3aed;font-weight:700">{{ avi.recurrence_count }} recurrences{% if avi.is_systemic %} · SYSTEMIC{% endif %}</div>
+            </div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:var(--muted);font-size:11px">No systemic issues detected</div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ INEFFECTIVE IMPLEMENTATIONS ════════════════════════════════════════ -->
+{% if ineffective_items %}
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;border-left:4px solid #dc2626">
+  <div style="background:#dc2626;padding:11px 18px">
+    <strong style="color:#fff;font-size:13px">❌ Ineffective Implementations — Reopen Cycles Required</strong>
+  </div>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th><th>Verification Objective</th><th>Area</th>
+          <th>Verified By</th><th>Verified</th><th>Notes</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for avi in ineffective_items %}
+        <tr style="background:#fff5f5">
+          <td><span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:800">{{ avi.source_module|upper }}</span></td>
+          <td style="font-size:11px;max-width:280px">{{ (avi.verification_objective or '')[:100] }}</td>
+          <td style="font-size:11px">{{ avi.verification_area }}</td>
+          <td style="font-size:11px">{{ avi.verified_by or '—' }}</td>
+          <td style="font-size:11px">{{ avi.verified_at.strftime('%d %b %Y') if avi.verified_at else '—' }}</td>
+          <td style="font-size:11px;color:#dc2626">{{ (avi.effectiveness_notes or '')[:80] }}</td>
+          <td><a href="/audit-assurance/items/{{ avi.id }}" class="btn btn-sm" style="background:#dc2626;color:#fff;font-size:10px">Review</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══ RECENT AVIs ══════════════════════════════════════════════════════════ -->
+<div class="card" style="padding:0;overflow:hidden">
+  <div style="background:var(--navy);padding:11px 18px;display:flex;justify-content:space-between;align-items:center">
+    <strong style="color:#c9a84c;font-size:13px">🕐 Recently Generated Verification Items</strong>
+    <a href="/audit-assurance/items" style="color:#94a3b8;font-size:11px;text-decoration:none">View all →</a>
+  </div>
+  {% if recent_avis %}
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px">#</th>
+          <th>Source</th>
+          <th>Verification Objective</th>
+          <th>Area</th>
+          <th>Risk</th>
+          <th>Due Cycle</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for avi in recent_avis %}
+        {% set status_colors = {
+          'Pending':('#fef9c3','#92400e'),
+          'Scheduled':('#dbeafe','#1e40af'),
+          'In Verification':('#ede9fe','#6d28d9'),
+          'Verified Effective':('#dcfce7','#15803d'),
+          'Verified Ineffective':('#fee2e2','#dc2626'),
+          'Escalated':('#ffedd5','#ea580c'),
+          'Closed':('#f1f5f9','#6b7280')
+        } %}
+        {% set sbg, sc = status_colors.get(avi.status, ('#f8fafc','#6b7280')) %}
+        {% set risk_c = {'Critical':'#dc2626','High':'#ea580c','Medium':'#d97706','Low':'#15803d'}.get(avi.operational_risk,'#6b7280') %}
+        <tr>
+          <td class="mono" style="font-size:11px">{{ avi.id }}</td>
+          <td><span style="background:#e2e8f0;color:#374151;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700">{{ avi.source_module|upper }}</span></td>
+          <td style="font-size:11px;max-width:260px">{{ (avi.verification_objective or '')[:90] }}{% if (avi.verification_objective or '')|length > 90 %}…{% endif %}</td>
+          <td style="font-size:11px">{{ avi.verification_area }}</td>
+          <td style="font-weight:800;font-size:11px;color:{{ risk_c }}">{{ avi.operational_risk }}</td>
+          <td style="font-size:11px" class="mono">{{ avi.due_audit_cycle or '—' }}</td>
+          <td><span style="background:{{ sbg }};color:{{ sc }};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;white-space:nowrap">{{ avi.status }}</span></td>
+          <td style="font-size:10px;color:var(--muted)">{{ avi.created_at.strftime('%d %b %Y') if avi.created_at else '—' }}</td>
+          <td><a href="/audit-assurance/items/{{ avi.id }}" class="btn btn-sm btn-outline" style="font-size:10px">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding:40px;text-align:center">
+    <div style="font-size:36px;margin-bottom:12px">🚀</div>
+    <div style="font-weight:700;color:var(--navy);margin-bottom:6px">Assurance Engine Ready</div>
+    <div style="font-size:12px;color:var(--muted);max-width:500px;margin:0 auto">
+      Verification Items are generated automatically as investigations close, SPI thresholds are exceeded,
+      audit findings are resolved, and corrective actions are completed across the SMS.
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -299,6 +299,7 @@
     <a href="/audit-schedule" class="nav-a {% if '/audit-schedule' in request.path and 'calendar' not in request.path and '/audit-plan' not in request.path %}active{% endif %}" data-tip="Schedule"><span class="nav-icon">🗓</span><span class="nav-label">Audit Schedule</span></a>
     <a href="/audit-checklists" class="nav-a {% if 'checklists' in request.path %}active{% endif %}" data-tip="Checklists"><span class="nav-icon">☑</span><span class="nav-label">Checklist Manager</span></a>
     <a href="/audit-findings-report" class="nav-a {% if 'findings-report' in request.path %}active{% endif %}" data-tip="Findings"><span class="nav-icon">🔍</span><span class="nav-label">Findings Report</span></a>
+    <a href="/audit-assurance" class="nav-a {% if '/audit-assurance' in request.path %}active{% endif %}" data-tip="Assurance Engine"><span class="nav-icon">⊕</span><span class="nav-label">Assurance Engine</span>{% if nav_avi_open and nav_avi_open > 0 %}<span class="nav-badge">{{ nav_avi_open }}</span>{% endif %}</a>
 
     <div class="sb-section">Investigation</div>
     <a href="/investigations" class="nav-a {% if '/investigations' in request.path %}active{% endif %}" data-tip="Investigations"><span class="nav-icon">🔎</span><span class="nav-label">Investigations</span></a>
@@ -308,6 +309,7 @@
     <a href="/spi" class="nav-a {% if request.path=='/spi' %}active{% endif %}" data-tip="SPI Dashboard"><span class="nav-icon">📈</span><span class="nav-label">SPI Dashboard</span></a>
     <a href="/spi/indicators" class="nav-a {% if '/spi/indicators' in request.path %}active{% endif %}" data-tip="Indicators"><span class="nav-icon">⚙</span><span class="nav-label">SPI Indicators</span></a>
     <a href="/spi/actions" class="nav-a {% if request.path=='/spi/actions' %}active{% endif %}" data-tip="Alerts"><span class="nav-icon">🔔</span><span class="nav-label">Alerts &amp; Actions</span></a>
+    <a href="/spi/intelligence" class="nav-a {% if '/spi/intelligence' in request.path %}active{% endif %}" data-tip="Intelligence Hub"><span class="nav-icon">🧠</span><span class="nav-label">Intelligence Hub</span></a>
 
     <div class="sb-section">Safety Promotion</div>
     <div class="sb-sub">Communications</div>

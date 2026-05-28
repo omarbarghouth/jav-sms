@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}Assurance Verification Items{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --avi-bg: #0d1117;
+    --avi-card: #161b22;
+    --avi-border: #30363d;
+    --avi-accent: #1f6feb;
+    --avi-accent2: #388bfd;
+    --avi-text: #e6edf3;
+    --avi-muted: #8b949e;
+    --avi-success: #3fb950;
+    --avi-warning: #d29922;
+    --avi-danger: #f85149;
+    --avi-info: #58a6ff;
+    --avi-purple: #bc8cff;
+    --avi-orange: #ffa657;
+  }
+
+  .avi-page { background: var(--avi-bg); min-height: 100vh; padding: 24px; color: var(--avi-text); font-family: 'Segoe UI', sans-serif; }
+
+  /* Header */
+  .avi-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .avi-header-left { display: flex; align-items: center; gap: 16px; }
+  .avi-back-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--avi-card); border: 1px solid var(--avi-border); border-radius: 8px; color: var(--avi-muted); text-decoration: none; font-size: 13px; transition: all .2s; }
+  .avi-back-btn:hover { color: var(--avi-text); border-color: var(--avi-accent); }
+  .avi-title { font-size: 22px; font-weight: 700; color: var(--avi-text); }
+  .avi-subtitle { font-size: 13px; color: var(--avi-muted); }
+  .avi-count-chip { background: var(--avi-accent); color: #fff; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+
+  /* Filter bar */
+  .filter-bar { background: var(--avi-card); border: 1px solid var(--avi-border); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .filter-group { display: flex; flex-direction: column; gap: 5px; }
+  .filter-group label { font-size: 11px; font-weight: 600; color: var(--avi-muted); text-transform: uppercase; letter-spacing: .5px; }
+  .filter-group select { background: #0d1117; border: 1px solid var(--avi-border); border-radius: 8px; color: var(--avi-text); padding: 8px 12px; font-size: 13px; min-width: 160px; cursor: pointer; }
+  .filter-group select:focus { outline: none; border-color: var(--avi-accent); }
+  .filter-btn { padding: 8px 18px; background: var(--avi-accent); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s; align-self: flex-end; }
+  .filter-btn:hover { background: var(--avi-accent2); }
+  .filter-clear { padding: 8px 14px; background: transparent; border: 1px solid var(--avi-border); border-radius: 8px; color: var(--avi-muted); font-size: 13px; cursor: pointer; text-decoration: none; align-self: flex-end; transition: all .2s; }
+  .filter-clear:hover { color: var(--avi-text); border-color: var(--avi-accent); }
+
+  /* Active filter chips */
+  .active-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .filter-chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(31,111,235,.15); border: 1px solid rgba(31,111,235,.4); color: var(--avi-info); font-size: 12px; padding: 4px 10px; border-radius: 20px; }
+  .filter-chip a { color: inherit; text-decoration: none; opacity: .7; }
+  .filter-chip a:hover { opacity: 1; }
+
+  /* Table */
+  .avi-table-card { background: var(--avi-card); border: 1px solid var(--avi-border); border-radius: 12px; overflow: hidden; }
+  .avi-table { width: 100%; border-collapse: collapse; }
+  .avi-table thead { background: #0d1117; }
+  .avi-table thead th { padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--avi-muted); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--avi-border); white-space: nowrap; }
+  .avi-table tbody tr { border-bottom: 1px solid rgba(48,54,61,.5); transition: background .15s; }
+  .avi-table tbody tr:hover { background: rgba(255,255,255,.03); }
+  .avi-table tbody tr:last-child { border-bottom: none; }
+  .avi-table td { padding: 13px 16px; font-size: 13px; vertical-align: middle; }
+
+  /* ID link */
+  .avi-id-link { font-family: monospace; font-size: 12px; color: var(--avi-info); text-decoration: none; font-weight: 600; }
+  .avi-id-link:hover { text-decoration: underline; }
+
+  /* Status badge */
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
+  .status-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .sb-pending { background: rgba(139,148,158,.15); color: #8b949e; }
+  .sb-scheduled { background: rgba(88,166,255,.15); color: #58a6ff; }
+  .sb-in-review { background: rgba(210,153,34,.15); color: #d29922; }
+  .sb-verified { background: rgba(63,185,80,.15); color: #3fb950; }
+  .sb-ineffective { background: rgba(248,81,73,.15); color: #f85149; }
+  .sb-escalated { background: rgba(188,140,255,.15); color: #bc8cff; }
+  .sb-closed { background: rgba(63,185,80,.12); color: #3fb950; }
+
+  /* Risk badge */
+  .risk-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+  .rb-critical { background: rgba(248,81,73,.2); color: #f85149; }
+  .rb-high { background: rgba(255,166,87,.2); color: #ffa657; }
+  .rb-medium { background: rgba(210,153,34,.2); color: #d29922; }
+  .rb-low { background: rgba(63,185,80,.2); color: #3fb950; }
+
+  /* Module tag */
+  .module-tag { display: inline-block; padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 600; background: rgba(31,111,235,.15); color: var(--avi-info); white-space: nowrap; }
+
+  /* Recurrence flag */
+  .recur-flag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #f85149; background: rgba(248,81,73,.1); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(248,81,73,.3); }
+
+  /* Due date */
+  .due-overdue { color: #f85149; font-weight: 700; }
+  .due-soon { color: #d29922; font-weight: 600; }
+  .due-ok { color: var(--avi-muted); }
+
+  /* Objective cell */
+  .obj-text { color: var(--avi-text); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 60px 24px; }
+  .empty-icon { font-size: 48px; opacity: .3; margin-bottom: 12px; }
+  .empty-state p { color: var(--avi-muted); font-size: 15px; }
+
+  /* Pagination */
+  .pagination { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-top: 1px solid var(--avi-border); }
+  .page-info { font-size: 13px; color: var(--avi-muted); }
+  .page-nav { display: flex; gap: 6px; }
+  .page-nav a { padding: 6px 12px; background: var(--avi-card); border: 1px solid var(--avi-border); border-radius: 6px; color: var(--avi-muted); font-size: 13px; text-decoration: none; transition: all .2s; }
+  .page-nav a:hover { color: var(--avi-text); border-color: var(--avi-accent); }
+  .page-nav .active { background: var(--avi-accent); border-color: var(--avi-accent); color: #fff; }
+
+  /* Summary stats row */
+  .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-pill { display: flex; align-items: center; gap: 8px; background: var(--avi-card); border: 1px solid var(--avi-border); border-radius: 10px; padding: 10px 16px; }
+  .stat-pill-num { font-size: 20px; font-weight: 800; }
+  .stat-pill-label { font-size: 12px; color: var(--avi-muted); line-height: 1.3; }
+  .sp-pending { border-left: 3px solid #8b949e; }
+  .sp-scheduled { border-left: 3px solid #58a6ff; }
+  .sp-review { border-left: 3px solid #d29922; }
+  .sp-verified { border-left: 3px solid #3fb950; }
+  .sp-ineffective { border-left: 3px solid #f85149; }
+  .sp-escalated { border-left: 3px solid #bc8cff; }
+
+  @media (max-width: 768px) {
+    .avi-table td:nth-child(4), .avi-table th:nth-child(4),
+    .avi-table td:nth-child(5), .avi-table th:nth-child(5) { display: none; }
+  }
+</style>
+
+<div class="avi-page">
+
+  <!-- Header -->
+  <div class="avi-header">
+    <div class="avi-header-left">
+      <a href="{{ url_for('audit_assurance_dashboard') }}" class="avi-back-btn">← Dashboard</a>
+      <div>
+        <div class="avi-title">Assurance Verification Items
+          <span class="avi-count-chip">{{ items|length }}</span>
+        </div>
+        <div class="avi-subtitle">All audit verification loops — continuous compliance traceability</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <a href="{{ url_for('audit_assurance_dashboard') }}" style="padding:9px 16px;background:var(--avi-card);border:1px solid var(--avi-border);border-radius:8px;color:var(--avi-muted);text-decoration:none;font-size:13px;">⊞ Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Status summary pills -->
+  {% set st_counts = {} %}
+  {% for item in items %}
+    {% set s = item.status %}
+    {% if s not in st_counts %}{% set _ = st_counts.update({s: 0}) %}{% endif %}
+    {% set _ = st_counts.update({s: st_counts[s] + 1}) %}
+  {% endfor %}
+  <div class="stats-row">
+    {% for label, cls, key in [('Pending','sp-pending','Pending'),('Scheduled','sp-scheduled','Scheduled'),('In Review','sp-review','In Review'),('Verified','sp-verified','Verified'),('Ineffective','sp-ineffective','Ineffective'),('Escalated','sp-escalated','Escalated')] %}
+    <div class="stat-pill {{ cls }}">
+      <div class="stat-pill-num">{{ st_counts.get(key, 0) }}</div>
+      <div class="stat-pill-label">{{ label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Filter bar -->
+  <form method="get" class="filter-bar">
+    <div class="filter-group">
+      <label>Status</label>
+      <select name="status">
+        <option value="">All Statuses</option>
+        {% for s in all_statuses %}
+        <option value="{{ s }}" {% if status_f == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Module</label>
+      <select name="module">
+        <option value="">All Modules</option>
+        {% for m in all_modules %}
+        <option value="{{ m }}" {% if module_f == m %}selected{% endif %}>{{ m|replace('_',' ')|title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Risk Level</label>
+      <select name="risk">
+        <option value="">All Risk Levels</option>
+        {% for r in ['Critical','High','Medium','Low'] %}
+        <option value="{{ r }}" {% if risk_f == r %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="filter-btn">Apply Filters</button>
+    {% if status_f or module_f or risk_f %}
+    <a href="{{ url_for('avi_list') }}" class="filter-clear">Clear All</a>
+    {% endif %}
+  </form>
+
+  <!-- Active filter chips -->
+  {% if status_f or module_f or risk_f %}
+  <div class="active-filters">
+    {% if status_f %}
+    <span class="filter-chip">Status: {{ status_f }}
+      <a href="{{ url_for('avi_list', module=module_f, risk=risk_f) }}">✕</a>
+    </span>
+    {% endif %}
+    {% if module_f %}
+    <span class="filter-chip">Module: {{ module_f|replace('_',' ')|title }}
+      <a href="{{ url_for('avi_list', status=status_f, risk=risk_f) }}">✕</a>
+    </span>
+    {% endif %}
+    {% if risk_f %}
+    <span class="filter-chip">Risk: {{ risk_f }}
+      <a href="{{ url_for('avi_list', status=status_f, module=module_f) }}">✕</a>
+    </span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Table -->
+  <div class="avi-table-card">
+    {% if items %}
+    <table class="avi-table">
+      <thead>
+        <tr>
+          <th>AVI ID</th>
+          <th>Module</th>
+          <th>Verification Area</th>
+          <th>Objective</th>
+          <th>Risk</th>
+          <th>Status</th>
+          <th>Due Cycle</th>
+          <th>Due Date</th>
+          <th>Flags</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        {% set today_str = now.strftime('%Y-%m-%d') if now else '' %}
+        {% set is_overdue = item.due_date and item.due_date.strftime('%Y-%m-%d') < today_str and item.status not in ('Verified','Closed') %}
+        {% set days_left = ((item.due_date - now)|string).split(',')[0] if item.due_date and now else '' %}
+        <tr>
+          <td>
+            <a href="{{ url_for('avi_detail', avi_id=item.id) }}" class="avi-id-link">
+              AVI-{{ '%04d'|format(item.id) }}
+            </a>
+          </td>
+          <td>
+            <span class="module-tag">{{ item.source_module|replace('_',' ')|title }}</span>
+          </td>
+          <td style="color:var(--avi-text);font-weight:500;">{{ item.verification_area or '—' }}</td>
+          <td>
+            <span class="obj-text" title="{{ item.verification_objective or '' }}">{{ item.verification_objective or '—' }}</span>
+          </td>
+          <td>
+            {% set r = item.risk_level or 'Low' %}
+            <span class="risk-badge rb-{{ r|lower }}">{{ r }}</span>
+          </td>
+          <td>
+            {% set s = item.status %}
+            {% if s == 'Pending' %}<span class="status-badge sb-pending">{{ s }}</span>
+            {% elif s == 'Scheduled' %}<span class="status-badge sb-scheduled">{{ s }}</span>
+            {% elif s == 'In Review' %}<span class="status-badge sb-in-review">{{ s }}</span>
+            {% elif s == 'Verified' %}<span class="status-badge sb-verified">{{ s }}</span>
+            {% elif s == 'Ineffective' %}<span class="status-badge sb-ineffective">{{ s }}</span>
+            {% elif s == 'Escalated' %}<span class="status-badge sb-escalated">{{ s }}</span>
+            {% elif s == 'Closed' %}<span class="status-badge sb-closed">{{ s }}</span>
+            {% else %}<span class="status-badge sb-pending">{{ s }}</span>
+            {% endif %}
+          </td>
+          <td style="font-family:monospace;font-size:12px;color:var(--avi-muted);">{{ item.due_cycle or '—' }}</td>
+          <td>
+            {% if item.due_date %}
+            <span class="{% if is_overdue %}due-overdue{% elif item.due_date and (item.due_date - now).days <= 14 %}due-soon{% else %}due-ok{% endif %}">
+              {{ item.due_date.strftime('%d %b %Y') }}
+              {% if is_overdue %} ⚠{% endif %}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if item.is_systemic %}
+            <span class="recur-flag">↺ Systemic</span>
+            {% endif %}
+            {% if item.effectiveness_result == 'Ineffective' %}
+            <span style="font-size:11px;color:#f85149;">✗ CAP Failed</span>
+            {% endif %}
+            {% if item.escalated_to_srb %}
+            <span style="font-size:11px;color:#bc8cff;">▲ SRB</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--avi-muted);">
+            {% if item.source_record_id %}
+            #{{ item.source_record_id }}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">⊙</div>
+      <p>No Assurance Verification Items found for the selected filters.</p>
+      {% if status_f or module_f or risk_f %}
+      <p><a href="{{ url_for('avi_list') }}" style="color:var(--avi-info);">Clear filters</a> to see all items.</p>
+      {% else %}
+      <p style="font-size:13px;margin-top:8px;">AVIs are auto-generated when investigations, findings, hazard reports, and safety actions are closed.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+  // Highlight row on AVI-ID click area
+  document.querySelectorAll('.avi-table tbody tr').forEach(row => {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function(e) {
+      if (e.target.tagName !== 'A') {
+        const link = this.querySelector('.avi-id-link');
+        if (link) window.location.href = link.href;
+      }
+    });
+  });
+</script>
+{% endblock %}
