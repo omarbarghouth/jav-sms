@@ -4971,6 +4971,7 @@ def spi_indicators():
 @require_login
 def spi_delete_indicator(iid):
     ind = SPIIndicator.query.get_or_404(iid)
+    _avi_purge(spi_indicator_id=iid)
     db.session.delete(ind)
     db.session.commit()
     flash(f'✓ Indicator {ind.code} deleted.', 'success')
@@ -6130,7 +6131,8 @@ def delete_hazard_report(rid):
             db.session.flush()
         except Exception: pass
 
-        # Step 3: Delete the report row
+        # Step 3: Delete the report row + its AVIs
+        _avi_purge(source_record_id=rid, linked_report_id=rid)
         db.session.delete(rep)
         db.session.flush()
 
@@ -6158,6 +6160,7 @@ def delete_hazard_report(rid):
             db.session.flush()
             haz = Hazard.query.get(hid)
             if haz:
+                _avi_purge(linked_hazard_id=hid)
                 db.session.delete(haz)
         db.session.commit()
         flash(f'✓ Hazard Report {rid} deleted.', 'success')
@@ -6196,6 +6199,7 @@ def delete_hazard(hid):
             db.session.delete(r)
         db.session.flush()
 
+        _avi_purge(linked_hazard_id=hid)
         db.session.delete(h)
         db.session.commit()
         flash(f'✓ Hazard {hid} deleted.', 'success')
@@ -6220,6 +6224,7 @@ def delete_asr(aid):
                 db.session.delete(a)
             haz = Hazard.query.get(rec.hazard_id)
             if haz: db.session.delete(haz)
+        _avi_purge(source_record_id=aid)
         db.session.delete(rec)
         db.session.commit()
         flash(f'✓ ASR {aid} deleted successfully.', 'success')
@@ -6237,6 +6242,7 @@ def delete_action(aid):
         # Delete child records first (FK constraint)
         ActionHistory.query.filter_by(action_id=aid).delete(synchronize_session=False)
         db.session.flush()
+        _avi_purge(source_record_id=aid, linked_action_id=aid)
         db.session.delete(a)
         db.session.commit()
         flash(f'✓ Action {aid} deleted.', 'success')
@@ -6262,6 +6268,7 @@ def delete_risk_assessment(ra_id):
         db.session.flush()
         RARow.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
         db.session.flush()
+        _avi_purge(source_record_id=ra_id)
         db.session.delete(ra)
         db.session.commit()
         flash(f'✓ Risk Assessment {ra_id} deleted.', 'success')
@@ -6309,11 +6316,13 @@ def delete_audit_schedule(sid):
                 db.session.flush()
         except Exception: pass
 
-        # Now delete findings
+        # Now delete findings (and their AVIs)
         for f in findings:
+            _avi_purge(source_record_id=f.id, linked_finding_id=f.id)
             db.session.delete(f)
         db.session.flush()
 
+        _avi_purge(linked_audit_id=sid)
         db.session.delete(s)
         db.session.commit()
         flash(f'✓ Audit Schedule {sid} deleted.', 'success')
@@ -6348,6 +6357,7 @@ def delete_audit_finding(fid):
                 db.session.delete(la)
             db.session.flush()
         except Exception: pass
+        _avi_purge(source_record_id=fid, linked_finding_id=fid)
         db.session.delete(f)
         db.session.commit()
         flash('✓ Audit Finding and linked SAG actions deleted.', 'success')
@@ -6367,6 +6377,7 @@ def delete_investigation(iid):
             ActionHistory.query.filter_by(action_id=la.id).delete(synchronize_session=False)
             db.session.delete(la)
         db.session.flush()
+        _avi_purge(source_record_id=iid, linked_investigation_id=iid)
         db.session.delete(inv)
         db.session.commit()
         flash('✓ Investigation and linked SAG actions deleted.', 'success')
@@ -8724,9 +8735,79 @@ def _avi_check_recurrence(source_module, verification_area, department_id=None):
         return False, 0, []
 
 
+def _avi_purge(source_record_id=None, linked_report_id=None, linked_hazard_id=None,
+               linked_investigation_id=None, linked_spi_id=None,
+               linked_action_id=None, linked_audit_id=None, linked_finding_id=None,
+               spi_indicator_id=None):
+    """
+    Delete all AuditVerificationItems linked to a source record that is being deleted.
+    Call this inside any deletion route BEFORE db.session.commit() to keep the
+    Assurance Engine clean.  Safe to call even if AuditVerificationItem is not imported.
+    Returns the number of rows deleted.
+    """
+    if not AuditVerificationItem:
+        return 0
+    try:
+        from sqlalchemy import or_
+        conditions = []
+        if source_record_id is not None:
+            conditions.append(
+                AuditVerificationItem.source_record_id == str(source_record_id))
+        if linked_report_id is not None:
+            conditions.append(
+                AuditVerificationItem.linked_report_id == str(linked_report_id))
+        if linked_hazard_id is not None:
+            conditions.append(
+                AuditVerificationItem.linked_hazard_id == str(linked_hazard_id))
+        if linked_investigation_id is not None:
+            conditions.append(
+                AuditVerificationItem.linked_investigation_id == str(linked_investigation_id))
+        if linked_spi_id is not None:
+            conditions.append(
+                AuditVerificationItem.linked_spi_id == int(linked_spi_id))
+        if spi_indicator_id is not None:
+            # SPI source_record_id is stored as "{indicator_id}-{month}-{rule}"
+            # We match all AVIs whose source_record_id starts with this indicator id
+            conditions.append(
+                AuditVerificationItem.source_record_id.like(f'{spi_indicator_id}-%'))
+            conditions.append(
+                AuditVerificationItem.linked_spi_id == int(spi_indicator_id))
+        if linked_action_id is not None:
+            conditions.append(
+                AuditVerificationItem.linked_action_id == str(linked_action_id))
+        if linked_audit_id is not None:
+            conditions.append(
+                AuditVerificationItem.linked_audit_id == str(linked_audit_id))
+        if linked_finding_id is not None:
+            conditions.append(
+                AuditVerificationItem.linked_finding_id == str(linked_finding_id))
+        if not conditions:
+            return 0
+        deleted = AuditVerificationItem.query.filter(
+            or_(*conditions)
+        ).delete(synchronize_session=False)
+        return deleted
+    except Exception:
+        return 0
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  ASSURANCE ENGINE ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/audit-assurance/clear-all', methods=['POST'])
+@require_login
+def avi_clear_all():
+    """Admin: wipe ALL AuditVerificationItems — testing / reset only."""
+    try:
+        n = AuditVerificationItem.query.delete(synchronize_session=False)
+        db.session.commit()
+        flash(f'✓ Cleared {n} verification items from the Assurance Engine.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not clear: {str(e)[:120]}', 'error')
+    return redirect(url_for('audit_assurance_dashboard'))
+
 
 @app.route('/audit-assurance')
 @require_login
