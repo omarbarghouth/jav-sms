@@ -4945,9 +4945,31 @@ def spi_indicator_detail(iid):
     chart_labels = [f"{r.month}/{r.year}" for r in data[-24:]]
     chart_values = [round(float(r.value), 4) if r.value is not None else None for r in data[-24:]]
     spt_target = float(ind.spt_target) if ind.spt_target else None
-    al1 = float(getattr(ind, 'alert_l1', None)) if getattr(ind, 'alert_l1', None) else None
-    al2 = float(getattr(ind, 'alert_l2', None)) if getattr(ind, 'alert_l2', None) else None
-    al3 = float(getattr(ind, 'alert_l3', None)) if getattr(ind, 'alert_l3', None) else None
+
+    # ── ICAO Statistical thresholds (auto-calculated from preceding year) ─────
+    # These are ALWAYS computed regardless of whether manual overrides are saved.
+    # Manual fields (ind.alert_l1/l2/l3) override auto if explicitly set.
+    history_tuples = _spi_history(ind)
+    all_hist_vals  = [v for _, _, v in history_tuples]
+    stat_l1, stat_l2, stat_l3, stat_mean, stat_sd, is_stat = _spi_thresholds(ind, all_hist_vals)
+    impr_target = _spi_improvement_target(ind)
+    baseline_needed = ind.baseline_months or 3
+    months_collected = len(all_hist_vals)
+
+    # Chart lines: prefer statistical auto-values; allow manual override
+    al1 = float(ind.alert_l1) if ind.alert_l1 else (round(stat_l1, 4) if stat_l1 else None)
+    al2 = float(ind.alert_l2) if ind.alert_l2 else (round(stat_l2, 4) if stat_l2 else None)
+    al3 = float(ind.alert_l3) if ind.alert_l3 else (round(stat_l3, 4) if stat_l3 else None)
+
+    # Current status of the latest data point
+    latest_val  = all_hist_vals[-1] if all_hist_vals else None
+    curr_status = _spi_status(latest_val, ind, all_hist_vals) if latest_val is not None else ('— No data', '#9ca3af', 0)
+
+    # Trigger check on full history
+    last_24_hist  = history_tuples[-24:]
+    trigger_pairs = [(i+1, v) for i, (_, _, v) in enumerate(last_24_hist)]
+    trigger_detail = _spi_trigger_detail(trigger_pairs, stat_l1, stat_l2, stat_l3,
+                                         ind.calc_type == 'PERCENT', spt=ind.spt_target)
 
     return render_template('spi/spi_indicator_detail.html',
         ind=ind,
@@ -4962,7 +4984,20 @@ def spi_indicator_detail(iid):
         chart_labels=chart_labels,
         chart_values=chart_values,
         spt_target=spt_target,
+        # Auto-calculated ICAO thresholds
         al1=al1, al2=al2, al3=al3,
+        stat_l1=round(stat_l1,4) if stat_l1 else None,
+        stat_l2=round(stat_l2,4) if stat_l2 else None,
+        stat_l3=round(stat_l3,4) if stat_l3 else None,
+        stat_mean=round(stat_mean,4) if stat_mean else None,
+        stat_sd=round(stat_sd,4) if stat_sd else None,
+        is_stat=is_stat,
+        impr_target=impr_target,
+        latest_val=latest_val,
+        curr_status=curr_status,
+        trigger_detail=trigger_detail,
+        months_collected=months_collected,
+        baseline_needed=baseline_needed,
         now=datetime.utcnow(),
     )
 
