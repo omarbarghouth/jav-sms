@@ -21,12 +21,9 @@
   }
 
   .avid-page { background: var(--avi-bg); min-height: 100vh; padding: 24px; color: var(--avi-text); font-family: 'Segoe UI', sans-serif; }
-
-  /* Layout */
   .avid-layout { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
   @media (max-width: 1024px) { .avid-layout { grid-template-columns: 1fr; } }
 
-  /* Header */
   .avid-header { margin-bottom: 24px; }
   .avid-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--avi-muted); margin-bottom: 10px; }
   .avid-breadcrumb a { color: var(--avi-muted); text-decoration: none; } .avid-breadcrumb a:hover { color: var(--avi-info); }
@@ -36,12 +33,10 @@
   .avid-area { font-size: 16px; font-weight: 600; color: var(--avi-text); margin-top: 4px; }
   .avid-module-tag { display: inline-block; background: rgba(31,111,235,.15); border: 1px solid rgba(31,111,235,.3); color: var(--avi-info); font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; margin-top: 8px; }
 
-  /* Cards */
   .avid-card { background: var(--avi-card); border: 1px solid var(--avi-border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   .avid-card-title { font-size: 12px; font-weight: 700; color: var(--avi-muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
   .avid-card-title::after { content: ''; flex: 1; height: 1px; background: var(--avi-border); }
 
-  /* Status badge */
   .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .3px; }
   .status-badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
   .sb-pending { background: rgba(139,148,158,.15); color: #8b949e; }
@@ -52,32 +47,27 @@
   .sb-escalated { background: rgba(188,140,255,.15); color: #bc8cff; }
   .sb-closed { background: rgba(63,185,80,.12); color: #3fb950; }
 
-  /* Risk badge */
   .risk-badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; }
   .rb-critical { background: rgba(248,81,73,.2); color: #f85149; border: 1px solid rgba(248,81,73,.3); }
   .rb-high { background: rgba(255,166,87,.2); color: #ffa657; border: 1px solid rgba(255,166,87,.3); }
   .rb-medium { background: rgba(210,153,34,.2); color: #d29922; border: 1px solid rgba(210,153,34,.3); }
   .rb-low { background: rgba(63,185,80,.2); color: #3fb950; border: 1px solid rgba(63,185,80,.3); }
 
-  /* Field rows */
   .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .field-item label { font-size: 11px; color: var(--avi-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; display: block; margin-bottom: 4px; }
   .field-item p { font-size: 14px; color: var(--avi-text); margin: 0; font-weight: 500; }
   .field-item.full { grid-column: 1/-1; }
   .field-text-block { font-size: 13px; color: var(--avi-text); line-height: 1.6; background: #0d1117; border: 1px solid var(--avi-border); border-radius: 8px; padding: 12px 14px; margin-top: 4px; }
 
-  /* Recurrence alert */
   .recur-alert { background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.35); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 12px; }
   .recur-alert-icon { font-size: 22px; flex-shrink: 0; }
   .recur-alert-text strong { display: block; color: #f85149; font-size: 14px; margin-bottom: 4px; }
   .recur-alert-text p { font-size: 13px; color: var(--avi-muted); margin: 0; }
 
-  /* Systemic banner */
   .systemic-banner { background: rgba(188,140,255,.08); border: 1px solid rgba(188,140,255,.3); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; }
   .systemic-banner strong { color: var(--avi-purple); font-size: 14px; display: block; margin-bottom: 4px; }
   .systemic-banner p { font-size: 13px; color: var(--avi-muted); margin: 0; }
 
-  /* Cross-module intel */
   .intel-item { background: #0d1117; border: 1px solid var(--avi-border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; }
   .intel-item:last-child { margin-bottom: 0; }
   .intel-label { font-size: 11px; color: var(--avi-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
@@ -86,8 +76,6 @@
   .intel-desc { font-size: 12px; color: var(--avi-muted); margin-top: 4px; }
   .no-intel { font-size: 13px; color: var(--avi-muted); font-style: italic; text-align: center; padding: 20px; }
 
-  /* Action form */
-  .action-form { }
   .action-tabs { display: flex; gap: 0; margin-bottom: 18px; border: 1px solid var(--avi-border); border-radius: 10px; overflow: hidden; }
   .action-tab { flex: 1; padding: 10px 8px; background: #0d1117; border: none; color: var(--avi-muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .2s; border-right: 1px solid var(--avi-border); text-align: center; }
   .action-tab:last-child { border-right: none; }
@@ -96,17 +84,13 @@
   .action-panel { display: none; }
   .action-panel.active { display: block; }
 
-  /* Form controls */
   .form-group { margin-bottom: 14px; }
   .form-group label { display: block; font-size: 11px; color: var(--avi-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
   .form-group select, .form-group textarea, .form-group input[type="date"], .form-group input[type="text"] {
     width: 100%; background: #0d1117; border: 1px solid var(--avi-border); border-radius: 8px;
-    color: var(--avi-text); padding: 9px 12px; font-size: 13px; box-sizing: border-box;
-    font-family: inherit;
+    color: var(--avi-text); padding: 9px 12px; font-size: 13px; box-sizing: border-box; font-family: inherit;
   }
-  .form-group select:focus, .form-group textarea:focus, .form-group input:focus {
-    outline: none; border-color: var(--avi-accent);
-  }
+  .form-group select:focus, .form-group textarea:focus, .form-group input:focus { outline: none; border-color: var(--avi-accent); }
   .form-group textarea { resize: vertical; min-height: 80px; }
   .form-btn { width: 100%; padding: 11px; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .2s; margin-top: 4px; }
   .btn-verify { background: #1f6feb; color: #fff; }
@@ -118,13 +102,11 @@
   .btn-close { background: rgba(63,185,80,.15); color: #3fb950; border: 1px solid rgba(63,185,80,.3); }
   .btn-close:hover { background: rgba(63,185,80,.25); }
 
-  /* Evidence checklist */
   .evidence-list { list-style: none; padding: 0; margin: 0; }
   .evidence-list li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid rgba(48,54,61,.5); font-size: 13px; color: var(--avi-muted); }
   .evidence-list li:last-child { border-bottom: none; }
   .evidence-list li::before { content: '☐'; color: var(--avi-warning); font-size: 16px; }
 
-  /* Audit trail */
   .trail-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(48,54,61,.4); }
   .trail-item:last-child { border-bottom: none; }
   .trail-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--avi-accent); flex-shrink: 0; margin-top: 5px; }
@@ -133,17 +115,14 @@
   .trail-meta { font-size: 11px; color: var(--avi-muted); margin-top: 2px; }
   .trail-note { font-size: 12px; color: var(--avi-muted); margin-top: 4px; font-style: italic; }
 
-  /* Side metadata */
   .meta-item { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px solid rgba(48,54,61,.4); }
   .meta-item:last-child { border-bottom: none; }
   .meta-key { font-size: 12px; color: var(--avi-muted); font-weight: 500; }
   .meta-val { font-size: 12px; color: var(--avi-text); font-weight: 600; text-align: right; max-width: 55%; word-break: break-word; }
 
-  /* Flash messages */
   .flash-success { background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.3); color: #3fb950; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
   .flash-error { background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.3); color: #f85149; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
 
-  /* Effectiveness result */
   .effectiveness-result { border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; }
   .er-effective { background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.3); }
   .er-effective strong { color: #3fb950; }
@@ -153,19 +132,19 @@
   .er-partial strong { color: #d29922; }
   .er-val { font-size: 13px; color: var(--avi-muted); margin: 4px 0 0; }
 
-  /* SRB escalation badge */
   .srb-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(188,140,255,.1); border: 1px solid rgba(188,140,255,.35); color: var(--avi-purple); border-radius: 8px; padding: 8px 14px; font-size: 12px; font-weight: 700; }
 </style>
 
+{% set today_str = now.strftime('%Y-%m-%d') %}
+{% set due_str = (avi.due_date|string)[:10] if avi.due_date else '' %}
+{% set is_overdue = due_str and due_str < today_str and avi.status not in ('Verified Effective','Closed') %}
+
 <div class="avid-page">
 
-  <!-- Flash messages -->
   {% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-  {% for category, message in messages %}
+  {% if messages %}{% for category, message in messages %}
   <div class="flash-{{ 'success' if category in ('success','message') else 'error' }}">{{ message }}</div>
-  {% endfor %}
-  {% endif %}
+  {% endfor %}{% endif %}
   {% endwith %}
 
   <!-- Header -->
@@ -192,14 +171,14 @@
         {% set s = avi.status %}
         {% if s == 'Pending' %}<span class="status-badge sb-pending">{{ s }}</span>
         {% elif s == 'Scheduled' %}<span class="status-badge sb-scheduled">{{ s }}</span>
-        {% elif s == 'In Review' %}<span class="status-badge sb-in-review">{{ s }}</span>
-        {% elif s == 'Verified' %}<span class="status-badge sb-verified">{{ s }}</span>
-        {% elif s == 'Ineffective' %}<span class="status-badge sb-ineffective">{{ s }}</span>
+        {% elif s == 'In Verification' %}<span class="status-badge sb-in-review">{{ s }}</span>
+        {% elif s == 'Verified Effective' %}<span class="status-badge sb-verified">{{ s }}</span>
+        {% elif s == 'Verified Ineffective' %}<span class="status-badge sb-ineffective">{{ s }}</span>
         {% elif s == 'Escalated' %}<span class="status-badge sb-escalated">{{ s }}</span>
         {% elif s == 'Closed' %}<span class="status-badge sb-closed">{{ s }}</span>
         {% else %}<span class="status-badge sb-pending">{{ s }}</span>
         {% endif %}
-        {% set r = avi.risk_level or 'Low' %}
+        {% set r = avi.operational_risk or 'Medium' %}
         <span class="risk-badge rb-{{ r|lower }}">{{ r }} Risk</span>
         {% if avi.escalated_to_srb %}
         <span class="srb-badge">▲ Escalated to SRB</span>
@@ -208,7 +187,7 @@
     </div>
   </div>
 
-  <!-- Systemic / Recurrence alerts -->
+  <!-- Alerts -->
   {% if is_recurring %}
   <div class="recur-alert">
     <div class="recur-alert-icon">↺</div>
@@ -222,12 +201,13 @@
   {% if avi.is_systemic %}
   <div class="systemic-banner">
     <strong>⚠ Systemic Issue — Safety Review Board Attention Required</strong>
-    <p>This item has been classified as a systemic deficiency. {{ avi.systemic_notes or 'Root cause investigation and organizational corrective action required.' }}</p>
+    <p>{{ avi.recurrence_notes or 'Root cause investigation and organizational corrective action required.' }}</p>
   </div>
   {% endif %}
 
   {% if avi.effectiveness_result %}
-  <div class="effectiveness-result er-{{ avi.effectiveness_result|lower|replace(' ','') }}">
+  {% set er_cls = 'er-effective' if avi.effectiveness_result == 'Effective' else ('er-ineffective' if avi.effectiveness_result == 'Ineffective' else 'er-partial') %}
+  <div class="effectiveness-result {{ er_cls }}">
     <strong>Effectiveness Determination: {{ avi.effectiveness_result }}</strong>
     <p class="er-val">{{ avi.effectiveness_notes or 'No additional notes recorded.' }}</p>
   </div>
@@ -236,7 +216,7 @@
   <!-- Two-column layout -->
   <div class="avid-layout">
 
-    <!-- LEFT: Main content -->
+    <!-- LEFT -->
     <div>
 
       <!-- Verification Specification -->
@@ -245,51 +225,50 @@
         <div class="field-grid">
           <div class="field-item">
             <label>Due Cycle</label>
-            <p style="font-family:monospace;font-size:15px;color:var(--avi-info);">{{ avi.due_cycle or '—' }}</p>
+            <p style="font-family:monospace;font-size:15px;color:var(--avi-info);">{{ avi.due_audit_cycle or '—' }}</p>
           </div>
           <div class="field-item">
             <label>Due Date</label>
-            {% if avi.due_date %}
-            {% set due_str = (avi.due_date|string)[:10] %}
-            {% set today_str = now.strftime('%Y-%m-%d') %}
-            {% set is_overdue = due_str < today_str and avi.status not in ('Verified','Closed') %}
             <p style="color:{% if is_overdue %}#f85149{% else %}var(--avi-text){% endif %};">
-              {{ due_str }}
+              {{ due_str or '—' }}
               {% if is_overdue %} ⚠ OVERDUE{% endif %}
             </p>
-            {% else %}<p>—</p>{% endif %}
           </div>
           <div class="field-item">
-            <label>Scheduled Date</label>
-            <p>{{ (avi.scheduled_date|string)[:10] if avi.scheduled_date else '—' }}</p>
+            <label>Status</label>
+            <p>{{ avi.status }}</p>
           </div>
           <div class="field-item">
-            <label>Auditor Assigned</label>
-            <p>{{ avi.assigned_auditor or '—' }}</p>
+            <label>Risk Level</label>
+            <p>{{ avi.operational_risk or '—' }}</p>
           </div>
           <div class="field-item full">
             <label>Verification Objective</label>
             <div class="field-text-block">{{ avi.verification_objective or 'No objective specified.' }}</div>
           </div>
           <div class="field-item full">
-            <label>Acceptance Criteria</label>
-            <div class="field-text-block">{{ avi.acceptance_criteria or 'No criteria defined.' }}</div>
+            <label>Effectiveness Criteria</label>
+            <div class="field-text-block">{{ avi.effectiveness_criteria or 'No criteria defined.' }}</div>
           </div>
           <div class="field-item full">
-            <label>Evidence Requirements</label>
-            {% if avi.evidence_required %}
+            <label>Required Evidence</label>
+            {% if avi.required_evidence %}
             <ul class="evidence-list">
-              {% for ev in avi.evidence_required.split(';') %}
+              {% for ev in avi.required_evidence.split(';') %}
               {% set ev_str = ev.strip() %}
-              {% if ev_str %}
-              <li>{{ ev_str }}</li>
-              {% endif %}
+              {% if ev_str %}<li>{{ ev_str }}</li>{% endif %}
               {% endfor %}
             </ul>
             {% else %}
             <div class="field-text-block" style="color:var(--avi-muted);">No evidence requirements specified.</div>
             {% endif %}
           </div>
+          {% if avi.evidence_collected %}
+          <div class="field-item full">
+            <label>Evidence Collected</label>
+            <div class="field-text-block">{{ avi.evidence_collected }}</div>
+          </div>
+          {% endif %}
         </div>
       </div>
 
@@ -302,7 +281,7 @@
           <div class="intel-label">Related Audit Findings ({{ related_findings|length }})</div>
           {% for f in related_findings %}
           <div style="margin-bottom:6px;">
-            <a href="{{ url_for('finding_detail', finding_id=f.id) }}" class="intel-link">Finding #{{ f.id }}</a>
+            <a href="{{ url_for('finding_detail', fid=f.id) }}" class="intel-link">Finding #{{ f.id }}</a>
             <span class="intel-desc"> — {{ f.description[:100] if f.description else 'No description' }}{% if f.description and f.description|length > 100 %}…{% endif %}</span>
           </div>
           {% endfor %}
@@ -314,7 +293,7 @@
           <div class="intel-label">Related Corrective Actions ({{ related_actions|length }})</div>
           {% for a in related_actions %}
           <div style="margin-bottom:6px;">
-            <a href="{{ url_for('action_detail', action_id=a.id) }}" class="intel-link">CAP #{{ a.id }}</a>
+            <a href="{{ url_for('action_detail', aid=a.id) }}" class="intel-link">CAP #{{ a.id }}</a>
             <span class="intel-desc"> — {{ a.description[:100] if a.description else 'No description' }}{% if a.description and a.description|length > 100 %}…{% endif %}</span>
             {% if a.status %}<span style="margin-left:8px;font-size:11px;color:var(--avi-muted);">{{ a.status }}</span>{% endif %}
           </div>
@@ -324,13 +303,11 @@
 
         {% if related_spi %}
         <div class="intel-item">
-          <div class="intel-label">Related SPI Exceedances ({{ related_spi|length }})</div>
-          {% for s in related_spi %}
-          <div style="margin-bottom:6px;">
-            <span class="intel-link">SPI Event #{{ s.id }}</span>
-            <span class="intel-desc"> — {{ s.indicator_name or 'Unknown indicator' }}, Level {{ s.alert_level or '—' }}</span>
+          <div class="intel-label">Linked SPI Indicator</div>
+          <div>
+            <a href="/spi/indicators/{{ related_spi.id }}/detail" class="intel-link">{{ related_spi.code or 'SPI' }} — {{ related_spi.name or '' }}</a>
+            <span class="intel-desc">{{ related_spi.description[:80] if related_spi.description else '' }}</span>
           </div>
-          {% endfor %}
         </div>
         {% endif %}
 
@@ -338,7 +315,6 @@
         <div class="no-intel">No cross-module references found for this record.</div>
         {% endif %}
 
-        <!-- Source record -->
         {% if avi.source_record_id %}
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--avi-border);">
           <span style="font-size:12px;color:var(--avi-muted);">Origin Record:</span>
@@ -351,59 +327,51 @@
       <div class="avid-card">
         <div class="avid-card-title">Audit Trail</div>
         <div>
-          <!-- Created -->
           <div class="trail-item">
             <div class="trail-dot" style="background:#3fb950;"></div>
             <div class="trail-content">
               <div class="trail-action">AVI Created — Auto-generated by {{ avi.source_module|replace('_',' ')|title }} module</div>
               <div class="trail-meta">{{ (avi.created_at|string)[:16] if avi.created_at else 'Unknown' }}</div>
+              {% if avi.source_description %}
+              <div class="trail-note">"{{ avi.source_description[:120] }}"</div>
+              {% endif %}
             </div>
           </div>
-          <!-- Scheduled -->
-          {% if avi.scheduled_date %}
-          <div class="trail-item">
-            <div class="trail-dot" style="background:#58a6ff;"></div>
-            <div class="trail-content">
-              <div class="trail-action">Verification Scheduled</div>
-              <div class="trail-meta">Scheduled for {{ (avi.scheduled_date|string)[:10] }} — Auditor: {{ avi.assigned_auditor or 'Unassigned' }}</div>
-            </div>
-          </div>
-          {% endif %}
-          <!-- Auditor notes -->
-          {% if avi.auditor_notes %}
+
+          {% if avi.effectiveness_notes %}
           <div class="trail-item">
             <div class="trail-dot" style="background:#d29922;"></div>
             <div class="trail-content">
-              <div class="trail-action">Auditor Notes Recorded</div>
-              <div class="trail-note">"{{ avi.auditor_notes }}"</div>
+              <div class="trail-action">Verification Notes Recorded</div>
+              <div class="trail-note">"{{ avi.effectiveness_notes }}"</div>
             </div>
           </div>
           {% endif %}
-          <!-- Effectiveness -->
+
           {% if avi.effectiveness_result %}
           <div class="trail-item">
             <div class="trail-dot" style="background:{% if avi.effectiveness_result=='Effective' %}#3fb950{% elif avi.effectiveness_result=='Ineffective' %}#f85149{% else %}#d29922{% endif %};"></div>
             <div class="trail-content">
               <div class="trail-action">Effectiveness Determined: {{ avi.effectiveness_result }}</div>
-              <div class="trail-meta">{{ (avi.verified_at|string)[:16] if avi.verified_at else '' }}</div>
-              {% if avi.effectiveness_notes %}
-              <div class="trail-note">"{{ avi.effectiveness_notes }}"</div>
+              <div class="trail-meta">{{ (avi.verified_at|string)[:16] if avi.verified_at else '' }} — By: {{ avi.verified_by or 'Unknown' }}</div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if avi.escalation_required or avi.escalated_to_srb %}
+          <div class="trail-item">
+            <div class="trail-dot" style="background:#bc8cff;"></div>
+            <div class="trail-content">
+              <div class="trail-action">{% if avi.escalated_to_srb %}Escalated to Safety Review Board{% else %}Escalation Required{% endif %}</div>
+              <div class="trail-meta">{{ (avi.escalation_date|string)[:10] if avi.escalation_date else '' }}</div>
+              {% if avi.recurrence_notes %}
+              <div class="trail-note">"{{ avi.recurrence_notes }}"</div>
               {% endif %}
             </div>
           </div>
           {% endif %}
-          <!-- Escalation -->
-          {% if avi.escalated_to_srb %}
-          <div class="trail-item">
-            <div class="trail-dot" style="background:#bc8cff;"></div>
-            <div class="trail-content">
-              <div class="trail-action">Escalated to Safety Review Board</div>
-              <div class="trail-meta">{{ (avi.escalation_date|string)[:10] if avi.escalation_date else '' }} — {{ avi.escalation_reason or '' }}</div>
-            </div>
-          </div>
-          {% endif %}
-          <!-- Closed -->
-          {% if avi.status in ('Verified', 'Closed') and avi.verified_at %}
+
+          {% if avi.status in ('Verified Effective', 'Closed') and avi.verified_at %}
           <div class="trail-item">
             <div class="trail-dot" style="background:#3fb950;"></div>
             <div class="trail-content">
@@ -418,7 +386,7 @@
       <!-- Audit Schedules -->
       {% if audit_schedules %}
       <div class="avid-card">
-        <div class="avid-card-title">Linked Audit Schedules</div>
+        <div class="avid-card-title">Active Audit Schedules</div>
         {% for sched in audit_schedules %}
         <div style="padding:10px 0;border-bottom:1px solid rgba(48,54,61,.4);display:flex;justify-content:space-between;align-items:center;">
           <div>
@@ -436,7 +404,7 @@
     <!-- RIGHT: Actions sidebar -->
     <div>
 
-      <!-- Metadata card -->
+      <!-- Metadata -->
       <div class="avid-card">
         <div class="avid-card-title">Item Metadata</div>
         <div>
@@ -458,15 +426,15 @@
           </div>
           <div class="meta-item">
             <span class="meta-key">Risk Level</span>
-            <span class="meta-val">{{ avi.risk_level or '—' }}</span>
+            <span class="meta-val">{{ avi.operational_risk or '—' }}</span>
           </div>
           <div class="meta-item">
             <span class="meta-key">Cycle</span>
-            <span class="meta-val" style="font-family:monospace;">{{ avi.due_cycle or '—' }}</span>
+            <span class="meta-val" style="font-family:monospace;">{{ avi.due_audit_cycle or '—' }}</span>
           </div>
           <div class="meta-item">
             <span class="meta-key">Due Date</span>
-            <span class="meta-val">{{ (avi.due_date|string)[:10] if avi.due_date else '—' }}</span>
+            <span class="meta-val" style="color:{% if is_overdue %}#f85149{% else %}var(--avi-text){% endif %};">{{ due_str or '—' }}</span>
           </div>
           <div class="meta-item">
             <span class="meta-key">Recurring</span>
@@ -494,14 +462,13 @@
       </div>
 
       <!-- Action panel -->
-      {% if avi.status not in ('Verified', 'Closed') %}
+      {% if avi.status not in ('Verified Effective', 'Closed') %}
       <div class="avid-card">
         <div class="avid-card-title">Auditor Actions</div>
         <form method="post" action="{{ url_for('avi_detail', avi_id=avi.id) }}" id="avi-action-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" id="action-field" value="">
 
-          <!-- Tab selector -->
           <div class="action-tabs">
             <button type="button" class="action-tab active" onclick="switchTab('verify')">✓ Verify</button>
             <button type="button" class="action-tab" onclick="switchTab('schedule')">📅 Schedule</button>
@@ -509,7 +476,7 @@
             <button type="button" class="action-tab" onclick="switchTab('close')">✕ Close</button>
           </div>
 
-          <!-- Verify panel -->
+          <!-- Verify -->
           <div class="action-panel active" id="panel-verify">
             <div class="form-group">
               <label>Effectiveness Determination *</label>
@@ -522,46 +489,34 @@
             </div>
             <div class="form-group">
               <label>Verification Notes *</label>
-              <textarea name="verification_notes" placeholder="Document evidence reviewed, findings, and basis for determination…" required>{{ avi.auditor_notes or '' }}</textarea>
+              <textarea name="effectiveness_notes" placeholder="Document evidence reviewed, findings, and basis for determination…" required>{{ avi.effectiveness_notes or '' }}</textarea>
             </div>
             <div class="form-group">
               <label>Evidence Gathered</label>
-              <textarea name="evidence_gathered" placeholder="List documents, records, observations reviewed…">{{ avi.evidence_gathered or '' }}</textarea>
+              <textarea name="evidence_collected" placeholder="List documents, records, observations reviewed…">{{ avi.evidence_collected or '' }}</textarea>
             </div>
             <button type="submit" class="form-btn btn-verify" onclick="setAction('verify')">Submit Verification</button>
-            <p style="font-size:11px;color:var(--avi-muted);margin-top:8px;text-align:center;">If Ineffective, AVI status → Ineffective and source CAP is flagged for re-investigation.</p>
+            <p style="font-size:11px;color:var(--avi-muted);margin-top:8px;text-align:center;">If Ineffective, source CAP is flagged for re-investigation.</p>
           </div>
 
-          <!-- Schedule panel -->
+          <!-- Schedule -->
           <div class="action-panel" id="panel-schedule">
             <div class="form-group">
-              <label>Audit Date</label>
-              <input type="date" name="scheduled_date" value="{{ (avi.scheduled_date|string)[:10] if avi.scheduled_date else '' }}">
+              <label>Target Due Date</label>
+              <input type="date" name="due_date" value="{{ due_str }}">
             </div>
             <div class="form-group">
-              <label>Assigned Auditor</label>
-              <input type="text" name="assigned_auditor" placeholder="Full name / role" value="{{ avi.assigned_auditor or '' }}">
+              <label>Due Cycle</label>
+              <input type="text" name="due_audit_cycle" placeholder="e.g. Q3-2026" value="{{ avi.due_audit_cycle or '' }}">
             </div>
-            <div class="form-group">
-              <label>Scheduling Notes</label>
-              <textarea name="schedule_notes" placeholder="Pre-audit preparation requirements, access needs…"></textarea>
-            </div>
-            <button type="submit" class="form-btn btn-schedule" onclick="setAction('schedule')">Schedule Verification</button>
+            <button type="submit" class="form-btn btn-schedule" onclick="setAction('schedule')">Save Schedule</button>
           </div>
 
-          <!-- Escalate panel -->
+          <!-- Escalate -->
           <div class="action-panel" id="panel-escalate">
             <div class="form-group">
               <label>Escalation Reason *</label>
               <textarea name="escalation_reason" placeholder="Describe why SRB/safety manager escalation is required…" required></textarea>
-            </div>
-            <div class="form-group">
-              <label>Escalate To</label>
-              <select name="escalate_to">
-                <option value="SRB">Safety Review Board (SRB)</option>
-                <option value="SM">Safety Manager</option>
-                <option value="Accountable Manager">Accountable Manager</option>
-              </select>
             </div>
             {% if is_recurring %}
             <div style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#f85149;">
@@ -571,14 +526,14 @@
             <button type="submit" class="form-btn btn-escalate" onclick="setAction('escalate')">Escalate Issue</button>
           </div>
 
-          <!-- Close panel -->
+          <!-- Close -->
           <div class="action-panel" id="panel-close">
             <div class="form-group">
               <label>Closure Rationale *</label>
-              <textarea name="closure_notes" placeholder="Justify closure without full verification — regulatory dispensation, risk accepted, etc." required></textarea>
+              <textarea name="escalation_reason" placeholder="Justify closure without full verification." required></textarea>
             </div>
             <div style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#f85149;">
-              ⚠ Administrative closure bypasses effectiveness verification. Use only with regulatory/management approval.
+              ⚠ Administrative closure bypasses effectiveness verification. Use only with management approval.
             </div>
             <button type="submit" class="form-btn btn-close" onclick="setAction('close')">Close Without Verification</button>
           </div>
@@ -587,7 +542,6 @@
       </div>
 
       {% else %}
-      <!-- Completed state -->
       <div class="avid-card">
         <div class="avid-card-title">Verification Complete</div>
         <div style="text-align:center;padding:20px;">
@@ -624,15 +578,8 @@ function switchTab(tab) {
   document.querySelectorAll('.action-tab')[tabMap[tab]].classList.add('active');
   document.getElementById('panel-' + tab).classList.add('active');
 }
-
 function setAction(action) {
   document.getElementById('action-field').value = action;
 }
-
-// Form validation
-document.getElementById('avi-action-form')?.addEventListener('submit', function(e) {
-  const action = document.getElementById('action-field').value;
-  if (!action) { e.preventDefault(); alert('Please select an action tab and fill in required fields.'); }
-});
 </script>
 {% endblock %}

@@ -251,7 +251,7 @@
             <span class="obj-text" title="{{ item.verification_objective or '' }}">{{ item.verification_objective or '—' }}</span>
           </td>
           <td>
-            {% set r = item.risk_level or 'Low' %}
+            {% set r = item.operational_risk or 'Low' %}
             <span class="risk-badge rb-{{ r|lower }}">{{ r }}</span>
           </td>
           <td>
@@ -266,7 +266,7 @@
             {% else %}<span class="status-badge sb-pending">{{ s }}</span>
             {% endif %}
           </td>
-          <td style="font-family:monospace;font-size:12px;color:var(--avi-muted);">{{ item.due_cycle or '—' }}</td>
+          <td style="font-family:monospace;font-size:12px;color:var(--avi-muted);">{{ item.due_audit_cycle or '—' }}</td>
           <td>
             {% if item.due_date %}
             <span class="{% if is_overdue %}due-overdue{% else %}due-ok{% endif %}">
