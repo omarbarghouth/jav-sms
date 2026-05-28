@@ -2803,7 +2803,7 @@ def hazard_detail(hid):
         spi_link_event_id=str(hid),
         spi_link_event_title=(h.generic_hazard or str(hid))[:100],
         spi_link_event_date=str(h.created_at.strftime('%Y-%m-%d') if h.created_at else ''),
-        spi_link_severity=h.risk_rating or '',
+        spi_link_severity=h.status or '',
         spi_link_dept_id=h.department_id or '',
         spi_link_category=h.classification or '',
         spi_return_url=f'/hazard-log/{hid}',
