@@ -4817,7 +4817,7 @@ def spi_indicator_detail(iid):
     chart_labels = [f"{r.month}/{r.year}" for r in data[-24:]]
     chart_values = [round(float(r.value), 4) if r.value is not None else None for r in data[-24:]]
     spt_target   = float(ind.spt_target) if ind.spt_target else None
-    al_target    = float(ind.alert_level_1) if ind.alert_level_1 else None
+    al_target    = float(ind.alert_l1) if getattr(ind, 'alert_l1', None) else None
 
     return render_template('spi/spi_indicator_detail.html',
         ind=ind,
@@ -10824,6 +10824,25 @@ with app.app_context():
             ("status","VARCHAR(30) DEFAULT 'Open'"),
             ('owner','VARCHAR(100)'),('linked_report_id','VARCHAR(30)'),
             ('department_id','INTEGER'),('created_at','TIMESTAMP'),
+        ],
+        'spi_indicators': [
+            ('unit','VARCHAR(50)'),
+            ('frequency',"VARCHAR(20) DEFAULT 'Monthly'"),
+            ('alert_l1','FLOAT'),
+            ('alert_l2','FLOAT'),
+            ('alert_l3','FLOAT'),
+            ('auto_source','VARCHAR(50)'),
+            ('auto_category','VARCHAR(50)'),
+            ('baseline_months','INTEGER DEFAULT 3'),
+            ('improvement_pct','FLOAT DEFAULT 5.0'),
+            ('stat_mode','BOOLEAN DEFAULT FALSE'),
+            ('formula','VARCHAR(200)'),
+            ('created_at','TIMESTAMP'),
+        ],
+        'spi_data': [
+            ('mean_at_time','FLOAT'),
+            ('sd_at_time','FLOAT'),
+            ('total_events','INTEGER DEFAULT 0'),
         ],
         'actions': [
             ('hazard_id','VARCHAR(30)'),('spi_id','INTEGER'),
