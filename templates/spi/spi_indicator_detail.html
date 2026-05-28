@@ -271,6 +271,55 @@
   </div>
 </div>
 
+<!-- ═══ ALERT THRESHOLD EDITOR ════════════════════════════════════════════ -->
+<div class="card" style="padding:16px;margin-bottom:16px;border-top:3px solid #ea580c">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-weight:700;color:var(--navy);font-size:13px">⚡ ICAO Alert Thresholds &amp; SPT Target</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">Set thresholds to display coloured lines on the performance chart</div>
+    </div>
+  </div>
+  <form method="POST" action="/spi/indicators/{{ ind.id }}/set-alerts">
+    <input type="hidden" name="return_url" value="/spi/indicators/{{ ind.id }}/detail">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end">
+      <div class="fg" style="margin:0">
+        <label style="font-size:11px;font-weight:700;color:#15803d;display:block;margin-bottom:4px">🟢 SPT Target</label>
+        <input type="number" name="spt_target" step="0.01"
+               value="{{ ind.spt_target or '' }}" placeholder="e.g. 5.0"
+               style="width:100%;border:1.5px solid #bbf7d0;border-radius:6px;padding:7px 10px;font-size:12px"/>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">Green dashed line</div>
+      </div>
+      <div class="fg" style="margin:0">
+        <label style="font-size:11px;font-weight:700;color:#d97706;display:block;margin-bottom:4px">🟡 L1 Watch</label>
+        <input type="number" name="alert_l1" step="0.01"
+               value="{{ ind.alert_l1 or '' }}" placeholder="e.g. 6.0"
+               style="width:100%;border:1.5px solid #fde68a;border-radius:6px;padding:7px 10px;font-size:12px"/>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">Amber dashed line</div>
+      </div>
+      <div class="fg" style="margin:0">
+        <label style="font-size:11px;font-weight:700;color:#ea580c;display:block;margin-bottom:4px">🟠 L2 Warning</label>
+        <input type="number" name="alert_l2" step="0.01"
+               value="{{ ind.alert_l2 or '' }}" placeholder="e.g. 8.0"
+               style="width:100%;border:1.5px solid #fed7aa;border-radius:6px;padding:7px 10px;font-size:12px"/>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">Orange dashed line</div>
+      </div>
+      <div class="fg" style="margin:0">
+        <label style="font-size:11px;font-weight:700;color:#dc2626;display:block;margin-bottom:4px">🔴 L3 Critical</label>
+        <input type="number" name="alert_l3" step="0.01"
+               value="{{ ind.alert_l3 or '' }}" placeholder="e.g. 10.0"
+               style="width:100%;border:1.5px solid #fca5a5;border-radius:6px;padding:7px 10px;font-size:12px"/>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">Red dashed line</div>
+      </div>
+      <div style="padding-bottom:18px">
+        <button type="submit" class="btn btn-nav btn-sm"
+                style="background:#0a1628;color:#c9a84c;border:none;width:100%;font-size:12px;padding:8px 0">
+          ✓ Save Thresholds
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
 <!-- ═══ LINKED EVENTS TABLE ═══════════════════════════════════════════════ -->
 <div class="card" style="padding:16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
