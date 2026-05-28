@@ -4727,6 +4727,9 @@ def spi_indicators():
             spt_target      = float(f['spt_target']) if f.get('spt_target') else None,
             improvement_pct = float(f['improvement_pct']) if f.get('improvement_pct') else 5.0,
             baseline_months = int(f['baseline_months']) if f.get('baseline_months') else 3,
+            alert_l1        = float(f['alert_l1']) if f.get('alert_l1') else None,
+            alert_l2        = float(f['alert_l2']) if f.get('alert_l2') else None,
+            alert_l3        = float(f['alert_l3']) if f.get('alert_l3') else None,
             auto_source     = f.get('auto_source','manual'),
             auto_category   = f.get('auto_category',''),
             active          = True,
@@ -4766,6 +4769,26 @@ def spi_toggle_indicator(iid):
     db.session.commit()
     flash(f'✓ {ind.code} {"activated" if ind.active else "deactivated"}.', 'success')
     return redirect(url_for('spi_indicators'))
+
+
+@app.route('/spi/indicators/<int:iid>/set-alerts', methods=['POST'])
+@require_login
+def spi_set_alerts(iid):
+    """Update alert thresholds (L1/L2/L3) and SPT target for an existing indicator."""
+    ind = SPIIndicator.query.get_or_404(iid)
+    f   = request.form
+    try:
+        ind.spt_target = float(f['spt_target']) if f.get('spt_target') else ind.spt_target
+        ind.alert_l1   = float(f['alert_l1'])   if f.get('alert_l1')   else None
+        ind.alert_l2   = float(f['alert_l2'])   if f.get('alert_l2')   else None
+        ind.alert_l3   = float(f['alert_l3'])   if f.get('alert_l3')   else None
+        db.session.commit()
+        flash(f'✓ Alert thresholds updated for {ind.code}.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error: {e}', 'danger')
+    return_url = request.form.get('return_url') or f'/spi/indicators/{iid}/detail'
+    return redirect(return_url)
 
 
 # ─── SPI Intelligence: Indicator Detail ───────────────────────────────────────
