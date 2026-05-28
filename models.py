@@ -1477,3 +1477,119 @@ class ComplianceObligation(db.Model):
     updated_at      = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     department      = db.relationship('Department', foreign_keys=[department_id],
                           backref=db.backref('compliance_obligations', lazy=True))
+
+class SPIEventLink(db.Model):
+    """
+    ICAO Annex 19 / Doc 9859 — Operational event linked to SPI indicator.
+    Created automatically by the SPI Intelligence Mapper when events occur.
+    Purely additive — never modifies existing SPI calculations.
+    """
+    __tablename__ = 'spi_event_links'
+    id            = db.Column(db.Integer, primary_key=True)
+    spi_id        = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'), nullable=False)
+    # Source event
+    event_type    = db.Column(db.String(30))   # hazard_report / asr / investigation / audit_finding
+                                               # risk_assessment / erp_activation / action / safety_promo
+    event_id      = db.Column(db.String(50))   # e.g. HR-SMS-01 / ASR-001 / INV-SMS-01
+    event_title   = db.Column(db.String(200))  # human-readable summary
+    event_date    = db.Column(db.String(20))   # YYYY-MM-DD
+    # Context
+    department_id = db.Column(db.Integer)
+    category      = db.Column(db.String(100))  # occurrence category / hazard class
+    severity      = db.Column(db.String(20))   # Critical / High / Medium / Low
+    match_reason  = db.Column(db.String(300))  # why it was linked — e.g. "keyword:runway"
+    # Audit
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    # Relationship back to indicator
+    indicator     = db.relationship('SPIIndicator',
+                        backref=db.backref('event_links', lazy='dynamic'))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ENTERPRISE CONTINUOUS COMPLIANCE & AUDIT VERIFICATION ENGINE
+#  ICAO Annex 19 / Doc 9859 / IOSA ISM / EASA SMS Oversight
+#  Additive only — no existing tables modified
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AuditVerificationItem(db.Model):
+    """
+    Audit Verification Item (AVI) — the core record of the continuous
+    compliance engine.  Created automatically when any corrective action,
+    mitigation, investigation recommendation, SPI exceedance, or governance
+    action is generated anywhere in the SMS.  Survives until an auditor
+    confirms operational effectiveness during a real audit cycle.
+
+    Lifecycle:
+      Pending → Scheduled → In Verification → Verified Effective
+                                             → Verified Ineffective → Reopened
+                                             → Escalated
+    """
+    __tablename__ = 'audit_verification_items'
+
+    id              = db.Column(db.Integer, primary_key=True)
+
+    # ── Origin ────────────────────────────────────────────────────────────────
+    source_module       = db.Column(db.String(50))   # asr / hazard / investigation /
+                                                     # risk / action / spi / erp /
+                                                     # audit_finding / moc / safety_promo / cap
+    source_record_id    = db.Column(db.String(50))   # FK to originating record (string ID)
+    source_description  = db.Column(db.Text)         # human-readable trigger summary
+
+    # ── Cross-module linkage ───────────────────────────────────────────────────
+    linked_report_id        = db.Column(db.String(30))   # HazardReport / ASRReport
+    linked_hazard_id        = db.Column(db.String(30))
+    linked_investigation_id = db.Column(db.String(30))
+    linked_spi_id           = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'), nullable=True)
+    linked_action_id        = db.Column(db.String(30))
+    linked_audit_id         = db.Column(db.String(30))   # AuditSchedule id
+    linked_finding_id       = db.Column(db.String(30))   # AuditFinding id
+    linked_risk_id          = db.Column(db.String(30))   # RiskAssessment id
+
+    # ── Verification specification ─────────────────────────────────────────────
+    verification_area       = db.Column(db.String(100))  # e.g. "Flight Operations"
+    verification_objective  = db.Column(db.Text)         # what must be verified
+    required_evidence       = db.Column(db.Text)         # evidence auditor must collect
+    effectiveness_criteria  = db.Column(db.Text)         # pass/fail criteria
+    operational_risk        = db.Column(db.String(20), default='Medium')  # Critical/High/Medium/Low
+
+    # ── Scheduling ─────────────────────────────────────────────────────────────
+    department_id           = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    due_audit_cycle         = db.Column(db.String(30))   # e.g. "Q3-2026" or "2026-Annual"
+    due_date                = db.Column(db.String(20))   # YYYY-MM-DD deadline
+
+    # ── Status lifecycle ────────────────────────────────────────────────────────
+    status = db.Column(db.String(30), default='Pending')
+    # Pending / Scheduled / In Verification / Verified Effective /
+    # Verified Ineffective / Escalated / Closed / Cancelled
+
+    # ── Recurrence intelligence ─────────────────────────────────────────────────
+    recurrence_flag         = db.Column(db.Boolean, default=False)
+    recurrence_count        = db.Column(db.Integer, default=0)
+    is_systemic             = db.Column(db.Boolean, default=False)
+    recurrence_notes        = db.Column(db.Text)
+
+    # ── Verification outcome (filled by auditor) ────────────────────────────────
+    verified_by             = db.Column(db.String(100))
+    verified_at             = db.Column(db.DateTime)
+    scheduled_audit_id      = db.Column(db.String(30))   # AuditSchedule where it was verified
+    effectiveness_result    = db.Column(db.String(30))   # Effective / Partially / Ineffective
+    effectiveness_notes     = db.Column(db.Text)
+    evidence_collected      = db.Column(db.Text)
+
+    # ── Follow-up / escalation ──────────────────────────────────────────────────
+    followup_required       = db.Column(db.Boolean, default=False)
+    followup_notes          = db.Column(db.Text)
+    escalation_required     = db.Column(db.Boolean, default=False)
+    escalated_to_srb        = db.Column(db.Boolean, default=False)
+    escalation_date         = db.Column(db.String(20))
+
+    # ── Metadata ────────────────────────────────────────────────────────────────
+    created_at              = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at              = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by              = db.Column(db.String(100))
+
+    # ── Relationships ────────────────────────────────────────────────────────────
+    department  = db.relationship('Department', foreign_keys=[department_id],
+                      backref=db.backref('verification_items', lazy='dynamic'))
+    linked_spi  = db.relationship('SPIIndicator', foreign_keys=[linked_spi_id],
+                      backref=db.backref('verification_items', lazy='dynamic'))

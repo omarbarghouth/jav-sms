@@ -250,9 +250,15 @@ def inject_globals():
         overdue = Action.query.filter_by(status='Overdue').count()
     except Exception:
         overdue = 0
+    try:
+        avi_open = AuditVerificationItem.query.filter(
+            AuditVerificationItem.status.in_(['Pending', 'Scheduled', 'In Review', 'Ineffective', 'Escalated'])
+        ).count()
+    except Exception:
+        avi_open = 0
     now = datetime.utcnow()
     return dict(all_departments=depts, now=now, get_tolerance=get_tolerance,
-                nav_overdue=overdue, enumerate=enumerate)
+                nav_overdue=overdue, nav_avi_open=avi_open, enumerate=enumerate)
 
 
 @app.after_request
@@ -2435,6 +2441,19 @@ def safety_closure_approve(rid):
         db.session.commit()
         sync_report_status(hr.hazard_id)
         db.session.commit()
+        # ── AVI Hook: Hazard report closure → verify hazard controls ─────────
+        try:
+            _avi_generate(
+                source_module='hazard', source_record_id=hr.id,
+                source_description=f'Hazard report closed: {(hr.generic_hazard or hr.description or "")[:200]}',
+                linked_report_id=hr.id,
+                linked_hazard_id=hr.hazard_id,
+                operational_risk='High' if (hr.severity or '') in ('A','B') else 'Medium',
+                override_objective=f'Verify that hazard controls implemented for report "{rid}" remain operationally effective and the hazard has not recurred.',
+            )
+            db.session.commit()
+        except Exception:
+            pass
         flash(f'✓ Occurrence {rid} officially closed by Safety Management. Closure approved.', 'success')
     except Exception as e:
         db.session.rollback()
@@ -2711,6 +2730,21 @@ def asr():
         except Exception:
             pass
 
+        # ── AVI Hook: ASR submission → verify operational safety concern resolved ─
+        try:
+            asr_obj = ASRReport.query.get(aid)
+            dept_id = asr_obj.department_id if asr_obj else None
+            _avi_generate(
+                source_module='asr', source_record_id=aid,
+                source_description=f'ASR submitted: {f.get("occurrence_description","")[:200]}',
+                department_id=dept_id,
+                linked_report_id=aid,
+                linked_hazard_id=hid,
+                operational_risk='High' if f.get('safety_effect','') in ('D','E') else 'Medium',
+            )
+            db.session.commit()
+        except Exception:
+            pass
         flash(f'✓ ASR {aid} submitted successfully. Hazard {hid} created. Proceeding to Risk Assessment.', 'success')
         return redirect(url_for('ra_wizard_start', hid=hid))
     # GET - show list if ?list=1, otherwise show form
@@ -3126,6 +3160,20 @@ def update_action(aid):
                 pass
         sync_report_status(a.hazard_id)
         db.session.commit()
+        # ── AVI Hook: Action closure → verify corrective action effectiveness ─
+        if new_status == 'Closed':
+            try:
+                _avi_generate(
+                    source_module='action', source_record_id=a.id,
+                    source_description=f'Action closed: {(a.description or "")[:200]}',
+                    linked_action_id=a.id,
+                    linked_hazard_id=a.hazard_id,
+                    operational_risk='High' if (a.priority or '') == 'High' else 'Medium',
+                    override_objective=f'Verify that corrective action "{(a.description or "")[:100]}" has produced lasting operational improvement and has not reverted.',
+                )
+                db.session.commit()
+            except Exception:
+                pass
         flash('✓ Action updated.', 'success')
     except Exception as e:
         db.session.rollback()
@@ -3596,6 +3644,21 @@ def close_investigation(iid):
         performed_by=session.get('username','system'))
     db.session.add(evt)
     db.session.commit()
+    # ── AVI Hook: Investigation closure → verify recommendation effectiveness ──
+    try:
+        recs = (inv.recommendations or '')[:300]
+        _avi_generate(
+            source_module='investigation', source_record_id=inv.id,
+            source_description=f'Investigation closed: {inv.title}. Recommendations: {recs}',
+            department_id=inv.department_id,
+            linked_investigation_id=inv.id,
+            linked_hazard_id=inv.hazard_id,
+            operational_risk='Critical' if (inv.classification or '') in ('Accident','Serious Incident') else 'High',
+            override_objective=f'Verify that recommendations from investigation "{inv.title}" have been fully implemented and are producing measurable operational improvement.',
+        )
+        db.session.commit()
+    except Exception:
+        pass
     flash(f'✓ Investigation {inv.id} closed.', 'success')
     return redirect(url_for('investigation_detail', iid=iid))
 
@@ -3700,6 +3763,20 @@ def update_moc(mid):
     m.implementation_status = new_impl_status
     m.post_change_review    = new_pcr
     db.session.commit()
+    # ── AVI Hook: MOC completed → verify change didn't introduce new hazards ──
+    if new_impl_status == 'Completed':
+        try:
+            _avi_generate(
+                source_module='moc', source_record_id=m.id,
+                source_description=f'MOC completed: {(m.title or "")[:200]}. Change type: {m.change_type}',
+                department_id=m.department_id,
+                linked_hazard_id=m.hazard_id,
+                operational_risk='High',
+                override_objective=f'Verify that MOC "{(m.title or "")[:100]}" has not introduced unacceptable safety risks and post-change review findings are resolved.',
+            )
+            db.session.commit()
+        except Exception:
+            pass
     flash('✓ MOC updated.', 'success')
     return redirect(url_for('moc_list'))
 
@@ -4291,6 +4368,21 @@ def _spi_record_escalation(ind, trigger_detail, l1, l2, l3, mean, sd):
     )
     db.session.add(esc)
     db.session.flush()   # get ID without committing
+    # ── AVI Hook: SPI exceedance → verify operational corrective actions ───────
+    try:
+        risk_map = {'L3': 'Critical', 'L2': 'High', 'L1': 'Medium'}
+        dept_ids = [int(x) for x in (ind.department_ids or '').split(',') if x.strip().isdigit()]
+        dept_id  = dept_ids[0] if dept_ids else None
+        _avi_generate(
+            source_module='spi', source_record_id=f'{ind.id}-{month}-{rule}',
+            source_description=f'SPI {ind.code} ({ind.name}) exceeded {level} threshold. Rule {rule} triggered in month {month}. Value: {round(value,4)}',
+            department_id=dept_id,
+            linked_spi_id=ind.id,
+            operational_risk=risk_map.get(level, 'High'),
+            override_objective=f'Verify that operational actions taken after {ind.code} exceeded {level} have restored the Safety Performance Indicator to within the SPT target.',
+        )
+    except Exception:
+        pass
     return esc
 
 
@@ -8164,6 +8256,23 @@ def finding_detail(fid):
                     la.status = 'Closed'
                     la.closed_date = finding.closure_date
             db.session.commit()
+            # ── AVI Hook: AuditFinding closure → schedule next-cycle verification ─
+            try:
+                sched = AuditSchedule.query.get(finding.schedule_id)
+                dept_id = sched.department_id if sched else None
+                _avi_generate(
+                    source_module='audit_finding', source_record_id=finding.id,
+                    source_description=f'Finding {finding.finding_ref} closed: {(finding.finding_title or finding.description or "")[:200]}',
+                    department_id=dept_id,
+                    linked_finding_id=finding.id,
+                    linked_audit_id=finding.schedule_id,
+                    linked_action_id=finding.linked_action_id,
+                    operational_risk='Critical' if finding.severity == 'Major' else ('High' if finding.severity == 'Minor' else 'Medium'),
+                    override_objective=f'Verify that CAP for finding "{finding.finding_ref}: {(finding.finding_title or "")[:80]}" has corrected the non-conformity and will not recur in the next audit cycle.',
+                )
+                db.session.commit()
+            except Exception:
+                pass
             flash(f'✓ Finding {fid} closed and verified.', 'success')
 
         elif action == 'reopen':
@@ -8437,6 +8546,373 @@ def update_audit_action(aid):
         flash('✓ Action updated.', 'success')
     db.session.commit()
     return redirect(url_for('audit_actions'))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ENTERPRISE CONTINUOUS COMPLIANCE & AUDIT VERIFICATION ENGINE
+#  ICAO Annex 19 · Doc 9859 · IOSA ISM · EASA SMS Oversight
+#  Phase 2: Auto-Generation Engine + Hooks
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── AVI auto-generation templates per source module ───────────────────────────
+_AVI_TEMPLATES = {
+    'asr': {
+        'area': 'Flight Operations',
+        'objective': 'Verify that the reported air safety concern has been operationally resolved and recurrence prevention measures are effective.',
+        'evidence': 'SOP revision records, training records, operational briefing logs, recurrence data.',
+        'criteria': 'No recurrence of same event category within 6 months; SOPs updated; crews briefed.',
+        'risk': 'High',
+    },
+    'hazard': {
+        'area': 'Safety Assurance',
+        'objective': 'Verify that identified hazard controls remain operationally effective and have not introduced new hazards.',
+        'evidence': 'Risk register updates, control implementation records, inspection reports.',
+        'criteria': 'Hazard risk rating maintained at acceptable level; controls verified in place.',
+        'risk': 'High',
+    },
+    'investigation': {
+        'area': 'Safety Assurance',
+        'objective': 'Verify that investigation recommendations have been fully implemented and are producing measurable operational improvement.',
+        'evidence': 'Implementation records, follow-up inspection reports, SPI trend data, training completion records.',
+        'criteria': 'All recommendations closed; no recurrence of root-cause scenario; SPI improving.',
+        'risk': 'Critical',
+    },
+    'risk': {
+        'area': 'Risk Management',
+        'objective': 'Verify that risk mitigation measures remain adequate and risk level has not been re-elevated by operational changes.',
+        'evidence': 'Risk assessment review records, control audit evidence, SPI data.',
+        'criteria': 'Risk rating at or below accepted level; mitigations still in place and effective.',
+        'risk': 'High',
+    },
+    'action': {
+        'area': 'Safety Assurance',
+        'objective': 'Verify that the closed corrective/preventive action has produced lasting operational improvement and not reverted.',
+        'evidence': 'Post-implementation inspection, operational data, follow-up audit checklist response.',
+        'criteria': 'Issue not recurred; implementation sustained; no regression observed.',
+        'risk': 'Medium',
+    },
+    'spi': {
+        'area': 'Safety Performance Monitoring',
+        'objective': 'Verify that operational actions taken in response to SPI exceedance have restored performance to within the Safety Performance Target.',
+        'evidence': 'SPI trend data for 3 months post-action, operational briefing records, SOP compliance checks.',
+        'criteria': 'SPI value below L1 threshold for 3 consecutive months; corrective actions closed.',
+        'risk': 'Critical',
+    },
+    'audit_finding': {
+        'area': 'Audit & Compliance',
+        'objective': 'Verify that the CAP implemented for this finding has corrected the non-conformity and will prevent recurrence in the next audit cycle.',
+        'evidence': 'CAP completion records, updated procedures, next-cycle checklist response, evidence files.',
+        'criteria': 'Same finding does not recur; CAP verified complete; next audit result: Conforming.',
+        'risk': 'High',
+    },
+    'moc': {
+        'area': 'Management of Change',
+        'objective': 'Verify that the implemented change has not introduced unacceptable safety risks and post-change review findings are resolved.',
+        'evidence': 'Post-change inspection records, hazard reassessment, operational feedback reports.',
+        'criteria': 'No new hazards identified; change integrated into operations without safety degradation.',
+        'risk': 'Medium',
+    },
+    'erp': {
+        'area': 'Emergency Response',
+        'objective': 'Verify that ERP drill findings and corrective actions have improved emergency response capability.',
+        'evidence': 'Drill follow-up records, revised ERP procedures, next drill performance metrics.',
+        'criteria': 'All drill findings closed; ERP procedures updated; next drill performance improved.',
+        'risk': 'High',
+    },
+    'safety_promo': {
+        'area': 'Safety Promotion',
+        'objective': 'Verify that safety promotion activities have reached target audience and produced measurable safety culture improvement.',
+        'evidence': 'Attendance records, survey results, knowledge assessment scores, safety reporting trend.',
+        'criteria': 'Target attendance achieved; measurable improvement in safety culture indicators.',
+        'risk': 'Low',
+    },
+    'cap': {
+        'area': 'Corrective Action',
+        'objective': 'Verify that the Corrective Action Plan has been fully implemented and the root cause eliminated.',
+        'evidence': 'CAP completion evidence, root cause elimination verification, recurrence check.',
+        'criteria': 'All CAP tasks complete; root cause addressed; no recurrence within 90 days.',
+        'risk': 'High',
+    },
+}
+
+
+def _avi_generate(source_module, source_record_id, source_description,
+                  department_id=None, linked_report_id=None, linked_hazard_id=None,
+                  linked_investigation_id=None, linked_spi_id=None,
+                  linked_action_id=None, linked_audit_id=None,
+                  linked_finding_id=None, linked_risk_id=None,
+                  override_objective=None, override_evidence=None,
+                  override_criteria=None, operational_risk=None):
+    """
+    Core AVI auto-generation function.
+    Creates an AuditVerificationItem from any source module.
+    Safe to call from any route — wrapped in try/except internally.
+    Never raises; returns the created AVI id or None on failure.
+    """
+    try:
+        # Prevent duplicates: one pending AVI per source_module + source_record_id
+        existing = AuditVerificationItem.query.filter_by(
+            source_module=source_module,
+            source_record_id=str(source_record_id),
+            status='Pending'
+        ).first()
+        if existing:
+            return existing.id
+
+        tmpl = _AVI_TEMPLATES.get(source_module, _AVI_TEMPLATES['action'])
+        cur_year = datetime.utcnow().year
+        cur_q    = (datetime.utcnow().month - 1) // 3 + 1
+        next_q   = cur_q + 1 if cur_q < 4 else 1
+        next_q_year = cur_year if cur_q < 4 else cur_year + 1
+        due_cycle = f'Q{next_q}-{next_q_year}'
+        due_date  = f'{next_q_year}-{(next_q * 3):02d}-28'
+
+        avi = AuditVerificationItem(
+            source_module       = source_module,
+            source_record_id    = str(source_record_id),
+            source_description  = source_description[:500] if source_description else '',
+            department_id       = department_id,
+            linked_report_id    = linked_report_id,
+            linked_hazard_id    = linked_hazard_id,
+            linked_investigation_id = linked_investigation_id,
+            linked_spi_id       = linked_spi_id,
+            linked_action_id    = linked_action_id,
+            linked_audit_id     = linked_audit_id,
+            linked_finding_id   = linked_finding_id,
+            linked_risk_id      = linked_risk_id,
+            verification_area       = tmpl['area'],
+            verification_objective  = override_objective or tmpl['objective'],
+            required_evidence       = override_evidence  or tmpl['evidence'],
+            effectiveness_criteria  = override_criteria  or tmpl['criteria'],
+            operational_risk        = operational_risk   or tmpl['risk'],
+            due_audit_cycle         = due_cycle,
+            due_date                = due_date,
+            status                  = 'Pending',
+            created_by              = session.get('user', 'system'),
+        )
+        db.session.add(avi)
+        db.session.flush()
+        return avi.id
+    except Exception as _avi_err:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _avi_check_recurrence(source_module, verification_area, department_id=None):
+    """
+    Detect if the same type of issue has recurred (3+ AVIs same area/module).
+    Returns (is_recurring: bool, count: int, existing_ids: list).
+    """
+    try:
+        q = AuditVerificationItem.query.filter_by(
+            source_module=source_module,
+            verification_area=verification_area,
+        )
+        if department_id:
+            q = q.filter_by(department_id=department_id)
+        existing = q.order_by(AuditVerificationItem.created_at.desc()).all()
+        count = len(existing)
+        return count >= 3, count, [e.id for e in existing[:5]]
+    except Exception:
+        return False, 0, []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ASSURANCE ENGINE ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/audit-assurance')
+@require_login
+def audit_assurance_dashboard():
+    """Enterprise Continuous Compliance & Assurance Dashboard."""
+    try:
+        total_avis      = AuditVerificationItem.query.count()
+        pending_avis    = AuditVerificationItem.query.filter_by(status='Pending').count()
+        in_verify       = AuditVerificationItem.query.filter(
+                            AuditVerificationItem.status.in_(['Scheduled','In Verification'])).count()
+        effective       = AuditVerificationItem.query.filter_by(effectiveness_result='Effective').count()
+        ineffective     = AuditVerificationItem.query.filter_by(effectiveness_result='Ineffective').count()
+        escalated       = AuditVerificationItem.query.filter_by(escalation_required=True).count()
+        systemic        = AuditVerificationItem.query.filter_by(is_systemic=True).count()
+        recurring       = AuditVerificationItem.query.filter_by(recurrence_flag=True).count()
+
+        from datetime import date
+        today_str = date.today().isoformat()
+        overdue   = AuditVerificationItem.query.filter(
+                        AuditVerificationItem.due_date < today_str,
+                        AuditVerificationItem.status.in_(['Pending','Scheduled'])).count()
+
+        # Recent AVIs grouped by source
+        recent_avis = AuditVerificationItem.query.order_by(
+                        AuditVerificationItem.created_at.desc()).limit(20).all()
+
+        # Breakdown by source module
+        from sqlalchemy import func
+        module_counts = db.session.query(
+            AuditVerificationItem.source_module,
+            func.count(AuditVerificationItem.id)
+        ).group_by(AuditVerificationItem.source_module).all()
+
+        # Open assurance loops (pending + overdue)
+        open_loops = AuditVerificationItem.query.filter(
+            AuditVerificationItem.status.in_(['Pending','Scheduled','In Verification'])
+        ).order_by(AuditVerificationItem.operational_risk.desc(),
+                   AuditVerificationItem.due_date.asc()).limit(50).all()
+
+        # Systemic/recurring issues
+        systemic_items = AuditVerificationItem.query.filter(
+            (AuditVerificationItem.is_systemic == True) |
+            (AuditVerificationItem.recurrence_flag == True)
+        ).order_by(AuditVerificationItem.recurrence_count.desc()).limit(20).all()
+
+        # Ineffective implementations requiring action
+        ineffective_items = AuditVerificationItem.query.filter_by(
+            effectiveness_result='Ineffective'
+        ).order_by(AuditVerificationItem.verified_at.desc()).limit(20).all()
+
+    except Exception as _e:
+        db.session.rollback()
+        total_avis = pending_avis = in_verify = effective = 0
+        ineffective = escalated = systemic = recurring = overdue = 0
+        recent_avis = open_loops = systemic_items = ineffective_items = []
+        module_counts = []
+
+    return render_template('audit/assurance_dashboard.html',
+        total_avis=total_avis, pending_avis=pending_avis,
+        in_verify=in_verify, effective=effective, ineffective=ineffective,
+        escalated=escalated, systemic=systemic, recurring=recurring,
+        overdue=overdue, recent_avis=recent_avis, open_loops=open_loops,
+        systemic_items=systemic_items, ineffective_items=ineffective_items,
+        module_counts=module_counts,
+        now=datetime.utcnow())
+
+
+@app.route('/audit-assurance/items')
+@require_login
+def avi_list():
+    """All Audit Verification Items with filtering."""
+    status_f = request.args.get('status', '')
+    module_f = request.args.get('module', '')
+    risk_f   = request.args.get('risk', '')
+
+    q = AuditVerificationItem.query
+    if status_f:
+        q = q.filter_by(status=status_f)
+    if module_f:
+        q = q.filter_by(source_module=module_f)
+    if risk_f:
+        q = q.filter_by(operational_risk=risk_f)
+
+    items = q.order_by(AuditVerificationItem.operational_risk.desc(),
+                       AuditVerificationItem.created_at.desc()).all()
+
+    departments = Department.query.order_by(Department.name).all()
+    return render_template('audit/avi_list.html',
+        items=items, status_f=status_f, module_f=module_f, risk_f=risk_f,
+        departments=departments,
+        all_statuses=['Pending','Scheduled','In Verification',
+                      'Verified Effective','Verified Ineffective','Escalated','Closed'],
+        all_modules=list(_AVI_TEMPLATES.keys()))
+
+
+@app.route('/audit-assurance/items/<int:avi_id>', methods=['GET','POST'])
+@require_login
+def avi_detail(avi_id):
+    """AVI detail view + auditor verification form."""
+    avi = AuditVerificationItem.query.get_or_404(avi_id)
+
+    if request.method == 'POST':
+        f = request.form
+        action = f.get('action', 'verify')
+
+        if action == 'verify':
+            avi.status               = 'In Verification'
+            avi.verified_by          = f.get('verified_by', session.get('user',''))
+            avi.verified_at          = datetime.utcnow()
+            avi.effectiveness_result = f.get('effectiveness_result', '')
+            avi.effectiveness_notes  = f.get('effectiveness_notes', '')
+            avi.evidence_collected   = f.get('evidence_collected', '')
+            avi.scheduled_audit_id   = f.get('scheduled_audit_id', '')
+
+            if avi.effectiveness_result == 'Effective':
+                avi.status = 'Verified Effective'
+            elif avi.effectiveness_result == 'Ineffective':
+                avi.status = 'Verified Ineffective'
+                avi.followup_required    = True
+                avi.escalation_required  = True
+                # Re-open the source finding if applicable
+                if avi.linked_finding_id:
+                    try:
+                        finding = AuditFinding.query.get(avi.linked_finding_id)
+                        if finding and finding.status == 'Closed':
+                            finding.status = 'Open'
+                            finding.revision_reason = f'Effectiveness verification FAILED: {avi.effectiveness_notes}'
+                            db.session.add(finding)
+                    except Exception:
+                        pass
+            elif avi.effectiveness_result == 'Partially Effective':
+                avi.status            = 'In Verification'
+                avi.followup_required = True
+
+        elif action == 'schedule':
+            avi.status          = 'Scheduled'
+            avi.due_audit_cycle = f.get('due_audit_cycle', avi.due_audit_cycle)
+            avi.due_date        = f.get('due_date', avi.due_date)
+
+        elif action == 'escalate':
+            avi.status               = 'Escalated'
+            avi.escalation_required  = True
+            avi.escalation_date      = date.today().isoformat()
+            avi.recurrence_notes     = f.get('escalation_reason', '')
+            # Check recurrence
+            is_rec, count, _ = _avi_check_recurrence(
+                avi.source_module, avi.verification_area, avi.department_id)
+            if is_rec:
+                avi.recurrence_flag  = True
+                avi.recurrence_count = count
+                avi.is_systemic      = True
+
+        elif action == 'close':
+            avi.status = 'Closed'
+
+        db.session.add(avi)
+        db.session.commit()
+        flash(f'✓ Verification Item {avi_id} updated — status: {avi.status}', 'success')
+        return redirect(url_for('avi_detail', avi_id=avi_id))
+
+    # Related context for intelligence panel
+    related_findings = []
+    related_actions  = []
+    related_spi      = None
+    try:
+        if avi.linked_finding_id:
+            related_findings = [AuditFinding.query.get(avi.linked_finding_id)]
+            related_findings = [f for f in related_findings if f]
+        if avi.linked_action_id:
+            related_actions = [Action.query.get(avi.linked_action_id)]
+            related_actions = [a for a in related_actions if a]
+        if avi.linked_spi_id:
+            related_spi = SPIIndicator.query.get(avi.linked_spi_id)
+    except Exception:
+        pass
+
+    # Recurrence check
+    is_rec, rec_count, rec_ids = _avi_check_recurrence(
+        avi.source_module, avi.verification_area, avi.department_id)
+
+    audit_schedules = AuditSchedule.query.filter(
+        AuditSchedule.status.in_(['Planned','In Progress'])
+    ).order_by(AuditSchedule.scheduled_date).all()
+
+    return render_template('audit/avi_detail.html',
+        avi=avi, related_findings=related_findings,
+        related_actions=related_actions, related_spi=related_spi,
+        is_recurring=is_rec, recurrence_count=rec_count,
+        audit_schedules=audit_schedules,
+        now=datetime.utcnow())
 
 
 # ─── AUDIT DASHBOARD (summary view) ──────────────────────────────────────────
@@ -9699,6 +10175,21 @@ def ra_update(ra_id):
     if f.get('approved_by_position') is not None:
         ra.approved_by_position  = f.get('approved_by_position')
     db.session.commit()
+    # ── AVI Hook: RA closed/approved → verify mitigation effectiveness ────────
+    if ra.status in ('Closed', 'Approved') and f.get('status') in ('Closed', 'Approved'):
+        try:
+            _avi_generate(
+                source_module='risk', source_record_id=ra_id,
+                source_description=f'Risk Assessment {ra.status}: {(ra.general_description or ra.title or "")[:200]}',
+                department_id=ra.department_id,
+                linked_risk_id=ra_id,
+                linked_hazard_id=getattr(ra, 'hazard_id', None),
+                operational_risk='High' if (ra.risk_level_after or '') in ('High','Critical','Catastrophic') else 'Medium',
+                override_objective=f'Verify that risk mitigations in RA "{ra_id}" remain adequate and residual risk has not been re-elevated.',
+            )
+            db.session.commit()
+        except Exception:
+            pass
     flash('✓ Risk Assessment updated successfully.', 'success')
     return redirect(url_for('ra_detail', ra_id=ra_id))
 
@@ -10649,388 +11140,24 @@ def pdf_route_audit_finding(fid):
     return _pdf_response(pdf_bytes, f'CAP-{fid}.pdf')
 
 
-# ── 13. SPI DASHBOARD SUMMARY PDF ───────────────────────────────────────────
+# ── 13. SPI DASHBOARD SUMMARY PDF ────────────────────────────────────────────
 @app.route('/pdf/spi-summary')
 @require_login
 def pdf_route_spi_summary():
     if not _PDF_ENGINE:
         return _pdf_unavailable()
-    indicators = SPIIndicator.query.filter_by(active=True).order_by(SPIIndicator.code).all()
-    # Build data_by_spi: {spi_id: [SPIData, ...]} sorted newest-first
-    data_by_spi = {}
-    for ind in indicators:
-        entries = SPIData.query.filter_by(spi_id=ind.id).order_by(
-            SPIData.year.desc(), SPIData.month.desc()).limit(24).all()
-        data_by_spi[ind.id] = entries
-    pdf_bytes = pdf_spi_summary(indicators, data_by_spi, generated_by=_gen_by())
-    from datetime import date as _date
-    stamp = _date.today().strftime('%Y%m')
-    return _pdf_response(pdf_bytes, f'SPI-Summary-{stamp}.pdf')
+    indicators  = SPIIndicator.query.filter_by(active=True).all()
+    pdf_bytes   = pdf_spi_summary(indicators, generated_by=_gen_by())
+    return _pdf_response(pdf_bytes, 'SPI-Summary.pdf')
 
 
-
-
-# ─── ERP DRILLS ───────────────────────────────────────────────────────────────
-
-@app.route('/erp/<eid>/drills/new', methods=['GET','POST'])
-@require_login
-def new_erp_drill(eid):
-    from models import ERPDrill
-    erp = ERPlan.query.get_or_404(eid)
-    if request.method == 'POST':
-        f = request.form
-        from datetime import date
-        drill_count = ERPDrill.query.count() + 1
-        drill = ERPDrill(
-            erp_id=eid,
-            drill_ref=f'DRILL-{date.today().year}-{drill_count:03d}',
-            drill_type=f.get('drill_type','Table-Top'),
-            drill_date=f.get('drill_date',''),
-            duration_min=int(f.get('duration_min') or 0),
-            facilitator=f.get('facilitator',''),
-            participants=f.get('participants',''),
-            participant_count=int(f.get('participant_count') or 0),
-            scenario_brief=f.get('scenario_brief',''),
-            objectives=f.get('objectives',''),
-            observations=f.get('observations',''),
-            strengths=f.get('strengths',''),
-            deficiencies=f.get('deficiencies',''),
-            recommendations=f.get('recommendations',''),
-            action_items=f.get('action_items',''),
-            erp_update_required=bool(f.get('erp_update_required')),
-            outcome=f.get('outcome','Satisfactory'),
-            next_drill_due=f.get('next_drill_due',''),
-            created_by=session.get('username','unknown'),
-        )
-        db.session.add(drill)
-        db.session.commit()
-        flash(f'\u2713 Drill {drill.drill_ref} recorded for {erp.erp_ref}.', 'success')
-        return redirect(url_for('erp_detail', eid=eid))
-    return render_template('safety_policy/erp_drill_form.html', erp=erp)
-
-@app.route('/erp/<eid>/activate', methods=['POST'])
-@require_login
-def activate_erp(eid):
-    from models import ERPActivation
-    from datetime import datetime as dt
-    erp = ERPlan.query.get_or_404(eid)
-    act_count = ERPActivation.query.count() + 1
-    act = ERPActivation(
-        erp_id=eid,
-        activation_ref=f'ACT-{dt.utcnow().year}-{act_count:03d}',
-        investigation_id=request.form.get('investigation_id') or None,
-        activated_at=dt.utcnow(),
-        activated_by=session.get('username','unknown'),
-        activation_reason=request.form.get('activation_reason',''),
-        status='Active',
-    )
-    db.session.add(act)
-    db.session.commit()
-    # Hook 6 — SPI Intelligence linkage for ERP activation
-    try:
-        _spi_link_event(
-            event_type    = 'erp_activation',
-            event_id      = act.activation_ref,
-            event_title   = f'{erp.scenario_type}: {erp.erp_ref}'[:120],
-            department_id = None,
-            category      = erp.scenario_type or '',
-            severity      = 'Critical',
-            extra_text    = request.form.get('activation_reason', '') + ' ' + (erp.scenario_description or ''),
-            event_date    = act.activated_at.strftime('%Y-%m-%d') if act.activated_at else '',
-        )
-    except Exception:
-        pass
-    flash(f'\u2713 ERP {erp.erp_ref} activated — ref {act.activation_ref}.', 'success')
-    return redirect(url_for('erp_detail', eid=eid))
-
-@app.route('/erp/activation/<int:aid>/update', methods=['POST'])
-@require_login
-def update_erp_activation(aid):
-    from models import ERPActivation
-    from datetime import datetime as dt
-    act = ERPActivation.query.get_or_404(aid)
-    f = request.form
-    act.caa_notified    = bool(f.get('caa_notified'))
-    act.caa_ref         = f.get('caa_ref', act.caa_ref)
-    act.icao_notified   = bool(f.get('icao_notified'))
-    act.media_statement = bool(f.get('media_statement'))
-    act.nok_notified    = bool(f.get('nok_notified'))
-    act.actions_taken   = f.get('actions_taken', act.actions_taken)
-    act.lessons_learned = f.get('lessons_learned', act.lessons_learned)
-    act.effectiveness   = f.get('effectiveness', act.effectiveness)
-    act.erp_update_required = bool(f.get('erp_update_required'))
-    if f.get('deactivate') and act.status == 'Active':
-        act.deactivated_at = dt.utcnow()
-        act.deactivated_by = session.get('username','unknown')
-        if act.activated_at:
-            delta = act.deactivated_at - act.activated_at
-            act.duration_hours = round(delta.total_seconds() / 3600, 1)
-        act.status = 'Deactivated'
-    db.session.commit()
-    flash('\u2713 Activation record updated.', 'success')
-    return redirect(url_for('erp_detail', eid=act.erp_id))
-
-@app.route('/erp-dashboard')
-@require_login
-def erp_dashboard():
-    from models import ERPDrill, ERPActivation
-    from datetime import date, timedelta
-    plans      = ERPlan.query.filter_by(status='Active').all()
-    all_drills = ERPDrill.query.order_by(ERPDrill.drill_date.desc()).all()
-    all_acts   = ERPActivation.query.order_by(ERPActivation.activated_at.desc()).all()
-    # Drills overdue: last drill > 12 months ago or never drilled
-    overdue_erps = []
-    cutoff = (date.today() - timedelta(days=365)).isoformat()
-    for p in plans:
-        drills = ERPDrill.query.filter_by(erp_id=p.id).order_by(ERPDrill.drill_date.desc()).first()
-        if not drills or (drills.drill_date and drills.drill_date < cutoff):
-            overdue_erps.append(p)
-    return render_template('safety_policy/erp_dashboard.html',
-        plans=plans, all_drills=all_drills, all_acts=all_acts,
-        overdue_erps=overdue_erps,
-        total_plans=len(plans),
-        total_drills=len(all_drills),
-        active_acts=sum(1 for a in all_acts if a.status=='Active'),
-        overdue_count=len(overdue_erps))
-
-
-# ── COMPLIANCE REGISTER ──────────────────────────────────────────────────────
-
-COMPLIANCE_STATUSES = [
-    'Compliant', 'Partially Compliant', 'Non-Compliant',
-    'Under Review', 'Not Applicable', 'Exempt'
-]
-OBLIGATION_TYPES = ['Ongoing', 'Periodic', 'One-Time', 'Conditional']
-REVIEW_FREQUENCIES = ['Monthly', 'Quarterly', 'Semi-Annual', 'Annual', 'Event-Based']
-REGULATION_BODIES = ['ICAO', 'JCAR', 'EASA', 'FAA', 'IOSA', 'Internal', 'Other']
-
-def _next_comp_ref():
-    from models import ComplianceObligation
-    from datetime import datetime
-    year = datetime.utcnow().year
-    last = db.session.query(ComplianceObligation).filter(
-        ComplianceObligation.ref_number.like(f'COMP-{year}-%')
-    ).count()
-    return f'COMP-{year}-{last+1:03d}'
-
-
-@app.route('/compliance')
-@require_login
-def compliance_list():
-    from models import ComplianceObligation
-    status_filter = request.args.get('status', '')
-    body_filter   = request.args.get('body', '')
-    priority_filter = request.args.get('priority', '')
-    q = db.session.query(ComplianceObligation)
-    if status_filter:
-        q = q.filter(ComplianceObligation.compliance_status == status_filter)
-    if body_filter:
-        q = q.filter(ComplianceObligation.regulation_body == body_filter)
-    if priority_filter:
-        q = q.filter(ComplianceObligation.priority == priority_filter)
-    obligations = q.order_by(ComplianceObligation.priority.desc(),
-                              ComplianceObligation.next_review_due.asc()).all()
-    # KPI counts
-    total   = len(obligations) if not (status_filter or body_filter or priority_filter) else \
-              db.session.query(ComplianceObligation).count()
-    compliant     = db.session.query(ComplianceObligation).filter_by(compliance_status='Compliant').count()
-    non_compliant = db.session.query(ComplianceObligation).filter_by(compliance_status='Non-Compliant').count()
-    partial       = db.session.query(ComplianceObligation).filter_by(compliance_status='Partially Compliant').count()
-    under_review  = db.session.query(ComplianceObligation).filter_by(compliance_status='Under Review').count()
-    from datetime import date
-    today_str = date.today().isoformat()
-    overdue = db.session.query(ComplianceObligation).filter(
-        ComplianceObligation.next_review_due < today_str,
-        ComplianceObligation.compliance_status.notin_(['Not Applicable', 'Exempt'])
-    ).count()
-    return render_template('compliance/compliance_list.html',
-        obligations=obligations,
-        status_filter=status_filter,
-        body_filter=body_filter,
-        priority_filter=priority_filter,
-        statuses=COMPLIANCE_STATUSES,
-        bodies=REGULATION_BODIES,
-        total=total,
-        compliant=compliant,
-        non_compliant=non_compliant,
-        partial=partial,
-        under_review=under_review,
-        overdue=overdue)
-
-
-@app.route('/compliance/new', methods=['GET', 'POST'])
-@require_login
-def new_compliance():
-    from models import ComplianceObligation
-    if request.method == 'POST':
-        ob = ComplianceObligation(
-            ref_number         = request.form.get('ref_number') or _next_comp_ref(),
-            regulation_body    = request.form.get('regulation_body', ''),
-            standard_ref       = request.form.get('standard_ref', ''),
-            requirement_title  = request.form.get('requirement_title', ''),
-            requirement_text   = request.form.get('requirement_text', ''),
-            applicability      = request.form.get('applicability', ''),
-            obligation_type    = request.form.get('obligation_type', 'Ongoing'),
-            compliance_status  = request.form.get('compliance_status', 'Under Review'),
-            evidence_description = request.form.get('evidence_description', ''),
-            evidence_location  = request.form.get('evidence_location', ''),
-            responsible_person = request.form.get('responsible_person', ''),
-            department_id      = request.form.get('department_id') or None,
-            review_frequency   = request.form.get('review_frequency', 'Annual'),
-            last_reviewed      = request.form.get('last_reviewed', ''),
-            next_review_due    = request.form.get('next_review_due', ''),
-            finding_ref        = request.form.get('finding_ref', ''),
-            linked_action_id   = request.form.get('linked_action_id', ''),
-            notes              = request.form.get('notes', ''),
-            priority           = request.form.get('priority', 'Medium'),
-            created_by         = current_user.username if hasattr(current_user, 'username') else 'system',
-        )
-        db.session.add(ob)
-        db.session.commit()
-        flash(f'Compliance obligation {ob.ref_number} created.', 'success')
-        return redirect(url_for('compliance_detail', oid=ob.id))
-    departments = Department.query.order_by(Department.name).all()
-    suggested_ref = _next_comp_ref()
-    return render_template('compliance/compliance_form.html',
-        edit=False,
-        ob=None,
-        suggested_ref=suggested_ref,
-        departments=departments,
-        statuses=COMPLIANCE_STATUSES,
-        obligation_types=OBLIGATION_TYPES,
-        review_frequencies=REVIEW_FREQUENCIES,
-        bodies=REGULATION_BODIES)
-
-
-@app.route('/compliance/<int:oid>')
-@require_login
-def compliance_detail(oid):
-    from models import ComplianceObligation
-    ob = ComplianceObligation.query.get_or_404(oid)
-    return render_template('compliance/compliance_detail.html', ob=ob)
-
-
-@app.route('/compliance/<int:oid>/edit', methods=['GET', 'POST'])
-@require_login
-def edit_compliance(oid):
-    from models import ComplianceObligation
-    ob = ComplianceObligation.query.get_or_404(oid)
-    if request.method == 'POST':
-        ob.regulation_body    = request.form.get('regulation_body', ob.regulation_body)
-        ob.standard_ref       = request.form.get('standard_ref', ob.standard_ref)
-        ob.requirement_title  = request.form.get('requirement_title', ob.requirement_title)
-        ob.requirement_text   = request.form.get('requirement_text', ob.requirement_text)
-        ob.applicability      = request.form.get('applicability', ob.applicability)
-        ob.obligation_type    = request.form.get('obligation_type', ob.obligation_type)
-        ob.compliance_status  = request.form.get('compliance_status', ob.compliance_status)
-        ob.evidence_description = request.form.get('evidence_description', ob.evidence_description)
-        ob.evidence_location  = request.form.get('evidence_location', ob.evidence_location)
-        ob.responsible_person = request.form.get('responsible_person', ob.responsible_person)
-        ob.department_id      = request.form.get('department_id') or None
-        ob.review_frequency   = request.form.get('review_frequency', ob.review_frequency)
-        ob.last_reviewed      = request.form.get('last_reviewed', ob.last_reviewed)
-        ob.next_review_due    = request.form.get('next_review_due', ob.next_review_due)
-        ob.finding_ref        = request.form.get('finding_ref', ob.finding_ref)
-        ob.linked_action_id   = request.form.get('linked_action_id', ob.linked_action_id)
-        ob.notes              = request.form.get('notes', ob.notes)
-        ob.priority           = request.form.get('priority', ob.priority)
-        db.session.commit()
-        flash(f'Obligation {ob.ref_number} updated.', 'success')
-        return redirect(url_for('compliance_detail', oid=ob.id))
-    departments = Department.query.order_by(Department.name).all()
-    return render_template('compliance/compliance_form.html',
-        edit=True,
-        ob=ob,
-        suggested_ref=ob.ref_number,
-        departments=departments,
-        statuses=COMPLIANCE_STATUSES,
-        obligation_types=OBLIGATION_TYPES,
-        review_frequencies=REVIEW_FREQUENCIES,
-        bodies=REGULATION_BODIES)
-
-
-@app.route('/compliance/<int:oid>/update-status', methods=['POST'])
-@require_login
-def update_compliance_status(oid):
-    from models import ComplianceObligation
-    ob = ComplianceObligation.query.get_or_404(oid)
-    new_status = request.form.get('compliance_status', ob.compliance_status)
-    ob.compliance_status = new_status
-    ob.last_reviewed = request.form.get('last_reviewed', ob.last_reviewed)
-    ob.next_review_due = request.form.get('next_review_due', ob.next_review_due)
-    ob.evidence_description = request.form.get('evidence_description', ob.evidence_description)
-    ob.notes = request.form.get('notes', ob.notes)
-    db.session.commit()
-    flash(f'Status updated to {new_status}.', 'success')
-    return redirect(url_for('compliance_detail', oid=ob.id))
-
-
+# ─────────────────────────────────────────────────────────────────────────────
+#  APPLICATION STARTUP — migrations + seed
+# ─────────────────────────────────────────────────────────────────────────────
 with app.app_context():
-    try:
-        db.create_all()
-    except Exception as _e:
-        print(f'Warning: db.create_all() skipped: {_e}')
+    db.create_all()
 
     _migrations = {
-        'distribution_lists': [
-            ('name','VARCHAR(100)'),('email','VARCHAR(200)'),
-            ('department_id','INTEGER'),('position','VARCHAR(100)'),
-            ('is_active','BOOLEAN DEFAULT TRUE'),
-        ],
-        'email_logs': [
-            ('subject','VARCHAR(300)'),('content_type','VARCHAR(30)'),
-            ('content_ref','VARCHAR(50)'),('sent_by','VARCHAR(100)'),
-            ('recipient_count','INTEGER DEFAULT 0'),('dept_filter','VARCHAR(200)'),
-            ('status',"VARCHAR(20) DEFAULT 'Sent'"),('error_message','TEXT'),
-        ],
-        'survey_responses': [
-            ('survey_id','INTEGER'),('respondent_name','VARCHAR(100)'),
-            ('respondent_email','VARCHAR(200)'),('department_id','INTEGER'),
-            ('is_anonymous','BOOLEAN DEFAULT FALSE'),('answers','TEXT'),
-            ('ip_address','VARCHAR(50)'),
-        ],
-        'departments': [
-            ("color","VARCHAR(20) DEFAULT '#1e40af'"),
-        ],
-        'hazard_reports': [
-            ("classification","VARCHAR(50) DEFAULT 'Operational'"),
-            ("report_type","VARCHAR(30) DEFAULT 'Hazard Report'"),
-            ('created_at','TIMESTAMP'),
-            ("status","VARCHAR(30) DEFAULT 'Submitted'"),
-            ('generic_hazard','VARCHAR(200)'),
-            ('consequences','TEXT'),('immediate_action','TEXT'),
-            ('suggested_mitigation','TEXT'),('reporter_severity','VARCHAR(20)'),
-            ("reporter","VARCHAR(100) DEFAULT 'Anonymous'"),
-            ('hazard_id','VARCHAR(30)'),('severity','VARCHAR(2)'),
-            ('likelihood','INTEGER'),('risk_index','VARCHAR(5)'),
-        ],
-        'hazards': [
-            ('classification','VARCHAR(50)'),('type_of_activity','VARCHAR(100)'),
-            ('generic_hazard','VARCHAR(200)'),('specific_components','TEXT'),
-            ('consequences','TEXT'),
-            ("status","VARCHAR(30) DEFAULT 'Open'"),
-            ('owner','VARCHAR(100)'),('linked_report_id','VARCHAR(30)'),
-            ('department_id','INTEGER'),('created_at','TIMESTAMP'),
-        ],
-        'spi_indicators': [
-            ('unit','VARCHAR(50)'),
-            ('frequency',"VARCHAR(20) DEFAULT 'Monthly'"),
-            ('alert_l1','FLOAT'),
-            ('alert_l2','FLOAT'),
-            ('alert_l3','FLOAT'),
-            ('auto_source','VARCHAR(50)'),
-            ('auto_category','VARCHAR(50)'),
-            ('baseline_months','INTEGER DEFAULT 3'),
-            ('improvement_pct','FLOAT DEFAULT 5.0'),
-            ('stat_mode','BOOLEAN DEFAULT FALSE'),
-            ('formula','VARCHAR(200)'),
-            ('created_at','TIMESTAMP'),
-        ],
-        'spi_data': [
-            ('mean_at_time','FLOAT'),
-            ('sd_at_time','FLOAT'),
-            ('total_events','INTEGER DEFAULT 0'),
-        ],
         'actions': [
             ('hazard_id','VARCHAR(30)'),('spi_id','INTEGER'),
             ('spi_alert_level','VARCHAR(5)'),('spi_trigger_rule','VARCHAR(2)'),
@@ -11088,6 +11215,88 @@ with app.app_context():
             ))
     except Exception as _sle:
         pass
+
+    # audit_verification_items DDL
+    try:
+        with engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS audit_verification_items ("
+                "  id SERIAL PRIMARY KEY,"
+                "  source_module VARCHAR(50),"
+                "  source_record_id VARCHAR(50),"
+                "  source_description TEXT,"
+                "  linked_report_id VARCHAR(30),"
+                "  linked_hazard_id VARCHAR(30),"
+                "  linked_investigation_id VARCHAR(30),"
+                "  linked_spi_id INTEGER REFERENCES spi_indicators(id) ON DELETE SET NULL,"
+                "  linked_action_id VARCHAR(30),"
+                "  linked_audit_id VARCHAR(30),"
+                "  linked_finding_id VARCHAR(30),"
+                "  linked_risk_id VARCHAR(30),"
+                "  verification_area VARCHAR(100),"
+                "  verification_objective TEXT,"
+                "  required_evidence TEXT,"
+                "  effectiveness_criteria TEXT,"
+                "  operational_risk VARCHAR(20) DEFAULT 'Medium',"
+                "  department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,"
+                "  due_audit_cycle VARCHAR(30),"
+                "  due_date VARCHAR(20),"
+                "  status VARCHAR(30) DEFAULT 'Pending',"
+                "  recurrence_flag BOOLEAN DEFAULT FALSE,"
+                "  recurrence_count INTEGER DEFAULT 0,"
+                "  is_systemic BOOLEAN DEFAULT FALSE,"
+                "  recurrence_notes TEXT,"
+                "  verified_by VARCHAR(100),"
+                "  verified_at TIMESTAMP,"
+                "  scheduled_audit_id VARCHAR(30),"
+                "  effectiveness_result VARCHAR(30),"
+                "  effectiveness_notes TEXT,"
+                "  evidence_collected TEXT,"
+                "  followup_required BOOLEAN DEFAULT FALSE,"
+                "  followup_notes TEXT,"
+                "  escalation_required BOOLEAN DEFAULT FALSE,"
+                "  escalated_to_srb BOOLEAN DEFAULT FALSE,"
+                "  escalation_date VARCHAR(20),"
+                "  created_at TIMESTAMP DEFAULT NOW(),"
+                "  updated_at TIMESTAMP DEFAULT NOW(),"
+                "  created_by VARCHAR(100)"
+                ")"
+            ))
+    except Exception as _avie:
+        pass
+
+    # additive columns on audit_findings
+    for _col, _ctype in [
+        ('effectiveness_verified',    'BOOLEAN DEFAULT FALSE'),
+        ('effectiveness_verified_by', 'VARCHAR(100)'),
+        ('effectiveness_verified_at', 'TIMESTAMP'),
+        ('effectiveness_outcome',     "VARCHAR(30) DEFAULT 'Pending'"),
+        ('effectiveness_notes_avi',   'TEXT'),
+        ('is_recurring',              'BOOLEAN DEFAULT FALSE'),
+        ('recurrence_count',          'INTEGER DEFAULT 0'),
+        ('systemic_flag',             'BOOLEAN DEFAULT FALSE'),
+        ('avi_id',                    'INTEGER'),
+    ]:
+        try:
+            with engine.connect() as conn:
+                conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+                conn.execute(text(f"ALTER TABLE audit_findings ADD COLUMN IF NOT EXISTS {_col} {_ctype}"))
+        except Exception:
+            pass
+
+    # additive columns on audit_actions
+    for _col, _ctype in [
+        ('effectiveness_gate_passed', 'BOOLEAN DEFAULT FALSE'),
+        ('effectiveness_gate_date',   'VARCHAR(20)'),
+        ('effectiveness_gate_by',     'VARCHAR(100)'),
+    ]:
+        try:
+            with engine.connect() as conn:
+                conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+                conn.execute(text(f"ALTER TABLE audit_actions ADD COLUMN IF NOT EXISTS {_col} {_ctype}"))
+        except Exception:
+            pass
 
     try:
         seed()
