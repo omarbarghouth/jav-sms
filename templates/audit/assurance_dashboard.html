@@ -7,9 +7,13 @@
     <div class="page-title">Continuous Compliance & Assurance Engine</div>
     <div class="page-sub">ICAO Annex 19 · Doc 9859 · IOSA ISM · EASA SMS Oversight · Safety Assurance Loop</div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <a href="/audit-assurance/items" class="btn btn-sm" style="background:var(--navy);color:#fff;border:1.5px solid var(--navy)">📋 All Verification Items</a>
     <a href="/audit-dashboard" class="btn btn-sm btn-outline">← Audit Dashboard</a>
+    <form method="POST" action="/audit-assurance/clear-all" style="margin:0" onsubmit="return confirm('Delete ALL verification items? This cannot be undone.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-sm" style="background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b;font-size:11px">🗑 Clear All (Testing)</button>
+    </form>
   </div>
 </div>
 
