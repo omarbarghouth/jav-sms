@@ -4663,16 +4663,20 @@ def spi():
     # Build table for the SELECTED year (for monthly display columns)
     table, MONTHS = _spi_build_table(indicators, sel_year)
 
-    # Gather all years that have SPI data recorded (for the year-selector buttons)
+    # Gather all years that have SPI data recorded, then always include the
+    # last 3 calendar years so the selector is navigable even when a year
+    # has no entries yet (user can switch there to log historical data).
     try:
         year_rows = db.session.execute(
             text("SELECT DISTINCT year FROM spi_data ORDER BY year DESC")
         ).fetchall()
         available_years = [r[0] for r in year_rows if r[0]]
     except Exception:
-        available_years = [cur_year]
-    if cur_year not in available_years:
-        available_years.insert(0, cur_year)
+        available_years = []
+    for y in [cur_year, cur_year - 1, cur_year - 2]:
+        if y not in available_years:
+            available_years.append(y)
+    available_years = sorted(set(available_years), reverse=True)
 
     critical = sum(1 for r in table if r['status'][2] >= 3)
     warning  = sum(1 for r in table if r['status'][2] == 2)
