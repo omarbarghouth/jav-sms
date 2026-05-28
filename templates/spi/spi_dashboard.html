@@ -110,13 +110,12 @@
 </div>
 
 <!-- ═══ YEAR FILTER ═══════════════════════════════════════════════════════ -->
-{% if available_years|length > 1 %}
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;
             background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:8px 14px">
-  <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin-right:2px">📅 Year:</span>
+  <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin-right:2px">📅 Viewing Year:</span>
   {% for yr in available_years|sort %}
   <a href="/spi?{% if dept_f %}dept={{ dept_f }}&{% endif %}year={{ yr }}"
-     style="display:inline-block;padding:4px 14px;border-radius:99px;font-size:12px;font-weight:700;text-decoration:none;transition:all .15s;
+     style="display:inline-block;padding:4px 14px;border-radius:99px;font-size:12px;font-weight:700;text-decoration:none;
             {% if yr == sel_year %}
             background:var(--navy);color:#fff;border:2px solid var(--navy);
             {% elif yr == cur_year %}
@@ -124,23 +123,20 @@
             {% else %}
             background:#fff;color:#6b7280;border:2px solid #e5e7eb;
             {% endif %}">
-    {{ yr }}{% if yr == cur_year %} <span style="font-size:9px;opacity:.75">(current)</span>{% endif %}
+    {{ yr }}{% if yr == cur_year %} <span style="font-size:9px;opacity:.8">(current)</span>{% endif %}
   </a>
   {% endfor %}
   {% if sel_year != cur_year %}
   <a href="/spi{% if dept_f %}?dept={{ dept_f }}{% endif %}"
      style="margin-left:6px;font-size:11px;color:#6b7280;text-decoration:none;padding:3px 10px;
             border:1px dashed #d1d5db;border-radius:99px">
-    ✕ Return to current year
+    ✕ Return to {{ cur_year }}
   </a>
   {% endif %}
   <span style="margin-left:auto;font-size:10px;color:var(--muted);font-style:italic">
-    Thresholds always calculated from preceding year data per ICAO Doc 9859
+    Thresholds calculated from preceding year data · ICAO Doc 9859
   </span>
 </div>
-{% else %}
-<div style="margin-bottom:16px"></div>
-{% endif %}
 
 <!-- ═══ LEGEND ════════════════════════════════════════════════════════════ -->
 <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 16px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
