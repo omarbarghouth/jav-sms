@@ -39,12 +39,15 @@
   </div>
   <div class="stat-card" style="border-top:3px solid #c9a84c">
     <div class="stat-val" style="font-size:14px;color:#c9a84c">{{ spt_target if spt_target else 'N/A' }}</div>
-    <div class="stat-lbl">SPT Target</div>
-    <div class="stat-sub">
+    <div class="stat-lbl">SPT Target
+      {% if is_stat %}<span style="font-size:9px;background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">📊 STAT</span>
+      {% else %}<span style="font-size:9px;background:#d97706;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">🔄 BASE</span>{% endif %}
+    </div>
+    <div class="stat-sub" style="font-size:10px">
       {% if al1 %}<span style="color:#d97706">L1: {{ al1 }}</span>{% endif %}
       {% if al2 %} · <span style="color:#ea580c">L2: {{ al2 }}</span>{% endif %}
       {% if al3 %} · <span style="color:#dc2626">L3: {{ al3 }}</span>{% endif %}
-      {% if not al1 and not al2 and not al3 %}No alerts set{% endif %}
+      {% if not al1 and not al2 and not al3 %}Auto-pending{% endif %}
     </div>
   </div>
 </div>
@@ -271,53 +274,125 @@
   </div>
 </div>
 
-<!-- ═══ ALERT THRESHOLD EDITOR ════════════════════════════════════════════ -->
+<!-- ═══ ICAO STATISTICAL MONITORING PANEL ════════════════════════════════ -->
 <div class="card" style="padding:16px;margin-bottom:16px;border-top:3px solid #ea580c">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
     <div>
       <div style="font-weight:700;color:var(--navy);font-size:13px">⚡ ICAO Alert Thresholds &amp; SPT Target</div>
-      <div style="font-size:11px;color:#6b7280;margin-top:2px">Set thresholds to display coloured lines on the performance chart</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">
+        Auto-calculated from preceding year's data · Manual override optional
+      </div>
+    </div>
+    <div>
+      {% if is_stat %}
+      <span style="background:#7c3aed;color:#fff;font-size:11px;font-weight:700;border-radius:6px;padding:4px 10px">📊 Statistical Mode Active</span>
+      {% else %}
+      <span style="background:#d97706;color:#fff;font-size:11px;font-weight:700;border-radius:6px;padding:4px 10px">🔄 Baseline Phase ({{ months_collected }}/{{ baseline_needed }} months)</span>
+      {% endif %}
     </div>
   </div>
+
+  <!-- Auto-calculated thresholds display -->
+  {% if stat_l1 or stat_l2 or stat_l3 %}
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px">
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:3px">📊 PREC. YEAR AVG</div>
+      <div style="font-size:16px;font-weight:800;color:#15803d">{{ stat_mean if stat_mean else '—' }}</div>
+      <div style="font-size:9px;color:#6b7280">Mean (baseline)</div>
+    </div>
+    <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#d97706;margin-bottom:3px">🟡 L1 AUTO</div>
+      <div style="font-size:16px;font-weight:800;color:#d97706">{{ stat_l1 if stat_l1 else '—' }}</div>
+      <div style="font-size:9px;color:#6b7280">Avg + 1 SD ({{ stat_sd }})</div>
+    </div>
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#ea580c;margin-bottom:3px">🟠 L2 AUTO</div>
+      <div style="font-size:16px;font-weight:800;color:#ea580c">{{ stat_l2 if stat_l2 else '—' }}</div>
+      <div style="font-size:9px;color:#6b7280">Avg + 2 SD</div>
+    </div>
+    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#dc2626;margin-bottom:3px">🔴 L3 AUTO</div>
+      <div style="font-size:16px;font-weight:800;color:#dc2626">{{ stat_l3 if stat_l3 else '—' }}</div>
+      <div style="font-size:9px;color:#6b7280">Avg + 3 SD</div>
+    </div>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#1d4ed8;margin-bottom:3px">🎯 IMPROVEMENT</div>
+      <div style="font-size:16px;font-weight:800;color:#1d4ed8">{{ impr_target if impr_target else '—' }}</div>
+      <div style="font-size:9px;color:#6b7280">Target ({{ ind.improvement_pct or 5 }}% better)</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:#6b7280;margin-bottom:12px;padding:8px 12px;background:#f8fafc;border-radius:6px;border-left:3px solid #7c3aed">
+    ✓ Lines on chart are auto-drawn. These auto values are active now. Use the form below only to <strong>manually override</strong> a specific threshold.
+  </div>
+  {% else %}
+  <div style="font-size:12px;color:#d97706;padding:10px;background:#fff7ed;border-radius:6px;border:1px solid #fed7aa;margin-bottom:12px">
+    ⏳ Not enough data for statistical thresholds yet.
+    Add <strong>{{ baseline_needed - months_collected }}</strong> more month(s) of data to activate automatic L1/L2/L3.
+    Chart lines below use SPT-based fallback until then.
+  </div>
+  {% endif %}
+
+  <!-- Trigger alert banner -->
+  {% if trigger_detail %}
+  <div style="background:#fef2f2;border:1.5px solid #dc2626;border-radius:8px;padding:12px;margin-bottom:12px">
+    <div style="font-size:12px;font-weight:800;color:#dc2626;margin-bottom:4px">
+      🚨 ICAO RULE {{ trigger_detail.rule }} TRIGGERED — {{ trigger_detail.level }}
+    </div>
+    <div style="font-size:11.5px;color:#374151">{{ trigger_detail.description }}</div>
+    <div style="font-size:10.5px;color:#6b7280;margin-top:4px">
+      Trigger month: <strong>{{ trigger_detail.trigger_month }}</strong> ·
+      Value: <strong>{{ trigger_detail.trigger_value }}</strong>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Manual override form -->
+  <details style="margin-top:4px">
+    <summary style="font-size:12px;font-weight:600;color:#6b7280;cursor:pointer;user-select:none;padding:6px 0">
+      ✏ Override thresholds manually (optional — leave blank to keep auto values)
+    </summary>
+    <div style="margin-top:10px">
   <form method="POST" action="/spi/indicators/{{ ind.id }}/set-alerts">
     <input type="hidden" name="return_url" value="/spi/indicators/{{ ind.id }}/detail">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end">
       <div class="fg" style="margin:0">
         <label style="font-size:11px;font-weight:700;color:#15803d;display:block;margin-bottom:4px">🟢 SPT Target</label>
-        <input type="number" name="spt_target" step="0.01"
-               value="{{ ind.spt_target or '' }}" placeholder="e.g. 5.0"
+        <input type="number" name="spt_target" step="0.0001"
+               value="{{ ind.spt_target or '' }}" placeholder="auto"
                style="width:100%;border:1.5px solid #bbf7d0;border-radius:6px;padding:7px 10px;font-size:12px"/>
         <div style="font-size:10px;color:#6b7280;margin-top:2px">Green dashed line</div>
       </div>
       <div class="fg" style="margin:0">
-        <label style="font-size:11px;font-weight:700;color:#d97706;display:block;margin-bottom:4px">🟡 L1 Watch</label>
-        <input type="number" name="alert_l1" step="0.01"
-               value="{{ ind.alert_l1 or '' }}" placeholder="e.g. 6.0"
+        <label style="font-size:11px;font-weight:700;color:#d97706;display:block;margin-bottom:4px">🟡 L1 Override</label>
+        <input type="number" name="alert_l1" step="0.0001"
+               value="{{ ind.alert_l1 or '' }}" placeholder="{{ stat_l1 or 'auto' }}"
                style="width:100%;border:1.5px solid #fde68a;border-radius:6px;padding:7px 10px;font-size:12px"/>
-        <div style="font-size:10px;color:#6b7280;margin-top:2px">Amber dashed line</div>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">Auto: {{ stat_l1 or '—' }}</div>
       </div>
       <div class="fg" style="margin:0">
-        <label style="font-size:11px;font-weight:700;color:#ea580c;display:block;margin-bottom:4px">🟠 L2 Warning</label>
-        <input type="number" name="alert_l2" step="0.01"
-               value="{{ ind.alert_l2 or '' }}" placeholder="e.g. 8.0"
+        <label style="font-size:11px;font-weight:700;color:#ea580c;display:block;margin-bottom:4px">🟠 L2 Override</label>
+        <input type="number" name="alert_l2" step="0.0001"
+               value="{{ ind.alert_l2 or '' }}" placeholder="{{ stat_l2 or 'auto' }}"
                style="width:100%;border:1.5px solid #fed7aa;border-radius:6px;padding:7px 10px;font-size:12px"/>
-        <div style="font-size:10px;color:#6b7280;margin-top:2px">Orange dashed line</div>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">Auto: {{ stat_l2 or '—' }}</div>
       </div>
       <div class="fg" style="margin:0">
-        <label style="font-size:11px;font-weight:700;color:#dc2626;display:block;margin-bottom:4px">🔴 L3 Critical</label>
-        <input type="number" name="alert_l3" step="0.01"
-               value="{{ ind.alert_l3 or '' }}" placeholder="e.g. 10.0"
+        <label style="font-size:11px;font-weight:700;color:#dc2626;display:block;margin-bottom:4px">🔴 L3 Override</label>
+        <input type="number" name="alert_l3" step="0.0001"
+               value="{{ ind.alert_l3 or '' }}" placeholder="{{ stat_l3 or 'auto' }}"
                style="width:100%;border:1.5px solid #fca5a5;border-radius:6px;padding:7px 10px;font-size:12px"/>
-        <div style="font-size:10px;color:#6b7280;margin-top:2px">Red dashed line</div>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">Auto: {{ stat_l3 or '—' }}</div>
       </div>
       <div style="padding-bottom:18px">
         <button type="submit" class="btn btn-nav btn-sm"
                 style="background:#0a1628;color:#c9a84c;border:none;width:100%;font-size:12px;padding:8px 0">
-          ✓ Save Thresholds
+          ✓ Save Override
         </button>
       </div>
     </div>
   </form>
+    </div>
+  </details>
 </div>
 
 <!-- ═══ LINKED EVENTS TABLE ═══════════════════════════════════════════════ -->
