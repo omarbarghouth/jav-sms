@@ -120,6 +120,7 @@
       <td style="font-size:11px;font-family:monospace">{{ a.due_date or '—' }}</td>
       <td>
         <form method="POST" action="/sag/assign/{{ a.id }}" style="display:flex;gap:6px;align-items:center">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <select name="sag_member" style="font-size:11px;padding:4px 7px;border:1px solid var(--border);border-radius:5px">
             <option value="">Select SAG member…</option>
             {% for u in sag_members %}<option value="{{ u.username }}">{{ u.full_name or u.username }}</option>{% endfor %}
