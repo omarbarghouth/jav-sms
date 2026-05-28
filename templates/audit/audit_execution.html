@@ -368,6 +368,64 @@
       {% endif %}
     </div>
 
+    <!-- ══ Safety Assurance Verification Panel ══════════════════════════════ -->
+    {% if linked_avis %}
+    <div class="card" style="border-left:4px solid #1d4ed8;margin-bottom:16px">
+      <div class="card-title" style="color:#1d4ed8">
+        ⊕ Safety Assurance Verification Items
+        <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px;
+          background:{% if avi_pending_count>0 %}#fef3c7;color:#b45309{% else %}#dcfce7;color:#15803d{% endif %}">
+          {% if avi_pending_count>0 %}{{ avi_pending_count }} pending verification{% else %}All verified ✓{% endif %}
+        </span>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+        These corrective actions and controls must be verified for real-world effectiveness during this audit.
+        {% if s.status == 'Planned' %}Start the audit to activate them.
+        {% elif avi_pending_count > 0 %}Open each item, conduct the physical verification, then submit the result.
+        {% endif %}
+      </p>
+      <div class="tbl-wrap"><table>
+        <thead><tr>
+          <th>AVI Ref</th><th>Area</th><th>Source</th><th>Risk</th><th>Status</th><th>Required Evidence</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for avi in linked_avis %}
+        <tr {% if avi.status == 'Verified Effective' %}style="opacity:.6"{% endif %}>
+          <td><span class="ctrl-num" style="font-size:10px">AVI-{{ '%04d'|format(avi.id) }}</span></td>
+          <td style="font-size:12px;font-weight:600">{{ avi.verification_area or '—' }}</td>
+          <td><span class="badge b-gray" style="font-size:10px">{{ avi.source_module or '—' }}</span></td>
+          <td>
+            {% if avi.operational_risk == 'Critical' %}<span class="badge b-red" style="font-size:10px">Critical</span>
+            {% elif avi.operational_risk == 'High' %}<span class="badge" style="font-size:10px;background:#fff3e0;color:#e65100;border:1px solid #ffcc80">High</span>
+            {% elif avi.operational_risk == 'Medium' %}<span class="badge b-yellow" style="font-size:10px">Medium</span>
+            {% else %}<span class="badge b-gray" style="font-size:10px">{{ avi.operational_risk or 'Low' }}</span>{% endif %}
+          </td>
+          <td>
+            {% if avi.status == 'Verified Effective' %}<span class="badge" style="font-size:10px;background:#dcfce7;color:#15803d;border:1px solid #bbf7d0">✓ Verified</span>
+            {% elif avi.status == 'Verified Ineffective' %}<span class="badge b-red" style="font-size:10px">✗ Ineffective</span>
+            {% elif avi.status == 'In Verification' %}<span class="badge b-yellow" style="font-size:10px">In Verification</span>
+            {% elif avi.status == 'Escalated' %}<span class="badge" style="font-size:10px;background:#f3e8ff;color:#7c3aed">Escalated</span>
+            {% else %}<span class="badge b-gray" style="font-size:10px">{{ avi.status }}</span>{% endif %}
+          </td>
+          <td style="font-size:11px;color:var(--muted);max-width:200px">{{ (avi.required_evidence or '—')[:80] }}</td>
+          <td>
+            <a href="/audit-assurance/items/{{ avi.id }}" class="btn btn-nav btn-sm" target="_blank">
+              {% if avi.status in ('In Verification','Scheduled') %}✓ Verify →{% else %}View →{% endif %}
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% if avi_pending_count > 0 and s.status == 'In Progress' %}
+      <p style="font-size:11px;color:#b45309;margin-top:10px;background:#fef3c7;padding:8px 12px;border-radius:6px">
+        ⚠ Audit cannot be closed until all {{ avi_pending_count }} verification item(s) are resolved.
+        Open each item above, submit the verification result, then return here to close the audit.
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Closure validation -->
     <div class="card" style="border:1.5px solid {% if can_close %}#bbf7d0{% else %}#fde68a{% endif %}">
       <div class="card-title" style="color:{% if can_close %}#15803d{% else %}#b45309{% endif %}">
@@ -390,6 +448,12 @@
           <span style="color:{% if all_verified %}#15803d{% else %}#dc2626{% endif %};font-size:16px">{% if all_verified %}✓{% else %}✗{% endif %}</span>
           Effectiveness verified
         </div>
+        {% if linked_avis %}
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:{% if avi_pending_count==0 %}#15803d{% else %}#dc2626{% endif %};font-size:16px">{% if avi_pending_count==0 %}✓{% else %}✗{% endif %}</span>
+          Safety Assurance items verified ({{ linked_avis|length - avi_pending_count }}/{{ linked_avis|length }})
+        </div>
+        {% endif %}
       </div>
 
       {% if can_close and s.status == 'In Progress' %}
@@ -498,6 +562,122 @@ document.querySelectorAll('input[type=radio]').forEach(function(radio) {
         span.style.background = '#fff';
       }
     });
+  });
+});
+</script>
+{% endblock %}
+      <!-- Safety Department Review & Close Form -->
+      <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:6px">
+          ✓ All closure requirements met — Safety Department review required to close
+        </div>
+        <div style="font-size:12px;color:#374151">
+          Complete the safety review below and close the audit officially.
+        </div>
+      </div>
+      <form method="POST" action="/audit-schedule/{{ s.id }}/close">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="sec">Safety Department Final Review</div>
+        <div class="g2">
+          <div class="fg">
+            <label>Safety Reviewer *</label>
+            <input type="text" name="closed_by" required placeholder="Safety Manager name"/>
+          </div>
+          <div class="fg">
+            <label>Closing Meeting Date</label>
+            <input type="date" name="closing_meeting" value="{{ today_date }}"/>
+          </div>
+        </div>
+        <div class="fg">
+          <label>Overall Audit Conclusion *</label>
+          <textarea name="final_remarks" rows="3" required
+                    placeholder="Summarise the overall audit outcome, key findings addressed, and safety improvements achieved…"></textarea>
+        </div>
+        <div class="g2">
+          <div class="fg">
+            <label>Audit Result</label>
+            <select name="audit_result">
+              <option value="Satisfactory">Satisfactory</option>
+              <option value="Satisfactory with Observations">Satisfactory with Observations</option>
+              <option value="Unsatisfactory">Unsatisfactory</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Follow-up Required?</label>
+            <select name="followup_required">
+              <option value="No">No — Audit complete</option>
+              <option value="Yes">Yes — Follow-up audit scheduled</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-nav" style="background:#15803d;margin-top:4px"
+                onclick="return confirm('Close this audit? This action is final. The audit will be marked Completed.')">
+          🔒 Close Audit & Generate Final Report
+        </button>
+      </form>
+      {% elif s.status == 'Completed' %}
+      <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:14px 16px">
+        <div style="font-size:13px;font-weight:800;color:#15803d;margin-bottom:8px">
+          ✓ Audit Completed
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
+          <div><span style="color:#6b7280">Closed by:</span> <strong>{{ s.closed_by or '—' }}</strong></div>
+          <div><span style="color:#6b7280">Closed on:</span> <strong>{{ s.closure_date or '—' }}</strong></div>
+          {% if s.closing_meeting %}<div><span style="color:#6b7280">Closing meeting:</span> <strong>{{ s.closing_meeting }}</strong></div>{% endif %}
+          {% if s.audit_result %}<div><span style="color:#6b7280">Result:</span> <strong>{{ s.audit_result }}</strong></div>{% endif %}
+        </div>
+        {% if s.final_remarks %}
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #bbf7d0">
+          <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Conclusion</div>
+          <p style="font-size:12px;color:#374151;line-height:1.6">{{ s.final_remarks }}</p>
+        </div>
+        {% endif %}
+        <div style="margin-top:12px">
+          <a href="/audit-schedule/{{ s.id }}/final-report" target="_blank"
+             class="btn btn-sm" style="background:#065f46;color:#fff">
+            📋 View Final Audit Report
+          </a>
+        </div>
+      </div>
+      {% else %}
+      <p style="font-size:12px;color:var(--muted)">Resolve all requirements above before closing.</p>
+      {% endif %}
+    </div>
+
+    <!-- Audit summary -->
+    {% if s.summary %}
+    <div class="card">
+      <div class="card-title">Audit Summary</div>
+      <p style="font-size:13px;line-height:1.7;color:#374151">{{ s.summary }}</p>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+// Show radio selection visually
+document.querySelectorAll('input[type=radio]').forEach(function(radio) {
+  radio.addEventListener('change', function() {
+    var name = this.name;
+    document.querySelectorAll('input[name="' + name + '"]').forEach(function(r) {
+      var span = r.nextElementSibling;
+      if(r.checked) {
+        span.style.background = span.dataset.col || '';
+        span.style.color = '#fff';
+      } else {
+        span.style.background = '#fff';
+        span.style.color = span.dataset.col || '';
+      }
+    });
+  });
+});
+// Show evidence upload row only for 'No' responses
+document.querySelectorAll('input[type=radio][value=No]').forEach(function(r) {
+  r.addEventListener('change', function() {
+    var row = document.getElementById('ev-row-' + this.name.split('_').pop());
+    if(row) row.style.display = this.checked ? 'block' : 'none';
   });
 });
 </script>
