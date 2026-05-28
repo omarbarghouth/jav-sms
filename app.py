@@ -4613,11 +4613,16 @@ def spi():
     """SPI Dashboard — ICAO Annex 19 §6.3 / Doc 9859 Chapter 7."""
     cur_year = datetime.now().year
     dept_f   = request.args.get('dept', '')
+    # Year filter — default to current year, but user can select any year with data
+    try:
+        sel_year = int(request.args.get('year', cur_year))
+    except (ValueError, TypeError):
+        sel_year = cur_year
 
     if request.method == 'POST':
         f        = request.form
         ind      = SPIIndicator.query.get_or_404(int(f['spi_id']))
-        year     = int(f.get('year', cur_year))
+        year     = int(f.get('year', sel_year))
         month    = int(f['month'])
         events   = int(f.get('events', 0))
         exposure = float(f.get('exposure', 1) or 1)
@@ -4648,14 +4653,26 @@ def spi():
 
         db.session.commit()
         flash(f'✓ {ind.code} logged: {month}/{year} = {entry.value:.3f}', 'success')
-        return redirect(url_for('spi', dept=dept_f))
+        return redirect(url_for('spi', dept=dept_f, year=sel_year))
 
     indicators = SPIIndicator.query.filter_by(active=True).all()
     if dept_f:
         indicators = [i for i in indicators
                       if dept_f in (i.department_ids or '').split(',')]
 
-    table, MONTHS = _spi_build_table(indicators, cur_year)
+    # Build table for the SELECTED year (for monthly display columns)
+    table, MONTHS = _spi_build_table(indicators, sel_year)
+
+    # Gather all years that have SPI data recorded (for the year-selector buttons)
+    try:
+        year_rows = db.session.execute(
+            text("SELECT DISTINCT year FROM spi_data ORDER BY year DESC")
+        ).fetchall()
+        available_years = [r[0] for r in year_rows if r[0]]
+    except Exception:
+        available_years = [cur_year]
+    if cur_year not in available_years:
+        available_years.insert(0, cur_year)
 
     critical = sum(1 for r in table if r['status'][2] >= 3)
     warning  = sum(1 for r in table if r['status'][2] == 2)
@@ -4669,7 +4686,8 @@ def spi():
     return render_template('spi/spi_dashboard.html',
         table=table, MONTHS=MONTHS,
         indicators=SPIIndicator.query.filter_by(active=True).all(),
-        dept_f=dept_f, cur_year=cur_year,
+        dept_f=dept_f, cur_year=cur_year, sel_year=sel_year,
+        available_years=available_years,
         critical=critical, warning=warning, watch=watch, ok_count=ok_count,
         triggered=triggered,
         enumerate=enumerate)
