@@ -4,6 +4,10 @@ try:
     from models import SPIEventLink
 except ImportError:
     SPIEventLink = None  # models.py not yet deployed with SPIEventLink — will work after next redeploy
+try:
+    from models import AuditVerificationItem
+except ImportError:
+    AuditVerificationItem = None  # models.py not yet deployed with AuditVerificationItem — will work after next redeploy
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from werkzeug.security import generate_password_hash, check_password_hash as _wz_check
@@ -2797,8 +2801,8 @@ def hazard_detail(hid):
         spi_existing_links=spi_link_existing,
         spi_link_event_type='hazard_report',
         spi_link_event_id=str(hid),
-        spi_link_event_title=h.description[:100] if h.description else str(hid),
-        spi_link_event_date=str(h.date_reported or ''),
+        spi_link_event_title=(h.generic_hazard or str(hid))[:100],
+        spi_link_event_date=str(h.created_at.strftime('%Y-%m-%d') if h.created_at else ''),
         spi_link_severity=h.risk_rating or '',
         spi_link_dept_id=h.department_id or '',
         spi_link_category=h.classification or '',
