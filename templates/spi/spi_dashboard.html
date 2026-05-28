@@ -5,7 +5,7 @@
 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:4px">
   <div>
     <div class="page-title">Safety Performance Monitoring</div>
-    <div class="page-sub">ICAO Annex 19 §6.3 · Doc 9859 Ch.7 · Automatic · {{ cur_year }}</div>
+    <div class="page-sub">ICAO Annex 19 §6.3 · Doc 9859 Ch.7 · Automatic · {{ sel_year }}{% if sel_year != cur_year %} <span style="background:#d97706;color:#fff;font-size:10px;padding:1px 8px;border-radius:99px;font-weight:700;vertical-align:middle">Historical View</span>{% endif %}</div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a href="/spi/intelligence" class="btn btn-sm" style="background:#0a1628;color:#c9a84c;border:1.5px solid #c9a84c;white-space:nowrap"
@@ -88,11 +88,13 @@
 </div>
 
 <!-- ═══ CONTROLS ══════════════════════════════════════════════════════════ -->
-<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
-  <div style="display:flex;gap:6px;flex-wrap:wrap">
-    <a href="/spi" class="btn {% if not dept_f %}btn-nav{% else %}btn-outline{% endif %} btn-sm">All</a>
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-right:2px">Dept:</span>
+    <a href="/spi{% if sel_year != cur_year %}?year={{ sel_year }}{% endif %}"
+       class="btn {% if not dept_f %}btn-nav{% else %}btn-outline{% endif %} btn-sm">All</a>
     {% for d in all_departments %}
-    <a href="/spi?dept={{ d.id }}"
+    <a href="/spi?dept={{ d.id }}{% if sel_year != cur_year %}&year={{ sel_year }}{% endif %}"
        class="btn {% if dept_f==d.id|string %}btn-nav{% else %}btn-outline{% endif %} btn-sm">
       {{ d.code }}
     </a>
@@ -106,6 +108,39 @@
     </button>
   </div>
 </div>
+
+<!-- ═══ YEAR FILTER ═══════════════════════════════════════════════════════ -->
+{% if available_years|length > 1 %}
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;
+            background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:8px 14px">
+  <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin-right:2px">📅 Year:</span>
+  {% for yr in available_years|sort %}
+  <a href="/spi?{% if dept_f %}dept={{ dept_f }}&{% endif %}year={{ yr }}"
+     style="display:inline-block;padding:4px 14px;border-radius:99px;font-size:12px;font-weight:700;text-decoration:none;transition:all .15s;
+            {% if yr == sel_year %}
+            background:var(--navy);color:#fff;border:2px solid var(--navy);
+            {% elif yr == cur_year %}
+            background:#eff6ff;color:#1d4ed8;border:2px solid #bfdbfe;
+            {% else %}
+            background:#fff;color:#6b7280;border:2px solid #e5e7eb;
+            {% endif %}">
+    {{ yr }}{% if yr == cur_year %} <span style="font-size:9px;opacity:.75">(current)</span>{% endif %}
+  </a>
+  {% endfor %}
+  {% if sel_year != cur_year %}
+  <a href="/spi{% if dept_f %}?dept={{ dept_f }}{% endif %}"
+     style="margin-left:6px;font-size:11px;color:#6b7280;text-decoration:none;padding:3px 10px;
+            border:1px dashed #d1d5db;border-radius:99px">
+    ✕ Return to current year
+  </a>
+  {% endif %}
+  <span style="margin-left:auto;font-size:10px;color:var(--muted);font-style:italic">
+    Thresholds always calculated from preceding year data per ICAO Doc 9859
+  </span>
+</div>
+{% else %}
+<div style="margin-bottom:16px"></div>
+{% endif %}
 
 <!-- ═══ LEGEND ════════════════════════════════════════════════════════════ -->
 <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 16px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
@@ -492,7 +527,7 @@
       </div>
       <div id="modal-hint" style="display:none;border-radius:7px;padding:10px 13px;font-size:12px"></div>
       <div class="g2">
-        <div class="fg"><label>Year</label><input type="number" name="year" value="{{ cur_year }}" required/></div>
+        <div class="fg"><label>Year</label><input type="number" name="year" value="{{ sel_year }}" required/></div>
         <div class="fg"><label>Month *</label>
           <select name="month" required>
             {% for idx, m in enumerate(MONTHS) %}
