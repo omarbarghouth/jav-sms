@@ -40,7 +40,12 @@
   <div class="stat-card" style="border-top:3px solid #c9a84c">
     <div class="stat-val" style="font-size:14px;color:#c9a84c">{{ spt_target if spt_target else 'N/A' }}</div>
     <div class="stat-lbl">SPT Target</div>
-    <div class="stat-sub">Alert: {{ al_target if al_target else '—' }}</div>
+    <div class="stat-sub">
+      {% if al1 %}<span style="color:#d97706">L1: {{ al1 }}</span>{% endif %}
+      {% if al2 %} · <span style="color:#ea580c">L2: {{ al2 }}</span>{% endif %}
+      {% if al3 %} · <span style="color:#dc2626">L3: {{ al3 }}</span>{% endif %}
+      {% if not al1 and not al2 and not al3 %}No alerts set{% endif %}
+    </div>
   </div>
 </div>
 
@@ -59,25 +64,117 @@
       const labels  = {{ chart_labels | tojson }};
       const values  = {{ chart_values | tojson }};
       const spt     = {{ spt_target | tojson }};
-      const al      = {{ al_target | tojson }};
+      const al1     = {{ al1 | tojson }};
+      const al2     = {{ al2 | tojson }};
+      const al3     = {{ al3 | tojson }};
+
       const datasets = [{
         label: '{{ ind.code }}',
         data: values,
         borderColor: '#0a1628',
         backgroundColor: 'rgba(10,22,40,0.07)',
-        borderWidth: 2,
+        borderWidth: 2.5,
         pointRadius: 3,
+        pointBackgroundColor: '#0a1628',
         tension: 0.3,
         fill: true,
+        order: 1,
       }];
-      if (spt) datasets.push({ label:'SPT Target', data: labels.map(()=>spt),
-        borderColor:'#15803d', borderDash:[6,3], borderWidth:1.5, pointRadius:0 });
-      if (al) datasets.push({ label:'Alert Level', data: labels.map(()=>al),
-        borderColor:'#dc2626', borderDash:[4,4], borderWidth:1.5, pointRadius:0 });
+
+      // SPT Target — green dashed
+      if (spt) datasets.push({
+        label: 'SPT Target',
+        data: labels.map(() => spt),
+        borderColor: '#15803d',
+        borderDash: [8, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        order: 2,
+      });
+
+      // Alert Level 1 — yellow/amber dashed
+      if (al1) datasets.push({
+        label: 'L1 Watch',
+        data: labels.map(() => al1),
+        borderColor: '#d97706',
+        backgroundColor: 'rgba(217,119,6,0.06)',
+        borderDash: [6, 3],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        order: 3,
+      });
+
+      // Alert Level 2 — orange dashed
+      if (al2) datasets.push({
+        label: 'L2 Warning',
+        data: labels.map(() => al2),
+        borderColor: '#ea580c',
+        backgroundColor: 'rgba(234,88,12,0.06)',
+        borderDash: [5, 3],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        order: 4,
+      });
+
+      // Alert Level 3 — red solid
+      if (al3) datasets.push({
+        label: 'L3 Critical',
+        data: labels.map(() => al3),
+        borderColor: '#dc2626',
+        backgroundColor: 'rgba(220,38,38,0.08)',
+        borderDash: [4, 2],
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        order: 5,
+      });
+
       new Chart(ctx, {
-        type:'line', data:{labels, datasets},
-        options:{ responsive:true, plugins:{ legend:{ position:'bottom', labels:{font:{size:11}} } },
-          scales:{ y:{ beginAtZero:true } } }
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                font: { size: 11 },
+                usePointStyle: true,
+                pointStyleWidth: 20,
+                generateLabels: function(chart) {
+                  // Custom legend with coloured line samples
+                  return chart.data.datasets.map((ds, i) => ({
+                    text: ds.label,
+                    fillStyle: ds.borderColor,
+                    strokeStyle: ds.borderColor,
+                    lineWidth: ds.borderWidth || 1.5,
+                    lineDash: ds.borderDash || [],
+                    hidden: !chart.isDatasetVisible(i),
+                    datasetIndex: i,
+                    pointStyle: 'line',
+                  }));
+                }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y ?? '—'}`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.05)' },
+              ticks: { font: { size: 11 } }
+            },
+            x: { ticks: { font: { size: 10 } } }
+          }
+        }
       });
     })();
     </script>
