@@ -2141,14 +2141,28 @@ def dashboard():
         finding_close_rate = 100
 
     # ── SPI ───────────────────────────────────────────────────────────────────
+    # ICAO-correct: use calculated value field + statistical thresholds
     spi_alerts = spi_l2 = spi_l3 = 0
-    for ind in SPIIndicator.query.all():
-        recent = SPIData.query.filter_by(spi_id=ind.id).order_by(
-                 SPIData.year.desc(), SPIData.month.desc()).first()
-        if recent and recent.rate:
-            if ind.alert_l3 and recent.rate >= ind.alert_l3: spi_l3 += 1; spi_alerts += 1
-            elif ind.alert_l2 and recent.rate >= ind.alert_l2: spi_l2 += 1; spi_alerts += 1
-            elif ind.alert_l1 and recent.rate >= ind.alert_l1: spi_alerts += 1
+    try:
+        for ind in SPIIndicator.query.filter_by(active=True).all():
+            history = _spi_history(ind)
+            if not history:
+                continue
+            all_hist_vals = [v for _, _, v in history]
+            latest_val = all_hist_vals[-1]
+            l1, l2, l3, _mean, _sd, _is_stat = _spi_thresholds(ind, all_hist_vals)
+            is_pct = (ind.calc_type == 'PERCENT')
+            if is_pct:
+                if l3 and latest_val <= l3: spi_l3 += 1; spi_alerts += 1
+                elif l2 and latest_val <= l2: spi_l2 += 1; spi_alerts += 1
+                elif l1 and latest_val <= l1: spi_alerts += 1
+            else:
+                if l3 and latest_val >= l3: spi_l3 += 1; spi_alerts += 1
+                elif l2 and latest_val >= l2: spi_l2 += 1; spi_alerts += 1
+                elif l1 and latest_val >= l1: spi_alerts += 1
+    except Exception:
+        db.session.rollback()
+        spi_alerts = spi_l2 = spi_l3 = 0
 
     # ── SAFETY PROMOTION ─────────────────────────────────────────────────────
     active_surveys = active_bulletins = active_campaigns = 0
@@ -3744,47 +3758,75 @@ def _spi_statistics(values):
 
 def _spi_thresholds(ind, all_values=None):
     """
-    ICAO Statistical Monitoring thresholds.
-    Statistical mode (≥ baseline_months data points):
-      L1 = Mean + 1 SD
-      L2 = Mean + 2 SD
-      L3 = Mean + 3 SD
-    Baseline mode (insufficient data):
-      Fall back to SPT +20% / +40% / +60%
-    For PERCENT type: direction is reversed (lower = worse)
+    ICAO Statistical Monitoring thresholds — per CAAS/ICAO SPM methodology
+    (Doc 9859 Ch.4, APRAST-6 Workshop):
+
+      Alert levels for the CURRENT monitoring period are set from the
+      PRECEDING period's (preceding year's) Average and Standard Deviation:
+        L1 = Preceding Year Mean + 1 SD
+        L2 = Preceding Year Mean + 2 SD
+        L3 = Preceding Year Mean + 3 SD
+
+      For PERCENT-type indicators (higher = better), direction is reversed:
+        L1 = Preceding Year Mean - 1 SD  (falling below = worse)
+        L2 = Preceding Year Mean - 2 SD
+        L3 = Preceding Year Mean - 3 SD
+
+    Period logic:
+      1. Try to use the full preceding calendar year (cur_year - 1).
+      2. If insufficient (<baseline_months), fall back to the oldest rolling
+         12-month window available in all history.
+      3. If still insufficient data, use SPT-based fixed thresholds.
+
+    Returns: (l1, l2, l3, mean, sd, is_stat_mode)
     """
-    if all_values is None:
-        history = _spi_history(ind)
-        all_values = [v for _, _, v in history]
-
-    baseline_needed = ind.baseline_months or 3
-    is_pct = ind.calc_type == 'PERCENT'
+    is_pct = (ind.calc_type == 'PERCENT')
     spt    = ind.spt_target or 0
+    baseline_needed = ind.baseline_months or 3
 
-    if len(all_values) >= baseline_needed:
-        # Statistical mode — ICAO Mean ± SD
-        mean, sd = _spi_statistics(all_values)
+    # ── Fetch full history with year/month info ───────────────────────────────
+    full_history = SPIData.query.filter_by(spi_id=ind.id).filter(
+        SPIData.value.isnot(None)).order_by(SPIData.year, SPIData.month).all()
+
+    if not full_history:
+        # Zero data — pure SPT fallback
         if is_pct:
-            l1 = max(0, round(mean - sd,     2))
-            l2 = max(0, round(mean - 2 * sd, 2))
-            l3 = max(0, round(mean - 3 * sd, 2))
-        else:
-            l1 = round(mean + sd,     2)
-            l2 = round(mean + 2 * sd, 2)
-            l3 = round(mean + 3 * sd, 2)
-        return l1, l2, l3, mean, sd, True   # last two: mean, sd, is_stat_mode
+            return round(spt*0.90,2), round(spt*0.80,2), round(spt*0.70,2), 0.0, 0.0, False
+        return round(spt*1.20,2), round(spt*1.40,2), round(spt*1.60,2), 0.0, 0.0, False
+
+    # Current monitoring period = year of the latest data point
+    cur_year = full_history[-1].year
+
+    # ── Strategy 1: preceding calendar year ──────────────────────────────────
+    prec_vals = [r.value for r in full_history if r.year == cur_year - 1]
+
+    # ── Strategy 2: rolling lookback (if no preceding year or too few months) ─
+    if len(prec_vals) < baseline_needed:
+        # Take all data BEFORE the current year as the baseline window
+        prec_vals = [r.value for r in full_history if r.year < cur_year]
+        if len(prec_vals) < baseline_needed:
+            # No preceding data at all — use all collected data so far
+            prec_vals = [r.value for r in full_history]
+
+    # ── Strategy 3: SPT fallback if still not enough ─────────────────────────
+    if len(prec_vals) < baseline_needed:
+        mean_now = sum(prec_vals)/len(prec_vals) if prec_vals else 0.0
+        sd_now   = _spi_statistics(prec_vals)[1] if len(prec_vals) >= 2 else 0.0
+        if is_pct:
+            return round(spt*0.90,2), round(spt*0.80,2), round(spt*0.70,2), mean_now, sd_now, False
+        return round(spt*1.20,2), round(spt*1.40,2), round(spt*1.60,2), mean_now, sd_now, False
+
+    # ── Statistical mode — ICAO Mean ± SD from preceding period ──────────────
+    mean, sd = _spi_statistics(prec_vals)
+    if is_pct:
+        l1 = max(0, round(mean - sd,     2))
+        l2 = max(0, round(mean - 2 * sd, 2))
+        l3 = max(0, round(mean - 3 * sd, 2))
     else:
-        # Baseline mode — SPT-based fallback
-        mean, sd = _spi_statistics(all_values) if all_values else (0.0, 0.0)
-        if is_pct:
-            l1 = round(spt * 0.90, 2)
-            l2 = round(spt * 0.80, 2)
-            l3 = round(spt * 0.70, 2)
-        else:
-            l1 = round(spt * 1.20, 2)
-            l2 = round(spt * 1.40, 2)
-            l3 = round(spt * 1.60, 2)
-        return l1, l2, l3, mean, sd, False
+        l1 = round(mean + sd,     2)
+        l2 = round(mean + 2 * sd, 2)
+        l3 = round(mean + 3 * sd, 2)
+    return l1, l2, l3, mean, sd, True
 
 
 def _spi_target(ind, all_values=None):
@@ -3802,23 +3844,38 @@ def _spi_target(ind, all_values=None):
 
 def _spi_improvement_target(ind, all_values=None):
     """
-    ICAO improvement target — calculated from historical average.
-    Shown as a separate line on the dashboard (not the SPT).
-    Formula: Avg × (1 − improvement%) or Avg × (1 + improvement%) for %
-    Falls back to SPT if insufficient data.
-    """
-    if all_values is None:
-        history = _spi_history(ind)
-        all_values = [v for _, _, v in history]
+    ICAO improvement target — per CAAS/ICAO SPM PDF (APRAST-6):
+      Target = Preceding Year Average × (1 − improvement%)
+      For PERCENT type: Target = Preceding Year Average × (1 + improvement%)
 
+    "A planned 5% reduction of the current period's average over the
+     preceding period's average rate." — ICAO SPM Presentation p.9
+
+    Preceding year = calendar year before the most recent data point.
+    Falls back to SPT if insufficient preceding year data.
+    """
     improvement = (ind.improvement_pct or 5.0) / 100.0
-    if len(all_values) >= 3:
-        prev_avg = sum(all_values) / len(all_values)
-        if ind.calc_type == 'PERCENT':
-            return round(prev_avg * (1 + improvement), 2)
-        else:
-            return round(prev_avg * (1 - improvement), 2)
-    return ind.spt_target or 0.0
+
+    # Fetch preceding year data
+    full_history = SPIData.query.filter_by(spi_id=ind.id).filter(
+        SPIData.value.isnot(None)).order_by(SPIData.year, SPIData.month).all()
+
+    if not full_history:
+        return ind.spt_target or 0.0
+
+    cur_year  = full_history[-1].year
+    prec_vals = [r.value for r in full_history if r.year == cur_year - 1]
+
+    # Fall back to all data before current year if not a full year
+    if len(prec_vals) < 3:
+        prec_vals = [r.value for r in full_history if r.year < cur_year]
+    if len(prec_vals) < 3:
+        return ind.spt_target or 0.0
+
+    prec_avg = sum(prec_vals) / len(prec_vals)
+    if ind.calc_type == 'PERCENT':
+        return round(prec_avg * (1 + improvement), 2)
+    return round(prec_avg * (1 - improvement), 2)
 
 
 def _spi_status(value, ind, all_values=None):
@@ -3846,15 +3903,46 @@ def _spi_status(value, ind, all_values=None):
 
 def _spi_trend(values_list):
     """
-    3-point trend analysis.
-    ↑ Increasing / ↓ Decreasing / → Stable
+    Multi-point trend analysis using linear regression slope.
+    Uses up to last 6 data points for a statistically meaningful direction.
+
+    Returns:
+      '↑ Worsening'  / '↓ Improving'  for COUNT/RATE (up = worse)
+      '↑ Improving'  / '↓ Worsening'  labelled neutrally as ↑/↓ Increasing/Decreasing
+      '→ Stable' when slope is within ±5% of mean per period
+
+    We label direction factually (Increasing/Decreasing) so the dashboard
+    can apply colour based on calc_type context.
     """
     vals = [v for v in values_list if v is not None]
     if len(vals) < 2:
-        return '— No trend'
-    if vals[-1] > vals[-2] * 1.05:
+        return '— Insufficient data'
+    if len(vals) == 2:
+        pct_change = (vals[-1] - vals[-2]) / vals[-2] if vals[-2] != 0 else 0
+        if pct_change > 0.05:
+            return '↑ Increasing'
+        elif pct_change < -0.05:
+            return '↓ Decreasing'
+        return '→ Stable'
+
+    # Linear regression slope (least squares) over the available points
+    n = len(vals)
+    xs = list(range(n))
+    x_mean = sum(xs) / n
+    y_mean = sum(vals) / n
+    numerator   = sum((xs[i] - x_mean) * (vals[i] - y_mean) for i in range(n))
+    denominator = sum((xs[i] - x_mean) ** 2 for i in range(n))
+    slope = numerator / denominator if denominator != 0 else 0
+
+    # Normalise slope relative to mean to get percentage-per-period
+    if y_mean != 0:
+        slope_pct = slope / abs(y_mean)
+    else:
+        slope_pct = 0
+
+    if slope_pct > 0.03:       # > 3% increase per period
         return '↑ Increasing'
-    elif vals[-1] < vals[-2] * 0.95:
+    elif slope_pct < -0.03:    # > 3% decrease per period
         return '↓ Decreasing'
     return '→ Stable'
 
@@ -4019,52 +4107,64 @@ def _spi_build_table(indicators, cur_year):
               'Jul','Aug','Sep','Oct','Nov','Dec']
     table = []
     for ind in indicators:
-        # Current year data
+        # Current year display data (for table cells)
         month_vals = {}
         for d in SPIData.query.filter_by(spi_id=ind.id, year=cur_year).all():
             month_vals[d.month] = d.value if d.value is not None else (d.rate or 0.0)
 
-        # All historical values (for statistics)
+        # All historical values (full history — for context)
         all_history = _spi_history(ind)
         all_values  = [v for _, _, v in all_history]
         baseline_needed = ind.baseline_months or 3
 
-        # Statistics
+        # Statistics — uses preceding year per ICAO methodology
         l1, l2, l3, mean, sd, is_stat = _spi_thresholds(ind, all_values)
         target   = _spi_target(ind, all_values)
 
-        # YTD + 3M avg
+        # Auto-update stat_mode flag in DB when statistical mode activates
+        if is_stat and not ind.stat_mode:
+            try:
+                ind.stat_mode = True
+                db.session.add(ind)
+            except Exception:
+                pass
+
+        # YTD + 3M avg (current year only)
         sorted_months = sorted(month_vals)
         vals_yr  = [month_vals[m] for m in sorted_months]
         ytd      = round(sum(vals_yr) / len(vals_yr), 2) if vals_yr else 0.0
-        recent   = vals_yr[-3:]
-        avg3     = round(sum(recent) / len(recent), 2) if recent else 0.0
-        trend    = _spi_trend(vals_yr[-3:])
-        latest   = vals_yr[-1] if vals_yr else 0.0
+        recent_3 = vals_yr[-3:]
+        avg3     = round(sum(recent_3) / len(recent_3), 2) if recent_3 else 0.0
+        trend    = _spi_trend(all_values[-6:])   # use last 6 points for better trend
+        latest   = vals_yr[-1] if vals_yr else (all_values[-1] if all_values else 0.0)
 
         # SPT is FIXED — never auto-modified
         spt_fixed = ind.spt_target or 0.0
-        # Improvement target — separate from SPT
-        impr_target = _spi_improvement_target(ind, all_values)
+        # Improvement target — preceding year average × (1 - improvement%)
+        impr_target = _spi_improvement_target(ind)
 
-        # Status
+        # Status based on latest value vs statistical thresholds
         status = _spi_status(latest, ind, all_values)
 
-        # ICAO trigger check
-        # Use all historical data (not just current year) to find real trigger month
-        # Thresholds (l1,l2,l3) are already computed from all_values above
-        all_history_pairs = [(m, v) for _, m, v in _spi_history(ind)]
-        # Also include current-year data not in all_history (e.g. just logged)
-        for sm in sorted_months:
-            if not any(p[0] == sm for p in all_history_pairs):
-                all_history_pairs.append((sm, month_vals[sm]))
-        all_history_pairs.sort(key=lambda x: x[0])
+        # ── ICAO Trigger check — CROSS-YEAR AWARE ────────────────────────────
+        # Build (sequence_number, value) from LAST 24 MONTHS of all history
+        # so Rule B and C triggers across year boundaries are detected.
+        last_24 = all_history[-24:]   # (year, month, value) tuples, chronological
+        trigger_pairs = [(i + 1, v) for i, (_, _, v) in enumerate(last_24)]
+        # Map seq index → real month number for escalation reporting
+        seq_to_month  = {i + 1: m for i, (_, m, _) in enumerate(last_24)}
+        seq_to_year   = {i + 1: y for i, (y, _, _) in enumerate(last_24)}
 
-        month_val_tuples = [(m, month_vals[m]) for m in sorted_months]
         trigger_detail = _spi_trigger_detail(
-            month_val_tuples, l1, l2, l3, ind.calc_type == 'PERCENT',
+            trigger_pairs, l1, l2, l3, ind.calc_type == 'PERCENT',
             spt=ind.spt_target)
         trigger = trigger_detail['rule'] if trigger_detail else None
+
+        # Resolve real calendar month/year from sequence number
+        if trigger_detail:
+            seq = trigger_detail['trigger_month']
+            trigger_detail['trigger_month'] = seq_to_month.get(seq, seq)
+            trigger_detail['trigger_year']  = seq_to_year.get(seq, cur_year)
 
         # Extract exact escalation info AND persist a record
         if trigger_detail:
@@ -4397,13 +4497,18 @@ def _spi_intelligence_summary():
         for ind in SPIIndicator.query.filter_by(active=True).all():
             recent = SPIData.query.filter_by(spi_id=ind.id).order_by(
                 SPIData.year.desc(), SPIData.month.desc()).first()
-            if recent and recent.rate is not None and ind.spt_target:
-                exceeded = recent.rate > ind.spt_target
+            # Use .value (calculated field); .rate is legacy compat only
+            recent_val = recent.value if recent and recent.value is not None else None
+            if recent_val is not None and ind.spt_target:
+                if ind.calc_type == 'PERCENT':
+                    exceeded = recent_val < ind.spt_target
+                else:
+                    exceeded = recent_val > ind.spt_target
                 if exceeded:
                     rec = _spi_recurrence_analysis(ind.id, lookback_months=3)
                     srb_items.append({
                         'ind':         ind,
-                        'value':       recent.rate,
+                        'value':       recent_val,
                         'spt':         ind.spt_target,
                         'event_count': spi_counts.get(ind.id, 0),
                         'recurring':   rec['has_recurrence'],
@@ -10880,74 +10985,17 @@ with app.app_context():
             ('safety_reviewer','VARCHAR(100)'),('safety_review_date','VARCHAR(20)'),
             ('implementation_date','VARCHAR(20)'),('evidence_filename','VARCHAR(200)'),
             ('mitigation_description','TEXT'),('corrective_description','TEXT'),
-            ('safety_notes','TEXT'),('assigned_by','VARCHAR(100)'),
-            ('closure_by','VARCHAR(100)'),('linked_ref_id','VARCHAR(30)'),
-            ('linked_risk_id','VARCHAR(30)'),('linked_audit_id','VARCHAR(30)'),
-            ('linked_ra_id','VARCHAR(30)'),('department_id','INTEGER'),
-            ("action_type","VARCHAR(20) DEFAULT 'Corrective'"),
-            ('owner','VARCHAR(100)'),('due_date','VARCHAR(20)'),
-            ("priority","VARCHAR(20) DEFAULT 'Medium'"),
-            ('completed_date','VARCHAR(20)'),('closed_date','VARCHAR(20)'),
-            ('effectiveness','VARCHAR(30)'),('effectiveness_review','TEXT'),
-            ('reopen_count','INTEGER DEFAULT 0'),('reopen_reason','TEXT'),
-            ('created_at','TIMESTAMP'),('root_cause','TEXT'),
-            ('rejection_notes','TEXT'),('sag_member','VARCHAR(100)'),
-        ],
-        'audit_plans': [
-            ('month','INTEGER'),('created_at','TIMESTAMP'),('objectives','TEXT'),
-            ('iosa_reference','VARCHAR(100)'),('auditor_name','VARCHAR(100)'),
-            ('planned_week','INTEGER'),('responsible_manager','VARCHAR(100)'),
-            ('frequency','VARCHAR(30)'),('scope','TEXT'),
-        ],
-        'audit_schedules': [
-            ('plan_id','VARCHAR(30)'),('audit_team','VARCHAR(200)'),
-            ('scope','TEXT'),('objectives','TEXT'),('actual_date','VARCHAR(20)'),
-            ('opening_meeting','TEXT'),('closing_meeting','TEXT'),
-            ('summary','TEXT'),('final_remarks','TEXT'),
-            ('closure_date','VARCHAR(20)'),('closed_by','VARCHAR(100)'),
-            ('created_at','TIMESTAMP'),
-        ],
-        'audit_findings': [
-            ('finding_ref','VARCHAR(30)'),('finding_title','VARCHAR(200)'),
-            ('assigned_to','VARCHAR(100)'),('assigned_dept','VARCHAR(100)'),
-            ('assigned_date','VARCHAR(20)'),('investigation_notes','TEXT'),
-            ('contributing_factors','TEXT'),('root_cause_submitted_at','TIMESTAMP'),
-            ('immediate_action','TEXT'),('longterm_action','TEXT'),
-            ('cap_responsible','VARCHAR(100)'),('cap_due_date','VARCHAR(20)'),
-            ("cap_status","VARCHAR(30) DEFAULT 'Pending'"),
-            ('cap_completion_pct','INTEGER DEFAULT 0'),
-            ('cap_submitted_at','TIMESTAMP'),('corrective_action','TEXT'),
-            ('effectiveness_check','TEXT'),('closed_by','VARCHAR(100)'),
-            ('closed_at','TIMESTAMP'),('created_at','TIMESTAMP'),
+            ('safety_culture_notes','TEXT'),
         ],
         'investigations': [
-            ("classification","VARCHAR(30) DEFAULT 'Incident'"),
-            ('severity_index','VARCHAR(5)'),
-            ('occurrence_category','VARCHAR(50)'),
-            ('phase_of_flight','VARCHAR(50)'),
-            ('aircraft_type','VARCHAR(50)'),('aircraft_reg','VARCHAR(20)'),
-            ('location','VARCHAR(200)'),('authority_notified','BOOLEAN DEFAULT FALSE'),
-            ('notification_date','VARCHAR(20)'),('notification_ref','VARCHAR(50)'),
-            ("lifecycle_stage","VARCHAR(40) DEFAULT 'Notified'"),
-            ('performed_by','VARCHAR(100)'),
-        ],
-        'compliance_obligations': [
-            ('regulation_ref','VARCHAR(100)'),
-            ('regulation_title','VARCHAR(300)'),
-            ('authority','VARCHAR(100)'),
-            ('category','VARCHAR(50)'),
-            ('description','TEXT'),
-            ('applicability','TEXT'),
-            ('evidence_required','TEXT'),
-            ('owner','VARCHAR(100)'),
-            ('review_date','VARCHAR(20)'),
-            ('status','VARCHAR(30)'),
-            ('compliance_level','VARCHAR(30)'),
-            ('last_audit_date','VARCHAR(20)'),
-            ('next_review_date','VARCHAR(20)'),
-            ('notes','TEXT'),
-            ('created_at','TIMESTAMP'),
-            ('updated_at','TIMESTAMP'),
+            ('classification','VARCHAR(50)'),('icao_occurrence_category','VARCHAR(50)'),
+            ('phase_of_flight','VARCHAR(50)'),('contributing_factors','TEXT'),
+            ('findings','TEXT'),('recommendations','TEXT'),
+            ('root_cause','TEXT'),('regulatory_ref','VARCHAR(100)'),
+            ('notified_authority','BOOLEAN DEFAULT FALSE'),
+            ('notification_date','VARCHAR(20)'),
+            ('erp_activated','BOOLEAN DEFAULT FALSE'),
+            ('created_at','TIMESTAMP'),('closed_at','TIMESTAMP'),
         ],
     }
 
@@ -10960,37 +11008,36 @@ with app.app_context():
                         f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}"
                     ))
             except Exception as _ce:
-                pass  # column may already exist
+                pass
 
-    # Create spi_event_links table if not exists
-    _spi_links_ddl = (
-        "CREATE TABLE IF NOT EXISTS spi_event_links ("
-        "id SERIAL PRIMARY KEY, "
-        "spi_id INTEGER REFERENCES spi_indicators(id), "
-        "event_type VARCHAR(30), "
-        "event_id VARCHAR(50), "
-        "event_title VARCHAR(200), "
-        "event_date VARCHAR(20), "
-        "department_id INTEGER, "
-        "category VARCHAR(100), "
-        "severity VARCHAR(20), "
-        "match_reason VARCHAR(300), "
-        "created_at TIMESTAMP DEFAULT NOW())"
-    )
+    # spi_event_links DDL
     try:
         with engine.connect() as conn:
             conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(_spi_links_ddl))
-    except Exception as _e:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS spi_event_links ("
+                "  id SERIAL PRIMARY KEY,"
+                "  spi_id INTEGER NOT NULL REFERENCES spi_indicators(id) ON DELETE CASCADE,"
+                "  event_type VARCHAR(50) NOT NULL,"
+                "  event_id VARCHAR(50) NOT NULL,"
+                "  event_title VARCHAR(300),"
+                "  event_date VARCHAR(20),"
+                "  severity VARCHAR(20),"
+                "  department_id INTEGER,"
+                "  category VARCHAR(100),"
+                "  link_type VARCHAR(20) DEFAULT 'auto',"
+                "  created_at TIMESTAMP DEFAULT NOW()"
+                ")"
+            ))
+    except Exception as _sle:
         pass
 
     try:
         seed()
     except Exception as _se:
         print(f'Seed warning: {_se}')
-
     db.session.remove()
 
-
 if __name__ == '__main__':
+    import os
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
