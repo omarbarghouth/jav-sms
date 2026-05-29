@@ -178,7 +178,7 @@
       <th rowspan="2" style="width:100px">Specific Components of the Hazard</th>
       <th rowspan="2" style="width:90px">Hazard Related Consequences</th>
       <th colspan="3" style="background:#1a2d5a">Initial Risk</th>
-      <th rowspan="2" style="width:100px">Current Defenses</th>
+      <th rowspan="2" style="width:100px">Current Controls / Defenses<br><span style="font-weight:400;font-size:8px">(existing barriers)</span></th>
       <th rowspan="2" style="width:110px">Further Mitigation Measures</th>
       <th colspan="3" style="background:#1a2d5a">Residual Risk</th>
     </tr>
@@ -209,7 +209,7 @@
           </span>
         {% else %}—{% endif %}
       </td>
-      <td>{{ row.current_defenses or '—' }}</td>
+      <td>{{ row.current_defenses if row.current_defenses else 'None identified' }}</td>
       <td>{{ row.further_mitigations or '—' }}</td>
       <td style="text-align:center">{{ row.likelihood_residual or '—' }}</td>
       <td style="text-align:center">{{ row.severity_residual or '—' }}</td>

@@ -129,7 +129,7 @@
                 <th style="padding:6px 8px;border:1px solid var(--border);width:45px;background:#fef3c7">L</th>
                 <th style="padding:6px 8px;border:1px solid var(--border);width:45px;background:#fef3c7">S</th>
                 <th style="padding:6px 8px;border:1px solid var(--border);width:55px;background:#fef3c7">Index</th>
-                <th style="padding:6px 8px;border:1px solid var(--border);width:150px">Current Defenses</th>
+                <th style="padding:6px 8px;border:1px solid var(--border);width:150px">Current Controls / Defenses<br><span style="font-weight:400;font-size:9px;color:#6b7280">(existing barriers in place)</span></th>
                 <th style="padding:6px 8px;border:1px solid var(--border);width:160px">Further Mitigation Measures</th>
                 <th style="padding:6px 8px;border:1px solid var(--border);width:45px;background:#dcfce7">L</th>
                 <th style="padding:6px 8px;border:1px solid var(--border);width:45px;background:#dcfce7">S</th>
@@ -171,7 +171,7 @@
                   <div id="tol_i_1" style="font-size:9px;margin-top:2px"></div>
                 </td>
                 <td style="border:1px solid var(--border);padding:4px">
-                  <textarea name="defenses_1" rows="2" placeholder="Current defenses in place…"
+                  <textarea name="defenses_1" rows="2" placeholder="Existing controls in place (procedures, training, PPE, engineering barriers…). Leave blank if NONE exist."
                     style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
                 <td style="border:1px solid var(--border);padding:4px">
                   <textarea name="mitigations_1" rows="2" placeholder="Additional mitigations required…"
@@ -282,7 +282,7 @@ function addRow(){
             <td style="border:1px solid var(--border);padding:4px;background:#fffbeb;text-align:center;width:55px">
               <div id="ri_i_${n}" style="font-weight:800;font-size:14px"></div><div id="tol_i_${n}" style="font-size:9px;margin-top:2px"></div>
             </td>
-            <td style="border:1px solid var(--border);padding:4px;width:150px"><textarea name="defenses_${n}" rows="2" placeholder="Current defenses…" style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
+            <td style="border:1px solid var(--border);padding:4px;width:150px"><textarea name="defenses_${n}" rows="2" placeholder="Existing controls (procedures, barriers, PPE…). Leave blank if NONE." style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
             <td style="border:1px solid var(--border);padding:4px;width:160px"><textarea name="mitigations_${n}" rows="2" placeholder="Further mitigations…" style="width:100%;border:none;font-size:11px;padding:3px;resize:none"></textarea></td>
             <td style="border:1px solid var(--border);padding:4px;background:#f0fdf4;width:45px">
               <select name="lik_r_${n}" id="lik_r_${n}" onchange="calcResidual('${n}')" style="width:100%;border:none;font-size:11px;background:transparent">

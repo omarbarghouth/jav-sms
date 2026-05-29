@@ -329,7 +329,7 @@
           <th style="padding:8px;border:1px solid #374151;background:#92400e">L</th>
           <th style="padding:8px;border:1px solid #374151;background:#92400e">S</th>
           <th style="padding:8px;border:1px solid #374151;background:#92400e">Risk Index</th>
-          <th style="padding:8px;border:1px solid #374151">Current Defenses</th>
+          <th style="padding:8px;border:1px solid #374151">Current Controls / Defenses<br><span style="font-weight:400;font-size:9px;color:#cbd5e1">(existing barriers)</span></th>
           <th style="padding:8px;border:1px solid #374151">Further Mitigation Measures</th>
           <th style="padding:8px;border:1px solid #374151;background:#065f46">L</th>
           <th style="padding:8px;border:1px solid #374151;background:#065f46">S</th>
@@ -353,7 +353,7 @@
             <div style="font-size:10px;color:var(--muted)">{{ row.risk_tolerance_initial or '' }}</div>
             {% if row.risk_id %}<a href="/risk/{{ row.risk_id }}" style="font-size:10px;color:#1d4ed8">Risk →</a>{% endif %}
           </td>
-          <td style="border:1px solid var(--border);padding:8px;max-width:160px">{{ row.current_defenses or '—' }}</td>
+          <td style="border:1px solid var(--border);padding:8px;max-width:160px">{% if row.current_defenses %}<span>{{ row.current_defenses }}</span>{% else %}<span style="color:#9ca3af;font-style:italic;font-size:11px">None identified</span>{% endif %}</td>
           <td style="border:1px solid var(--border);padding:8px;max-width:160px">{{ row.further_mitigations or '—' }}</td>
           <td style="border:1px solid var(--border);padding:8px;text-align:center;font-weight:700;background:#f0fdf4">{{ row.likelihood_residual or '—' }}</td>
           <td style="border:1px solid var(--border);padding:8px;text-align:center;font-weight:700;background:#f0fdf4">{{ row.severity_residual or '—' }}</td>
@@ -383,7 +383,7 @@
         <div class="fg"><label>Generic Hazard *</label><input type="text" name="generic_hazard" required/></div>
         <div class="fg"><label>Specific Components</label><textarea name="specific_components" rows="2"></textarea></div>
         <div class="fg"><label>Consequences *</label><textarea name="consequences" required rows="2"></textarea></div>
-        <div class="fg"><label>Current Defenses</label><textarea name="current_defenses" rows="2"></textarea></div>
+        <div class="fg"><label>Current Controls / Defenses <span style="font-weight:400;color:var(--muted);font-size:11px">(leave blank if none exist)</span></label><textarea name="current_defenses" rows="2" placeholder="Existing controls in place — procedures, training, engineering barriers, PPE. Leave blank if NO controls exist yet."></textarea></div>
         <div class="fg"><label>Further Mitigation Measures</label><textarea name="further_mitigations" rows="2"></textarea></div>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
