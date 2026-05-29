@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
 try:
     from models import SPIEventLink
 except ImportError:
@@ -2018,6 +2018,363 @@ def api_mobile_stats():
             }, 'Stats loaded')
     except Exception as e:
         return api_err(str(e)[:120], 500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SAFETY PROMOTION — Mobile API  (Phase 5)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _sp_user_read_set(user_id):
+    """Return a set of (content_type, content_id) already read by this user."""
+    rows = SafetyPromoRead.query.filter_by(user_id=str(user_id)).all()
+    return {(r.content_type, r.content_id) for r in rows}
+
+
+def _sp_user_ack_set(user_id):
+    """Return a set of (content_type, content_id) already acked by this user."""
+    rows = SafetyPromoAck.query.filter_by(user_id=str(user_id)).all()
+    return {(r.content_type, r.content_id) for r in rows}
+
+
+def _sp_item(obj, ctype, cid_attr, title_attr, date_attr, dept_attr=None,
+             summary_attr=None, severity_attr=None, priority_attr=None,
+             mandatory_attr='is_mandatory', read_set=None, ack_set=None):
+    """Serialize a safety-promo model instance into a feed dict."""
+    cid = str(getattr(obj, cid_attr, ''))
+    is_read = (ctype, cid) in read_set if read_set is not None else False
+    is_acked = (ctype, cid) in ack_set if ack_set is not None else False
+    return {
+        'type':        ctype,
+        'id':          cid,
+        'title':       getattr(obj, title_attr, '') or '',
+        'summary':     getattr(obj, summary_attr, '') or '' if summary_attr else '',
+        'date':        str(getattr(obj, date_attr, '') or ''),
+        'dept_id':     getattr(obj, dept_attr, None) if dept_attr else None,
+        'severity':    getattr(obj, severity_attr, '') or '' if severity_attr else '',
+        'priority':    getattr(obj, priority_attr, 'Normal') or 'Normal' if priority_attr else 'Normal',
+        'is_mandatory': bool(getattr(obj, mandatory_attr, False)),
+        'is_read':     is_read,
+        'is_acked':    is_acked,
+        'has_attachment': bool(getattr(obj, 'attachment', None)),
+    }
+
+
+@app.route('/api/mobile/safety/feed', methods=['GET', 'OPTIONS'])
+@csrf.exempt
+def api_mobile_safety_feed():
+    """Flutter: unified chronological safety promotion feed.
+
+    Query params:
+      type   — alert | bulletin | newsletter | survey | lesson  (omit = all)
+      limit  — default 50
+      offset — default 0
+    """
+    if request.method == 'OPTIONS':
+        return api_ok({}, 'ok')
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
+
+    ftype  = request.args.get('type', '').lower()
+    limit  = min(int(request.args.get('limit', 50)), 200)
+    offset = int(request.args.get('offset', 0))
+    uid    = str(identity.get('user_id') or identity.get('id', ''))
+    dept   = request.headers.get('X-Dept-Id')
+
+    try:
+        read_set = _sp_user_read_set(uid)
+        ack_set  = _sp_user_ack_set(uid)
+        items = []
+
+        # Safety Bulletins (Alerts)
+        if not ftype or ftype in ('alert', 'bulletin'):
+            q = SafetyBulletin.query.filter(SafetyBulletin.status == 'Active')
+            btype = 'alert' if ftype == 'alert' else None
+            rows = q.all()
+            for b in rows:
+                ct = 'alert' if (b.bulletin_type or '').lower() in ('safety alert', 'alert') else 'bulletin'
+                if ftype and ftype != ct:
+                    continue
+                items.append(_sp_item(b, ct, 'id', 'title', 'issue_date',
+                                      dept_attr='department_id',
+                                      summary_attr='content',
+                                      severity_attr='severity',
+                                      priority_attr='priority_level',
+                                      read_set=read_set, ack_set=ack_set))
+
+        # Newsletters
+        if not ftype or ftype == 'newsletter':
+            rows = SafetyNewsletter.query.filter(SafetyNewsletter.status == 'Published').all()
+            for n in rows:
+                items.append(_sp_item(n, 'newsletter', 'id', 'title', 'issue_date',
+                                      dept_attr='department_id',
+                                      summary_attr='summary',
+                                      priority_attr='priority_level',
+                                      read_set=read_set, ack_set=ack_set))
+
+        # Surveys
+        if not ftype or ftype == 'survey':
+            rows = SafetySurvey.query.filter(SafetySurvey.status == 'Active').all()
+            for s in rows:
+                items.append(_sp_item(s, 'survey', 'id', 'title', 'start_date',
+                                      dept_attr='department_id',
+                                      summary_attr='description',
+                                      priority_attr='priority_level',
+                                      read_set=read_set, ack_set=ack_set))
+
+        # Lessons Learned
+        if not ftype or ftype == 'lesson':
+            rows = LessonLearned.query.filter(LessonLearned.status == 'Published').all()
+            for l in rows:
+                items.append(_sp_item(l, 'lesson', 'id', 'title', 'date',
+                                      dept_attr='department_id',
+                                      summary_attr='lesson',
+                                      priority_attr='priority_level',
+                                      read_set=read_set, ack_set=ack_set))
+
+        # Sort by date descending (ISO strings compare fine)
+        items.sort(key=lambda x: x['date'] or '', reverse=True)
+
+        total = len(items)
+        page  = items[offset:offset + limit]
+        return api_ok({'items': page, 'total': total, 'offset': offset, 'limit': limit},
+                      'Feed loaded')
+    except Exception as e:
+        return api_err(str(e)[:200], 500)
+
+
+@app.route('/api/mobile/safety/unread_count', methods=['GET', 'OPTIONS'])
+@csrf.exempt
+def api_mobile_safety_unread_count():
+    """Flutter: per-type unread counts."""
+    if request.method == 'OPTIONS':
+        return api_ok({}, 'ok')
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
+
+    uid = str(identity.get('user_id') or identity.get('id', ''))
+    try:
+        read_set = _sp_user_read_set(uid)
+
+        def _unread(qs, ctype, id_attr='id'):
+            return sum(1 for r in qs if (ctype, str(getattr(r, id_attr, ''))) not in read_set)
+
+        alerts      = SafetyBulletin.query.filter(
+            SafetyBulletin.status == 'Active',
+            SafetyBulletin.bulletin_type.ilike('%alert%')).all()
+        bulletins   = SafetyBulletin.query.filter(
+            SafetyBulletin.status == 'Active',
+            ~SafetyBulletin.bulletin_type.ilike('%alert%')).all()
+        newsletters = SafetyNewsletter.query.filter_by(status='Published').all()
+        surveys     = SafetySurvey.query.filter_by(status='Active').all()
+        lessons     = LessonLearned.query.filter_by(status='Published').all()
+
+        counts = {
+            'alert':      _unread(alerts,      'alert'),
+            'bulletin':   _unread(bulletins,   'bulletin'),
+            'newsletter': _unread(newsletters, 'newsletter'),
+            'survey':     _unread(surveys,     'survey'),
+            'lesson':     _unread(lessons,     'lesson'),
+        }
+        counts['total'] = sum(counts.values())
+        return api_ok(counts, 'Counts loaded')
+    except Exception as e:
+        return api_err(str(e)[:200], 500)
+
+
+@app.route('/api/mobile/safety/read', methods=['POST', 'OPTIONS'])
+@csrf.exempt
+def api_mobile_safety_read():
+    """Flutter: mark an item as read. Body: {type, id}"""
+    if request.method == 'OPTIONS':
+        return api_ok({}, 'ok')
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
+
+    data    = request.get_json(silent=True) or {}
+    ctype   = data.get('type', '').strip()
+    cid     = str(data.get('id', '')).strip()
+    uid     = str(identity.get('user_id') or identity.get('id', ''))
+
+    if not ctype or not cid:
+        return api_err('type and id required', 400)
+
+    try:
+        existing = SafetyPromoRead.query.filter_by(
+            user_id=uid, content_type=ctype, content_id=cid).first()
+        if not existing:
+            db.session.add(SafetyPromoRead(
+                user_id=uid, content_type=ctype, content_id=cid))
+            db.session.commit()
+        return api_ok({'marked': True}, 'Marked as read')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:200], 500)
+
+
+@app.route('/api/mobile/safety/acknowledge', methods=['POST', 'OPTIONS'])
+@csrf.exempt
+def api_mobile_safety_acknowledge():
+    """Flutter: record mandatory acknowledgment. Body: {type, id, full_name, device_info}"""
+    if request.method == 'OPTIONS':
+        return api_ok({}, 'ok')
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
+
+    data      = request.get_json(silent=True) or {}
+    ctype     = data.get('type', '').strip()
+    cid       = str(data.get('id', '')).strip()
+    uid       = str(identity.get('user_id') or identity.get('id', ''))
+    full_name = data.get('full_name', identity.get('name', ''))
+    device    = data.get('device_info', '')
+
+    if not ctype or not cid:
+        return api_err('type and id required', 400)
+
+    try:
+        existing = SafetyPromoAck.query.filter_by(
+            user_id=uid, content_type=ctype, content_id=cid).first()
+        if not existing:
+            db.session.add(SafetyPromoAck(
+                user_id=uid, full_name=full_name,
+                content_type=ctype, content_id=cid,
+                device_info=device[:200] if device else None))
+            db.session.commit()
+        # Also mark as read
+        if not SafetyPromoRead.query.filter_by(
+                user_id=uid, content_type=ctype, content_id=cid).first():
+            db.session.add(SafetyPromoRead(
+                user_id=uid, content_type=ctype, content_id=cid))
+            db.session.commit()
+        return api_ok({'acknowledged': True}, 'Acknowledgment recorded')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:200], 500)
+
+
+@app.route('/api/mobile/safety/search', methods=['GET', 'OPTIONS'])
+@csrf.exempt
+def api_mobile_safety_search():
+    """Flutter: search across all safety promotion content.
+
+    Query params:
+      q    — search term (min 2 chars)
+      type — optional filter
+    """
+    if request.method == 'OPTIONS':
+        return api_ok({}, 'ok')
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
+
+    q     = request.args.get('q', '').strip()
+    ftype = request.args.get('type', '').lower()
+    uid   = str(identity.get('user_id') or identity.get('id', ''))
+
+    if len(q) < 2:
+        return api_err('Search term must be at least 2 characters', 400)
+
+    pat = f'%{q}%'
+    try:
+        read_set = _sp_user_read_set(uid)
+        ack_set  = _sp_user_ack_set(uid)
+        items = []
+
+        if not ftype or ftype in ('alert', 'bulletin'):
+            rows = SafetyBulletin.query.filter(
+                SafetyBulletin.status == 'Active',
+                db.or_(SafetyBulletin.title.ilike(pat),
+                       SafetyBulletin.content.ilike(pat),
+                       SafetyBulletin.ref_number.ilike(pat))
+            ).all()
+            for b in rows:
+                ct = 'alert' if (b.bulletin_type or '').lower() in ('safety alert', 'alert') else 'bulletin'
+                if ftype and ftype != ct:
+                    continue
+                items.append(_sp_item(b, ct, 'id', 'title', 'issue_date',
+                                      summary_attr='content', severity_attr='severity',
+                                      read_set=read_set, ack_set=ack_set))
+
+        if not ftype or ftype == 'newsletter':
+            rows = SafetyNewsletter.query.filter(
+                SafetyNewsletter.status == 'Published',
+                db.or_(SafetyNewsletter.title.ilike(pat),
+                       SafetyNewsletter.summary.ilike(pat),
+                       SafetyNewsletter.content.ilike(pat))
+            ).all()
+            for n in rows:
+                items.append(_sp_item(n, 'newsletter', 'id', 'title', 'issue_date',
+                                      summary_attr='summary', read_set=read_set, ack_set=ack_set))
+
+        if not ftype or ftype == 'survey':
+            rows = SafetySurvey.query.filter(
+                SafetySurvey.status == 'Active',
+                db.or_(SafetySurvey.title.ilike(pat),
+                       SafetySurvey.description.ilike(pat))
+            ).all()
+            for s in rows:
+                items.append(_sp_item(s, 'survey', 'id', 'title', 'start_date',
+                                      summary_attr='description', read_set=read_set, ack_set=ack_set))
+
+        if not ftype or ftype == 'lesson':
+            rows = LessonLearned.query.filter(
+                LessonLearned.status == 'Published',
+                db.or_(LessonLearned.title.ilike(pat),
+                       LessonLearned.lesson.ilike(pat),
+                       LessonLearned.description.ilike(pat))
+            ).all()
+            for l in rows:
+                items.append(_sp_item(l, 'lesson', 'id', 'title', 'date',
+                                      summary_attr='lesson', read_set=read_set, ack_set=ack_set))
+
+        items.sort(key=lambda x: x['date'] or '', reverse=True)
+        return api_ok({'items': items, 'total': len(items)}, f'{len(items)} result(s)')
+    except Exception as e:
+        return api_err(str(e)[:200], 500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  FCM Push helper — Safety Promotion publish hook
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _sp_push_notify(title, body, ctype, cid, dept_id=None):
+    """Send FCM push to all device tokens (optionally filtered by dept_id)."""
+    try:
+        import json, urllib.request, urllib.error
+        server_key = os.environ.get('FCM_SERVER_KEY', '')
+        if not server_key:
+            return  # FCM not configured — skip silently
+
+        q = DeviceToken.query
+        tokens = [dt.fcm_token for dt in q.all()]
+        if not tokens:
+            return
+
+        headers = {
+            'Authorization': f'key={server_key}',
+            'Content-Type':  'application/json',
+        }
+        payload = json.dumps({
+            'registration_ids': tokens,
+            'notification': {'title': title, 'body': body, 'sound': 'default'},
+            'data':         {'type': ctype, 'id': str(cid), 'click_action': 'FLUTTER_NOTIFICATION_CLICK'},
+            'priority':     'high',
+        }).encode()
+
+        req = urllib.request.Request(
+            'https://fcm.googleapis.com/fcm/send',
+            data=payload, headers=headers, method='POST')
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass  # Never let push failure break the publish flow
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
@@ -11350,7 +11707,7 @@ def pdf_route_investigation(inv_id):
     return _pdf_response(pdf_bytes, f'INV-{inv_id}.pdf')
 
 
-# ── 4. RISK ASSESSMENT PDF ──────────────────────────────────────────────────
+# ── 4. RISK ASSESSMENT PDF ──────────────────────────────────────────
 @app.route('/pdf/risk-assessment/<ra_id>')
 @require_login
 def pdf_route_risk_assessment(ra_id):
@@ -11403,7 +11760,7 @@ def pdf_route_audit(sid):
     return _pdf_response(pdf_bytes, f'AUDIT-{sid}.pdf')
 
 
-# ── 8. EMERGENCY RESPONSE PLAN PDF ──────────────────────────────────────────
+# ── 8. EMERGENCY RESPONSE PLAN PDF ────────────────────────────────────────────
 @app.route('/pdf/erp/<eid>')
 @require_login
 def pdf_route_erp(eid):
@@ -11414,7 +11771,7 @@ def pdf_route_erp(eid):
     return _pdf_response(pdf_bytes, f'ERP-{eid}.pdf')
 
 
-# ── 9. VOLUNTARY REPORT PDF ─────────────────────────────────────────────────
+# ── 9. VOLUNTARY REPORT PDF ───────────────────────────────────────────────────
 @app.route('/pdf/voluntary/<vid>')
 @require_login
 def pdf_route_voluntary(vid):
@@ -11425,7 +11782,7 @@ def pdf_route_voluntary(vid):
     return _pdf_response(pdf_bytes, f'VOL-{vid}.pdf')
 
 
-# ── 10. CONFIDENTIAL REPORT PDF ─────────────────────────────────────────────
+# ── 10. CONFIDENTIAL REPORT PDF ───────────────────────────────────────────────────
 @app.route('/pdf/confidential/<cid>')
 @require_login
 def pdf_route_confidential(cid):
@@ -11440,7 +11797,7 @@ def pdf_route_confidential(cid):
     return _pdf_response(pdf_bytes, f'CONF-{cid}.pdf')
 
 
-# ── 11. TRAINING RECORD PDF ─────────────────────────────────────────────────
+# ── 11. TRAINING RECORD PDF ───────────────────────────────────────────────────────
 @app.route('/pdf/training/<tid>')
 @require_login
 def pdf_route_training(tid):
@@ -11451,7 +11808,7 @@ def pdf_route_training(tid):
     return _pdf_response(pdf_bytes, f'TRN-{tid}.pdf')
 
 
-# ── 12. AUDIT FINDING / CAP PDF ─────────────────────────────────────────────
+# ── 12. AUDIT FINDING / CAP PDF ───────────────────────────────────────────────────
 @app.route('/pdf/audit-finding/<fid>')
 @require_login
 def pdf_route_audit_finding(fid):
@@ -11463,7 +11820,7 @@ def pdf_route_audit_finding(fid):
     return _pdf_response(pdf_bytes, f'CAP-{fid}.pdf')
 
 
-# ── 13. SPI DASHBOARD SUMMARY PDF ────────────────────────────────────────────
+# ── 13. SPI DASHBOARD SUMMARY PDF ────────────────────────────────────────────────────────
 @app.route('/pdf/spi-summary')
 @require_login
 def pdf_route_spi_summary():
@@ -11474,9 +11831,9 @@ def pdf_route_spi_summary():
     return _pdf_response(pdf_bytes, 'SPI-Summary.pdf')
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────────
 #  APPLICATION STARTUP — migrations + seed
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────────
 with app.app_context():
     db.create_all()
 
@@ -11620,6 +11977,63 @@ with app.app_context():
                 conn.execute(text(f"ALTER TABLE audit_actions ADD COLUMN IF NOT EXISTS {_col} {_ctype}"))
         except Exception:
             pass
+
+    # Safety Promotion tracking tables (Phase 5)
+    try:
+        with engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS safety_promo_reads ("
+                "  id SERIAL PRIMARY KEY,"
+                "  user_id VARCHAR(30) NOT NULL,"
+                "  content_type VARCHAR(30) NOT NULL,"
+                "  content_id VARCHAR(50) NOT NULL,"
+                "  read_at TIMESTAMP DEFAULT NOW(),"
+                "  CONSTRAINT uq_safety_promo_read UNIQUE (user_id, content_type, content_id)"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_spr_user_id ON safety_promo_reads(user_id)"
+            ))
+    except Exception:
+        pass
+
+    try:
+        with engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS safety_promo_acks ("
+                "  id SERIAL PRIMARY KEY,"
+                "  user_id VARCHAR(30) NOT NULL,"
+                "  full_name VARCHAR(100),"
+                "  content_type VARCHAR(30) NOT NULL,"
+                "  content_id VARCHAR(50) NOT NULL,"
+                "  acked_at TIMESTAMP DEFAULT NOW(),"
+                "  device_info VARCHAR(200),"
+                "  CONSTRAINT uq_safety_promo_ack UNIQUE (user_id, content_type, content_id)"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_spa_user_id ON safety_promo_acks(user_id)"
+            ))
+    except Exception:
+        pass
+
+    # Additive columns on existing safety-promotion content tables
+    for _sp_col, _sp_ctype in [
+        ('is_mandatory',    'BOOLEAN DEFAULT FALSE'),
+        ('priority_level',  "VARCHAR(20) DEFAULT 'Normal'"),
+        ('target_dept_ids', 'TEXT DEFAULT NULL'),
+    ]:
+        for _sp_table in ('safety_bulletins', 'safety_newsletters', 'safety_surveys', 'lessons_learned'):
+            try:
+                with engine.connect() as conn:
+                    conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+                    conn.execute(text(
+                        f"ALTER TABLE {_sp_table} ADD COLUMN IF NOT EXISTS {_sp_col} {_sp_ctype}"
+                    ))
+            except Exception:
+                pass
 
     try:
         seed()
