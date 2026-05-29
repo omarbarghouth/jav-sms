@@ -7587,7 +7587,11 @@ def sp_survey_response_detail(sid, rid):
         answers = _j.loads(resp.answers or '{}')
     except Exception:
         answers = {}
-    qa_pairs = [(questions[i], answers.get(str(i),'—'))
+    # Mobile submits answers as a list; web stores as a dict — normalise to dict
+    if isinstance(answers, list):
+        answers = {str(item.get('question_index', i)): item.get('answer', '')
+                   for i, item in enumerate(answers) if isinstance(item, dict)}
+    qa_pairs = [(questions[i], answers.get(str(i), '—'))
                 for i in range(len(questions))]
     return render_template('spi/sp_survey_response_detail.html',
                            survey=s, resp=resp, qa_pairs=qa_pairs)
