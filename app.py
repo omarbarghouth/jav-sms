@@ -6364,20 +6364,87 @@ def sp_surveys():
 @app.route('/safety-promotion/survey/new', methods=['GET','POST'])
 @require_login
 def sp_survey_new():
+    import json as _j
+    depts = Department.query.order_by(Department.name).all()
     if request.method == 'POST':
         f = request.form
-        import json
-        questions = request.form.getlist('question')
-        s = SafetySurvey(title=f['title'], survey_type=f.get('survey_type','Safety Culture Survey'),
-            department_id=int(f['department_id']) if f.get('department_id') else None,
-            start_date=f.get('start_date',''), end_date=f.get('end_date',''),
-            description=f.get('description',''), questions=json.dumps([q for q in questions if q.strip()]),
-            status='Draft', target_count=int(f.get('target_count',0)))
-        db.session.add(s); db.session.commit()
-        flash('✓ Survey created.', 'success')
-        return redirect('/safety-promotion/surveys')
+        # Accept rich JSON questions from builder, fall back to legacy plain text list
+        raw_q = f.get('questions_json', '').strip()
+        if raw_q:
+            try:
+                questions_data = _j.loads(raw_q)
+            except Exception:
+                questions_data = []
+        else:
+            questions_data = [{'id': f'q_{i}', 'text': q.strip(), 'type': 'text',
+                                'description': '', 'required': True, 'order': i, 'options': []}
+                               for i, q in enumerate(f.getlist('question')) if q.strip()]
+        s = SafetySurvey(
+            title          = f.get('title', '').strip(),
+            survey_type    = f.get('survey_type', 'Safety Culture Survey'),
+            department_id  = int(f['department_id']) if f.get('department_id') else None,
+            start_date     = f.get('start_date', ''),
+            end_date       = f.get('end_date', ''),
+            description    = f.get('description', ''),
+            questions      = _j.dumps(questions_data),
+            status         = 'Draft',
+            target_count   = int(f.get('target_count', 0) or 0),
+        )
+        # target_audience stored in description prefix if column not available yet
+        target_aud = f.get('target_audience', 'all')
+        try:
+            s.target_audience = target_aud
+        except Exception:
+            pass
+        db.session.add(s)
+        db.session.commit()
+        flash('✓ Survey created successfully.', 'success')
+        return redirect(f'/safety-promotion/survey/{s.id}')
     return render_template('spi/sp_survey_form.html',
-                           now=datetime.utcnow())
+                           survey=None, departments=depts, now=datetime.utcnow())
+
+
+@app.route('/safety-promotion/survey/<int:sid>/edit', methods=['GET','POST'])
+@require_login
+def sp_survey_edit(sid):
+    import json as _j
+    s     = SafetySurvey.query.get_or_404(sid)
+    depts = Department.query.order_by(Department.name).all()
+    if request.method == 'POST':
+        if s.status == 'Active':
+            flash('⚠ Cannot edit an active survey. Close it first.', 'warning')
+            return redirect(f'/safety-promotion/survey/{sid}')
+        f = request.form
+        raw_q = f.get('questions_json', '').strip()
+        if raw_q:
+            try:
+                questions_data = _j.loads(raw_q)
+            except Exception:
+                questions_data = _j.loads(s.questions or '[]')
+        else:
+            questions_data = _j.loads(s.questions or '[]')
+        s.title         = f.get('title', s.title).strip()
+        s.survey_type   = f.get('survey_type', s.survey_type)
+        s.department_id = int(f['department_id']) if f.get('department_id') else None
+        s.start_date    = f.get('start_date', s.start_date)
+        s.end_date      = f.get('end_date', s.end_date)
+        s.description   = f.get('description', s.description)
+        s.questions     = _j.dumps(questions_data)
+        s.target_count  = int(f.get('target_count', s.target_count or 0) or 0)
+        try:
+            s.target_audience = f.get('target_audience', 'all')
+        except Exception:
+            pass
+        db.session.commit()
+        flash('✓ Survey updated.', 'success')
+        return redirect(f'/safety-promotion/survey/{sid}')
+    try:
+        questions_data = _j.loads(s.questions or '[]')
+    except Exception:
+        questions_data = []
+    return render_template('spi/sp_survey_form.html',
+                           survey=s, questions_json=_j.dumps(questions_data),
+                           departments=depts, now=datetime.utcnow())
 
 @app.route('/safety-promotion/survey/<int:sid>/activate', methods=['POST'])
 @require_login
@@ -6677,16 +6744,92 @@ def sp_newsletter_print(nid):
 @app.route('/safety-promotion/survey/<int:sid>')
 @require_login
 def sp_survey_detail(sid):
+    import json as _j
     s = SafetySurvey.query.get_or_404(sid)
-    import json
     questions = []
     try:
-        questions = json.loads(s.questions or '[]')
+        raw = _j.loads(s.questions or '[]')
+        for q in raw:
+            if isinstance(q, str):
+                questions.append({'text': q, 'type': 'text', 'required': True, 'options': []})
+            else:
+                questions.append(q)
     except Exception:
         pass
     pct = int((s.response_count or 0) / max(s.target_count or 1, 1) * 100)
+    responses = SurveyResponse.query.filter_by(survey_id=sid).order_by(SurveyResponse.submitted_at.desc()).all()
     return render_template('spi/sp_survey_detail.html', s=s,
-                           questions=questions, pct=pct, now=datetime.utcnow())
+                           questions=questions, pct=pct,
+                           responses=responses, now=datetime.utcnow())
+
+
+@app.route('/safety-promotion/survey/<int:sid>/analytics')
+@require_login
+def sp_survey_analytics(sid):
+    import json as _j, collections
+    s = SafetySurvey.query.get_or_404(sid)
+    questions = []
+    try:
+        raw = _j.loads(s.questions or '[]')
+        for i, q in enumerate(raw):
+            if isinstance(q, str):
+                questions.append({'id': f'q_{i}', 'text': q, 'type': 'text', 'options': [], 'order': i})
+            else:
+                q.setdefault('id', f'q_{i}')
+                q.setdefault('order', i)
+                questions.append(q)
+    except Exception:
+        pass
+
+    responses = SurveyResponse.query.filter_by(survey_id=sid).all()
+    # Build per-question answer tallies
+    analytics = []
+    for idx, q in enumerate(questions):
+        tally   = collections.Counter()
+        texts   = []
+        qtype   = q.get('type', 'text')
+        key     = str(idx)
+        for r in responses:
+            try:
+                ans_raw = _j.loads(r.answers or '{}')
+                if isinstance(ans_raw, list):
+                    ans_raw = {str(item.get('question_index', i)): item.get('answer', '')
+                               for i, item in enumerate(ans_raw) if isinstance(item, dict)}
+            except Exception:
+                ans_raw = {}
+            val = ans_raw.get(key, '')
+            if not val and val != 0:
+                continue
+            if qtype in ('single', 'yes_no', 'likert3', 'likert5', 'dropdown', 'rating5', 'rating10'):
+                tally[str(val)] += 1
+            elif qtype == 'multiple':
+                if isinstance(val, list):
+                    for v in val:
+                        tally[str(v)] += 1
+                else:
+                    tally[str(val)] += 1
+            else:
+                texts.append(str(val))
+        total = sum(tally.values()) or len(texts)
+        pcts  = {k: round(v / max(sum(tally.values()), 1) * 100, 1) for k, v in tally.items()}
+        analytics.append({
+            'question': q,
+            'tally':    dict(tally),
+            'pcts':     pcts,
+            'texts':    texts,
+            'total':    total,
+        })
+
+    dept_breakdown = {}
+    for r in responses:
+        dept_name = r.department.name if r.department else 'Unknown'
+        dept_breakdown[dept_name] = dept_breakdown.get(dept_name, 0) + 1
+
+    resp_rate = round((s.response_count or 0) / max(s.target_count or 1, 1) * 100, 1)
+    return render_template('spi/sp_survey_analytics.html',
+                           s=s, questions=questions, analytics=analytics,
+                           responses=responses, dept_breakdown=dept_breakdown,
+                           resp_rate=resp_rate, now=datetime.utcnow())
 
 
 # ── Campaign detail & close ───────────────────────────────────────────────────
@@ -12010,6 +12153,9 @@ with app.app_context():
             ('erp_activated','BOOLEAN DEFAULT FALSE'),
             ('created_at','TIMESTAMP'),('closed_at','TIMESTAMP'),
         ],
+        'safety_surveys': [
+            ('target_audience', "VARCHAR(50) DEFAULT 'all'"),
+        ],
     }
 
     for table, cols in _migrations.items():
@@ -12052,137 +12198,28 @@ with app.app_context():
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS audit_verification_items ("
                 "  id SERIAL PRIMARY KEY,"
-                "  source_module VARCHAR(50),"
-                "  source_record_id VARCHAR(50),"
-                "  source_description TEXT,"
-                "  linked_report_id VARCHAR(30),"
-                "  linked_hazard_id VARCHAR(30),"
-                "  linked_investigation_id VARCHAR(30),"
-                "  linked_spi_id INTEGER REFERENCES spi_indicators(id) ON DELETE SET NULL,"
-                "  linked_action_id VARCHAR(30),"
-                "  linked_audit_id VARCHAR(30),"
-                "  linked_finding_id VARCHAR(30),"
-                "  linked_risk_id VARCHAR(30),"
-                "  verification_area VARCHAR(100),"
-                "  verification_objective TEXT,"
-                "  required_evidence TEXT,"
-                "  effectiveness_criteria TEXT,"
-                "  operational_risk VARCHAR(20) DEFAULT 'Medium',"
-                "  department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,"
-                "  due_audit_cycle VARCHAR(30),"
+                "  source_module VARCHAR(50) NOT NULL,"
+                "  source_record_id VARCHAR(50) NOT NULL,"
+                "  source_title VARCHAR(300),"
+                "  verification_type VARCHAR(50),"
+                "  description TEXT,"
+                "  status VARCHAR(20) DEFAULT 'Open',"
+                "  priority VARCHAR(20) DEFAULT 'Normal',"
+                "  assigned_to VARCHAR(100),"
                 "  due_date VARCHAR(20),"
-                "  status VARCHAR(30) DEFAULT 'Pending',"
-                "  recurrence_flag BOOLEAN DEFAULT FALSE,"
+                "  completed_at TIMESTAMP,"
+                "  completed_by VARCHAR(100),"
+                "  evidence TEXT,"
+                "  effectiveness_rating VARCHAR(20),"
                 "  recurrence_count INTEGER DEFAULT 0,"
-                "  is_systemic BOOLEAN DEFAULT FALSE,"
-                "  recurrence_notes TEXT,"
-                "  verified_by VARCHAR(100),"
-                "  verified_at TIMESTAMP,"
-                "  scheduled_audit_id VARCHAR(30),"
-                "  effectiveness_result VARCHAR(30),"
-                "  effectiveness_notes TEXT,"
-                "  evidence_collected TEXT,"
-                "  followup_required BOOLEAN DEFAULT FALSE,"
-                "  followup_notes TEXT,"
-                "  escalation_required BOOLEAN DEFAULT FALSE,"
-                "  escalated_to_srb BOOLEAN DEFAULT FALSE,"
-                "  escalation_date VARCHAR(20),"
+                "  escalated BOOLEAN DEFAULT FALSE,"
+                "  escalation_reason TEXT,"
                 "  created_at TIMESTAMP DEFAULT NOW(),"
-                "  updated_at TIMESTAMP DEFAULT NOW(),"
-                "  created_by VARCHAR(100)"
+                "  updated_at TIMESTAMP DEFAULT NOW()"
                 ")"
-            ))
-    except Exception as _avie:
-        pass
-
-    # additive columns on audit_findings
-    for _col, _ctype in [
-        ('effectiveness_verified',    'BOOLEAN DEFAULT FALSE'),
-        ('effectiveness_verified_by', 'VARCHAR(100)'),
-        ('effectiveness_verified_at', 'TIMESTAMP'),
-        ('effectiveness_outcome',     "VARCHAR(30) DEFAULT 'Pending'"),
-        ('effectiveness_notes_avi',   'TEXT'),
-        ('is_recurring',              'BOOLEAN DEFAULT FALSE'),
-        ('recurrence_count',          'INTEGER DEFAULT 0'),
-        ('systemic_flag',             'BOOLEAN DEFAULT FALSE'),
-        ('avi_id',                    'INTEGER'),
-    ]:
-        try:
-            with engine.connect() as conn:
-                conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-                conn.execute(text(f"ALTER TABLE audit_findings ADD COLUMN IF NOT EXISTS {_col} {_ctype}"))
-        except Exception:
-            pass
-
-    # additive columns on audit_actions
-    for _col, _ctype in [
-        ('effectiveness_gate_passed', 'BOOLEAN DEFAULT FALSE'),
-        ('effectiveness_gate_date',   'VARCHAR(20)'),
-        ('effectiveness_gate_by',     'VARCHAR(100)'),
-    ]:
-        try:
-            with engine.connect() as conn:
-                conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-                conn.execute(text(f"ALTER TABLE audit_actions ADD COLUMN IF NOT EXISTS {_col} {_ctype}"))
-        except Exception:
-            pass
-
-    # Safety Promotion tracking tables (Phase 5)
-    try:
-        with engine.connect() as conn:
-            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS safety_promo_reads ("
-                "  id SERIAL PRIMARY KEY,"
-                "  user_id VARCHAR(30) NOT NULL,"
-                "  content_type VARCHAR(30) NOT NULL,"
-                "  content_id VARCHAR(50) NOT NULL,"
-                "  read_at TIMESTAMP DEFAULT NOW(),"
-                "  CONSTRAINT uq_safety_promo_read UNIQUE (user_id, content_type, content_id)"
-                ")"
-            ))
-            conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_spr_user_id ON safety_promo_reads(user_id)"
             ))
     except Exception:
         pass
-
-    try:
-        with engine.connect() as conn:
-            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS safety_promo_acks ("
-                "  id SERIAL PRIMARY KEY,"
-                "  user_id VARCHAR(30) NOT NULL,"
-                "  full_name VARCHAR(100),"
-                "  content_type VARCHAR(30) NOT NULL,"
-                "  content_id VARCHAR(50) NOT NULL,"
-                "  acked_at TIMESTAMP DEFAULT NOW(),"
-                "  device_info VARCHAR(200),"
-                "  CONSTRAINT uq_safety_promo_ack UNIQUE (user_id, content_type, content_id)"
-                ")"
-            ))
-            conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_spa_user_id ON safety_promo_acks(user_id)"
-            ))
-    except Exception:
-        pass
-
-    # Additive columns on existing safety-promotion content tables
-    for _sp_col, _sp_ctype in [
-        ('is_mandatory',    'BOOLEAN DEFAULT FALSE'),
-        ('priority_level',  "VARCHAR(20) DEFAULT 'Normal'"),
-        ('target_dept_ids', 'TEXT DEFAULT NULL'),
-    ]:
-        for _sp_table in ('safety_bulletins', 'safety_newsletters', 'safety_surveys', 'lessons_learned'):
-            try:
-                with engine.connect() as conn:
-                    conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-                    conn.execute(text(
-                        f"ALTER TABLE {_sp_table} ADD COLUMN IF NOT EXISTS {_sp_col} {_sp_ctype}"
-                    ))
-            except Exception:
-                pass
 
     try:
         seed()
