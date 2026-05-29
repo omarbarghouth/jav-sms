@@ -1148,6 +1148,46 @@ class ApiToken(db.Model):
         return datetime.utcnow() > self.expires_at
 
 
+class SafetyPromoRead(db.Model):
+    """Read receipts for safety promotion content consumed via the Flutter app.
+
+    One row per (user_id, content_type, content_id).  Inserted on first open;
+    subsequent views are no-ops.  Used to drive unread counters and read-rate
+    analytics for the Safety Department.
+    """
+    __tablename__ = 'safety_promo_reads'
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.String(30), nullable=False, index=True)  # 'emp_5' or 'usr_3'
+    content_type = db.Column(db.String(30), nullable=False)  # bulletin / newsletter / survey / lesson / campaign
+    content_id   = db.Column(db.String(50), nullable=False)
+    read_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'content_type', 'content_id', name='uq_safety_promo_read'),
+    )
+
+
+class SafetyPromoAck(db.Model):
+    """Mandatory acknowledgment records for critical safety publications.
+
+    Recorded when an employee explicitly taps "I Acknowledge" in the Flutter app.
+    Immutable once created (deletion forbidden).  Feeds the acknowledgment rate
+    dashboard visible to the Safety Manager.
+    """
+    __tablename__ = 'safety_promo_acks'
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.String(30), nullable=False, index=True)
+    full_name    = db.Column(db.String(100))                 # denormalised for audit trail
+    content_type = db.Column(db.String(30), nullable=False)
+    content_id   = db.Column(db.String(50), nullable=False)
+    acked_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    device_info  = db.Column(db.String(200))                 # optional: platform / version
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'content_type', 'content_id', name='uq_safety_promo_ack'),
+    )
+
+
 class DeviceToken(db.Model):
     """FCM push-notification tokens for Flutter mobile sessions.
 
