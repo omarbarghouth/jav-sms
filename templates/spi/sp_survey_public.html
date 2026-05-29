@@ -2,95 +2,280 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>{{ survey.title }} — Safety Survey</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<title>{{ survey.title }} | Safety Survey</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#f0f2f8;min-height:100vh;font-family:'IBM Plex Sans',sans-serif;padding:24px}
-  .header{background:#0f1c3f;border-radius:10px;padding:18px 24px;margin-bottom:20px;border-bottom:3px solid #c9a84c}
-  .header h1{color:#fff;font-size:14px;font-weight:800}
-  .header p{color:rgba(255,255,255,.5);font-size:11px;margin-top:2px}
-  .card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:22px;margin-bottom:14px;max-width:680px;margin-left:auto;margin-right:auto}
-  .title{font-size:20px;font-weight:800;color:#0f1c3f;margin-bottom:8px}
-  .desc{font-size:13px;color:#6b7280;line-height:1.6;margin-bottom:16px}
-  .q-label{font-size:12px;font-weight:700;color:#374151;margin-bottom:8px;display:block}
-  .q-num{background:#0f1c3f;color:#c9a84c;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;margin-right:8px}
-  .option{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:7px;margin-bottom:6px;cursor:pointer;transition:all .15s}
-  .option:hover{border-color:#0f1c3f;background:#f4f6fb}
-  .option input:checked + .option{border-color:#0f1c3f}
-  input[type=radio]{accent-color:#0f1c3f}
-  input[type=text],input[type=email],textarea,select{border:1.5px solid #e5e7eb;border-radius:7px;padding:9px 12px;font-family:inherit;font-size:13px;width:100%;margin-bottom:10px;transition:border-color .15s}
-  input:focus,textarea:focus,select:focus{border-color:#0f1c3f;outline:none}
-  .btn{background:#0f1c3f;color:#fff;border:none;border-radius:8px;padding:12px 28px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;margin-top:8px}
-  .anon-toggle{background:#f3e8ff;border:1.5px solid #d8b4fe;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1a1a2e;min-height:100vh}
+.shell{max-width:740px;margin:0 auto;padding:24px 16px}
+.header{background:linear-gradient(135deg,#0f1c3f,#1a3a6e);color:#fff;border-radius:12px;padding:28px 28px 20px;margin-bottom:20px}
+.header h1{font-size:1.3rem;margin-bottom:6px}
+.header p{font-size:13px;opacity:.8}
+.badge{display:inline-block;background:rgba(255,255,255,.18);border-radius:20px;padding:3px 12px;font-size:11px;margin-top:8px}
+.card{background:#fff;border-radius:12px;padding:22px 24px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.q-num{display:inline-block;background:#0f1c3f;color:#fff;border-radius:5px;padding:2px 9px;font-size:11px;margin-bottom:8px}
+.q-type{display:inline-block;background:#e8f0fe;color:#1a56db;border-radius:5px;padding:2px 9px;font-size:11px;margin-left:6px}
+.q-text{font-weight:600;font-size:15px;margin-bottom:4px}
+.q-help{font-size:12px;color:#6b7280;margin-bottom:12px}
+.required{color:#ef4444}
+label{font-size:13px;display:block;margin-bottom:4px;color:#374151}
+input[type=text],input[type=email],textarea,select{
+  border:1.5px solid #e5e7eb;border-radius:8px;padding:10px 13px;
+  font-family:inherit;font-size:13px;width:100%;transition:border-color .15s}
+input:focus,textarea:focus,select:focus{border-color:#0f1c3f;outline:none}
+.btn-choice{border:2px solid #e5e7eb;border-radius:8px;padding:10px 16px;background:#fff;
+  cursor:pointer;font-size:13px;font-family:inherit;transition:all .15s;text-align:center;width:100%;display:block}
+.btn-choice:hover{border-color:#0f1c3f;background:#f0f4ff}
+.btn-choice.active{border-color:#0f1c3f;background:#0f1c3f;color:#fff}
+.rating-row{display:flex;gap:6px;flex-wrap:wrap}
+.rating-btn{border:2px solid #e5e7eb;border-radius:8px;padding:8px 14px;background:#fff;
+  cursor:pointer;font-size:13px;font-family:inherit;transition:all .15s;min-width:42px;text-align:center}
+.rating-btn:hover{border-color:#6366f1;background:#f0f0ff}
+.rating-btn.active{border-color:#6366f1;background:#6366f1;color:#fff}
+.likert-row{display:flex;gap:8px;flex-wrap:wrap}
+.likert-btn{border:2px solid #e5e7eb;border-radius:8px;padding:9px 14px;background:#fff;
+  cursor:pointer;font-size:12px;font-family:inherit;transition:all .15s;flex:1;text-align:center}
+.likert-btn:hover{border-color:#0f1c3f}
+.likert-btn.active{border-color:#0f1c3f;background:#0f1c3f;color:#fff}
+.yn-row{display:flex;gap:12px}
+.yn-btn{border:2px solid #e5e7eb;border-radius:8px;padding:10px 28px;background:#fff;
+  cursor:pointer;font-size:14px;font-family:inherit;transition:all .15s}
+.yn-yes.active{border-color:#16a34a;background:#16a34a;color:#fff}
+.yn-no.active{border-color:#ef4444;background:#ef4444;color:#fff}
+.yn-yes:hover{border-color:#16a34a}
+.yn-no:hover{border-color:#ef4444}
+.checkbox-opt{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid #e5e7eb;
+  border-radius:8px;margin-bottom:7px;cursor:pointer;transition:border-color .15s}
+.checkbox-opt:hover{border-color:#0f1c3f}
+.checkbox-opt input{width:16px;height:16px;accent-color:#0f1c3f;cursor:pointer}
+.anon-box{background:#f3e8ff;border:1.5px solid #d8b4fe;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.anon-box input{width:16px;height:16px;accent-color:#7c3aed}
+.submit-btn{background:linear-gradient(135deg,#0f1c3f,#1a3a6e);color:#fff;border:none;
+  border-radius:10px;padding:14px 32px;font-size:15px;font-weight:600;cursor:pointer;width:100%;
+  font-family:inherit;transition:opacity .15s}
+.submit-btn:hover{opacity:.9}
+.progress-bar{height:6px;background:#e5e7eb;border-radius:3px;margin-bottom:20px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#0f1c3f,#6366f1);border-radius:3px;transition:width .3s}
 </style>
 </head>
 <body>
-<div class="header" style="max-width:680px;margin:0 auto 20px">
-  <h1>✈ Jordan Aviation</h1>
-  <p>Safety Management System — Safety Survey</p>
-</div>
-<div class="card">
-  <div class="title">{{ survey.title }}</div>
-  <div class="desc">{{ survey.description or '' }}</div>
-  {% if survey.end_date %}<p style="font-size:12px;color:#6b7280;margin-bottom:16px">Closes: {{ survey.end_date }}</p>{% endif %}
-</div>
-<form method="POST">
+<div class="shell">
+  <div class="header">
+    <h1>{{ survey.title }}</h1>
+    {% if survey.description %}<p>{{ survey.description }}</p>{% endif %}
+    <div>
+      <span class="badge">{{ survey.survey_type }}</span>
+      {% if survey.end_date %}<span class="badge">Closes {{ survey.end_date }}</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+
+  <form method="POST" id="surveyForm" onsubmit="return validateForm()">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-  <!-- Respondent info -->
-  <div class="card">
-    <div class="anon-toggle">
-      <input type="checkbox" name="anonymous" value="yes" id="anon" style="width:16px;height:16px;accent-color:#7c3aed"/>
-      <label for="anon" style="font-size:13px;color:#7c3aed;font-weight:600;cursor:pointer">
-        🔒 Submit anonymously — your identity will not be recorded
-      </label>
-    </div>
-    <div id="id-fields">
-      <input type="text" name="name" placeholder="Your full name (optional)"/>
-      <input type="email" name="email" placeholder="Your email (optional)"/>
-      <select name="department_id">
-        <option value="">Select your department…</option>
-        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
-      </select>
-    </div>
-  </div>
-  <!-- Questions -->
-  {% for q in questions %}
-  <div class="card">
-    <span class="q-num">{{ loop.index }}</span>
-    <label class="q-label" style="display:inline">{{ (q.text if q is mapping and 'text' in q else q)|string }}</label>
-    {% if (q.type if q is mapping and 'type' in q else 'text') == 'rating' %}
-      <div style="display:flex;gap:8px;margin-top:10px">
-        {% for v in range(1,6) %}
-        <label style="flex:1;text-align:center;border:1.5px solid #e5e7eb;border-radius:8px;padding:10px 4px;cursor:pointer">
-          <input type="radio" name="q_{{ loop.index0 }}" value="{{ v }}" style="display:block;margin:0 auto 4px;accent-color:#0f1c3f"/>
-          <span style="font-size:13px;font-weight:700">{{ v }}</span>
+    {% if not survey.is_anonymous %}
+    <div class="card">
+      <div class="anon-box">
+        <input type="checkbox" name="is_anonymous" id="anonCheck" onchange="toggleAnon(this)"/>
+        <label for="anonCheck" style="color:#7c3aed;font-weight:600;cursor:pointer;margin:0">
+          🔒 Submit anonymously — your identity will not be recorded
         </label>
-        {% endfor %}
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">
-        <span>Poor</span><span>Excellent</span>
+      <div id="identityFields">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fg"><label>Your Full Name</label>
+            <input type="text" name="name" placeholder="Full name…"/>
+          </div>
+          <div class="fg"><label>Email (optional)</label>
+            <input type="email" name="email" placeholder="your@email.com"/>
+          </div>
+        </div>
+        {% if all_departments %}
+        <div class="fg"><label>Department</label>
+          <select name="department_id">
+            <option value="">-- Select Department --</option>
+            {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
       </div>
-    {% elif q.get('options') %}
-      {% for opt in q.options %}
-      <label class="option" style="margin-top:{% if loop.first %}10px{% else %}0{% endif %}">
-        <input type="radio" name="q_{{ loop.index0 }}" value="{{ opt }}"/>
-        <span style="font-size:13px">{{ opt }}</span>
-      </label>
-      {% endfor %}
-    {% else %}
-      <textarea name="q_{{ loop.index0 }}" rows="3" placeholder="Your answer…" style="margin-top:10px"></textarea>
+    </div>
     {% endif %}
-  </div>
-  {% endfor %}
-  <div class="card">
-    <button type="submit" class="btn">📋 Submit Survey Response</button>
-  </div>
-</form>
+
+    {% for q in questions %}
+    {% set idx = loop.index0 %}
+    {% set qtype = q.get('type','text') if q is mapping else 'text' %}
+    {% set qtext = q.get('text', q) if q is mapping else q %}
+    {% set qhelp = q.get('description','') if q is mapping else '' %}
+    {% set qreq  = q.get('required', True) if q is mapping else True %}
+    {% set opts  = q.get('options',[]) if q is mapping else [] %}
+
+    <div class="card" id="qcard_{{ idx }}">
+      <span class="q-num">Q{{ loop.index }}</span>
+      <span class="q-type">
+        {% if qtype == 'yes_no' %}Yes / No
+        {% elif qtype == 'likert3' %}Agreement Scale
+        {% elif qtype == 'likert5' %}Likert Scale
+        {% elif qtype == 'rating5' %}Rating 1–5
+        {% elif qtype == 'rating10' %}Rating 1–10
+        {% elif qtype == 'single' %}Single Choice
+        {% elif qtype == 'multiple' %}Multiple Choice
+        {% elif qtype == 'dropdown' %}Dropdown
+        {% elif qtype == 'long_text' %}Long Text
+        {% elif qtype == 'short_text' %}Short Text
+        {% else %}Free Text{% endif %}
+      </span>
+      <div class="q-text" style="margin-top:8px">
+        {{ qtext }}{% if qreq %} <span class="required">*</span>{% endif %}
+      </div>
+      {% if qhelp %}<div class="q-help">{{ qhelp }}</div>{% endif %}
+
+      {# YES / NO #}
+      {% if qtype == 'yes_no' %}
+        <input type="hidden" name="q_{{ idx }}" id="v_{{ idx }}" {% if qreq %}data-required="1"{% endif %}/>
+        <div class="yn-row">
+          <button type="button" class="yn-btn yn-yes" onclick="pickSingle('{{ idx }}','Yes',this)">✅ Yes</button>
+          <button type="button" class="yn-btn yn-no"  onclick="pickSingle('{{ idx }}','No', this)">❌ No</button>
+        </div>
+
+      {# LIKERT 3 #}
+      {% elif qtype == 'likert3' %}
+        <input type="hidden" name="q_{{ idx }}" id="v_{{ idx }}" {% if qreq %}data-required="1"{% endif %}/>
+        <div class="likert-row">
+          {% for opt in ['Agree','Neutral','Disagree'] %}
+          <button type="button" class="likert-btn" onclick="pickSingle('{{ idx }}','{{ opt }}',this)">{{ opt }}</button>
+          {% endfor %}
+        </div>
+
+      {# LIKERT 5 #}
+      {% elif qtype == 'likert5' %}
+        <input type="hidden" name="q_{{ idx }}" id="v_{{ idx }}" {% if qreq %}data-required="1"{% endif %}/>
+        <div class="likert-row">
+          {% for opt in ['Strongly Agree','Agree','Neutral','Disagree','Strongly Disagree'] %}
+          <button type="button" class="likert-btn" style="font-size:11px" onclick="pickSingle('{{ idx }}','{{ opt }}',this)">{{ opt }}</button>
+          {% endfor %}
+        </div>
+
+      {# RATING 5 #}
+      {% elif qtype == 'rating5' %}
+        <input type="hidden" name="q_{{ idx }}" id="v_{{ idx }}" {% if qreq %}data-required="1"{% endif %}/>
+        <div class="rating-row">
+          {% for n in range(1,6) %}
+          <button type="button" class="rating-btn" onclick="pickSingle('{{ idx }}','{{ n }}',this)">{{ n }}</button>
+          {% endfor %}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted,#6b7280);margin-top:4px"><span>Low</span><span>High</span></div>
+
+      {# RATING 10 #}
+      {% elif qtype == 'rating10' %}
+        <input type="hidden" name="q_{{ idx }}" id="v_{{ idx }}" {% if qreq %}data-required="1"{% endif %}/>
+        <div class="rating-row">
+          {% for n in range(1,11) %}
+          <button type="button" class="rating-btn" onclick="pickSingle('{{ idx }}','{{ n }}',this)">{{ n }}</button>
+          {% endfor %}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted,#6b7280);margin-top:4px"><span>Low</span><span>High</span></div>
+
+      {# SINGLE CHOICE #}
+      {% elif qtype == 'single' %}
+        <input type="hidden" name="q_{{ idx }}" id="v_{{ idx }}" {% if qreq %}data-required="1"{% endif %}/>
+        {% if opts %}
+          {% for opt in opts %}
+          <div style="margin-bottom:7px">
+            <button type="button" class="btn-choice" onclick="pickSingle('{{ idx }}','{{ opt }}',this)">{{ opt }}</button>
+          </div>
+          {% endfor %}
+        {% else %}
+          <input type="text" name="q_{{ idx }}" {% if qreq %}required{% endif %} placeholder="Your answer…"/>
+        {% endif %}
+
+      {# MULTIPLE CHOICE #}
+      {% elif qtype == 'multiple' %}
+        <div id="multi_{{ idx }}">
+          {% for opt in opts %}
+          <label class="checkbox-opt">
+            <input type="checkbox" name="q_{{ idx }}[]" value="{{ opt }}" onchange="updateMulti('{{ idx }}')"/>
+            {{ opt }}
+          </label>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="q_{{ idx }}" id="v_{{ idx }}" {% if qreq %}data-required="1"{% endif %}/>
+
+      {# DROPDOWN #}
+      {% elif qtype == 'dropdown' %}
+        <select name="q_{{ idx }}" {% if qreq %}required{% endif %}>
+          <option value="">-- Select an option --</option>
+          {% for opt in opts %}<option value="{{ opt }}">{{ opt }}</option>{% endfor %}
+        </select>
+
+      {# LONG TEXT #}
+      {% elif qtype == 'long_text' %}
+        <textarea name="q_{{ idx }}" rows="5" {% if qreq %}required{% endif %} placeholder="Please provide a detailed answer…"></textarea>
+
+      {# SHORT TEXT / TEXT (default) #}
+      {% else %}
+        <input type="text" name="q_{{ idx }}" {% if qreq %}required{% endif %} placeholder="Your answer…"/>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="card">
+      <button type="submit" class="submit-btn">📤 Submit Response</button>
+    </div>
+  </form>
+</div>
+
 <script>
-document.getElementById('anon').addEventListener('change', function() {
-  document.getElementById('id-fields').style.opacity = this.checked ? '.3' : '1';
+function pickSingle(idx, val, btn) {
+  document.getElementById('v_'+idx).value = val;
+  // Clear siblings
+  var parent = btn.parentElement;
+  parent.querySelectorAll('button').forEach(function(b){
+    b.classList.remove('active');
+  });
+  btn.classList.add('active');
+  updateProgress();
+}
+
+function updateMulti(idx) {
+  var checks = document.querySelectorAll('input[name="q_'+idx+'[]"]:checked');
+  var vals = Array.from(checks).map(function(c){return c.value;});
+  document.getElementById('v_'+idx).value = vals.join('||');
+  updateProgress();
+}
+
+function toggleAnon(cb) {
+  var fields = document.getElementById('identityFields');
+  if (fields) fields.style.display = cb.checked ? 'none' : 'block';
+}
+
+function validateForm() {
+  var ok = true;
+  document.querySelectorAll('[data-required="1"]').forEach(function(inp) {
+    if (!inp.value.trim()) {
+      var card = inp.closest('.card');
+      if (card) { card.style.borderColor='#ef4444'; card.style.border='2px solid #ef4444'; }
+      ok = false;
+    }
+  });
+  if (!ok) { alert('Please answer all required questions before submitting.'); }
+  return ok;
+}
+
+function updateProgress() {
+  var total = document.querySelectorAll('[data-required="1"]').length
+            + document.querySelectorAll('input[required],textarea[required],select[required]').length;
+  if (!total) return;
+  var answered = document.querySelectorAll('[data-required="1"]').length - 
+                 Array.from(document.querySelectorAll('[data-required="1"]')).filter(function(i){return !i.value;}).length;
+  answered += Array.from(document.querySelectorAll('input[required]')).filter(function(i){return i.value;}).length;
+  document.getElementById('progressFill').style.width = Math.min(100, Math.round(answered/total*100))+'%';
+}
+
+// Wire text/select inputs to progress
+document.querySelectorAll('input[required],textarea[required],select[required]').forEach(function(el){
+  el.addEventListener('input', updateProgress);
+  el.addEventListener('change', updateProgress);
 });
 </script>
 </body>

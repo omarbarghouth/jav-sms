@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Survey Analytics — {{ s.title }}{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px">
+  <a href="/safety-promotion/survey/{{ s.id }}" style="color:var(--muted);font-size:13px">← {{ s.title }}</a>
+</div>
+<div class="page-title">📊 Survey Analytics</div>
+<div style="color:var(--muted);font-size:13px;margin-bottom:20px">{{ s.title }} · {{ s.survey_type }}</div>
+
+<!-- KPI Strip -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+  {% for label, val, sub, color in [
+    ('Responses', responses|length, 'submitted', '#0f1c3f'),
+    ('Target', s.target_count or 0, 'expected', '#6366f1'),
+    ('Response Rate', resp_rate|string + '%', 'completion', '#16a34a' if resp_rate >= 70 else '#f59e0b' if resp_rate >= 40 else '#ef4444'),
+    ('Questions', questions|length, 'total', '#0ea5e9'),
+  ] %}
+  <div class="card" style="padding:18px;text-align:center">
+    <div style="font-size:26px;font-weight:700;color:{{ color }}">{{ val }}</div>
+    <div style="font-size:12px;font-weight:600;margin-top:2px">{{ label }}</div>
+    <div style="font-size:11px;color:var(--muted)">{{ sub }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Response rate bar -->
+<div class="card" style="padding:18px;margin-bottom:24px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-weight:600;font-size:14px">Response Rate</span>
+    <span style="font-size:13px;color:var(--muted)">{{ responses|length }} of {{ s.target_count or '?' }} expected</span>
+  </div>
+  <div style="height:12px;background:#e5e7eb;border-radius:6px;overflow:hidden">
+    <div style="height:100%;width:{{ [resp_rate,100]|min }}%;background:linear-gradient(90deg,#0f1c3f,#6366f1);border-radius:6px;transition:width .5s"></div>
+  </div>
+  <div style="font-size:12px;color:var(--muted);margin-top:6px">{{ resp_rate }}% completion rate</div>
+</div>
+
+{% if dept_breakdown %}
+<!-- Department Breakdown -->
+<div class="card" style="padding:18px;margin-bottom:24px">
+  <div style="font-weight:600;font-size:14px;margin-bottom:14px">Responses by Department</div>
+  {% for dept, count in dept_breakdown.items() %}
+  {% set pct = (count / (responses|length) * 100)|round(1) %}
+  <div style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+      <span>{{ dept }}</span>
+      <span style="color:var(--muted)">{{ count }} ({{ pct }}%)</span>
+    </div>
+    <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:{{ pct }}%;background:#0f1c3f;border-radius:4px"></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Per-Question Analytics -->
+<div style="font-weight:600;font-size:15px;margin-bottom:14px">Question-by-Question Analysis</div>
+
+{% for a in analytics %}
+{% set q = a.question %}
+{% set qtype = q.get('type','text') %}
+<div class="card" style="padding:20px;margin-bottom:16px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <span style="background:#0f1c3f;color:#fff;border-radius:5px;padding:2px 9px;font-size:11px">Q{{ loop.index }}</span>
+    <span style="background:#e8f0fe;color:#1a56db;border-radius:5px;padding:2px 9px;font-size:11px">{{ qtype }}</span>
+    <span style="font-size:12px;color:var(--muted)">{{ a.total }} response{{ 's' if a.total != 1 }}</span>
+  </div>
+  <div style="font-weight:600;font-size:14px;margin-bottom:14px">{{ q.get('text','') }}</div>
+
+  {% if qtype in ('single','yes_no','likert3','likert5','dropdown','multiple','rating5','rating10') %}
+    {% if a.tally %}
+      <!-- Bar chart -->
+      {% for key, count in a.tally.items()|sort(attribute='1', reverse=True) %}
+      {% set pct = a.pcts.get(key, 0) %}
+      {% set color = '#16a34a' if key in ('Yes','Strongly Agree','Agree') else '#ef4444' if key in ('No','Disagree','Strongly Disagree') else '#f59e0b' if key == 'Neutral' else '#6366f1' %}
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span style="font-weight:500">{{ key }}</span>
+          <span style="color:var(--muted)">{{ count }} · {{ pct }}%</span>
+        </div>
+        <div style="height:10px;background:#f3f4f6;border-radius:5px;overflow:hidden">
+          <div style="height:100%;width:{{ pct }}%;background:{{ color }};border-radius:5px;transition:width .5s"></div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="color:var(--muted);font-size:13px">No responses yet for this question.</div>
+    {% endif %}
+
+  {% elif qtype in ('text','short_text','long_text') %}
+    {% if a.texts %}
+      <div style="max-height:250px;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
+        {% for txt in a.texts %}
+        <div style="background:#f8fafc;border-left:3px solid #0f1c3f;border-radius:4px;padding:10px 14px;font-size:13px">{{ txt }}</div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div style="color:var(--muted);font-size:13px">No text responses yet.</div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endfor %}
+
+<!-- Export actions -->
+<div class="card" style="padding:18px;display:flex;gap:10px;flex-wrap:wrap">
+  <a href="/safety-promotion/survey/{{ s.id }}/responses" class="btn btn-outline">📋 View All Responses</a>
+  <a href="/safety-promotion/survey/{{ s.id }}" class="btn btn-outline">← Back to Survey</a>
+</div>
+{% endblock %}

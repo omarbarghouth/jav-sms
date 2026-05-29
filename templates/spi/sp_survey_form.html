@@ -1,50 +1,279 @@
 {% extends "base.html" %}
-{% block title %}New Survey{% endblock %}
+{% block title %}{{ 'Edit Survey' if survey else 'New Survey' }}{% endblock %}
 {% block content %}
-<div style="margin-bottom:14px"><a href="/safety-promotion/surveys" style="color:var(--muted);font-size:13px">← Surveys</a></div>
-<div class="page-title">Create Safety Survey</div>
-<form class="form-card" method="POST" style="max-width:640px">
-  <div class="sec">Survey Details</div>
-  <div class="fg"><label>Survey Title *</label><input type="text" name="title" required placeholder="e.g. Annual Safety Culture Survey 2026"/></div>
-  <div class="g2">
-    <div class="fg"><label>Survey Type *</label>
-      <select name="survey_type" required>
-        {% for t in ["Safety Culture Survey","Fatigue Survey","Training Feedback","Reporting Culture Survey","Operational Safety Survey","Human Factors Survey"] %}
-        <option>{{ t }}</option>{% endfor %}
-      </select></div>
-    <div class="fg"><label>Target Responses</label><input type="number" name="target_count" min="0" value="50"/></div>
-  </div>
-  <div class="fg"><label>Department (optional)</label>
-    <select name="department_id">
-      <option value="">All Departments</option>
-      {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
-    </select></div>
-  <div class="g2">
-    <div class="fg"><label>Start Date</label><input type="date" name="start_date"/></div>
-    <div class="fg"><label>End Date</label><input type="date" name="end_date"/></div>
-  </div>
-  <div class="fg"><label>Description</label><textarea name="description" rows="2" placeholder="Survey purpose and objectives…"></textarea></div>
-  <div class="sec">Survey Questions</div>
-  <div id="questions">
-    {% for i in range(5) %}
-    <div class="fg"><label>Question {{ i+1 }}</label><input type="text" name="question" placeholder="Survey question {{ i+1 }}…"/></div>
-    {% endfor %}
-  </div>
-  <button type="button" onclick="addQ()" class="btn btn-outline btn-sm">+ Add Question</button>
-  <div style="display:flex;gap:10px;margin-top:14px">
-    <button type="submit" class="btn btn-nav">📋 Create Survey</button>
-    <a href="/safety-promotion/surveys" class="btn btn-outline">Cancel</a>
+<div style="margin-bottom:14px">
+  <a href="/safety-promotion/surveys" style="color:var(--muted);font-size:13px">← Surveys</a>
+</div>
+<div class="page-title">{{ '✏️ Edit Survey' if survey else '📋 New Dynamic Survey' }}</div>
+
+<form method="POST" id="surveyForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+  <input type="hidden" name="questions_json" id="questions_json"/>
+
+  <div style="display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start">
+
+    <!-- LEFT: Survey Details -->
+    <div>
+      <div class="card" style="padding:20px;margin-bottom:16px">
+        <div class="sec" style="margin-bottom:14px">Survey Details</div>
+        <div class="fg"><label>Survey Title *</label>
+          <input type="text" name="title" required placeholder="e.g. Annual Safety Culture Survey 2026"
+                 value="{{ survey.title if survey else '' }}"/>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fg"><label>Survey Type</label>
+            <select name="survey_type">
+              {% for t in ['Safety Culture Survey','Fatigue Survey','Training Feedback','Reporting Culture Survey','Operational Safety Survey','Human Factors Survey','Leadership Survey','SMS Effectiveness Survey'] %}
+              <option {% if survey and survey.survey_type==t %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="fg"><label>Target Responses</label>
+            <input type="number" name="target_count" min="0" value="{{ survey.target_count if survey else 50 }}"/>
+          </div>
+        </div>
+        <div class="fg"><label>Target Audience</label>
+          <select name="target_audience">
+            {% set ta = survey.target_audience if survey and survey.target_audience else 'all' %}
+            {% for val,lbl in [('all','All Employees'),('pilots','Pilots'),('cabin_crew','Cabin Crew'),('ground','Ground Operations'),('engineering','Engineering'),('occ','OCC / Operations Control'),('specific_dept','Specific Department Only')] %}
+            <option value="{{ val }}" {% if ta==val %}selected{% endif %}>{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg"><label>Department (optional)</label>
+          <select name="department_id">
+            <option value="">All Departments</option>
+            {% for d in departments %}
+            <option value="{{ d.id }}" {% if survey and survey.department_id==d.id %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fg"><label>Start Date</label>
+            <input type="date" name="start_date" value="{{ survey.start_date if survey else '' }}"/>
+          </div>
+          <div class="fg"><label>End Date</label>
+            <input type="date" name="end_date" value="{{ survey.end_date if survey else '' }}"/>
+          </div>
+        </div>
+        <div class="fg"><label>Description / Objective</label>
+          <textarea name="description" rows="3" placeholder="Survey purpose and ICAO Safety Promotion objectives…">{{ survey.description if survey else '' }}</textarea>
+        </div>
+      </div>
+
+      <!-- Question Builder -->
+      <div class="card" style="padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <div class="sec" style="margin:0">❓ Questions</div>
+          <div style="display:flex;gap:8px">
+            <button type="button" onclick="previewSurvey()" class="btn btn-outline btn-sm">👁 Preview</button>
+            <button type="button" onclick="addQuestion()" class="btn btn-nav btn-sm">+ Add Question</button>
+          </div>
+        </div>
+        <div id="questionList" style="display:flex;flex-direction:column;gap:12px">
+          <!-- Questions rendered by JS -->
+        </div>
+        <div id="emptyState" style="text-align:center;padding:40px;color:var(--muted);font-size:13px">
+          <div style="font-size:32px;margin-bottom:8px">📋</div>
+          No questions yet. Click <strong>+ Add Question</strong> to start building.
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Question Type Picker + Actions -->
+    <div style="position:sticky;top:20px">
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        <div class="sec" style="margin-bottom:12px">Question Types</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          {% for qtype, label, icon in [
+            ('text','Free Text','📝'),
+            ('short_text','Short Text','✏️'),
+            ('long_text','Long Text','📄'),
+            ('yes_no','Yes / No','✅'),
+            ('single','Single Choice','🔘'),
+            ('multiple','Multiple Choice','☑️'),
+            ('likert3','Agree Scale (3)','📊'),
+            ('likert5','Likert Scale (5)','📊'),
+            ('rating5','Rating 1–5','⭐'),
+            ('rating10','Rating 1–10','🔢'),
+            ('dropdown','Dropdown','▼'),
+          ] %}
+          <button type="button" onclick="addQuestion('{{ qtype }}')"
+                  style="padding:8px 6px;border:1.5px solid #e5e7eb;border-radius:7px;background:#fff;cursor:pointer;font-size:11px;text-align:left;display:flex;align-items:center;gap:4px;transition:border-color .15s"
+                  onmouseover="this.style.borderColor='#0f1c3f'" onmouseout="this.style.borderColor='#e5e7eb'">
+            <span>{{ icon }}</span> {{ label }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card" style="padding:16px">
+        <button type="submit" class="btn btn-nav" style="width:100%;margin-bottom:8px" onclick="prepareSubmit()">
+          💾 {{ 'Update Survey' if survey else 'Create Survey' }}
+        </button>
+        <a href="/safety-promotion/surveys" class="btn btn-outline" style="width:100%;text-align:center;display:block">Cancel</a>
+      </div>
+    </div>
   </div>
 </form>
+
+<!-- Preview Modal -->
+<div id="previewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;overflow:auto">
+  <div style="max-width:700px;margin:40px auto;background:#fff;border-radius:12px;padding:32px;position:relative">
+    <button onclick="document.getElementById('previewModal').style.display='none'"
+            style="position:absolute;top:16px;right:16px;border:none;background:none;font-size:20px;cursor:pointer">✕</button>
+    <div id="previewContent"></div>
+  </div>
+</div>
+
 {% endblock %}
 {% block scripts %}
 <script>
-var qc = 5;
-function addQ() {
-  qc++;
-  var d = document.createElement("div"); d.className = "fg";
-  d.innerHTML = "<label>Question "+qc+"</label><input type=text name=question placeholder='Survey question "+qc+"…' style='border:1px solid #e5e7eb;border-radius:5px;padding:7px 9px;font-size:13px;font-family:inherit;width:100%'/>";
-  document.getElementById("questions").appendChild(d);
+// ── Question data store ────────────────────────────────────────────────
+var questions = {{ questions_json|safe if questions_json else '[]' }};
+var qCounter  = questions.length;
+
+const TYPE_META = {
+  text:        { label:'Free Text',               opts:false, defaultOpts:[] },
+  short_text:  { label:'Short Text',              opts:false, defaultOpts:[] },
+  long_text:   { label:'Long Text',               opts:false, defaultOpts:[] },
+  yes_no:      { label:'Yes / No',                opts:false, defaultOpts:['Yes','No'] },
+  single:      { label:'Single Choice',           opts:true,  defaultOpts:['Option A','Option B','Option C'] },
+  multiple:    { label:'Multiple Choice',         opts:true,  defaultOpts:['Option A','Option B','Option C'] },
+  likert3:     { label:'Agree / Neutral / Disagree', opts:false, defaultOpts:['Agree','Neutral','Disagree'] },
+  likert5:     { label:'Likert Scale (5)',        opts:false, defaultOpts:['Strongly Agree','Agree','Neutral','Disagree','Strongly Disagree'] },
+  rating5:     { label:'Rating 1–5',              opts:false, defaultOpts:[] },
+  rating10:    { label:'Rating 1–10',             opts:false, defaultOpts:[] },
+  dropdown:    { label:'Dropdown',                opts:true,  defaultOpts:['Option A','Option B','Option C'] },
+};
+
+function renderAll() {
+  var list = document.getElementById('questionList');
+  var empty = document.getElementById('emptyState');
+  list.innerHTML = '';
+  empty.style.display = questions.length ? 'none' : 'block';
+  questions.forEach(function(q, idx) { list.appendChild(makeCard(q, idx)); });
 }
+
+function makeCard(q, idx) {
+  var meta = TYPE_META[q.type] || TYPE_META.text;
+  var div  = document.createElement('div');
+  div.className = 'card';
+  div.style = 'padding:16px;border:2px solid #e5e7eb;border-radius:10px;background:#fafbfc';
+  div.dataset.idx = idx;
+
+  var optHTML = '';
+  if (meta.opts) {
+    optHTML = '<div style="margin-top:10px"><label style="font-size:12px;color:var(--muted)">Options (one per line)</label>'
+            + '<textarea rows="3" onchange="updateOpts('+idx+',this.value)" style="font-size:12px;margin-top:4px">'
+            + (q.options||[]).join('\n') + '</textarea></div>';
+  }
+
+  div.innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+    + '<span style="background:#0f1c3f;color:#fff;border-radius:5px;padding:2px 8px;font-size:11px;white-space:nowrap">Q'+(idx+1)+'</span>'
+    + '<span style="background:#e8f0fe;color:#1a56db;border-radius:5px;padding:2px 8px;font-size:11px">'+meta.label+'</span>'
+    + '<div style="flex:1"></div>'
+    + '<button type="button" onclick="moveQ('+idx+',-1)" title="Move up" style="border:none;background:none;cursor:pointer;font-size:14px">↑</button>'
+    + '<button type="button" onclick="moveQ('+idx+',1)"  title="Move down" style="border:none;background:none;cursor:pointer;font-size:14px">↓</button>'
+    + '<button type="button" onclick="deleteQ('+idx+')" style="border:none;background:none;cursor:pointer;color:#ef4444;font-size:16px">🗑</button>'
+    + '</div>'
+    + '<div class="fg" style="margin-bottom:8px">'
+    + '<label style="font-size:12px">Question Text *</label>'
+    + '<input type="text" value="'+esc(q.text||'')+'" onchange="questions['+idx+'].text=this.value" placeholder="Enter question…"/>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div class="fg"><label style="font-size:12px">Help Text (optional)</label>'
+    + '<input type="text" value="'+esc(q.description||'')+'" onchange="questions['+idx+'].description=this.value" placeholder="Guidance for respondent…"/></div>'
+    + '<div class="fg"><label style="font-size:12px">Required</label>'
+    + '<select onchange="questions['+idx+'].required=(this.value===\'true\')">'
+    + '<option value="true"'+(q.required!==false?' selected':'')+'>Required</option>'
+    + '<option value="false"'+(q.required===false?' selected':'')+'>Optional</option>'
+    + '</select></div>'
+    + '</div>'
+    + optHTML;
+  return div;
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function addQuestion(type) {
+  type = type || 'text';
+  var meta = TYPE_META[type] || TYPE_META.text;
+  questions.push({ id:'q_'+qCounter, text:'', description:'', type:type,
+                   required:true, order:qCounter, options:[].concat(meta.defaultOpts) });
+  qCounter++;
+  renderAll();
+  // Scroll to bottom
+  var list = document.getElementById('questionList');
+  list.lastChild && list.lastChild.scrollIntoView({behavior:'smooth'});
+}
+
+function deleteQ(idx) {
+  if (!confirm('Delete this question?')) return;
+  questions.splice(idx, 1);
+  renderAll();
+}
+
+function moveQ(idx, dir) {
+  var to = idx + dir;
+  if (to < 0 || to >= questions.length) return;
+  var tmp = questions[idx]; questions[idx] = questions[to]; questions[to] = tmp;
+  questions.forEach(function(q,i){ q.order=i; });
+  renderAll();
+}
+
+function updateOpts(idx, val) {
+  questions[idx].options = val.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+}
+
+function prepareSubmit() {
+  // Collect current text values from inputs before serialising
+  document.querySelectorAll('#questionList [data-idx]').forEach(function(card) {
+    var idx = parseInt(card.dataset.idx);
+    var inp = card.querySelector('input[type=text]');
+    if (inp) questions[idx].text = inp.value;
+  });
+  document.getElementById('questions_json').value = JSON.stringify(questions);
+}
+
+function previewSurvey() {
+  prepareSubmit();
+  var html = '<h2 style="margin-top:0">📋 Survey Preview</h2>';
+  questions.forEach(function(q,i){
+    var meta = TYPE_META[q.type]||TYPE_META.text;
+    html += '<div style="margin-bottom:24px;padding:16px;border:1px solid #e5e7eb;border-radius:8px">';
+    html += '<div style="font-weight:600;margin-bottom:4px">Q'+(i+1)+'. '+esc(q.text)+(q.required?' <span style="color:#ef4444">*</span>':' <span style="color:var(--muted);font-size:12px">(optional)</span>')+'</div>';
+    if (q.description) html += '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'+esc(q.description)+'</div>';
+    html += '<div style="font-size:12px;color:#6366f1;margin-bottom:8px">'+meta.label+'</div>';
+    if (q.type==='yes_no') {
+      html += '<div style="display:flex;gap:10px"><button class="btn btn-outline btn-sm" type="button">✅ Yes</button><button class="btn btn-outline btn-sm" type="button">❌ No</button></div>';
+    } else if (q.type==='likert3') {
+      html += '<div style="display:flex;gap:8px">'+['Agree','Neutral','Disagree'].map(function(o){return '<button class="btn btn-outline btn-sm" type="button">'+o+'</button>';}).join('')+'</div>';
+    } else if (q.type==='likert5') {
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">'+['Strongly Agree','Agree','Neutral','Disagree','Strongly Disagree'].map(function(o){return '<button class="btn btn-outline btn-sm" type="button" style="font-size:11px">'+o+'</button>';}).join('')+'</div>';
+    } else if (q.type==='rating5') {
+      html += '<div style="display:flex;gap:8px">'+[1,2,3,4,5].map(function(n){return '<button class="btn btn-outline btn-sm" type="button">⭐'+n+'</button>';}).join('')+'</div>';
+    } else if (q.type==='rating10') {
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">'+[1,2,3,4,5,6,7,8,9,10].map(function(n){return '<button class="btn btn-outline btn-sm" type="button" style="padding:4px 10px">'+n+'</button>';}).join('')+'</div>';
+    } else if (q.type==='single') {
+      html += (q.options||[]).map(function(o){return '<div style="margin:4px 0"><input type="radio" disabled/> '+esc(o)+'</div>';}).join('');
+    } else if (q.type==='multiple') {
+      html += (q.options||[]).map(function(o){return '<div style="margin:4px 0"><input type="checkbox" disabled/> '+esc(o)+'</div>';}).join('');
+    } else if (q.type==='dropdown') {
+      html += '<select><option value="">-- Select --</option>'+(q.options||[]).map(function(o){return '<option>'+esc(o)+'</option>';}).join('')+'</select>';
+    } else if (q.type==='long_text') {
+      html += '<textarea rows="4" placeholder="Your answer…" style="width:100%"></textarea>';
+    } else {
+      html += '<input type="text" placeholder="Your answer…" style="width:100%"/>';
+    }
+    html += '</div>';
+  });
+  document.getElementById('previewContent').innerHTML = html;
+  document.getElementById('previewModal').style.display = 'block';
+}
+
+// Init
+renderAll();
 </script>
 {% endblock %}

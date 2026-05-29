@@ -11,16 +11,16 @@
 <div class="page-title">Individual Response</div>
 <div class="page-sub">{{ survey.title }}</div>
 
-<div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-top:16px">
+<div style="display:grid;grid-template-columns:280px 1fr;gap:16px;margin-top:16px;align-items:start">
 
   <!-- Respondent Info -->
-  <div class="card" style="height:fit-content">
+  <div class="card" style="height:fit-content;position:sticky;top:20px">
     <div class="card-title">👤 Respondent</div>
     {% if resp.is_anonymous %}
     <div style="text-align:center;padding:20px">
       <div style="font-size:36px;margin-bottom:8px">🔒</div>
-      <div style="font-size:14px;font-weight:700;color:var(--navy)">Anonymous Response</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">Identity protected by safety culture policy</div>
+      <div style="font-size:14px;font-weight:700;color:var(--navy)">Anonymous</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Identity protected</div>
     </div>
     {% else %}
     <div class="fg"><label>Name</label>
@@ -47,26 +47,59 @@
     </div>
   </div>
 
-  <!-- Question / Answer Pairs -->
+  <!-- Q&A -->
   <div class="card">
     <div class="card-title">💬 Answers</div>
+    {% if not qa_pairs %}
+      <div style="color:var(--muted);font-size:13px;padding:16px">No answers recorded for this response.</div>
+    {% endif %}
     {% for q, a in qa_pairs %}
-    <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
-                  color:var(--muted);margin-bottom:6px">
-        Question {{ loop.index }}
+    {% set qtype = q.get('type','text') if q is mapping else 'text' %}
+    <div style="margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="background:#0f1c3f;color:#fff;border-radius:4px;padding:1px 8px;font-size:10px">Q{{ loop.index }}</span>
+        <span style="background:#e8f0fe;color:#1a56db;border-radius:4px;padding:1px 8px;font-size:10px">{{ qtype }}</span>
       </div>
-      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px">
-        {{ q.text if q is mapping else q }}
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
+        {{ q.get('text','') if q is mapping else q }}
       </div>
-      <div style="background:#f4f6fb;border-left:4px solid #0f1c3f;padding:10px 14px;
-                  border-radius:0 7px 7px 0;font-size:13px;color:#374151">
-        {% if a and a != '—' %}
-          {{ a }}
+      {% if a and a != '—' %}
+        {% if qtype in ('yes_no',) %}
+          <span style="display:inline-block;padding:6px 18px;border-radius:20px;font-weight:600;font-size:13px;
+                       background:{{ '#d1fae5' if a=='Yes' else '#fee2e2' }};
+                       color:{{ '#15803d' if a=='Yes' else '#dc2626' }}">
+            {{ '✅' if a=='Yes' else '❌' }} {{ a }}
+          </span>
+        {% elif qtype in ('likert3','likert5') %}
+          <span style="display:inline-block;padding:6px 18px;border-radius:20px;font-weight:600;font-size:13px;
+                       background:{{ '#d1fae5' if 'Agree' in a else '#fee2e2' if 'Disagree' in a else '#fef3c7' }};
+                       color:{{ '#15803d' if 'Agree' in a else '#dc2626' if 'Disagree' in a else '#92400e' }}">
+            {{ a }}
+          </span>
+        {% elif qtype in ('rating5','rating10') %}
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:24px;font-weight:700;color:#6366f1">{{ a }}</span>
+            <span style="color:var(--muted);font-size:12px">/ {{ '5' if qtype=='rating5' else '10' }}</span>
+            <div style="flex:1;max-width:200px;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden">
+              <div style="height:100%;border-radius:4px;background:linear-gradient(90deg,#6366f1,#0f1c3f);
+                           width:{{ (a|int / (5 if qtype=='rating5' else 10) * 100)|round }}%"></div>
+            </div>
+          </div>
+        {% elif '||' in a|string %}
+          {# Multiple choice stored as pipe-separated #}
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            {% for choice in a.split('||') %}
+            <span style="background:#e8f0fe;color:#1a56db;border-radius:20px;padding:4px 12px;font-size:12px">{{ choice }}</span>
+            {% endfor %}
+          </div>
         {% else %}
-          <span style="color:var(--muted);font-style:italic">No answer provided</span>
+          <div style="background:#f4f6fb;border-left:4px solid #0f1c3f;padding:10px 14px;border-radius:0 7px 7px 0;font-size:13px">
+            {{ a }}
+          </div>
         {% endif %}
-      </div>
+      {% else %}
+        <span style="color:var(--muted);font-style:italic;font-size:13px">No answer provided</span>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

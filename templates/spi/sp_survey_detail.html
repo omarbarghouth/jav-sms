@@ -3,9 +3,12 @@
 {% block content %}
 <div style="margin-bottom:14px"><a href="/safety-promotion/surveys" style="color:var(--muted);font-size:13px">← Surveys</a>
   <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-    <a href="/safety-promotion/survey/{{ s.id }}/responses" class="btn btn-nav btn-sm">📊 View Responses</a>
+    <a href="/safety-promotion/survey/{{ s.id }}/analytics" class="btn btn-nav btn-sm">📊 Analytics</a>
+    <a href="/safety-promotion/survey/{{ s.id }}/responses" class="btn btn-outline btn-sm">📋 All Responses</a>
+    {% if s.status != 'Active' %}<a href="/safety-promotion/survey/{{ s.id }}/edit" class="btn btn-outline btn-sm">✏️ Edit</a>{% endif %}
     <form method="POST" action="/safety-promotion/survey/{{ s.id }}/send-email" style="display:inline">
-      <button type="submit" class="btn btn-gold btn-sm">📧 Send Survey by Email</button>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="btn btn-gold btn-sm">📧 Send Email</button>
     </form>
     <a href="/safety-promotion/survey/{{ s.id }}/respond-public" target="_blank" class="btn btn-outline btn-sm">🔗 Public Link</a>
   </div></div>
