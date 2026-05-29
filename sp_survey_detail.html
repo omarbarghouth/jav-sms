@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}{{ s.title }}{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="/safety-promotion/surveys" style="color:var(--muted);font-size:13px">← Surveys</a>
+  <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+    <a href="/safety-promotion/survey/{{ s.id }}/analytics" class="btn btn-nav btn-sm">📊 Analytics</a>
+    <a href="/safety-promotion/survey/{{ s.id }}/responses" class="btn btn-outline btn-sm">📋 All Responses</a>
+    {% if s.status != 'Active' %}<a href="/safety-promotion/survey/{{ s.id }}/edit" class="btn btn-outline btn-sm">✏️ Edit</a>{% endif %}
+    <form method="POST" action="/safety-promotion/survey/{{ s.id }}/send-email" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="btn btn-gold btn-sm">📧 Send Email</button>
+    </form>
+    <a href="/safety-promotion/survey/{{ s.id }}/respond-public" target="_blank" class="btn btn-outline btn-sm">🔗 Public Link</a>
+  </div></div>
+
+    <div style="background:#f8f9fc;border:1px solid var(--border);border-radius:9px;padding:16px 18px;margin-bottom:14px">
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--navy);margin-bottom:10px">
+        📧 Send by Email
+      </div>
+      <form method="POST" action="/safety-promotion/survey/{{ s.id }}/send-email" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="fg" style="margin:0;flex:1;min-width:160px">
+          <label>Department (blank = All)</label>
+          <select name="dept_id">
+            <option value="">All Departments</option>
+            {%for d in all_departments%}<option value="{{d.id}}">{{d.name}}</option>{%endfor%}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-sm" style="background:#7c3aed;color:#fff;margin-bottom:14px"
+                onclick="return confirm('Send Survey by Email\nThis will send to your distribution list.')">
+          📧 Send Survey by Email
+        </button>
+      </form>
+      <div style="font-size:11px;color:var(--muted)">
+        Manage recipients at <a href="/safety-promotion/distribution" style="color:var(--navy);font-weight:600">Distribution List →</a>
+        &nbsp;·&nbsp; <a href="/safety-promotion/email-log" style="color:var(--navy);font-weight:600">Email Log →</a>
+      </div>
+    </div>
+<div class="page-title">{{ s.title }}</div>
+<div class="page-sub">{{ s.survey_type }} · {{ s.start_date or "—" }} → {{ s.end_date or "—" }}</div>
+
+<!-- Status & response stats -->
+<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+  <div class="stat-card" style="border-top:3px solid {% if s.status=="Active" %}#15803d{% elif s.status=="Closed" %}#6b7280{% else %}#d97706{% endif %}">
+    <div class="stat-val" style="color:{% if s.status=="Active" %}#15803d{% elif s.status=="Closed" %}#6b7280{% else %}#d97706{% endif %}">{{ s.status }}</div>
+    <div class="stat-lbl">Status</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#1d4ed8">{{ s.response_count or 0 }}</div>
+    <div class="stat-lbl">Responses</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" style="color:#374151">{{ s.target_count or 0 }}</div>
+    <div class="stat-lbl">Target</div>
+  </div>
+  <div class="stat-card" style="border-top:3px solid {% if pct >= 80 %}#15803d{% elif pct >= 50 %}#d97706{% else %}#dc2626{% endif %}">
+    <div class="stat-val" style="color:{% if pct >= 80 %}#15803d{% elif pct >= 50 %}#d97706{% else %}#dc2626{% endif %}">{{ pct }}%</div>
+    <div class="stat-lbl">Participation Rate</div>
+  </div>
+</div>
+
+<!-- Progress bar -->
+<div class="card" style="padding:16px 20px;margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;font-weight:700">
+    <span>Response Progress</span>
+    <span>{{ s.response_count or 0 }} / {{ s.target_count or 0 }} responses</span>
+  </div>
+  <div style="height:16px;background:#e5e7eb;border-radius:99px;overflow:hidden">
+    <div style="height:100%;width:{{ [pct,100]|min }}%;background:{% if pct >= 80 %}#15803d{% elif pct >= 50 %}#d97706{% else %}#dc2626{% endif %};border-radius:99px;transition:width .5s"></div>
+  </div>
+  {% if pct < 50 %}<div style="font-size:11px;color:#dc2626;margin-top:5px">⚠ Low participation rate — send reminders</div>{% endif %}
+</div>
+
+<!-- Questions -->
+{% if questions %}
+<div class="card">
+  <div class="card-title">Survey Questions <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:6px">{{ questions|length }} question{{ 's' if questions|length != 1 }}</span></div>
+  <ol style="font-size:13px;color:#374151;padding-left:20px;margin:0">
+    {% for q in questions %}
+    {% set qtext = q.text if q is mapping else q %}
+    {% set qtype = q.type if q is mapping else 'text' %}
+    {% set qopts = q.options if q is mapping else [] %}
+    {% set qreq  = q.required if q is mapping else False %}
+    <li style="padding:10px 0;border-bottom:1px solid #f1f5f9{% if loop.last %};border-bottom:none{% endif %}">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1">
+          <span style="font-weight:600;color:#1e293b">{{ qtext }}</span>
+          {% if qreq %}<span style="color:#dc2626;margin-left:4px;font-size:11px">*required</span>{% endif %}
+        </div>
+        <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;
+          background:{% if qtype in ['single','radio'] %}#dbeafe{% elif qtype in ['multiple','checkbox'] %}#ede9fe{% elif qtype == 'yes_no' %}#dcfce7{% elif qtype in ['likert3','likert5'] %}#fef3c7{% elif qtype in ['rating5','rating10','rating'] %}#ffedd5{% elif qtype == 'dropdown' %}#f1f5f9{% else %}#f8fafc{% endif %};
+          color:{% if qtype in ['single','radio'] %}#1d4ed8{% elif qtype in ['multiple','checkbox'] %}#6d28d9{% elif qtype == 'yes_no' %}#15803d{% elif qtype in ['likert3','likert5'] %}#92400e{% elif qtype in ['rating5','rating10','rating'] %}#c2410c{% elif qtype == 'dropdown' %}#475569{% else %}#64748b{% endif %}">
+          {{ {'single':'Single Choice','radio':'Single Choice','multiple':'Multiple Choice','checkbox':'Multiple Choice','yes_no':'Yes / No','likert3':'Likert 3','likert5':'Likert 5','rating5':'Rating 1–5','rating10':'Rating 1–10','rating':'Rating','dropdown':'Dropdown','text':'Free Text','short_text':'Short Text','long_text':'Long Text'}.get(qtype, qtype) }}
+        </span>
+      </div>
+      {% if qopts %}
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;padding-left:2px">
+        {% for opt in qopts %}
+        <span style="font-size:11px;padding:2px 9px;background:#f1f5f9;border-radius:20px;color:#475569;border:1px solid #e2e8f0">{{ opt }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endif %}
+
+<!-- Description -->
+{% if s.description %}
+<div class="card">
+  <div class="card-title">Survey Description</div>
+  <p style="font-size:13px;color:#374151;line-height:1.7">{{ s.description }}</p>
+</div>
+{% endif %}
+
+<!-- Actions -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+  {% if s.status == "Draft" %}
+  <form method="POST" action="/safety-promotion/survey/{{ s.id }}/activate">
+    <button class="btn btn-nav">Activate Survey</button>
+  </form>
+  {% elif s.status == "Active" %}
+  <form method="POST" action="/safety-promotion/survey/{{ s.id }}/respond">
+    <button class="btn btn-nav" style="background:#15803d">+ Record Response</button>
+  </form>
+  <form method="POST" action="/safety-promotion/survey/{{ s.id }}/close">
+    <button class="btn btn-outline">Close Survey</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
