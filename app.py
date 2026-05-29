@@ -2083,14 +2083,34 @@ def api_mobile_safety_ping():
         except Exception:
             reads = -1
             table_ok = False
+        # Try to fetch first active survey and its questions
+        survey_error = None
+        survey_sample = None
+        try:
+            s = SafetySurvey.query.filter_by(status='Active').first()
+            if s:
+                survey_sample = {
+                    'id': s.id,
+                    'title': s.title,
+                    'start_date': str(s.start_date or ''),
+                    'has_questions': bool(s.questions),
+                }
+                try:
+                    _ = SurveyResponse.query.filter_by(survey_id=s.id).count()
+                except Exception as se:
+                    survey_error = str(se)[:200]
+        except Exception as se2:
+            survey_error = str(se2)[:200]
         return api_ok({
-            'version':      'phase5-v2',
+            'version':      'phase5-v3',
             'surveys_active': surveys,
             'bulletins_active': bulletins,
             'newsletters_published': newsletters,
             'lessons_published': lessons,
             'promo_reads_table': table_ok,
             'promo_reads_count': reads,
+            'survey_sample': survey_sample,
+            'survey_error': survey_error,
         }, 'pong')
     except Exception as e:
         return api_err(str(e)[:300], 500)
@@ -2166,8 +2186,14 @@ def api_mobile_safety_feed():
                     item['questions'] = []
                 item['end_date'] = str(s.end_date or '')
                 # Check if this user already responded
-                already = SurveyResponse.query.filter_by(
-                    survey_id=s.id, respondent_name=uid).first() if uid else None
+                try:
+                    already = SurveyResponse.query.filter_by(
+                        survey_id=s.id).filter(
+                        SurveyResponse.respondent_name == uid
+                    ).first() if uid else None
+                except Exception:
+                    db.session.rollback()
+                    already = None
                 item['already_responded'] = bool(already)
                 items.append(item)
 
