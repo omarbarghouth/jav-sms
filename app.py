@@ -10517,23 +10517,34 @@ def ra_wizard_step(hid, step):
             db.session.commit()
 
         elif step == 4:
-            # Save checklist responses
+            # Save checklist responses + compile into current_defenses text
             for row in ra.rows:
                 # Delete existing checklist for this row
                 RAChecklistItem.query.filter_by(
                     assessment_id=ra.id, row_seq=row.seq_num).delete()
+                checked_labels = []
                 for idx, (cat, desc) in enumerate(CONTROL_CHECKLIST):
-                    key     = f'ctrl_{row.seq_num}_{idx}'
-                    notes_k = f'notes_{row.seq_num}_{idx}'
+                    key        = f'ctrl_{row.seq_num}_{idx}'
+                    notes_k    = f'notes_{row.seq_num}_{idx}'
+                    is_checked = key in f
+                    notes_val  = f.get(notes_k, '')
                     item = RAChecklistItem(
                         assessment_id=ra.id,
                         row_seq=row.seq_num,
                         category=cat,
                         description=desc,
-                        checked=key in f,
-                        notes=f.get(notes_k,'')
+                        checked=is_checked,
+                        notes=notes_val
                     )
                     db.session.add(item)
+                    if is_checked:
+                        label = desc
+                        if notes_val:
+                            label += f' ({notes_val})'
+                        checked_labels.append(f'[{cat}] {label}')
+                # Write compiled controls back to the RARow.current_defenses column
+                row.current_defenses = '; '.join(checked_labels) if checked_labels else ''
+                db.session.add(row)
             db.session.commit()
 
         elif step == 5:
