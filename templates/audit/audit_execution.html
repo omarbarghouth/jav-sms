@@ -39,6 +39,7 @@
   {% if s.status == 'Planned' %}
   <div style="margin-top:12px">
     <form method="POST" action="/audit-schedule/{{ s.id }}/start" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-nav" style="background:#1e40af">▶ Start Audit</button>
     </form>
   </div>
@@ -435,8 +436,8 @@
         <div style="display:flex;align-items:center;gap:8px">
           <span style="color:{% if all_no_have_findings is defined and all_no_have_findings %}#15803d{% else %}#dc2626{% endif %};font-size:16px">{% if all_no_have_findings is defined and all_no_have_findings %}✓{% else %}✗{% endif %}</span>
           All NO items have findings
-          </li>
-          <li style="display:flex;align-items:center;gap:8px;padding:5px 0">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
           <span style="color:{% if all_findings_actioned %}#15803d{% else %}#dc2626{% endif %};font-size:16px">{% if all_findings_actioned %}✓{% else %}✗{% endif %}</span>
           All findings have actions
         </div>
@@ -457,115 +458,6 @@
       </div>
 
       {% if can_close and s.status == 'In Progress' %}
-      <!-- Safety Department Review & Close Form -->
-      <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:14px 16px;margin-bottom:16px">
-        <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:6px">
-          ✓ All closure requirements met — Safety Department review required to close
-        </div>
-        <div style="font-size:12px;color:#374151">
-          Complete the safety review below and close the audit officially.
-        </div>
-      </div>
-      <form method="POST" action="/audit-schedule/{{ s.id }}/close">
-        <div class="sec">Safety Department Final Review</div>
-        <div class="g2">
-          <div class="fg">
-            <label>Safety Reviewer *</label>
-            <input type="text" name="closed_by" required placeholder="Safety Manager name"/>
-          </div>
-          <div class="fg">
-            <label>Closing Meeting Date</label>
-            <input type="date" name="closing_meeting" value="{{ today_date }}"/>
-          </div>
-        </div>
-        <div class="fg">
-          <label>Overall Audit Conclusion *</label>
-          <textarea name="final_remarks" rows="3" required
-                    placeholder="Summarise the overall audit outcome, key findings addressed, and safety improvements achieved…"></textarea>
-        </div>
-        <div class="g2">
-          <div class="fg">
-            <label>Audit Result</label>
-            <select name="audit_result">
-              <option value="Satisfactory">Satisfactory</option>
-              <option value="Satisfactory with Observations">Satisfactory with Observations</option>
-              <option value="Unsatisfactory">Unsatisfactory</option>
-            </select>
-          </div>
-          <div class="fg">
-            <label>Follow-up Required?</label>
-            <select name="followup_required">
-              <option value="No">No — Audit complete</option>
-              <option value="Yes">Yes — Follow-up audit scheduled</option>
-            </select>
-          </div>
-        </div>
-        <button type="submit" class="btn btn-nav" style="background:#15803d;margin-top:4px"
-                onclick="return confirm('Close this audit?
-
-This action is final. The audit will be marked Completed.')">
-          🔒 Close Audit & Generate Final Report
-        </button>
-      </form>
-      {% elif s.status == 'Completed' %}
-      <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:14px 16px">
-        <div style="font-size:13px;font-weight:800;color:#15803d;margin-bottom:8px">
-          ✓ Audit Completed
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
-          <div><span style="color:#6b7280">Closed by:</span> <strong>{{ s.closed_by or '—' }}</strong></div>
-          <div><span style="color:#6b7280">Closed on:</span> <strong>{{ s.closure_date or '—' }}</strong></div>
-          {% if s.closing_meeting %}<div><span style="color:#6b7280">Closing meeting:</span> <strong>{{ s.closing_meeting }}</strong></div>{% endif %}
-          {% if s.audit_result %}<div><span style="color:#6b7280">Result:</span> <strong>{{ s.audit_result }}</strong></div>{% endif %}
-        </div>
-        {% if s.final_remarks %}
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #bbf7d0">
-          <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Conclusion</div>
-          <p style="font-size:12px;color:#374151;line-height:1.6">{{ s.final_remarks }}</p>
-        </div>
-        {% endif %}
-        <div style="margin-top:12px">
-          <a href="/audit-schedule/{{ s.id }}/final-report" target="_blank"
-             class="btn btn-sm" style="background:#065f46;color:#fff">
-            📋 View Final Audit Report
-          </a>
-        </div>
-      </div>
-      {% else %}
-      <p style="font-size:12px;color:var(--muted)">Resolve all requirements above before closing.</p>
-      {% endif %}
-    </div>
-
-    <!-- Audit summary -->
-    {% if s.summary %}
-    <div class="card">
-      <div class="card-title">Audit Summary</div>
-      <p style="font-size:13px;line-height:1.7;color:#374151">{{ s.summary }}</p>
-    </div>
-    {% endif %}
-
-  </div>
-</div>
-{% endblock %}
-{% block scripts %}
-<script>
-// Show radio selection visually
-document.querySelectorAll('input[type=radio]').forEach(function(radio) {
-  radio.addEventListener('change', function() {
-    var name = this.name;
-    document.querySelectorAll('input[name="' + name + '"]').forEach(function(r) {
-      var span = r.nextElementSibling;
-      if(r.checked) {
-        span.style.background = span.dataset.col || '';
-        span.style.color = '#fff';
-      } else {
-        span.style.background = '#fff';
-      }
-    });
-  });
-});
-</script>
-{% endblock %}
       <!-- Safety Department Review & Close Form -->
       <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:14px 16px;margin-bottom:16px">
         <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:6px">
@@ -663,7 +555,7 @@ document.querySelectorAll('input[type=radio]').forEach(function(radio) {
     var name = this.name;
     document.querySelectorAll('input[name="' + name + '"]').forEach(function(r) {
       var span = r.nextElementSibling;
-      if(r.checked) {
+      if (r.checked) {
         span.style.background = span.dataset.col || '';
         span.style.color = '#fff';
       } else {
@@ -673,12 +565,18 @@ document.querySelectorAll('input[type=radio]').forEach(function(radio) {
     });
   });
 });
-// Show evidence upload row only for 'No' responses
-document.querySelectorAll('input[type=radio][value=No]').forEach(function(r) {
-  r.addEventListener('change', function() {
-    var row = document.getElementById('ev-row-' + this.name.split('_').pop());
-    if(row) row.style.display = this.checked ? 'block' : 'none';
-  });
-});
+
+// Toggle NO-answer evidence/finding rows
+function toggleNoRow(itemId, resp) {
+  var row = document.getElementById('ev-row-' + itemId);
+  if (row) row.style.display = (resp === 'No') ? 'block' : 'none';
+  var comment = document.querySelector('input[name="comment_' + itemId + '"]');
+  if (comment) {
+    comment.required = (resp === 'No');
+    comment.style.borderColor = (resp === 'No') ? '#fca5a5' : '';
+    comment.style.background = (resp === 'No') ? '#fff8f8' : '';
+    comment.placeholder = (resp === 'No') ? '⚠ Comment is required for NO answer' : 'Comment / evidence notes (optional)';
+  }
+}
 </script>
 {% endblock %}
