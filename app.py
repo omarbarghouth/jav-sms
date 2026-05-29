@@ -1040,6 +1040,7 @@ def api_err(message='Error', status=400):
 
 
 @app.route('/api/mobile/hazard', methods=['POST', 'OPTIONS'])
+@csrf.exempt
 def api_mobile_hazard():
     """Flutter: Submit Hazard Report → existing Hazard workflow."""
     if request.method == 'OPTIONS':
@@ -1107,6 +1108,7 @@ def api_mobile_hazard():
 
 
 @app.route('/api/mobile/asr', methods=['POST', 'OPTIONS'])
+@csrf.exempt
 def api_mobile_asr():
     """Flutter: Submit Air Safety Report → full SMS workflow (Hazard + ASR + HazardReport)."""
     if request.method == 'OPTIONS':
@@ -1214,6 +1216,7 @@ def api_mobile_asr():
 
 
 @app.route('/api/mobile/confidential', methods=['POST', 'OPTIONS'])
+@csrf.exempt
 def api_mobile_confidential():
     """Flutter: Submit Confidential Report.
 
@@ -1289,6 +1292,7 @@ def api_mobile_confidential():
 
 
 @app.route('/api/mobile/voluntary', methods=['POST', 'OPTIONS'])
+@csrf.exempt
 def api_mobile_voluntary():
     """Flutter: Submit Voluntary Safety Report.
 
