@@ -7465,8 +7465,8 @@ def sp_survey_respond_public(sid):
         answers = {str(i): f.get('q_' + str(i), '') for i in range(len(questions))}
         db.session.add(SurveyResponse(
             survey_id=sid,
-            respondent_name='' if is_anon else f.get('respondent_name',''),
-            respondent_email='' if is_anon else f.get('respondent_email',''),
+            respondent_name='' if is_anon else (f.get('respondent_name','') or f.get('name','')),
+            respondent_email='' if is_anon else (f.get('respondent_email','') or f.get('email','')),
             department_id=int(f['department_id']) if f.get('department_id') else None,
             is_anonymous=is_anon,
             answers=_j.dumps(answers),
