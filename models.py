@@ -1148,6 +1148,22 @@ class ApiToken(db.Model):
         return datetime.utcnow() > self.expires_at
 
 
+class DeviceToken(db.Model):
+    """FCM push-notification tokens for Flutter mobile sessions.
+
+    One row per (user_id, device). Upserted on each login or token refresh
+    so a user can have at most one active FCM token per device fingerprint.
+    Used by Flask notification helpers to push status updates to the app.
+    """
+    __tablename__ = 'device_tokens'
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.String(30), nullable=False, index=True)  # 'emp_5' or 'usr_3'
+    fcm_token  = db.Column(db.Text, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'fcm_token', name='uq_device_token'),)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  PHASE 1 — GOVERNANCE & AUTHORITY LAYER
 #  ICAO Annex 19 §4 / Doc 9859 §§3–4 — Management Commitment & Accountability

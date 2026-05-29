@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
 try:
     from models import SPIEventLink
 except ImportError:
@@ -1429,6 +1429,39 @@ def api_ping():
     return api_ok({'server': 'Jordan Aviation SMS', 'version': '1.0'}, 'API online')
 
 
+@app.route('/api/mobile/register_token', methods=['POST', 'OPTIONS'])
+@csrf.exempt
+def api_register_device_token():
+    """Flutter Phase 5: Register FCM push-notification token for this device.
+
+    Upserts a DeviceToken row keyed on (user_id, fcm_token) so each device
+    gets at most one row. Called on login and whenever FCM rotates the token.
+    """
+    if request.method == 'OPTIONS':
+        return api_ok()
+    token = request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
+    try:
+        data      = request.get_json(force=True, silent=True) or {}
+        fcm_token = str(data.get('fcm_token', '')).strip()
+        if not fcm_token:
+            return api_err('fcm_token is required')
+        uid = identity['uid']
+        # Upsert: delete any stale row for this user/token, then insert fresh
+        existing = DeviceToken.query.filter_by(user_id=uid, fcm_token=fcm_token).first()
+        if not existing:
+            db.session.add(DeviceToken(user_id=uid, fcm_token=fcm_token))
+        else:
+            existing.updated_at = datetime.utcnow()
+        db.session.commit()
+        return api_ok({'registered': True}, 'FCM token registered')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(f'Registration failed: {e}')
+
+
 # ── EMPLOYEE AUTH APIs ────────────────────────────────────────────────────────
 
 def _get_identity(token):
@@ -1468,6 +1501,30 @@ def _get_identity(token):
     return None
 
 
+def _ensure_device_token_table():
+    """Create device_tokens table if it doesn't exist yet (Phase 5 — FCM push tokens)."""
+    try:
+        db.session.execute(db.text('SELECT 1 FROM device_tokens LIMIT 1'))
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text('''
+                CREATE TABLE IF NOT EXISTS device_tokens (
+                    id SERIAL PRIMARY KEY,
+                    user_id VARCHAR(30) NOT NULL,
+                    fcm_token TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    CONSTRAINT uq_device_token UNIQUE (user_id, fcm_token)
+                )
+            '''))
+            db.session.execute(db.text(
+                'CREATE INDEX IF NOT EXISTS ix_device_tokens_user_id ON device_tokens(user_id)'
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
 def _ensure_token_table():
     """Create api_tokens table if it doesn't exist yet (safe for free-tier Render)."""
     try:
@@ -1501,6 +1558,7 @@ def _make_token(user_id, username):
     import secrets
     from datetime import timedelta
     _ensure_token_table()
+    _ensure_device_token_table()
     token = secrets.token_urlsafe(32)
     expires_at = datetime.utcnow() + timedelta(hours=24)
     # Lazy cleanup: remove expired tokens for this user_id before adding new one
