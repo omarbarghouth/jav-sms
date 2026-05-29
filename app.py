@@ -6758,9 +6758,11 @@ def sp_survey_detail(sid):
         pass
     pct = int((s.response_count or 0) / max(s.target_count or 1, 1) * 100)
     responses = SurveyResponse.query.filter_by(survey_id=sid).order_by(SurveyResponse.submitted_at.desc()).all()
+    all_departments = Department.query.order_by(Department.name).all()
     return render_template('spi/sp_survey_detail.html', s=s,
                            questions=questions, pct=pct,
-                           responses=responses, now=datetime.utcnow())
+                           responses=responses, all_departments=all_departments,
+                           now=datetime.utcnow())
 
 
 @app.route('/safety-promotion/survey/<int:sid>/analytics')
