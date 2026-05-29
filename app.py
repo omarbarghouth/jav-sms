@@ -8419,7 +8419,7 @@ def finding_detail(fid):
                            spi_link_event_date=str(finding.created_at.strftime('%Y-%m-%d') if finding.created_at else ''),
                            spi_link_severity='High' if finding.severity == 'Major' else 'Medium',
                            spi_link_dept_id='',
-                           spi_link_category=finding.finding_type or '',
+                           spi_link_category=finding.category or '',
                            spi_return_url=f'/audit-findings/{fid}',
                            )
 
