@@ -268,7 +268,7 @@ def inject_globals():
 @app.after_request
 def add_cors(response):
     response.headers['Access-Control-Allow-Origin']  = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Dept-Id'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     return response
 
@@ -1062,6 +1062,12 @@ def api_mobile_hazard():
             pass
 
         from datetime import date as _d
+        # Resolve dept_id: payload > X-Dept-Id header > None
+        dept_id_raw = str(f.get('dept_id', ''))
+        if not dept_id_raw.isdigit():
+            dept_id_raw = request.headers.get('X-Dept-Id', '')
+        resolved_dept_id = int(dept_id_raw) if dept_id_raw.isdigit() else None
+
         haz = Hazard(
             id                  = new_id('HAZ'),
             source              = 'Flutter App',
@@ -1070,7 +1076,7 @@ def api_mobile_hazard():
             specific_components = f.get('hazard_description', ''),
             consequences        = f.get('consequences', ''),
             status              = 'Open',
-            department_id       = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
+            department_id       = resolved_dept_id,
         )
         haz.status = 'Under Assessment'
         db.session.add(haz)
@@ -1079,7 +1085,7 @@ def api_mobile_hazard():
         rep = HazardReport(
             id                   = new_id('HR'),
             hazard_id            = haz.id,
-            department_id        = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
+            department_id        = resolved_dept_id,
             date                 = f.get('date', _d.today().isoformat()),
             location             = f.get('location', ''),
             description          = f.get('hazard_description', ''),
@@ -1209,12 +1215,44 @@ def api_mobile_asr():
 
 @app.route('/api/mobile/confidential', methods=['POST', 'OPTIONS'])
 def api_mobile_confidential():
-    """Flutter: Submit Confidential Report."""
+    """Flutter: Submit Confidential Report.
+
+    Accepts all fields collected by confidential_screen:
+    - description, location, consequences, suggestion
+    - reporter_position (optional — blank for fully anonymous)
+    - report_type: Safety Concern / Systemic Issue / Management Issue / etc.
+    - dept_id: from payload OR X-Dept-Id header (auth-token fallback)
+    Identity is NOT recorded for confidential reports.
+    """
     if request.method == 'OPTIONS':
         return api_ok()
     try:
         f = request.get_json() if request.is_json else request.form.to_dict()
         from datetime import date as _d
+        # Resolve dept_id: payload > X-Dept-Id header > token lookup > None
+        dept_id_raw = str(f.get('dept_id', ''))
+        if not dept_id_raw.isdigit():
+            dept_id_raw = request.headers.get('X-Dept-Id', '')
+        if not dept_id_raw.isdigit():
+            token = request.headers.get('Authorization', '').replace('Bearer ', '')
+            try:
+                id_data = _get_identity(token)
+                if id_data:
+                    uid_str = str(id_data.get('uid', ''))
+                    if uid_str.startswith('emp_'):
+                        _emp = Employee.query.get(int(uid_str.replace('emp_', '')))
+                        if _emp and _emp.department_id:
+                            dept_id_raw = str(_emp.department_id)
+                    elif uid_str.startswith('usr_') or uid_str.isdigit():
+                        _uid = int(uid_str.replace('usr_', '')) if uid_str.startswith('usr_') else int(uid_str)
+                        _usr = User.query.get(_uid)
+                        if _usr and _usr.department_id:
+                            dept_id_raw = str(_usr.department_id)
+            except Exception:
+                pass
+        resolved_dept_id = int(dept_id_raw) if dept_id_raw.isdigit() else None
+        # report_type stores the Flutter sub-category (Safety Concern, Systemic Issue, etc.)
+        report_subtype = f.get('report_type', 'Confidential')
         seq = ConfidentialReport.query.count() + 1
         ref = 'CR-SMS-{:03d}'.format(seq)
         rep = ConfidentialReport(
@@ -1224,9 +1262,9 @@ def api_mobile_confidential():
             description   = f.get('description', ''),
             consequences  = f.get('consequences', ''),
             suggestion    = f.get('suggestion', ''),
-            department_id = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
+            department_id = resolved_dept_id,
             position      = f.get('reporter_position', ''),
-            report_type   = 'Confidential',
+            report_type   = report_subtype,
             status        = 'Submitted',
         )
         db.session.add(rep)
@@ -1252,12 +1290,43 @@ def api_mobile_confidential():
 
 @app.route('/api/mobile/voluntary', methods=['POST', 'OPTIONS'])
 def api_mobile_voluntary():
-    """Flutter: Submit Voluntary Safety Report."""
+    """Flutter: Submit Voluntary Safety Report.
+
+    Accepts all fields collected by the Flutter voluntary_screen:
+    - description, location, consequences, suggestion (body text fields)
+    - reporter_name, reporter_position (identity — optional / anonymous)
+    - report_type: Near Miss / Safety Concern / Unsafe Condition / etc.
+    - dept_id: from payload OR X-Dept-Id header (auth-token fallback)
+    """
     if request.method == 'OPTIONS':
         return api_ok()
     try:
         f = request.get_json() if request.is_json else request.form.to_dict()
         from datetime import date as _d
+        # Resolve dept_id: payload > X-Dept-Id header > token lookup > None
+        dept_id_raw = str(f.get('dept_id', ''))
+        if not dept_id_raw.isdigit():
+            dept_id_raw = request.headers.get('X-Dept-Id', '')
+        if not dept_id_raw.isdigit():
+            token = request.headers.get('Authorization', '').replace('Bearer ', '')
+            try:
+                id_data = _get_identity(token)
+                if id_data:
+                    uid_str = str(id_data.get('uid', ''))
+                    if uid_str.startswith('emp_'):
+                        _emp = Employee.query.get(int(uid_str.replace('emp_', '')))
+                        if _emp and _emp.department_id:
+                            dept_id_raw = str(_emp.department_id)
+                    elif uid_str.startswith('usr_') or uid_str.isdigit():
+                        _uid = int(uid_str.replace('usr_', '')) if uid_str.startswith('usr_') else int(uid_str)
+                        _usr = User.query.get(_uid)
+                        if _usr and _usr.department_id:
+                            dept_id_raw = str(_usr.department_id)
+            except Exception:
+                pass
+        resolved_dept_id = int(dept_id_raw) if dept_id_raw.isdigit() else None
+        # report_type stores the Flutter sub-category (Near Miss, Safety Concern, etc.)
+        report_subtype = f.get('report_type', 'Voluntary Safety Report')
         seq = VoluntaryReport.query.count() + 1
         ref = 'VR-SMS-{:03d}'.format(seq)
         rep = VoluntaryReport(
@@ -1269,8 +1338,8 @@ def api_mobile_voluntary():
             suggestion    = f.get('suggestion', ''),
             reporter_name = f.get('reporter_name', '') or 'Anonymous',
             position      = f.get('reporter_position', ''),
-            department_id = int(f['dept_id']) if str(f.get('dept_id','')).isdigit() else None,
-            report_type   = 'Voluntary',
+            department_id = resolved_dept_id,
+            report_type   = report_subtype,
             status        = 'Submitted',
         )
         db.session.add(rep)
@@ -1506,6 +1575,8 @@ def api_login():
                     dept = Department.query.get(emp.department_id)
                     dept_name = dept.name if dept else ''
                 except Exception: pass
+            from datetime import timedelta
+            expires_at = (datetime.utcnow() + timedelta(hours=24)).isoformat() + 'Z'
             return api_ok({
                 'token':         token,
                 'user_id':       f'emp_{emp.id}',
@@ -1516,6 +1587,7 @@ def api_login():
                 'department_id': emp.department_id,
                 'employee_id':   emp.employee_id,
                 'account_type':  'employee',
+                'expires_at':    expires_at,
             }, 'Login successful')
         elif user:
             if not check_pw(password, user.password_hash):
@@ -1535,6 +1607,8 @@ def api_login():
                     dept = Department.query.get(user.department_id)
                     dept_name = dept.name if dept else ''
                 except Exception: pass
+            from datetime import timedelta
+            expires_at = (datetime.utcnow() + timedelta(hours=24)).isoformat() + 'Z'
             return api_ok({
                 'token':         token,
                 'user_id':       f'usr_{user.id}',
@@ -1545,6 +1619,7 @@ def api_login():
                 'department_id': user.department_id,
                 'employee_id':   '',
                 'account_type':  'admin',
+                'expires_at':    expires_at,
             }, 'Login successful')
         else:
             return api_err('Invalid username or password', 401)
@@ -1617,10 +1692,20 @@ def api_me():
         return api_err(str(e)[:120], 500)
 
 
-@app.route('/api/logout', methods=['POST'])
-@require_login
+@app.route('/api/logout', methods=['POST', 'OPTIONS'])
+@csrf.exempt
 def api_logout():
-    """Flutter: Invalidate auth token — deletes from persistent token store."""
+    """Flutter: Invalidate Bearer token — deletes from persistent token store.
+
+    Previously decorated with @require_login (web session guard) which caused
+    Flutter requests (Bearer token, no session cookie) to receive a 302 redirect
+    instead of JSON, leaving the server-side token permanently active.
+
+    Now: token-based validation. Logout is idempotent — returns 200 even if the
+    token is already expired or invalid, so the client always clears its session.
+    """
+    if request.method == 'OPTIONS':
+        return api_ok()
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     if token:
         try:
@@ -1720,8 +1805,11 @@ def api_my_reports():
         return api_err(str(e)[:120], 500)
 
 
-@app.route('/api/mobile/history', methods=['GET'])
+@app.route('/api/mobile/history', methods=['GET', 'OPTIONS'])
+@csrf.exempt
 def api_mobile_history():
+    if request.method == 'OPTIONS':
+        return api_ok({}, 'ok')
     """Flutter: Get reports for the authenticated employee only."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     identity = _get_identity(token)
@@ -1819,8 +1907,11 @@ def api_mobile_history():
         return api_err(str(e)[:120], 500)
 
 
-@app.route('/api/mobile/stats', methods=['GET'])
+@app.route('/api/mobile/stats', methods=['GET', 'OPTIONS'])
+@csrf.exempt
 def api_mobile_stats():
+    if request.method == 'OPTIONS':
+        return api_ok({}, 'ok')
     """Flutter: Dashboard stats — filtered by employee or full for admins."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     identity = _get_identity(token)
@@ -1851,10 +1942,15 @@ def api_mobile_stats():
             my_closed = HazardReport.query.filter(
                 HazardReport.reporter.ilike(f'%{reporter_name}%'),
                 HazardReport.status == 'Closed').count() if reporter_name else 0
+            # Real open action count for this employee (FL-010 fix)
+            my_actions = Action.query.filter(
+                Action.owner.ilike(f'%{reporter_name}%'),
+                Action.status.notin_(['Closed', 'Completed', 'Cancelled'])
+            ).count() if reporter_name else 0
             return api_ok({
                 'hazards_open':  my_open,
                 'asr_total':     my_asr,
-                'actions_open':  0,
+                'actions_open':  my_actions,
                 'hr_this_month': my_hr,
                 'my_closed':     my_closed,
             }, 'Stats loaded')
