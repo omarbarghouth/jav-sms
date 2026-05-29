@@ -2305,7 +2305,7 @@ def api_mobile_safety_acknowledge():
     data      = request.get_json(silent=True) or {}
     ctype     = data.get('type', '').strip()
     cid       = str(data.get('id', '')).strip()
-    uid       = str(identity.get('user_id') or identity.get('id', ''))
+    uid       = str(identity.get('uid') or identity.get('user_id') or identity.get('id', ''))
     full_name = data.get('full_name', identity.get('name', ''))
     device    = data.get('device_info', '')
 
@@ -2351,7 +2351,7 @@ def api_mobile_safety_search():
 
     q     = request.args.get('q', '').strip()
     ftype = request.args.get('type', '').lower()
-    uid   = str(identity.get('user_id') or identity.get('id', ''))
+    uid   = str(identity.get('uid') or identity.get('user_id') or identity.get('id', ''))
 
     if len(q) < 2:
         return api_err('Search term must be at least 2 characters', 400)
@@ -2433,7 +2433,7 @@ def api_mobile_safety_survey_respond():
     survey_id   = data.get('survey_id')
     answers     = data.get('answers', [])
     is_anon     = bool(data.get('is_anonymous', False))
-    uid         = str(identity.get('user_id') or identity.get('id', ''))
+    uid         = str(identity.get('uid') or identity.get('user_id') or identity.get('id', ''))
     name        = identity.get('name', '') or identity.get('username', uid)
     dept_id     = request.headers.get('X-Dept-Id')
 
@@ -12188,3 +12188,4 @@ with app.app_context():
 if __name__ == '__main__':
     import os
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
