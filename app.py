@@ -1,3 +1,4 @@
+import json
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
 try:
@@ -2117,11 +2118,22 @@ def api_mobile_safety_feed():
         if not ftype or ftype == 'survey':
             rows = SafetySurvey.query.filter(SafetySurvey.status == 'Active').all()
             for s in rows:
-                items.append(_sp_item(s, 'survey', 'id', 'title', 'start_date',
-                                      dept_attr='department_id',
-                                      summary_attr='description',
-                                      priority_attr='priority_level',
-                                      read_set=read_set, ack_set=ack_set))
+                item = _sp_item(s, 'survey', 'id', 'title', 'start_date',
+                                dept_attr='department_id',
+                                summary_attr='description',
+                                priority_attr='priority_level',
+                                read_set=read_set, ack_set=ack_set)
+                # Include questions JSON so Flutter can render the form
+                try:
+                    item['questions'] = json.loads(s.questions) if s.questions else []
+                except Exception:
+                    item['questions'] = []
+                item['end_date'] = str(s.end_date or '')
+                # Check if this user already responded
+                already = SurveyResponse.query.filter_by(
+                    survey_id=s.id, respondent_name=uid).first() if uid else None
+                item['already_responded'] = bool(already)
+                items.append(item)
 
         # Lessons Learned
         if not ftype or ftype == 'lesson':
@@ -2338,6 +2350,68 @@ def api_mobile_safety_search():
         items.sort(key=lambda x: x['date'] or '', reverse=True)
         return api_ok({'items': items, 'total': len(items)}, f'{len(items)} result(s)')
     except Exception as e:
+        return api_err(str(e)[:200], 500)
+
+
+@app.route('/api/mobile/safety/survey/respond', methods=['POST', 'OPTIONS'])
+@csrf.exempt
+def api_mobile_safety_survey_respond():
+    """Flutter: submit survey answers.
+
+    Body: {survey_id, answers: [{question_index, answer}], is_anonymous}
+    """
+    if request.method == 'OPTIONS':
+        return api_ok({}, 'ok')
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    identity = _get_identity(token)
+    if not identity:
+        return api_err('Unauthorized', 401)
+
+    data        = request.get_json(silent=True) or {}
+    survey_id   = data.get('survey_id')
+    answers     = data.get('answers', [])
+    is_anon     = bool(data.get('is_anonymous', False))
+    uid         = str(identity.get('user_id') or identity.get('id', ''))
+    name        = identity.get('name', uid)
+    dept_id     = request.headers.get('X-Dept-Id')
+
+    if not survey_id:
+        return api_err('survey_id required', 400)
+
+    try:
+        survey = SafetySurvey.query.get(survey_id)
+        if not survey:
+            return api_err('Survey not found', 404)
+        if survey.status != 'Active':
+            return api_err('Survey is not active', 400)
+
+        # Idempotency: one response per user per survey
+        existing = SurveyResponse.query.filter_by(
+            survey_id=survey_id, respondent_name=uid).first()
+        if existing:
+            return api_ok({'already_responded': True}, 'Already responded')
+
+        resp = SurveyResponse(
+            survey_id       = survey_id,
+            respondent_name = uid if not is_anon else 'anonymous',
+            respondent_email= '',
+            department_id   = int(dept_id) if dept_id and dept_id.isdigit() else None,
+            is_anonymous    = is_anon,
+            answers         = json.dumps(answers),
+        )
+        db.session.add(resp)
+        # Increment response count
+        if survey.response_count is not None:
+            survey.response_count = (survey.response_count or 0) + 1
+        # Also mark as read
+        if not SafetyPromoRead.query.filter_by(
+                user_id=uid, content_type='survey', content_id=str(survey_id)).first():
+            db.session.add(SafetyPromoRead(
+                user_id=uid, content_type='survey', content_id=str(survey_id)))
+        db.session.commit()
+        return api_ok({'submitted': True}, 'Response recorded — thank you!')
+    except Exception as e:
+        db.session.rollback()
         return api_err(str(e)[:200], 500)
 
 
