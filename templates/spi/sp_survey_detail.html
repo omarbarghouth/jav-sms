@@ -73,10 +73,33 @@
 <!-- Questions -->
 {% if questions %}
 <div class="card">
-  <div class="card-title">Survey Questions</div>
-  <ol style="font-size:13px;color:#374151;line-height:2;padding-left:20px">
+  <div class="card-title">Survey Questions <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:6px">{{ questions|length }} question{{ 's' if questions|length != 1 }}</span></div>
+  <ol style="font-size:13px;color:#374151;padding-left:20px;margin:0">
     {% for q in questions %}
-    <li>{{ q }}</li>
+    {% set qtext = q.text if q is mapping else q %}
+    {% set qtype = q.type if q is mapping else 'text' %}
+    {% set qopts = q.options if q is mapping else [] %}
+    {% set qreq  = q.required if q is mapping else False %}
+    <li style="padding:10px 0;border-bottom:1px solid #f1f5f9{% if loop.last %};border-bottom:none{% endif %}">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1">
+          <span style="font-weight:600;color:#1e293b">{{ qtext }}</span>
+          {% if qreq %}<span style="color:#dc2626;margin-left:4px;font-size:11px">*required</span>{% endif %}
+        </div>
+        <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;
+          background:{% if qtype in ['single','radio'] %}#dbeafe{% elif qtype in ['multiple','checkbox'] %}#ede9fe{% elif qtype == 'yes_no' %}#dcfce7{% elif qtype in ['likert3','likert5'] %}#fef3c7{% elif qtype in ['rating5','rating10','rating'] %}#ffedd5{% elif qtype == 'dropdown' %}#f1f5f9{% else %}#f8fafc{% endif %};
+          color:{% if qtype in ['single','radio'] %}#1d4ed8{% elif qtype in ['multiple','checkbox'] %}#6d28d9{% elif qtype == 'yes_no' %}#15803d{% elif qtype in ['likert3','likert5'] %}#92400e{% elif qtype in ['rating5','rating10','rating'] %}#c2410c{% elif qtype == 'dropdown' %}#475569{% else %}#64748b{% endif %}">
+          {{ {'single':'Single Choice','radio':'Single Choice','multiple':'Multiple Choice','checkbox':'Multiple Choice','yes_no':'Yes / No','likert3':'Likert 3','likert5':'Likert 5','rating5':'Rating 1–5','rating10':'Rating 1–10','rating':'Rating','dropdown':'Dropdown','text':'Free Text','short_text':'Short Text','long_text':'Long Text'}.get(qtype, qtype) }}
+        </span>
+      </div>
+      {% if qopts %}
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;padding-left:2px">
+        {% for opt in qopts %}
+        <span style="font-size:11px;padding:2px 9px;background:#f1f5f9;border-radius:20px;color:#475569;border:1px solid #e2e8f0">{{ opt }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </li>
     {% endfor %}
   </ol>
 </div>
