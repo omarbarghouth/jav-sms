@@ -7841,7 +7841,12 @@ def audit_execution(sid):
                 if a.status in ('Scheduled', 'In Verification', 'Pending')
             )
     except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         linked_avis = []
+        avi_pending_count = 0
 
     # can_close is also blocked if there are unverified AVIs linked to this audit
     if avi_pending_count > 0:
