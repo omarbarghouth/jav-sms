@@ -7509,8 +7509,16 @@ def sp_survey_responses(sid):
     parsed_responses = []
     for resp in responses:
         try:
-            ans = _j.loads(resp.answers or '{}')
+            ans_raw = _j.loads(resp.answers or '{}')
         except Exception:
+            ans_raw = {}
+        # Answers may be a dict {str(index): value} or a list [{question_index, answer}]
+        if isinstance(ans_raw, list):
+            ans = {str(item.get('question_index', i)): item.get('answer', '')
+                   for i, item in enumerate(ans_raw) if isinstance(item, dict)}
+        elif isinstance(ans_raw, dict):
+            ans = ans_raw
+        else:
             ans = {}
         parsed_responses.append({
             'obj':             resp,
