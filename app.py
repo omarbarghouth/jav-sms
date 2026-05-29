@@ -2136,7 +2136,7 @@ def api_mobile_safety_feed():
     ftype  = request.args.get('type', '').lower()
     limit  = min(int(request.args.get('limit', 50)), 200)
     offset = int(request.args.get('offset', 0))
-    uid    = str(identity.get('user_id') or identity.get('id', ''))
+    uid    = str(identity.get('uid') or identity.get('user_id') or identity.get('id', ''))
     dept   = request.headers.get('X-Dept-Id')
 
     try:
@@ -2229,7 +2229,7 @@ def api_mobile_safety_unread_count():
     if not identity:
         return api_err('Unauthorized', 401)
 
-    uid = str(identity.get('user_id') or identity.get('id', ''))
+    uid = str(identity.get('uid') or identity.get('user_id') or identity.get('id', ''))
     try:
         read_set = _sp_user_read_set(uid)
 
@@ -2273,7 +2273,7 @@ def api_mobile_safety_read():
     data    = request.get_json(silent=True) or {}
     ctype   = data.get('type', '').strip()
     cid     = str(data.get('id', '')).strip()
-    uid     = str(identity.get('user_id') or identity.get('id', ''))
+    uid     = str(identity.get('uid') or identity.get('user_id') or identity.get('id', ''))
 
     if not ctype or not cid:
         return api_err('type and id required', 400)
@@ -2434,7 +2434,7 @@ def api_mobile_safety_survey_respond():
     answers     = data.get('answers', [])
     is_anon     = bool(data.get('is_anonymous', False))
     uid         = str(identity.get('user_id') or identity.get('id', ''))
-    name        = identity.get('name', uid)
+    name        = identity.get('name', '') or identity.get('username', uid)
     dept_id     = request.headers.get('X-Dept-Id')
 
     if not survey_id:
