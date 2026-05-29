@@ -2189,7 +2189,7 @@ def api_mobile_safety_feed():
                 try:
                     already = SurveyResponse.query.filter_by(
                         survey_id=s.id).filter(
-                        SurveyResponse.respondent_name == uid
+                        SurveyResponse.respondent_email == uid
                     ).first() if uid else None
                 except Exception:
                     db.session.rollback()
@@ -2448,15 +2448,16 @@ def api_mobile_safety_survey_respond():
             return api_err('Survey is not active', 400)
 
         # Idempotency: one response per user per survey
+        # Use respondent_email to store uid for dedup; respondent_name holds real name
         existing = SurveyResponse.query.filter_by(
-            survey_id=survey_id, respondent_name=uid).first()
+            survey_id=survey_id, respondent_email=uid).first()
         if existing:
             return api_ok({'already_responded': True}, 'Already responded')
 
         resp = SurveyResponse(
             survey_id       = survey_id,
-            respondent_name = uid if not is_anon else 'anonymous',
-            respondent_email= '',
+            respondent_name = 'Anonymous' if is_anon else (name or uid),
+            respondent_email= '' if is_anon else uid,
             department_id   = int(dept_id) if dept_id and dept_id.isdigit() else None,
             is_anonymous    = is_anon,
             answers         = json.dumps(answers),
