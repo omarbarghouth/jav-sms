@@ -2027,14 +2027,22 @@ def api_mobile_stats():
 
 def _sp_user_read_set(user_id):
     """Return a set of (content_type, content_id) already read by this user."""
-    rows = SafetyPromoRead.query.filter_by(user_id=str(user_id)).all()
-    return {(r.content_type, r.content_id) for r in rows}
+    try:
+        rows = SafetyPromoRead.query.filter_by(user_id=str(user_id)).all()
+        return {(r.content_type, r.content_id) for r in rows}
+    except Exception:
+        db.session.rollback()
+        return set()
 
 
 def _sp_user_ack_set(user_id):
     """Return a set of (content_type, content_id) already acked by this user."""
-    rows = SafetyPromoAck.query.filter_by(user_id=str(user_id)).all()
-    return {(r.content_type, r.content_id) for r in rows}
+    try:
+        rows = SafetyPromoAck.query.filter_by(user_id=str(user_id)).all()
+        return {(r.content_type, r.content_id) for r in rows}
+    except Exception:
+        db.session.rollback()
+        return set()
 
 
 def _sp_item(obj, ctype, cid_attr, title_attr, date_attr, dept_attr=None,
@@ -2058,6 +2066,34 @@ def _sp_item(obj, ctype, cid_attr, title_attr, date_attr, dept_attr=None,
         'is_acked':    is_acked,
         'has_attachment': bool(getattr(obj, 'attachment', None)),
     }
+
+
+@app.route('/api/mobile/safety/ping', methods=['GET'])
+@csrf.exempt
+def api_mobile_safety_ping():
+    """Diagnostic: confirm new code is deployed and show survey counts (no auth needed)."""
+    try:
+        surveys     = SafetySurvey.query.filter_by(status='Active').count()
+        bulletins   = SafetyBulletin.query.filter(SafetyBulletin.status == 'Active').count()
+        newsletters = SafetyNewsletter.query.filter_by(status='Published').count()
+        lessons     = LessonLearned.query.filter_by(status='Published').count()
+        try:
+            reads = SafetyPromoRead.query.count()
+            table_ok = True
+        except Exception:
+            reads = -1
+            table_ok = False
+        return api_ok({
+            'version':      'phase5-v2',
+            'surveys_active': surveys,
+            'bulletins_active': bulletins,
+            'newsletters_published': newsletters,
+            'lessons_published': lessons,
+            'promo_reads_table': table_ok,
+            'promo_reads_count': reads,
+        }, 'pong')
+    except Exception as e:
+        return api_err(str(e)[:300], 500)
 
 
 @app.route('/api/mobile/safety/feed', methods=['GET', 'OPTIONS'])
