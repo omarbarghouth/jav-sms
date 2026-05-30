@@ -196,22 +196,35 @@
       <div class="tbl-wrap"><table>
         <thead><tr>
           <th>Hazard</th><th>Consequence</th><th>Existing Controls</th><th>Proposed Controls</th>
-          <th style="width:80px">Initial</th><th style="width:80px">Residual</th>
-          <th style="width:90px">Acceptance</th><th style="width:70px"></th>
+          <th style="width:75px">Initial</th><th style="width:75px">Residual</th>
+          <th style="width:85px">Acceptance</th>
+          <th style="width:130px">SMS Links</th>
+          <th style="width:40px"></th>
         </tr></thead>
         <tbody>
         {% for h in m.moc_hazards %}
         {% set r_color = {'Low':'#15803d','Medium':'#d97706','High':'#dc2626','Critical':'#7c3aed'} %}
         <tr>
-          <td style="font-size:12px;font-weight:600;max-width:140px">{{ (h.hazard_description or '—')[:80] }}</td>
-          <td style="font-size:11px;color:var(--muted);max-width:120px">{{ (h.potential_consequence or '—')[:60] }}</td>
-          <td style="font-size:11px;max-width:100px">{{ (h.existing_controls or '—')[:50] }}</td>
-          <td style="font-size:11px;max-width:100px">{{ (h.proposed_controls or '—')[:50] }}</td>
+          <td style="font-size:12px;font-weight:600;max-width:130px">{{ (h.hazard_description or '—')[:80] }}</td>
+          <td style="font-size:11px;color:var(--muted);max-width:110px">{{ (h.potential_consequence or '—')[:60] }}</td>
+          <td style="font-size:11px;max-width:90px">{{ (h.existing_controls or '—')[:50] }}</td>
+          <td style="font-size:11px;max-width:90px">{{ (h.proposed_controls or '—')[:50] }}</td>
           <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:{{ r_color.get(h.initial_risk,'#6b7280') }}20;color:{{ r_color.get(h.initial_risk,'#6b7280') }}">{{ h.initial_risk or '—' }}</span></td>
           <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:{{ r_color.get(h.residual_risk,'#6b7280') }}20;color:{{ r_color.get(h.residual_risk,'#6b7280') }}">{{ h.residual_risk or '—' }}</span></td>
           <td style="font-size:10px;font-weight:600;color:{% if h.acceptance_status=='Accepted' %}#15803d{% elif h.acceptance_status=='Not Accepted' %}#dc2626{% else %}#d97706{% endif %}">{{ h.acceptance_status or 'Pending' }}</td>
           <td>
-            <form method="POST" action="/moc/hazard/{{ h.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this hazard?')">
+            {% if h.linked_hazard_id %}
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <a href="/hazard-log/{{ h.linked_hazard_id }}" class="btn btn-sm btn-outline" style="font-size:9px;padding:2px 6px;text-decoration:none" title="View in Hazard Log">
+                🔗 {{ h.linked_hazard_id }}
+              </a>
+            </div>
+            {% else %}
+            <span style="font-size:10px;color:var(--muted)">Legacy entry</span>
+            {% endif %}
+          </td>
+          <td>
+            <form method="POST" action="/moc/hazard/{{ h.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this hazard from register and Hazard Log?')">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
               <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;padding:2px 7px;font-size:10px">✕</button>
             </form>
@@ -221,7 +234,7 @@
         </tbody>
       </table></div>
       {% else %}
-      <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No hazards recorded yet. Add hazards to build the MOC Hazard Register.</div>
+      <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No hazards recorded yet. Add hazards to build the MOC Hazard Register — each entry is automatically logged in the Hazard Log and Risk Register.</div>
       {% endif %}
     </div>
 
