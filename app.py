@@ -209,11 +209,28 @@ def new_id(prefix):
     }
     if prefix in MODULE_MAP:
         code, model = MODULE_MAP[prefix]
-        seq = model.query.count() + 1
+        # Use MAX existing sequence number, not COUNT, to survive deletions
+        prefix_pattern = f'{code}-SMS-'
+        try:
+            existing_ids = db.session.execute(
+                db.text(f"SELECT id FROM {model.__tablename__} WHERE id LIKE :pat"),
+                {'pat': f'{prefix_pattern}%'}
+            ).fetchall()
+            max_seq = 0
+            for (eid,) in existing_ids:
+                try:
+                    num = int(eid.replace(prefix_pattern, ''))
+                    if num > max_seq:
+                        max_seq = num
+                except (ValueError, AttributeError):
+                    pass
+            seq = max_seq + 1
+        except Exception:
+            seq = model.query.count() + 1
         return f'{code}-SMS-{seq:02d}'
     # fallback
     short = str(uuid.uuid4())[:6].upper()
-    return f'{prefix}-SMS-{short}' 
+    return f'{prefix}-SMS-{short}'
 
 _overdue_last_run: float = 0.0          # module-level timestamp; 0 = never run
 _OVERDUE_COOLDOWN: int  = 300           # seconds between DB sweeps (5 minutes)
@@ -12615,6 +12632,15 @@ with app.app_context():
     db.create_all()
 
     _migrations = {
+        'hazards': [
+            ('source',              'VARCHAR(30)'),
+            ('linked_report_id',    'VARCHAR(30)'),
+            ('classification',      'VARCHAR(30)'),
+            ('type_of_activity',    'VARCHAR(100)'),
+            ('specific_components', 'TEXT'),
+            ('consequences',        'TEXT'),
+            ('owner',               'VARCHAR(100)'),
+        ],
         'actions': [
             ('hazard_id','VARCHAR(30)'),('spi_id','INTEGER'),
             ('spi_alert_level','VARCHAR(5)'),('spi_trigger_rule','VARCHAR(2)'),
