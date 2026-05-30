@@ -383,6 +383,9 @@ class MOC(db.Model):
     # ── NEW: Safety Risk ─────────────────────────────────────────────────────
     safety_impact_level         = db.Column(db.String(20), default='Low')  # Low/Medium/High/Critical
     risk_assessment_required    = db.Column(db.Boolean, default=False)
+    # ra_status: Not Started → In Progress → Completed → Approved
+    # Gates final SM/AE approval when risk_assessment_required=True
+    ra_status                   = db.Column(db.String(30), default='Not Started')
     linked_ra_id                = db.Column(db.String(30))
     # ── NEW: Regulatory Compliance ────────────────────────────────────────────
     icao_impact                 = db.Column(db.Boolean, default=False)

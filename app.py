@@ -4425,7 +4425,8 @@ def new_moc():
             implementation_start_date = f.get('implementation_start_date', ''),
             pre_change_risk     = f.get('pre_change_risk', ''),
             safety_impact_level = f.get('safety_impact_level', 'Low'),
-            risk_assessment_required = 'risk_assessment_required' in f,
+            risk_assessment_required = f.get('risk_assessment_required', 'no') == 'yes',
+            ra_status           = f.get('ra_status', 'Not Started'),
             ae_approval_required = f.get('safety_impact_level','Low') in ('High','Critical'),
             status              = 'Draft',
             approval_status     = 'Pending',
@@ -4534,6 +4535,26 @@ def _moc_status_color(status):
 def _moc_impact_color(level):
     return {'Low':'#15803d','Medium':'#d97706','High':'#dc2626','Critical':'#7c3aed'}.get(level,'#6b7280')
 
+@app.route('/moc/<mid>/update-ra-status', methods=['POST'])
+@require_login
+def moc_update_ra_status(mid):
+    """Update RA Required flag and RA Status from the detail page."""
+    m = MOC.query.get_or_404(mid)
+    f = request.form
+    m.risk_assessment_required = f.get('risk_assessment_required', 'no') == 'yes'
+    m.ra_status = f.get('ra_status', m.ra_status or 'Not Started')
+    m.linked_ra_id = f.get('linked_ra_id', m.linked_ra_id or '').strip() or None
+    db.session.commit()
+    db.session.add(MOCUpdate(
+        moc_id=mid,
+        update_text=f'RA Status updated to: {m.ra_status}. RA Required: {"Yes" if m.risk_assessment_required else "No"}.',
+        update_by=session.get('username', 'System'),
+        update_type='Progress',
+    ))
+    db.session.commit()
+    flash('Risk Assessment status updated.', 'success')
+    return redirect(url_for('moc_detail', mid=mid) + '#ra-section')
+
 @app.route('/moc/<mid>/detail')
 @require_login
 def moc_detail(mid):
@@ -4545,7 +4566,7 @@ def moc_detail(mid):
     except Exception:
         db.session.rollback()
         actions = []
-    # Pre-load sub-relations explicitly so lazy-load errors are caught here
+    # Load linked hazards, risks
     try:
         moc_hazards     = MOCHazard.query.filter_by(moc_id=mid).order_by(MOCHazard.created_at).all()
         moc_milestones  = MOCMilestone.query.filter_by(moc_id=mid).order_by(MOCMilestone.target_date).all()
@@ -4554,10 +4575,32 @@ def moc_detail(mid):
     except Exception:
         db.session.rollback()
         moc_hazards = moc_milestones = moc_updates = moc_stakeholders = []
+    # Load linked investigations
+    try:
+        linked_investigations = Investigation.query.filter_by(linked_ref_id=mid).all()
+    except Exception:
+        db.session.rollback()
+        linked_investigations = []
+    # Load linked AVIs (Audit Verification Items)
+    try:
+        linked_avis = AuditVerificationItem.query.filter_by(source_record_id=mid).all()
+    except Exception:
+        db.session.rollback()
+        linked_avis = []
+    # Build real linked hazards list (from moc_hazards linked_hazard_id)
+    linked_hazard_ids = [mh.linked_hazard_id for mh in moc_hazards if mh.linked_hazard_id]
+    try:
+        linked_hazards = Hazard.query.filter(Hazard.id.in_(linked_hazard_ids)).all() if linked_hazard_ids else []
+    except Exception:
+        db.session.rollback()
+        linked_hazards = []
     return render_template('investigation/moc_detail.html',
                            m=m, all_departments=all_departments, actions=actions,
                            moc_hazards=moc_hazards, moc_milestones=moc_milestones,
                            moc_updates=moc_updates, moc_stakeholders=moc_stakeholders,
+                           linked_hazards=linked_hazards,
+                           linked_investigations=linked_investigations,
+                           linked_avis=linked_avis,
                            status_color=_moc_status_color(m.status or 'Draft'),
                            impact_color=_moc_impact_color(m.safety_impact_level or 'Low'))
 
@@ -4589,7 +4632,8 @@ def moc_edit(mid):
                     'impact_security','impact_regulatory','impact_contractor']:
             setattr(m, fld, fld in f)
         m.safety_impact_level = f.get('safety_impact_level', 'Low')
-        m.risk_assessment_required = 'risk_assessment_required' in f
+        m.risk_assessment_required = f.get('risk_assessment_required', 'no') == 'yes'
+        m.ra_status = f.get('ra_status', m.ra_status or 'Not Started')
         for fld in ['icao_impact','iosa_impact','easa_impact',
                     'national_authority_impact','company_manual_impact',
                     'regulatory_approval_required']:
@@ -4668,6 +4712,11 @@ def moc_approve_sm(mid):
     m.sm_name = f.get('approver_name', session.get('username',''))
     m.sm_date = datetime.utcnow().strftime('%Y-%m-%d')
     m.sm_comments = f.get('comments', '')
+    # ── RA Gate: RA must be Approved before final sign-off ────────────────────
+    if m.risk_assessment_required and (m.ra_status or 'Not Started') != 'Approved':
+        flash('⚠ Risk Assessment is required for this MOC and must reach "Approved" status '
+              'before the Safety Manager can approve. Update the RA status first.', 'error')
+        return redirect(url_for('moc_detail', mid=mid))
     dept_ok = m.dept_manager_status == 'Approved'
     safety_ok = m.safety_review_status == 'Approved'
     sm_ok = m.sm_approval_status == 'Approved'
@@ -4792,22 +4841,12 @@ def moc_add_hazard(mid):
     f = request.form
     hazard_desc   = f.get('hazard_description', '')
     consequence   = f.get('potential_consequence', '')
-    existing_ctrl = f.get('existing_controls', '')
-    proposed_ctrl = f.get('proposed_controls', '')
-    initial_risk  = f.get('initial_risk', 'Medium')
-    residual_risk = f.get('residual_risk', 'Low')
     acceptance    = f.get('acceptance_status', 'Pending')
     authority     = f.get('acceptance_authority', '')
-
-    # ── Risk level → matrix values mapping ──────────────────────────────────
-    _risk_map = {
-        'Low':      (1, 'A', '1A', 'Tolerable'),
-        'Medium':   (3, 'C', '3C', 'Tolerable'),
-        'High':     (4, 'D', '4D', 'Intolerable'),
-        'Critical': (5, 'E', '5E', 'Intolerable'),
-    }
-    il, isev, iidx, itol = _risk_map.get(initial_risk,  (2, 'B', '2B', 'Tolerable'))
-    rl, rsev, ridx, rtol = _risk_map.get(residual_risk, (1, 'A', '1A', 'Tolerable'))
+    # RA fields belong in the Risk Assessment module — use defaults here
+    # The Risk record created below is a placeholder; full RA is done separately
+    il, isev, iidx, itol = (2, 'B', '2B', 'Tolerable')  # default pending full RA
+    rl, rsev, ridx, rtol = (1, 'A', '1A', 'Tolerable')
 
     # ── 1. Create real Hazard record in the Hazard Log ───────────────────────
     haz_id = new_id('HAZ')
@@ -4865,30 +4904,13 @@ def moc_add_hazard(mid):
         moc_id               = mid,
         hazard_description   = hazard_desc,
         potential_consequence= consequence,
-        existing_controls    = existing_ctrl,
-        proposed_controls    = proposed_ctrl,
-        initial_risk         = initial_risk,
-        residual_risk        = residual_risk,
+        # RA-specific fields (existing/proposed controls, risk matrix) belong
+        # in the Risk Assessment module — left blank here for governance separation
         acceptance_status    = acceptance,
         acceptance_authority = authority,
         linked_hazard_id     = haz_id,
     )
     db.session.add(mh)
-
-    # ── 5. Auto-generate Action for proposed controls ────────────────────────
-    if proposed_ctrl:
-        act = Action(
-            id          = new_id('ACT'),
-            source      = 'MOC',
-            hazard_id   = haz_id,
-            linked_ref_id = mid,
-            description = f'Implement proposed controls: {proposed_ctrl[:200]}',
-            owner       = session.get('username', ''),
-            due_date    = m.target_completion_date or '',
-            priority    = 'High' if initial_risk in ('High', 'Critical') else 'Medium',
-            status      = 'Open',
-        )
-        db.session.add(act)
 
     # ── 6. Log the event ─────────────────────────────────────────────────────
     db.session.add(MOCUpdate(
@@ -12721,6 +12743,7 @@ with app.app_context():
             ('impact_contractor',           'BOOLEAN DEFAULT FALSE'),
             ('safety_impact_level',         "VARCHAR(20) DEFAULT 'Low'"),
             ('risk_assessment_required',    'BOOLEAN DEFAULT FALSE'),
+            ('ra_status',                   "VARCHAR(30) DEFAULT 'Not Started'"),
             ('linked_ra_id',                'VARCHAR(30)'),
             ('icao_impact',                 'BOOLEAN DEFAULT FALSE'),
             ('iosa_impact',                 'BOOLEAN DEFAULT FALSE'),
@@ -12922,13 +12945,12 @@ with app.app_context():
                 "  id SERIAL PRIMARY KEY,"
                 "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
                 "  update_text TEXT,"
+                "  update_by VARCHAR(100),"
                 "  update_type VARCHAR(30) DEFAULT 'Progress',"
-                "  created_by VARCHAR(100),"
                 "  created_at TIMESTAMP DEFAULT NOW()"
                 ")"
             ))
-    except Exception:
-        pass
+    except Exception: pass
 
     # moc_stakeholders DDL
     try:
@@ -12938,23 +12960,34 @@ with app.app_context():
                 "CREATE TABLE IF NOT EXISTS moc_stakeholders ("
                 "  id SERIAL PRIMARY KEY,"
                 "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
-                "  department_name VARCHAR(100),"
-                "  contact_name VARCHAR(100),"
-                "  consultation_date VARCHAR(20),"
-                "  remarks TEXT,"
+                "  name VARCHAR(100),"
+                "  role VARCHAR(100),"
+                "  department VARCHAR(100),"
+                "  consulted_date VARCHAR(20),"
+                "  feedback TEXT,"
                 "  reviewed BOOLEAN DEFAULT FALSE,"
                 "  created_at TIMESTAMP DEFAULT NOW()"
                 ")"
             ))
-    except Exception:
-        pass
+    except Exception: pass
 
+def seed():
     try:
-        seed()
-    except Exception as _se:
-        print(f'Seed warning: {_se}')
-    db.session.remove()
+        if not Department.query.first():
+            for code, name in [
+                ('FLT','Flight Operations'),('CAB','Cabin Crew'),
+                ('GND','Ground Operations'),('MNT','Maintenance'),
+                ('OCC','Operations Control'),('TRN','Training'),
+                ('SMS','Safety Management'),('SEC','Security'),
+                ('MGT','Management'),('QA','Quality Assurance'),
+            ]:
+                db.session.add(Department(code=code, name=name))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+with app.app_context():
+    seed()
 
 if __name__ == '__main__':
-    import os
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=True, host='0.0.0.0', port=5000)
