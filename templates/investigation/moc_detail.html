@@ -573,4 +573,17 @@
   </div>{# end right column #}
 </div>{# end main grid #}
 
+{% block scripts %}
+<script>
+function togglePanel(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'block' : 'none';
+  if (el.style.display === 'block') {
+    el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    var first = el.querySelector('input,select,textarea');
+    if (first) first.focus();
+  }
+}
+</script>
 {% endblock %}
