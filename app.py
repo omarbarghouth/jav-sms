@@ -4408,34 +4408,12 @@ def new_moc():
             stakeholder_summary            = f.get('stakeholder_summary', ''),
         )
         db.session.add(m)
-        db.session.flush()
-        # Auto-create hazard for pre-change risk
-        hid = new_id('HAZ')
-        h = Hazard(id=hid, source='MOC', linked_report_id=m.id,
-                   department_id=dept_id,
-                   classification='Organizational',
-                   type_of_activity='Management of Change',
-                   generic_hazard=f'MOC Risk: {title}',
-                   specific_components=f.get('pre_change_risk',''),
-                   consequences='To Be Assessed',
-                   status='Open')
-        db.session.add(h)
-        m.hazard_id = hid
-        # Auto-create Action
-        moc_action = Action(
-            id=new_id('ACT'), source='MOC', hazard_id=hid, linked_ref_id=m.id,
-            description=f'Review and verify implementation of change: {title}',
-            owner=f.get('initiator',''), due_date=f.get('target_completion_date',''),
-            priority='High' if f.get('safety_impact_level','Low') in ('High','Critical') else 'Medium',
-            status='Open'
-        )
-        db.session.add(moc_action)
-        # Auto-log creation
+        # Log creation
         u = MOCUpdate(moc_id=mid_new, update_text=f'MOC {m.moc_number} created.',
                       update_by=session.get('username','System'), update_type='Progress')
         db.session.add(u)
         db.session.commit()
-        flash(f'MOC {m.moc_number} created. Hazard {hid} and Action auto-generated.', 'success')
+        flash(f'MOC {m.moc_number} created successfully.', 'success')
         return redirect(url_for('moc_detail', mid=mid_new))
     all_departments = Department.query.order_by(Department.name).all()
     return render_template('investigation/moc_form.html', m=None, edit=False, all_departments=all_departments)
