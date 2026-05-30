@@ -12708,6 +12708,22 @@ with app.app_context():
             ('pir_additional_actions',      'TEXT'),
             ('pir_lessons_learned',         'TEXT'),
         ],
+        # Sub-tables created in earlier deployments may be missing newer columns
+        'moc_hazards': [
+            ('linked_hazard_id',        'VARCHAR(30)'),
+            ('acceptance_status',       "VARCHAR(30) DEFAULT 'Pending'"),
+            ('acceptance_authority',    'VARCHAR(100)'),
+        ],
+        'moc_milestones': [
+            ('completed_date',          'VARCHAR(20)'),
+            ('notes',                   'TEXT'),
+        ],
+        'moc_updates': [
+            ('update_type',             "VARCHAR(30) DEFAULT 'Progress'"),
+        ],
+        'moc_stakeholders': [
+            ('reviewed',                'BOOLEAN DEFAULT FALSE'),
+        ],
     }
 
     # Run column migrations using a raw psycopg2 connection so they are
