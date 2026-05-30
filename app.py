@@ -12611,16 +12611,29 @@ with app.app_context():
         ],
     }
 
-    for table, cols in _migrations.items():
-        for col, col_type in cols:
-            try:
-                with engine.connect() as conn:
-                    conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-                    conn.execute(text(
-                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}"
-                    ))
-            except Exception as _ce:
-                pass
+    # Run column migrations using a raw psycopg2 connection so they are
+    # guaranteed to execute before any ORM query — bypasses SQLAlchemy pool.
+    import psycopg2 as _pg2
+    _db_url = os.environ.get('DATABASE_URL', '')
+    if _db_url.startswith('postgres://'):
+        _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+    try:
+        _raw = _pg2.connect(_db_url)
+        _raw.autocommit = True
+        _cur = _raw.cursor()
+        for _tbl, _cols in _migrations.items():
+            for _col, _ctype in _cols:
+                try:
+                    _cur.execute(
+                        f"ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS {_col} {_ctype}"
+                    )
+                except Exception as _ce:
+                    print(f"[MIGRATION] {_tbl}.{_col}: {_ce}", flush=True)
+        _cur.close()
+        _raw.close()
+        print("[MIGRATION] Column migrations complete", flush=True)
+    except Exception as _mig_err:
+        print(f"[MIGRATION] Could not run migrations: {_mig_err}", flush=True)
 
     # spi_event_links DDL
     try:
