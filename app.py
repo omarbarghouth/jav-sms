@@ -264,19 +264,24 @@ def check_overdue_actions():
 
 @app.context_processor
 def inject_globals():
+    # Always start from a clean session state so lazy loads in templates never
+    # hit InFailedSqlTransaction from an earlier failed query in this request.
     try:
         depts = Department.query.all()
     except Exception:
+        db.session.rollback()
         depts = []
     try:
         overdue = Action.query.filter_by(status='Overdue').count()
     except Exception:
+        db.session.rollback()
         overdue = 0
     try:
         avi_open = AuditVerificationItem.query.filter(
             AuditVerificationItem.status.in_(['Pending', 'Scheduled', 'In Review', 'Ineffective', 'Escalated'])
         ).count()
     except Exception:
+        db.session.rollback()
         avi_open = 0
     now = datetime.utcnow()
     return dict(all_departments=depts, now=now, get_tolerance=get_tolerance,
@@ -3442,25 +3447,40 @@ def hazard_log():
     stat_f = request.args.get('status','')
     cls_f  = request.args.get('classification','')
     page   = request.args.get('page', 1, type=int)
+    from sqlalchemy.orm import subqueryload as _sql
+    hazards = []
+    pg = None
     try:
-        q = Hazard.query
-        if dept_f: q = q.filter_by(department_id=int(dept_f))
-        if stat_f: q = q.filter_by(status=stat_f)
-        if cls_f:  q = q.filter_by(classification=cls_f)
+        db.session.rollback()          # ensure clean state before every query
+        q = Hazard.query.options(
+            _sql(Hazard.actions),      # eagerly load actions — prevents lazy loads
+            _sql(Hazard.risks),        # eagerly load risks   — inside template
+            _sql(Hazard.department),
+        )
+        if dept_f: q = q.filter(Hazard.department_id == int(dept_f))
+        if stat_f: q = q.filter(Hazard.status == stat_f)
+        if cls_f:  q = q.filter(Hazard.classification == cls_f)
         pg      = q.order_by(Hazard.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
         hazards = pg.items
     except Exception as e:
         db.session.rollback()
         print(f'hazard_log query error: {e}')
-        from flask_sqlalchemy.pagination import Pagination
         hazards = []
-        pg = Hazard.query.filter_by(id=None).paginate(page=1, per_page=50, error_out=False)
+        pg = None
     try:
         all_departments = Department.query.order_by(Department.name).all()
     except Exception as e:
         db.session.rollback()
         print(f'hazard_log dept query error: {e}')
         all_departments = []
+    # Build a minimal pagination-compatible object when query fails
+    if pg is None:
+        class _NullPage:
+            items = []; total = 0; pages = 1; page = 1
+            has_prev = False; has_next = False
+            prev_num = None; next_num = None
+            def iter_pages(self, **kw): return []
+        pg = _NullPage()
     return render_template('hazard/hazard_log.html', hazards=hazards,
         dept_f=dept_f, stat_f=stat_f, cls_f=cls_f, pagination=pg,
         all_departments=all_departments)
