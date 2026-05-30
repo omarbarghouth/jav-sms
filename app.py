@@ -3431,8 +3431,10 @@ def hazard_log():
     if cls_f:  q = q.filter_by(classification=cls_f)
     pg     = q.order_by(Hazard.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
     hazards = pg.items
+    all_departments = Department.query.order_by(Department.name).all()
     return render_template('hazard/hazard_log.html', hazards=hazards,
-        dept_f=dept_f, stat_f=stat_f, cls_f=cls_f, pagination=pg)
+        dept_f=dept_f, stat_f=stat_f, cls_f=cls_f, pagination=pg,
+        all_departments=all_departments)
 
 @app.route('/hazard-log/<hid>')
 @require_login
