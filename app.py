@@ -3442,13 +3442,25 @@ def hazard_log():
     stat_f = request.args.get('status','')
     cls_f  = request.args.get('classification','')
     page   = request.args.get('page', 1, type=int)
-    q = Hazard.query
-    if dept_f: q = q.filter_by(department_id=int(dept_f))
-    if stat_f: q = q.filter_by(status=stat_f)
-    if cls_f:  q = q.filter_by(classification=cls_f)
-    pg     = q.order_by(Hazard.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
-    hazards = pg.items
-    all_departments = Department.query.order_by(Department.name).all()
+    try:
+        q = Hazard.query
+        if dept_f: q = q.filter_by(department_id=int(dept_f))
+        if stat_f: q = q.filter_by(status=stat_f)
+        if cls_f:  q = q.filter_by(classification=cls_f)
+        pg      = q.order_by(Hazard.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+        hazards = pg.items
+    except Exception as e:
+        db.session.rollback()
+        print(f'hazard_log query error: {e}')
+        from flask_sqlalchemy.pagination import Pagination
+        hazards = []
+        pg = Hazard.query.filter_by(id=None).paginate(page=1, per_page=50, error_out=False)
+    try:
+        all_departments = Department.query.order_by(Department.name).all()
+    except Exception as e:
+        db.session.rollback()
+        print(f'hazard_log dept query error: {e}')
+        all_departments = []
     return render_template('hazard/hazard_log.html', hazards=hazards,
         dept_f=dept_f, stat_f=stat_f, cls_f=cls_f, pagination=pg,
         all_departments=all_departments)
@@ -12890,12 +12902,13 @@ with app.app_context():
                 "  id SERIAL PRIMARY KEY,"
                 "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
                 "  update_text TEXT,"
-                "  update_by VARCHAR(100),"
                 "  update_type VARCHAR(30) DEFAULT 'Progress',"
+                "  created_by VARCHAR(100),"
                 "  created_at TIMESTAMP DEFAULT NOW()"
                 ")"
             ))
-    except Exception: pass
+    except Exception:
+        pass
 
     # moc_stakeholders DDL
     try:
@@ -12908,12 +12921,13 @@ with app.app_context():
                 "  department_name VARCHAR(100),"
                 "  contact_name VARCHAR(100),"
                 "  consultation_date VARCHAR(20),"
-                "  comments TEXT,"
+                "  remarks TEXT,"
                 "  reviewed BOOLEAN DEFAULT FALSE,"
                 "  created_at TIMESTAMP DEFAULT NOW()"
                 ")"
             ))
-    except Exception: pass
+    except Exception:
+        pass
 
     try:
         seed()
