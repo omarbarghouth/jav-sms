@@ -1,6 +1,6 @@
 import json
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
 try:
     from models import SPIEventLink
 except ImportError:
@@ -4351,46 +4351,94 @@ def moc_list():
 def new_moc():
     if request.method == 'POST':
         f = request.form
-        m = MOC(id=new_id('MOC'),
-                title=f['title'], description=f['description'],
-                department_id=int(f['department_id']),
-                change_type=f['change_type'],
-                initiator=f['initiator'],
-                planned_date=f['planned_date'],
-                pre_change_risk=f.get('pre_change_risk',''),
-                approval_status='Pending',
-                implementation_status='Not Started')
+        dept_id = int(f.get('department_id', 1))
+        title   = f.get('title', '').strip()
+        cat     = f.get('change_category', f.get('change_type', 'Operational'))
+        mid_new = new_id('MOC')
+        m = MOC(
+            id                  = mid_new,
+            moc_number          = _moc_number(),
+            title               = title,
+            description         = f.get('proposed_change', f.get('description', '')),
+            proposed_change     = f.get('proposed_change', ''),
+            current_situation   = f.get('current_situation', ''),
+            reason_for_change   = f.get('reason_for_change', ''),
+            expected_benefits   = f.get('expected_benefits', ''),
+            department_id       = dept_id,
+            change_category     = cat,
+            change_type         = cat,
+            initiator           = f.get('initiator', ''),
+            date_raised         = f.get('date_raised', datetime.utcnow().strftime('%Y-%m-%d')),
+            planned_date        = f.get('target_completion_date', f.get('planned_date', '')),
+            target_completion_date = f.get('target_completion_date', ''),
+            implementation_start_date = f.get('implementation_start_date', ''),
+            pre_change_risk     = f.get('pre_change_risk', ''),
+            safety_impact_level = f.get('safety_impact_level', 'Low'),
+            risk_assessment_required = 'risk_assessment_required' in f,
+            ae_approval_required = f.get('safety_impact_level','Low') in ('High','Critical'),
+            status              = 'Draft',
+            approval_status     = 'Pending',
+            implementation_status = 'Not Started',
+            # Impact assessment
+            impact_aircraft_ops     = 'impact_aircraft_ops' in f,
+            impact_flight_crew      = 'impact_flight_crew' in f,
+            impact_cabin_crew       = 'impact_cabin_crew' in f,
+            impact_ground_ops       = 'impact_ground_ops' in f,
+            impact_maintenance      = 'impact_maintenance' in f,
+            impact_occ              = 'impact_occ' in f,
+            impact_training         = 'impact_training' in f,
+            impact_safety_reporting = 'impact_safety_reporting' in f,
+            impact_erp              = 'impact_erp' in f,
+            impact_security         = 'impact_security' in f,
+            impact_regulatory       = 'impact_regulatory' in f,
+            impact_contractor       = 'impact_contractor' in f,
+            # Regulatory
+            icao_impact                  = 'icao_impact' in f,
+            iosa_impact                  = 'iosa_impact' in f,
+            easa_impact                  = 'easa_impact' in f,
+            national_authority_impact    = 'national_authority_impact' in f,
+            company_manual_impact        = 'company_manual_impact' in f,
+            regulatory_approval_required = 'regulatory_approval_required' in f,
+            regulatory_approval_ref      = f.get('regulatory_approval_ref', ''),
+            # Implementation needs
+            training_required              = 'training_required' in f,
+            documentation_update_required  = 'documentation_update_required' in f,
+            sop_revision_required          = 'sop_revision_required' in f,
+            erp_update_required            = 'erp_update_required' in f,
+            stakeholder_summary            = f.get('stakeholder_summary', ''),
+        )
         db.session.add(m)
         db.session.flush()
         # Auto-create hazard for pre-change risk
         hid = new_id('HAZ')
         h = Hazard(id=hid, source='MOC', linked_report_id=m.id,
-                   department_id=int(f['department_id']),
+                   department_id=dept_id,
                    classification='Organizational',
                    type_of_activity='Management of Change',
-                   generic_hazard=f'MOC Risk: {f["title"]}',
+                   generic_hazard=f'MOC Risk: {title}',
                    specific_components=f.get('pre_change_risk',''),
                    consequences='To Be Assessed',
                    status='Open')
         db.session.add(h)
         m.hazard_id = hid
-        # Auto-create Action in unified system — ICAO requirement
+        # Auto-create Action
         moc_action = Action(
-            id=new_id('ACT'),
-            source='MOC',
-            hazard_id=hid,
-            linked_ref_id=m.id,
-            description=f'Review and verify implementation of change: {f["title"]}',
-            owner=f['initiator'],
-            due_date=f.get('planned_date', ''),
-            priority='High',
+            id=new_id('ACT'), source='MOC', hazard_id=hid, linked_ref_id=m.id,
+            description=f'Review and verify implementation of change: {title}',
+            owner=f.get('initiator',''), due_date=f.get('target_completion_date',''),
+            priority='High' if f.get('safety_impact_level','Low') in ('High','Critical') else 'Medium',
             status='Open'
         )
         db.session.add(moc_action)
+        # Auto-log creation
+        u = MOCUpdate(moc_id=mid_new, update_text=f'MOC {m.moc_number} created.',
+                      update_by=session.get('username','System'), update_type='Progress')
+        db.session.add(u)
         db.session.commit()
-        flash(f'✓ MOC {m.id} created. Hazard {hid} and Action auto-generated.', 'success')
-        return redirect(url_for('moc_list'))
-    return render_template('investigation/moc_form.html')
+        flash(f'MOC {m.moc_number} created. Hazard {hid} and Action auto-generated.', 'success')
+        return redirect(url_for('moc_detail', mid=mid_new))
+    all_departments = Department.query.order_by(Department.name).all()
+    return render_template('investigation/moc_form.html', m=None, edit=False, all_departments=all_departments)
 
 @app.route('/moc/<mid>/update', methods=['POST'])
 @require_login
@@ -4435,6 +4483,340 @@ def update_moc(mid):
             pass
     flash('✓ MOC updated.', 'success')
     return redirect(url_for('moc_list'))
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  MOC AIRLINE-GRADE MODULE  (ICAO Annex 19 / Doc 9859 §7 / IOSA ISM / EASA)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _moc_number():
+    """Generate JAV/MOC/YYYY/NNN reference number."""
+    yr = datetime.utcnow().year
+    count = MOC.query.filter(MOC.moc_number.like(f'JAV/MOC/{yr}/%')).count()
+    return f'JAV/MOC/{yr}/{count+1:03d}'
+
+def _moc_status_color(status):
+    return {
+        'Draft': '#6b7280', 'Under Review': '#d97706', 'Approved': '#15803d',
+        'Implementing': '#1d4ed8', 'Implemented': '#0e7490',
+        'Post-Implementation Review': '#7c3aed', 'Closed': '#374151',
+    }.get(status, '#6b7280')
+
+def _moc_impact_color(level):
+    return {'Low':'#15803d','Medium':'#d97706','High':'#dc2626','Critical':'#7c3aed'}.get(level,'#6b7280')
+
+@app.route('/moc/<mid>/detail')
+@require_login
+def moc_detail(mid):
+    m = MOC.query.get_or_404(mid)
+    all_departments = Department.query.order_by(Department.name).all()
+    actions = Action.query.filter_by(linked_ref_id=mid).all()
+    return render_template('investigation/moc_detail.html',
+                           m=m, all_departments=all_departments, actions=actions,
+                           status_color=_moc_status_color(m.status or 'Draft'),
+                           impact_color=_moc_impact_color(m.safety_impact_level or 'Low'))
+
+@app.route('/moc/<mid>/edit', methods=['GET','POST'])
+@require_login
+def moc_edit(mid):
+    m = MOC.query.get_or_404(mid)
+    if m.status not in (None, 'Draft'):
+        flash('Only Draft MOCs can be edited.', 'error')
+        return redirect(url_for('moc_detail', mid=mid))
+    if request.method == 'POST':
+        f = request.form
+        m.title = f.get('title', m.title)
+        m.change_category = f.get('change_category', '')
+        m.change_type = f.get('change_category', m.change_type)
+        m.department_id = int(f.get('department_id', m.department_id or 1))
+        m.initiator = f.get('initiator', m.initiator or '')
+        m.date_raised = f.get('date_raised', '')
+        m.planned_date = f.get('target_completion_date', m.planned_date or '')
+        m.current_situation = f.get('current_situation', '')
+        m.proposed_change = f.get('proposed_change', '')
+        m.description = f.get('proposed_change', m.description or '')
+        m.reason_for_change = f.get('reason_for_change', '')
+        m.expected_benefits = f.get('expected_benefits', '')
+        m.pre_change_risk = f.get('pre_change_risk', m.pre_change_risk or '')
+        for fld in ['impact_aircraft_ops','impact_flight_crew','impact_cabin_crew',
+                    'impact_ground_ops','impact_maintenance','impact_occ',
+                    'impact_training','impact_safety_reporting','impact_erp',
+                    'impact_security','impact_regulatory','impact_contractor']:
+            setattr(m, fld, fld in f)
+        m.safety_impact_level = f.get('safety_impact_level', 'Low')
+        m.risk_assessment_required = 'risk_assessment_required' in f
+        for fld in ['icao_impact','iosa_impact','easa_impact',
+                    'national_authority_impact','company_manual_impact',
+                    'regulatory_approval_required']:
+            setattr(m, fld, fld in f)
+        m.regulatory_approval_ref = f.get('regulatory_approval_ref', '')
+        m.regulatory_approval_date = f.get('regulatory_approval_date', '')
+        m.regulatory_evidence = f.get('regulatory_evidence', '')
+        m.implementation_start_date = f.get('implementation_start_date', '')
+        m.target_completion_date = f.get('target_completion_date', '')
+        for fld in ['training_required','documentation_update_required',
+                    'sop_revision_required','erp_update_required']:
+            setattr(m, fld, fld in f)
+        m.stakeholder_summary = f.get('stakeholder_summary', '')
+        m.ae_approval_required = 'ae_approval_required' in f
+        db.session.commit()
+        flash('MOC updated.', 'success')
+        return redirect(url_for('moc_detail', mid=mid))
+    all_departments = Department.query.order_by(Department.name).all()
+    return render_template('investigation/moc_form.html', m=m, edit=True, all_departments=all_departments)
+
+@app.route('/moc/<mid>/submit', methods=['POST'])
+@require_login
+def moc_submit(mid):
+    m = MOC.query.get_or_404(mid)
+    if not m.title or not m.initiator:
+        flash('MOC must have a title and initiator before submitting.', 'error')
+        return redirect(url_for('moc_detail', mid=mid))
+    m.status = 'Under Review'
+    m.submitted_date = datetime.utcnow().strftime('%Y-%m-%d')
+    m.approval_status = 'Pending'
+    db.session.commit()
+    u = MOCUpdate(moc_id=mid, update_text='MOC submitted for review.',
+                  update_by=session.get('username','System'), update_type='Progress')
+    db.session.add(u); db.session.commit()
+    flash('MOC submitted for approval review.', 'success')
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/approve-dept', methods=['POST'])
+@require_login
+def moc_approve_dept(mid):
+    m = MOC.query.get_or_404(mid)
+    f = request.form
+    m.dept_manager_status = f.get('decision', 'Approved')
+    m.dept_manager_name = f.get('approver_name', session.get('username',''))
+    m.dept_manager_date = datetime.utcnow().strftime('%Y-%m-%d')
+    m.dept_manager_comments = f.get('comments', '')
+    db.session.commit()
+    u = MOCUpdate(moc_id=mid, update_text=f"Dept Manager: {m.dept_manager_status} — {m.dept_manager_comments or 'No comments'}",
+                  update_by=m.dept_manager_name, update_type='Progress')
+    db.session.add(u); db.session.commit()
+    flash(f'Department Manager decision: {m.dept_manager_status}', 'success')
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/approve-safety', methods=['POST'])
+@require_login
+def moc_approve_safety(mid):
+    m = MOC.query.get_or_404(mid)
+    f = request.form
+    m.safety_review_status = f.get('decision', 'Approved')
+    m.safety_reviewer_name = f.get('approver_name', session.get('username',''))
+    m.safety_review_date = datetime.utcnow().strftime('%Y-%m-%d')
+    m.safety_review_comments = f.get('comments', '')
+    db.session.commit()
+    u = MOCUpdate(moc_id=mid, update_text=f"Safety Review: {m.safety_review_status} — {m.safety_review_comments or 'No comments'}",
+                  update_by=m.safety_reviewer_name, update_type='Progress')
+    db.session.add(u); db.session.commit()
+    flash(f'Safety Review decision: {m.safety_review_status}', 'success')
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/approve-sm', methods=['POST'])
+@require_login
+def moc_approve_sm(mid):
+    m = MOC.query.get_or_404(mid)
+    f = request.form
+    m.sm_approval_status = f.get('decision', 'Approved')
+    m.sm_name = f.get('approver_name', session.get('username',''))
+    m.sm_date = datetime.utcnow().strftime('%Y-%m-%d')
+    m.sm_comments = f.get('comments', '')
+    dept_ok = m.dept_manager_status == 'Approved'
+    safety_ok = m.safety_review_status == 'Approved'
+    sm_ok = m.sm_approval_status == 'Approved'
+    ae_ok = (not m.ae_approval_required) or (m.ae_approval_status == 'Approved')
+    if dept_ok and safety_ok and sm_ok and ae_ok:
+        m.status = 'Approved'; m.approval_status = 'Approved'
+        m.approved_by = m.sm_name; m.approved_date = datetime.utcnow().strftime('%Y-%m-%d')
+        flash('Safety Manager approved. MOC is now APPROVED.', 'success')
+    else:
+        flash(f'Safety Manager decision: {m.sm_approval_status}', 'success')
+    db.session.commit()
+    u = MOCUpdate(moc_id=mid, update_text=f"Safety Manager: {m.sm_approval_status} — {m.sm_comments or 'No comments'}",
+                  update_by=m.sm_name, update_type='Progress')
+    db.session.add(u); db.session.commit()
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/approve-ae', methods=['POST'])
+@require_login
+def moc_approve_ae(mid):
+    m = MOC.query.get_or_404(mid)
+    f = request.form
+    m.ae_approval_status = f.get('decision', 'Approved')
+    m.ae_name = f.get('approver_name', session.get('username',''))
+    m.ae_date = datetime.utcnow().strftime('%Y-%m-%d')
+    m.ae_comments = f.get('comments', '')
+    dept_ok = m.dept_manager_status == 'Approved'
+    safety_ok = m.safety_review_status == 'Approved'
+    sm_ok = m.sm_approval_status == 'Approved'
+    ae_ok = m.ae_approval_status == 'Approved'
+    if dept_ok and safety_ok and sm_ok and ae_ok:
+        m.status = 'Approved'; m.approval_status = 'Approved'
+        m.approved_by = m.ae_name; m.approved_date = datetime.utcnow().strftime('%Y-%m-%d')
+        flash('Accountable Executive approved. MOC is now APPROVED.', 'success')
+    else:
+        flash(f'AE decision: {m.ae_approval_status}', 'success')
+    db.session.commit()
+    u = MOCUpdate(moc_id=mid, update_text=f"Accountable Executive: {m.ae_approval_status} — {m.ae_comments or 'No comments'}",
+                  update_by=m.ae_name, update_type='Progress')
+    db.session.add(u); db.session.commit()
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/start-implementation', methods=['POST'])
+@require_login
+def moc_start_implementation(mid):
+    m = MOC.query.get_or_404(mid)
+    if m.status != 'Approved':
+        flash('MOC must be Approved before implementation can begin.', 'error')
+        return redirect(url_for('moc_detail', mid=mid))
+    m.status = 'Implementing'; m.implementation_status = 'In Progress'
+    db.session.commit()
+    u = MOCUpdate(moc_id=mid, update_text='Implementation started.',
+                  update_by=session.get('username','System'), update_type='Progress')
+    db.session.add(u); db.session.commit()
+    flash('MOC status set to Implementing.', 'success')
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/mark-implemented', methods=['POST'])
+@require_login
+def moc_mark_implemented(mid):
+    m = MOC.query.get_or_404(mid)
+    m.status = 'Implemented'; m.implementation_status = 'Completed'
+    m.implemented_date = datetime.utcnow().strftime('%Y-%m-%d')
+    db.session.commit()
+    try:
+        _avi_generate(source_module='moc', source_record_id=m.id,
+                      source_description=f'MOC implemented: {(m.title or "")[:200]}',
+                      department_id=m.department_id, linked_hazard_id=m.hazard_id,
+                      operational_risk=m.safety_impact_level or 'Medium',
+                      override_objective=f'Verify change "{(m.title or "")[:100]}" fully implemented without introducing new safety risks.')
+        db.session.commit()
+    except Exception: pass
+    u = MOCUpdate(moc_id=mid, update_text='Change marked Implemented. Post-Implementation Review required.',
+                  update_by=session.get('username','System'), update_type='Progress')
+    db.session.add(u); db.session.commit()
+    flash('MOC marked as Implemented. Post-Implementation Review must now be completed.', 'success')
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/pir', methods=['POST'])
+@require_login
+def moc_pir(mid):
+    m = MOC.query.get_or_404(mid)
+    f = request.form
+    if not f.get('pir_actual_outcome'):
+        flash('Actual Outcome is required for Post-Implementation Review.', 'error')
+        return redirect(url_for('moc_detail', mid=mid))
+    m.pir_date = f.get('pir_date', datetime.utcnow().strftime('%Y-%m-%d'))
+    m.pir_reviewer = f.get('pir_reviewer', session.get('username',''))
+    m.pir_actual_outcome = f.get('pir_actual_outcome', '')
+    m.pir_new_hazards = f.get('pir_new_hazards', '')
+    m.pir_effectiveness = f.get('pir_effectiveness', '')
+    m.pir_additional_actions = f.get('pir_additional_actions', '')
+    m.pir_lessons_learned = f.get('pir_lessons_learned', '')
+    m.post_change_review = f.get('pir_actual_outcome', '')
+    m.status = 'Post-Implementation Review'
+    db.session.commit()
+    u = MOCUpdate(moc_id=mid, update_text=f'PIR completed. Effectiveness: {m.pir_effectiveness or "Pending"}.',
+                  update_by=m.pir_reviewer, update_type='Progress')
+    db.session.add(u); db.session.commit()
+    flash('Post-Implementation Review recorded.', 'success')
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/close', methods=['POST'])
+@require_login
+def moc_close(mid):
+    m = MOC.query.get_or_404(mid)
+    if not m.pir_actual_outcome:
+        flash('Post-Implementation Review must be completed before closing this MOC.', 'error')
+        return redirect(url_for('moc_detail', mid=mid))
+    m.status = 'Closed'; m.closed_date = datetime.utcnow().strftime('%Y-%m-%d')
+    m.implementation_status = 'Completed'
+    db.session.commit()
+    u = MOCUpdate(moc_id=mid, update_text='MOC closed.',
+                  update_by=session.get('username','System'), update_type='Progress')
+    db.session.add(u); db.session.commit()
+    flash('MOC closed successfully.', 'success')
+    return redirect(url_for('moc_detail', mid=mid))
+
+@app.route('/moc/<mid>/add-hazard', methods=['POST'])
+@require_login
+def moc_add_hazard(mid):
+    MOC.query.get_or_404(mid)
+    f = request.form
+    h = MOCHazard(moc_id=mid,
+                  hazard_description=f.get('hazard_description',''),
+                  potential_consequence=f.get('potential_consequence',''),
+                  existing_controls=f.get('existing_controls',''),
+                  proposed_controls=f.get('proposed_controls',''),
+                  initial_risk=f.get('initial_risk','Medium'),
+                  residual_risk=f.get('residual_risk','Low'),
+                  acceptance_status=f.get('acceptance_status','Pending'),
+                  acceptance_authority=f.get('acceptance_authority',''))
+    db.session.add(h); db.session.commit()
+    flash('Hazard added to MOC Hazard Register.', 'success')
+    return redirect(url_for('moc_detail', mid=mid) + '#hazards')
+
+@app.route('/moc/hazard/<int:hid>/delete', methods=['POST'])
+@require_login
+def moc_delete_hazard(hid):
+    h = MOCHazard.query.get_or_404(hid)
+    mid = h.moc_id
+    db.session.delete(h); db.session.commit()
+    flash('Hazard removed.', 'success')
+    return redirect(url_for('moc_detail', mid=mid) + '#hazards')
+
+@app.route('/moc/<mid>/add-milestone', methods=['POST'])
+@require_login
+def moc_add_milestone(mid):
+    MOC.query.get_or_404(mid)
+    f = request.form
+    ms = MOCMilestone(moc_id=mid, description=f.get('description',''),
+                      responsible_person=f.get('responsible_person',''),
+                      target_date=f.get('target_date',''), status=f.get('status','Pending'),
+                      notes=f.get('notes',''))
+    db.session.add(ms); db.session.commit()
+    flash('Milestone added.', 'success')
+    return redirect(url_for('moc_detail', mid=mid) + '#milestones')
+
+@app.route('/moc/milestone/<int:msid>/update', methods=['POST'])
+@require_login
+def moc_update_milestone(msid):
+    ms = MOCMilestone.query.get_or_404(msid)
+    mid = ms.moc_id
+    ms.status = request.form.get('status', ms.status)
+    if ms.status == 'Complete':
+        ms.completed_date = datetime.utcnow().strftime('%Y-%m-%d')
+    ms.notes = request.form.get('notes', ms.notes or '')
+    db.session.commit()
+    flash('Milestone updated.', 'success')
+    return redirect(url_for('moc_detail', mid=mid) + '#milestones')
+
+@app.route('/moc/<mid>/add-stakeholder', methods=['POST'])
+@require_login
+def moc_add_stakeholder(mid):
+    MOC.query.get_or_404(mid)
+    f = request.form
+    sk = MOCStakeholder(moc_id=mid, department_name=f.get('department_name',''),
+                        contact_name=f.get('contact_name',''),
+                        consultation_date=f.get('consultation_date',''),
+                        comments=f.get('comments',''), reviewed='reviewed' in f)
+    db.session.add(sk); db.session.commit()
+    flash('Stakeholder consultation recorded.', 'success')
+    return redirect(url_for('moc_detail', mid=mid) + '#stakeholders')
+
+@app.route('/moc/<mid>/add-update', methods=['POST'])
+@require_login
+def moc_add_update(mid):
+    MOC.query.get_or_404(mid)
+    f = request.form
+    u = MOCUpdate(moc_id=mid, update_text=f.get('update_text',''),
+                  update_by=f.get('update_by', session.get('username','')),
+                  update_type=f.get('update_type','Progress'))
+    db.session.add(u); db.session.commit()
+    flash('Update logged.', 'success')
+    return redirect(url_for('moc_detail', mid=mid) + '#updates')
 
 # ─── SPI ─────────────────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -12158,6 +12540,75 @@ with app.app_context():
         'safety_surveys': [
             ('target_audience', "VARCHAR(50) DEFAULT 'all'"),
         ],
+        'moc': [
+            ('moc_number',                  'VARCHAR(30)'),
+            ('change_category',             'VARCHAR(50)'),
+            ('date_raised',                 'VARCHAR(20)'),
+            ('current_situation',           'TEXT'),
+            ('proposed_change',             'TEXT'),
+            ('reason_for_change',           'TEXT'),
+            ('expected_benefits',           'TEXT'),
+            ('impact_aircraft_ops',         'BOOLEAN DEFAULT FALSE'),
+            ('impact_flight_crew',          'BOOLEAN DEFAULT FALSE'),
+            ('impact_cabin_crew',           'BOOLEAN DEFAULT FALSE'),
+            ('impact_ground_ops',           'BOOLEAN DEFAULT FALSE'),
+            ('impact_maintenance',          'BOOLEAN DEFAULT FALSE'),
+            ('impact_occ',                  'BOOLEAN DEFAULT FALSE'),
+            ('impact_training',             'BOOLEAN DEFAULT FALSE'),
+            ('impact_safety_reporting',     'BOOLEAN DEFAULT FALSE'),
+            ('impact_erp',                  'BOOLEAN DEFAULT FALSE'),
+            ('impact_security',             'BOOLEAN DEFAULT FALSE'),
+            ('impact_regulatory',           'BOOLEAN DEFAULT FALSE'),
+            ('impact_contractor',           'BOOLEAN DEFAULT FALSE'),
+            ('safety_impact_level',         "VARCHAR(20) DEFAULT 'Low'"),
+            ('risk_assessment_required',    'BOOLEAN DEFAULT FALSE'),
+            ('linked_ra_id',                'VARCHAR(30)'),
+            ('icao_impact',                 'BOOLEAN DEFAULT FALSE'),
+            ('iosa_impact',                 'BOOLEAN DEFAULT FALSE'),
+            ('easa_impact',                 'BOOLEAN DEFAULT FALSE'),
+            ('national_authority_impact',   'BOOLEAN DEFAULT FALSE'),
+            ('company_manual_impact',       'BOOLEAN DEFAULT FALSE'),
+            ('regulatory_approval_required','BOOLEAN DEFAULT FALSE'),
+            ('regulatory_approval_ref',     'VARCHAR(100)'),
+            ('regulatory_approval_date',    'VARCHAR(20)'),
+            ('regulatory_evidence',         'TEXT'),
+            ('implementation_start_date',   'VARCHAR(20)'),
+            ('target_completion_date',      'VARCHAR(20)'),
+            ('training_required',           'BOOLEAN DEFAULT FALSE'),
+            ('documentation_update_required','BOOLEAN DEFAULT FALSE'),
+            ('sop_revision_required',       'BOOLEAN DEFAULT FALSE'),
+            ('erp_update_required',         'BOOLEAN DEFAULT FALSE'),
+            ('stakeholder_summary',         'TEXT'),
+            ('dept_manager_status',         "VARCHAR(20) DEFAULT 'Pending'"),
+            ('dept_manager_name',           'VARCHAR(100)'),
+            ('dept_manager_date',           'VARCHAR(20)'),
+            ('dept_manager_comments',       'TEXT'),
+            ('safety_review_status',        "VARCHAR(20) DEFAULT 'Pending'"),
+            ('safety_reviewer_name',        'VARCHAR(100)'),
+            ('safety_review_date',          'VARCHAR(20)'),
+            ('safety_review_comments',      'TEXT'),
+            ('sm_approval_status',          "VARCHAR(20) DEFAULT 'Pending'"),
+            ('sm_name',                     'VARCHAR(100)'),
+            ('sm_date',                     'VARCHAR(20)'),
+            ('sm_comments',                 'TEXT'),
+            ('ae_approval_required',        'BOOLEAN DEFAULT FALSE'),
+            ('ae_approval_status',          "VARCHAR(20) DEFAULT 'Pending'"),
+            ('ae_name',                     'VARCHAR(100)'),
+            ('ae_date',                     'VARCHAR(20)'),
+            ('ae_comments',                 'TEXT'),
+            ('status',                      "VARCHAR(40) DEFAULT 'Draft'"),
+            ('submitted_date',              'VARCHAR(20)'),
+            ('approved_date',               'VARCHAR(20)'),
+            ('implemented_date',            'VARCHAR(20)'),
+            ('closed_date',                 'VARCHAR(20)'),
+            ('pir_date',                    'VARCHAR(20)'),
+            ('pir_reviewer',                'VARCHAR(100)'),
+            ('pir_actual_outcome',          'TEXT'),
+            ('pir_new_hazards',             'TEXT'),
+            ('pir_effectiveness',           'VARCHAR(30)'),
+            ('pir_additional_actions',      'TEXT'),
+            ('pir_lessons_learned',         'TEXT'),
+        ],
     }
 
     for table, cols in _migrations.items():
@@ -12222,6 +12673,81 @@ with app.app_context():
             ))
     except Exception:
         pass
+
+    # moc_hazards DDL
+    try:
+        with engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS moc_hazards ("
+                "  id SERIAL PRIMARY KEY,"
+                "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
+                "  hazard_description TEXT,"
+                "  potential_consequence TEXT,"
+                "  existing_controls TEXT,"
+                "  proposed_controls TEXT,"
+                "  initial_risk VARCHAR(20),"
+                "  residual_risk VARCHAR(20),"
+                "  acceptance_status VARCHAR(30) DEFAULT 'Pending',"
+                "  acceptance_authority VARCHAR(100),"
+                "  linked_hazard_id VARCHAR(30),"
+                "  created_at TIMESTAMP DEFAULT NOW()"
+                ")"
+            ))
+    except Exception: pass
+
+    # moc_milestones DDL
+    try:
+        with engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS moc_milestones ("
+                "  id SERIAL PRIMARY KEY,"
+                "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
+                "  description VARCHAR(300),"
+                "  responsible_person VARCHAR(100),"
+                "  target_date VARCHAR(20),"
+                "  status VARCHAR(20) DEFAULT 'Pending',"
+                "  completed_date VARCHAR(20),"
+                "  notes TEXT,"
+                "  created_at TIMESTAMP DEFAULT NOW()"
+                ")"
+            ))
+    except Exception: pass
+
+    # moc_updates DDL
+    try:
+        with engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS moc_updates ("
+                "  id SERIAL PRIMARY KEY,"
+                "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
+                "  update_text TEXT,"
+                "  update_by VARCHAR(100),"
+                "  update_type VARCHAR(30) DEFAULT 'Progress',"
+                "  created_at TIMESTAMP DEFAULT NOW()"
+                ")"
+            ))
+    except Exception: pass
+
+    # moc_stakeholders DDL
+    try:
+        with engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS moc_stakeholders ("
+                "  id SERIAL PRIMARY KEY,"
+                "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
+                "  department_name VARCHAR(100),"
+                "  contact_name VARCHAR(100),"
+                "  consultation_date VARCHAR(20),"
+                "  comments TEXT,"
+                "  reviewed BOOLEAN DEFAULT FALSE,"
+                "  created_at TIMESTAMP DEFAULT NOW()"
+                ")"
+            ))
+    except Exception: pass
 
     try:
         seed()

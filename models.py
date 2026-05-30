@@ -338,22 +338,173 @@ class Investigation(db.Model):
                               lazy=True, order_by='InvestigationEvent.created_at')
 
 class MOC(db.Model):
+    """
+    ICAO Annex 19 / Doc 9859 §7 — Management of Change
+    IOSA ISM/ORG, EASA SMS compliant — full airline governance lifecycle
+    """
     __tablename__ = 'moc'
+    # ── Core Identity (preserved from original) ──────────────────────────────
     id                  = db.Column(db.String(30), primary_key=True)
     title               = db.Column(db.String(200))
-    description         = db.Column(db.Text)
+    description         = db.Column(db.Text)          # maps to proposed_change in new UI
     department_id       = db.Column(db.Integer, db.ForeignKey('departments.id'))
-    change_type         = db.Column(db.String(50))   # Process / Equipment / Personnel / Regulatory
+    change_type         = db.Column(db.String(50))    # legacy field preserved
     initiator           = db.Column(db.String(100))
     planned_date        = db.Column(db.String(20))
     pre_change_risk     = db.Column(db.Text)
-    approval_status     = db.Column(db.String(30), default='Pending')  # Pending / Approved / Rejected
+    approval_status     = db.Column(db.String(30), default='Pending')
     approved_by         = db.Column(db.String(100))
     implementation_status = db.Column(db.String(30), default='Not Started')
     post_change_review  = db.Column(db.Text)
     hazard_id           = db.Column(db.String(30))
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
-    department          = db.relationship('Department', foreign_keys=[department_id])
+    # ── NEW: MOC Identification ───────────────────────────────────────────────
+    moc_number          = db.Column(db.String(30))    # e.g. JAV/MOC/2026/001
+    change_category     = db.Column(db.String(50))    # Operational/Flight Ops/Ground Ops/…
+    date_raised         = db.Column(db.String(20))
+    # ── NEW: Change Details ───────────────────────────────────────────────────
+    current_situation   = db.Column(db.Text)
+    proposed_change     = db.Column(db.Text)
+    reason_for_change   = db.Column(db.Text)
+    expected_benefits   = db.Column(db.Text)
+    # ── NEW: Impact Assessment (12 domains) ──────────────────────────────────
+    impact_aircraft_ops     = db.Column(db.Boolean, default=False)
+    impact_flight_crew      = db.Column(db.Boolean, default=False)
+    impact_cabin_crew       = db.Column(db.Boolean, default=False)
+    impact_ground_ops       = db.Column(db.Boolean, default=False)
+    impact_maintenance      = db.Column(db.Boolean, default=False)
+    impact_occ              = db.Column(db.Boolean, default=False)
+    impact_training         = db.Column(db.Boolean, default=False)
+    impact_safety_reporting = db.Column(db.Boolean, default=False)
+    impact_erp              = db.Column(db.Boolean, default=False)
+    impact_security         = db.Column(db.Boolean, default=False)
+    impact_regulatory       = db.Column(db.Boolean, default=False)
+    impact_contractor       = db.Column(db.Boolean, default=False)
+    # ── NEW: Safety Risk ─────────────────────────────────────────────────────
+    safety_impact_level         = db.Column(db.String(20), default='Low')  # Low/Medium/High/Critical
+    risk_assessment_required    = db.Column(db.Boolean, default=False)
+    linked_ra_id                = db.Column(db.String(30))
+    # ── NEW: Regulatory Compliance ────────────────────────────────────────────
+    icao_impact                 = db.Column(db.Boolean, default=False)
+    iosa_impact                 = db.Column(db.Boolean, default=False)
+    easa_impact                 = db.Column(db.Boolean, default=False)
+    national_authority_impact   = db.Column(db.Boolean, default=False)
+    company_manual_impact       = db.Column(db.Boolean, default=False)
+    regulatory_approval_required = db.Column(db.Boolean, default=False)
+    regulatory_approval_ref     = db.Column(db.String(100))
+    regulatory_approval_date    = db.Column(db.String(20))
+    regulatory_evidence         = db.Column(db.Text)
+    # ── NEW: Implementation Planning ─────────────────────────────────────────
+    implementation_start_date   = db.Column(db.String(20))
+    target_completion_date      = db.Column(db.String(20))
+    training_required           = db.Column(db.Boolean, default=False)
+    documentation_update_required = db.Column(db.Boolean, default=False)
+    sop_revision_required       = db.Column(db.Boolean, default=False)
+    erp_update_required         = db.Column(db.Boolean, default=False)
+    # ── NEW: Stakeholder Consultation ────────────────────────────────────────
+    stakeholder_summary         = db.Column(db.Text)
+    # ── NEW: Approval Chain ───────────────────────────────────────────────────
+    dept_manager_status         = db.Column(db.String(20), default='Pending')
+    dept_manager_name           = db.Column(db.String(100))
+    dept_manager_date           = db.Column(db.String(20))
+    dept_manager_comments       = db.Column(db.Text)
+    safety_review_status        = db.Column(db.String(20), default='Pending')
+    safety_reviewer_name        = db.Column(db.String(100))
+    safety_review_date          = db.Column(db.String(20))
+    safety_review_comments      = db.Column(db.Text)
+    sm_approval_status          = db.Column(db.String(20), default='Pending')
+    sm_name                     = db.Column(db.String(100))
+    sm_date                     = db.Column(db.String(20))
+    sm_comments                 = db.Column(db.Text)
+    ae_approval_required        = db.Column(db.Boolean, default=False)
+    ae_approval_status          = db.Column(db.String(20), default='Pending')
+    ae_name                     = db.Column(db.String(100))
+    ae_date                     = db.Column(db.String(20))
+    ae_comments                 = db.Column(db.Text)
+    # ── NEW: Lifecycle Status ─────────────────────────────────────────────────
+    # Draft → Under Review → Approved → Implementing → Implemented
+    # → Post-Implementation Review → Closed
+    status                      = db.Column(db.String(40), default='Draft')
+    submitted_date              = db.Column(db.String(20))
+    approved_date               = db.Column(db.String(20))
+    implemented_date            = db.Column(db.String(20))
+    closed_date                 = db.Column(db.String(20))
+    # ── NEW: Post-Implementation Review ──────────────────────────────────────
+    pir_date                    = db.Column(db.String(20))
+    pir_reviewer                = db.Column(db.String(100))
+    pir_actual_outcome          = db.Column(db.Text)
+    pir_new_hazards             = db.Column(db.Text)
+    pir_effectiveness           = db.Column(db.String(30))  # Effective/Partially Effective/Ineffective
+    pir_additional_actions      = db.Column(db.Text)
+    pir_lessons_learned         = db.Column(db.Text)
+    # ── Relationships ─────────────────────────────────────────────────────────
+    department      = db.relationship('Department', foreign_keys=[department_id])
+    moc_hazards     = db.relationship('MOCHazard', backref='moc', lazy=True,
+                                       cascade='all, delete-orphan',
+                                       order_by='MOCHazard.created_at')
+    moc_milestones  = db.relationship('MOCMilestone', backref='moc', lazy=True,
+                                       cascade='all, delete-orphan',
+                                       order_by='MOCMilestone.target_date')
+    moc_updates     = db.relationship('MOCUpdate', backref='moc', lazy=True,
+                                       cascade='all, delete-orphan',
+                                       order_by='MOCUpdate.created_at.desc()')
+    moc_stakeholders = db.relationship('MOCStakeholder', backref='moc', lazy=True,
+                                        cascade='all, delete-orphan')
+
+
+class MOCHazard(db.Model):
+    """Per-MOC hazard entries — supports multiple hazards per change (ICAO Doc 9859 §7.3)"""
+    __tablename__ = 'moc_hazards'
+    id              = db.Column(db.Integer, primary_key=True)
+    moc_id          = db.Column(db.String(30), db.ForeignKey('moc.id'), nullable=False)
+    hazard_description  = db.Column(db.Text)
+    potential_consequence = db.Column(db.Text)
+    existing_controls   = db.Column(db.Text)
+    proposed_controls   = db.Column(db.Text)
+    initial_risk        = db.Column(db.String(20))   # Low/Medium/High/Critical
+    residual_risk       = db.Column(db.String(20))
+    acceptance_status   = db.Column(db.String(30))   # Accepted/Not Accepted/Pending
+    acceptance_authority = db.Column(db.String(100))
+    linked_hazard_id    = db.Column(db.String(30))   # link to main hazards table
+    created_at          = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class MOCMilestone(db.Model):
+    """Implementation milestones for each MOC"""
+    __tablename__ = 'moc_milestones'
+    id              = db.Column(db.Integer, primary_key=True)
+    moc_id          = db.Column(db.String(30), db.ForeignKey('moc.id'), nullable=False)
+    description     = db.Column(db.String(300))
+    responsible_person = db.Column(db.String(100))
+    target_date     = db.Column(db.String(20))
+    status          = db.Column(db.String(20), default='Pending')  # Pending/In Progress/Complete/Overdue
+    completed_date  = db.Column(db.String(20))
+    notes           = db.Column(db.Text)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class MOCUpdate(db.Model):
+    """Progress updates and evidence log for each MOC"""
+    __tablename__ = 'moc_updates'
+    id              = db.Column(db.Integer, primary_key=True)
+    moc_id          = db.Column(db.String(30), db.ForeignKey('moc.id'), nullable=False)
+    update_text     = db.Column(db.Text)
+    update_by       = db.Column(db.String(100))
+    update_type     = db.Column(db.String(30), default='Progress')  # Progress/Evidence/Issue/Resolution
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class MOCStakeholder(db.Model):
+    """Stakeholder consultation records per MOC"""
+    __tablename__ = 'moc_stakeholders'
+    id              = db.Column(db.Integer, primary_key=True)
+    moc_id          = db.Column(db.String(30), db.ForeignKey('moc.id'), nullable=False)
+    department_name = db.Column(db.String(100))
+    contact_name    = db.Column(db.String(100))
+    consultation_date = db.Column(db.String(20))
+    comments        = db.Column(db.Text)
+    reviewed        = db.Column(db.Boolean, default=False)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
 
 class SPIIndicator(db.Model):
     """
@@ -1516,136 +1667,4 @@ class ComplianceObligation(db.Model):
     # Ongoing / Periodic / One-Time / Conditional
     compliance_status = db.Column(db.String(30), default='Under Review')
     # Compliant / Non-Compliant / Partially Compliant / Under Review / Not Applicable / Exempt
-    evidence_description = db.Column(db.Text)    # What evidence demonstrates compliance
-    evidence_location    = db.Column(db.String(200))  # Where to find evidence
-    responsible_person   = db.Column(db.String(100))
-    department_id   = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
-    review_frequency = db.Column(db.String(20), default='Annual')
-    # Monthly / Quarterly / Semi-Annual / Annual / Event-Based
-    last_reviewed   = db.Column(db.String(20))
-    next_review_due = db.Column(db.String(20))
-    finding_ref     = db.Column(db.String(30))    # linked CAA finding if non-compliant
-    linked_action_id = db.Column(db.String(30))   # corrective action if gap exists
-    notes           = db.Column(db.Text)
-    priority        = db.Column(db.String(20), default='Medium')  # Critical / High / Medium / Low
-    created_by      = db.Column(db.String(100))
-    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at      = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    department      = db.relationship('Department', foreign_keys=[department_id],
-                          backref=db.backref('compliance_obligations', lazy=True))
-
-class SPIEventLink(db.Model):
-    """
-    ICAO Annex 19 / Doc 9859 — Operational event linked to SPI indicator.
-    Created automatically by the SPI Intelligence Mapper when events occur.
-    Purely additive — never modifies existing SPI calculations.
-    """
-    __tablename__ = 'spi_event_links'
-    id            = db.Column(db.Integer, primary_key=True)
-    spi_id        = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'), nullable=False)
-    # Source event
-    event_type    = db.Column(db.String(30))   # hazard_report / asr / investigation / audit_finding
-                                               # risk_assessment / erp_activation / action / safety_promo
-    event_id      = db.Column(db.String(50))   # e.g. HR-SMS-01 / ASR-001 / INV-SMS-01
-    event_title   = db.Column(db.String(200))  # human-readable summary
-    event_date    = db.Column(db.String(20))   # YYYY-MM-DD
-    # Context
-    department_id = db.Column(db.Integer)
-    category      = db.Column(db.String(100))  # occurrence category / hazard class
-    severity      = db.Column(db.String(20))   # Critical / High / Medium / Low
-    match_reason  = db.Column(db.String(300))  # why it was linked — e.g. "keyword:runway"
-    # Audit
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    # Relationship back to indicator
-    indicator     = db.relationship('SPIIndicator',
-                        backref=db.backref('event_links', lazy='dynamic'))
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  ENTERPRISE CONTINUOUS COMPLIANCE & AUDIT VERIFICATION ENGINE
-#  ICAO Annex 19 / Doc 9859 / IOSA ISM / EASA SMS Oversight
-#  Additive only — no existing tables modified
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class AuditVerificationItem(db.Model):
-    """
-    Audit Verification Item (AVI) — the core record of the continuous
-    compliance engine.  Created automatically when any corrective action,
-    mitigation, investigation recommendation, SPI exceedance, or governance
-    action is generated anywhere in the SMS.  Survives until an auditor
-    confirms operational effectiveness during a real audit cycle.
-
-    Lifecycle:
-      Pending → Scheduled → In Verification → Verified Effective
-                                             → Verified Ineffective → Reopened
-                                             → Escalated
-    """
-    __tablename__ = 'audit_verification_items'
-
-    id              = db.Column(db.Integer, primary_key=True)
-
-    # ── Origin ────────────────────────────────────────────────────────────────
-    source_module       = db.Column(db.String(50))   # asr / hazard / investigation /
-                                                     # risk / action / spi / erp /
-                                                     # audit_finding / moc / safety_promo / cap
-    source_record_id    = db.Column(db.String(50))   # FK to originating record (string ID)
-    source_description  = db.Column(db.Text)         # human-readable trigger summary
-
-    # ── Cross-module linkage ───────────────────────────────────────────────────
-    linked_report_id        = db.Column(db.String(30))   # HazardReport / ASRReport
-    linked_hazard_id        = db.Column(db.String(30))
-    linked_investigation_id = db.Column(db.String(30))
-    linked_spi_id           = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'), nullable=True)
-    linked_action_id        = db.Column(db.String(30))
-    linked_audit_id         = db.Column(db.String(30))   # AuditSchedule id
-    linked_finding_id       = db.Column(db.String(30))   # AuditFinding id
-    linked_risk_id          = db.Column(db.String(30))   # RiskAssessment id
-
-    # ── Verification specification ─────────────────────────────────────────────
-    verification_area       = db.Column(db.String(100))  # e.g. "Flight Operations"
-    verification_objective  = db.Column(db.Text)         # what must be verified
-    required_evidence       = db.Column(db.Text)         # evidence auditor must collect
-    effectiveness_criteria  = db.Column(db.Text)         # pass/fail criteria
-    operational_risk        = db.Column(db.String(20), default='Medium')  # Critical/High/Medium/Low
-
-    # ── Scheduling ─────────────────────────────────────────────────────────────
-    department_id           = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
-    due_audit_cycle         = db.Column(db.String(30))   # e.g. "Q3-2026" or "2026-Annual"
-    due_date                = db.Column(db.String(20))   # YYYY-MM-DD deadline
-
-    # ── Status lifecycle ────────────────────────────────────────────────────────
-    status = db.Column(db.String(30), default='Pending')
-    # Pending / Scheduled / In Verification / Verified Effective /
-    # Verified Ineffective / Escalated / Closed / Cancelled
-
-    # ── Recurrence intelligence ─────────────────────────────────────────────────
-    recurrence_flag         = db.Column(db.Boolean, default=False)
-    recurrence_count        = db.Column(db.Integer, default=0)
-    is_systemic             = db.Column(db.Boolean, default=False)
-    recurrence_notes        = db.Column(db.Text)
-
-    # ── Verification outcome (filled by auditor) ────────────────────────────────
-    verified_by             = db.Column(db.String(100))
-    verified_at             = db.Column(db.DateTime)
-    scheduled_audit_id      = db.Column(db.String(30))   # AuditSchedule where it was verified
-    effectiveness_result    = db.Column(db.String(30))   # Effective / Partially / Ineffective
-    effectiveness_notes     = db.Column(db.Text)
-    evidence_collected      = db.Column(db.Text)
-
-    # ── Follow-up / escalation ──────────────────────────────────────────────────
-    followup_required       = db.Column(db.Boolean, default=False)
-    followup_notes          = db.Column(db.Text)
-    escalation_required     = db.Column(db.Boolean, default=False)
-    escalated_to_srb        = db.Column(db.Boolean, default=False)
-    escalation_date         = db.Column(db.String(20))
-
-    # ── Metadata ────────────────────────────────────────────────────────────────
-    created_at              = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at              = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_by              = db.Column(db.String(100))
-
-    # ── Relationships ────────────────────────────────────────────────────────────
-    department  = db.relationship('Department', foreign_keys=[department_id],
-                      backref=db.backref('verification_items', lazy='dynamic'))
-    linked_spi  = db.relationship('SPIIndicator', foreign_keys=[linked_spi_id],
-                      backref=db.backref('verification_items', lazy='dynamic'))
+    evidence_description = db.Column(db.Text)    # What 
