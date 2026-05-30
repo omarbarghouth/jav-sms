@@ -553,4 +553,24 @@
         ('Raised', m.date_raised or (m.created_at.strftime('%Y-%m-%d') if m.created_at else None)),
         ('Submitted', m.submitted_date), ('Approved', m.approved_date),
         ('Impl. Start', m.implementation_start_date), ('Target Completion', m.target_completion_date),
-        ('Implemented', m.implemented_date), ('PIR Date', m.pir_
+        ('Implemented', m.implemented_date), ('PIR Date', m.pir_date), ('Closed', m.closed_date)
+      ] %}
+      {% set filled = key_dates | selectattr('1') | list %}
+      {% if filled %}
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">
+        {% for label, val in filled %}
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">{{ label }}</div>
+          <div style="font-size:12px;font-weight:600;color:#1e293b">{{ val }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="font-size:12px;color:var(--muted);padding:6px 0">No dates recorded yet.</div>
+      {% endif %}
+    </div>
+
+  </div>{# end right column #}
+</div>{# end main grid #}
+
+{% endblock %}
