@@ -11,7 +11,7 @@ class Department(db.Model):
     color         = db.Column(db.String(20), default='#1e40af')
 
 class User(db.Model):
-    """Safety Admin users — protected access to internal SMS dashboard."""
+    """Safety Admin users - protected access to internal SMS dashboard."""
     __tablename__ = 'users'
     id            = db.Column(db.Integer, primary_key=True)
     username      = db.Column(db.String(80), unique=True, nullable=False)
@@ -28,7 +28,7 @@ class User(db.Model):
 
 
 class VoluntaryReport(db.Model):
-    """Voluntary safety report — open to all staff."""
+    """Voluntary safety report - open to all staff."""
     __tablename__ = 'voluntary_reports'
     id            = db.Column(db.Integer, primary_key=True)
     ref_number    = db.Column(db.String(30))
@@ -48,7 +48,7 @@ class VoluntaryReport(db.Model):
 
 
 class ConfidentialReport(db.Model):
-    """Confidential safety report — identity protected."""
+    """Confidential safety report - identity protected."""
     __tablename__ = 'confidential_reports'
     id            = db.Column(db.Integer, primary_key=True)
     ref_number    = db.Column(db.String(30))
@@ -79,7 +79,7 @@ class HazardReport(db.Model):
     immediate_action = db.Column(db.Text)
     suggested_mitigation = db.Column(db.Text)
     reporter_severity = db.Column(db.String(20))  # Low/Medium/High/Critical (perception)
-    # Keep these for backward compat — no longer required on form
+    # Keep these for backward compat - no longer required on form
     severity      = db.Column(db.String(2))
     likelihood    = db.Column(db.Integer)
     risk_index    = db.Column(db.String(5))
@@ -198,7 +198,7 @@ class Action(db.Model):
     priority         = db.Column(db.String(20), default='Medium')  # High / Medium / Low
     status           = db.Column(db.String(50), default='Open')
     # Open / In Progress / Closed / Overdue
-    # Effectiveness — only filled when closing
+    # Effectiveness - only filled when closing
     effectiveness        = db.Column(db.String(30))
     # Effective / Partially Effective / Ineffective
     effectiveness_review = db.Column(db.Text)
@@ -317,7 +317,7 @@ class Investigation(db.Model):
     aircraft_type       = db.Column(db.String(50))
     aircraft_reg        = db.Column(db.String(20))
     location            = db.Column(db.String(200))
-    # Regulatory notification (ICAO Annex 13 §6.1)
+    # Regulatory notification (ICAO Annex 13 s6.1)
     authority_notified  = db.Column(db.Boolean, default=False)
     notification_date   = db.Column(db.String(20))
     notification_ref    = db.Column(db.String(50))
@@ -339,8 +339,8 @@ class Investigation(db.Model):
 
 class MOC(db.Model):
     """
-    ICAO Annex 19 / Doc 9859 §7 — Management of Change
-    IOSA ISM/ORG, EASA SMS compliant — full airline governance lifecycle
+    ICAO Annex 19 / Doc 9859 s7 - Management of Change
+    IOSA ISM/ORG, EASA SMS compliant - full airline governance lifecycle
     """
     __tablename__ = 'moc'
     # ── Core Identity (preserved from original) ──────────────────────────────
@@ -453,7 +453,7 @@ class MOC(db.Model):
 
 
 class MOCHazard(db.Model):
-    """Per-MOC hazard entries — supports multiple hazards per change (ICAO Doc 9859 §7.3)"""
+    """Per-MOC hazard entries - supports multiple hazards per change (ICAO Doc 9859 s7.3)"""
     __tablename__ = 'moc_hazards'
     id              = db.Column(db.Integer, primary_key=True)
     moc_id          = db.Column(db.String(30), db.ForeignKey('moc.id'), nullable=False)
@@ -532,9 +532,9 @@ class SPIIndicator(db.Model):
     unit           = db.Column(db.String(50))
     frequency      = db.Column(db.String(20), default='Monthly')
     spt_target     = db.Column(db.Float)   # Safety Performance Target
-    alert_l1       = db.Column(db.Float)   # Yellow — Level 1
-    alert_l2       = db.Column(db.Float)   # Orange — Level 2
-    alert_l3       = db.Column(db.Float)   # Red    — Level 3 Critical
+    alert_l1       = db.Column(db.Float)   # Yellow - Level 1
+    alert_l2       = db.Column(db.Float)   # Orange - Level 2
+    alert_l3       = db.Column(db.Float)   # Red    - Level 3 Critical
     auto_source      = db.Column(db.String(50))
     auto_category    = db.Column(db.String(50))
     # Statistical monitoring
@@ -570,7 +570,7 @@ class SPIEscalation(db.Model):
     """
     Persistent record of each SPI escalation event.
     Created automatically when _spi_trigger_detail fires.
-    This is the SOURCE RECORD for SPI actions — the action is a RESPONSE,
+    This is the SOURCE RECORD for SPI actions - the action is a RESPONSE,
     the escalation is the CAUSE.
     """
     __tablename__ = 'spi_escalations'
@@ -587,7 +587,7 @@ class SPIEscalation(db.Model):
     mean_value     = db.Column(db.Float)      # mean at time of trigger
     sd_value       = db.Column(db.Float)      # SD at time of trigger
     description    = db.Column(db.Text)       # e.g. "Rule A: 20.0 > L3 4.8"
-    # When this record was created (not the trigger month — those are different)
+    # When this record was created (not the trigger month - those are different)
     detected_at    = db.Column(db.DateTime, default=datetime.utcnow)
     # Status tracking
     status         = db.Column(db.String(20), default='Open')  # Open / Actioned / Closed
@@ -597,7 +597,7 @@ class SPIEscalation(db.Model):
 
 
 class SafetyNewsletter(db.Model):
-    """Safety Newsletter — professional communications from Safety Dept."""
+    """Safety Newsletter - professional communications from Safety Dept."""
     __tablename__ = 'safety_newsletters'
     id             = db.Column(db.Integer, primary_key=True)
     ref_number     = db.Column(db.String(30))    # e.g. NL-2026-001
@@ -725,7 +725,7 @@ class Training(db.Model):
     department       = db.relationship('Department', foreign_keys=[department_id])
 
 class AuditPlan(db.Model):
-    """Annual audit plan — defines what must be audited in a given year."""
+    """Annual audit plan - defines what must be audited in a given year."""
     __tablename__ = 'audit_plans'
     id                 = db.Column(db.String(30), primary_key=True)
     year               = db.Column(db.Integer, nullable=False)
@@ -746,7 +746,7 @@ class AuditPlan(db.Model):
                                          cascade='all, delete-orphan')
 
 class AuditSchedule(db.Model):
-    """Individual scheduled audit — converted from audit plan."""
+    """Individual scheduled audit - converted from audit plan."""
     __tablename__ = 'audit_schedules'
     id                 = db.Column(db.String(30), primary_key=True)
     plan_id            = db.Column(db.String(30), db.ForeignKey('audit_plans.id'))
@@ -919,8 +919,8 @@ class AuditAction(db.Model):
     created_at           = db.Column(db.DateTime, default=datetime.utcnow)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  SAFETY POLICY & OBJECTIVES MODULE — COMPONENT 1 OF SMS
-#  ICAO Annex 19 / Doc 9859 — Added as extension, existing tables unchanged
+#  SAFETY POLICY & OBJECTIVES MODULE - COMPONENT 1 OF SMS
+#  ICAO Annex 19 / Doc 9859 - Added as extension, existing tables unchanged
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class DistributionList(db.Model):
@@ -964,7 +964,7 @@ class SurveyResponse(db.Model):
     department       = db.relationship('Department', foreign_keys=[department_id])
 
 class SafetyPolicy(db.Model):
-    """Safety Policy Statement — versioned, signed by Accountable Manager."""
+    """Safety Policy Statement - versioned, signed by Accountable Manager."""
     __tablename__ = 'safety_policies'
     id            = db.Column(db.String(30), primary_key=True)
     version       = db.Column(db.String(10))      # REV0, REV1, REV2…
@@ -981,7 +981,7 @@ class SafetyPolicy(db.Model):
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
 
 class SafetyRole(db.Model):
-    """Safety accountability — roles and responsibilities."""
+    """Safety accountability - roles and responsibilities."""
     __tablename__ = 'safety_roles'
     id            = db.Column(db.String(30), primary_key=True)
     role_name     = db.Column(db.String(100))
@@ -1017,7 +1017,7 @@ class SafetyPersonnel(db.Model):
     department    = db.relationship('Department', foreign_keys=[department_id])
 
 class ERPlan(db.Model):
-    """Emergency Response Plan — scenarios, procedures, contacts."""
+    """Emergency Response Plan - scenarios, procedures, contacts."""
     __tablename__ = 'erp'
     id              = db.Column(db.String(30), primary_key=True)
     erp_ref         = db.Column(db.String(30))   # e.g. ERP-001
@@ -1037,7 +1037,7 @@ class ERPlan(db.Model):
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
 
 class SMSDocument(db.Model):
-    """Document Control System — full lifecycle with revision history."""
+    """Document Control System - full lifecycle with revision history."""
     __tablename__ = 'sms_documents'
     id            = db.Column(db.String(50), primary_key=True)
     # Auto-generated: TYPE-DEPT-YEAR-SEQ-REV e.g. SOP-FO-2026-001-REV0
@@ -1064,13 +1064,13 @@ class SMSDocument(db.Model):
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  DOCUMENT TRACEABILITY BACKBONE
-#  Central linking table — connects SMSDocument to every module in the SMS
-#  ICAO Annex 19 §3.5 / IOSA ISM 1.1 — Full auditability
+#  Central linking table - connects SMSDocument to every module in the SMS
+#  ICAO Annex 19 s3.5 / IOSA ISM 1.1 - Full auditability
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class DocumentLink(db.Model):
     """
-    Universal linking table — one document can be linked to many entities
+    Universal linking table - one document can be linked to many entities
     and one entity can have many documents.
 
     entity_type values:
@@ -1092,9 +1092,9 @@ class DocumentLink(db.Model):
     )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  SAFETY RISK MANAGEMENT (SRM) — EXTENDED MODELS
+#  SAFETY RISK MANAGEMENT (SRM) - EXTENDED MODELS
 #  Extends existing Risk + Control + Hazard with SRM-grade fields
-#  ICAO Annex 19 §5 / Doc 9859 Ch.5 — Added as extension
+#  ICAO Annex 19 s5 / Doc 9859 Ch.5 - Added as extension
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class RiskOccurrence(db.Model):
@@ -1126,7 +1126,7 @@ class RiskAction(db.Model):
     risk          = db.relationship('Risk', backref=db.backref('risk_actions', lazy=True))
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RISK ASSESSMENT MODULE — Jav/SMS/001 Rev 01
+#  RISK ASSESSMENT MODULE - Jav/SMS/001 Rev 01
 #  Exact replica of Jordan Aviation Risk Assessment Form
 #  Pages 1-5 of the uploaded form → database structure
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1138,14 +1138,14 @@ class RiskAssessment(db.Model):
     """
     __tablename__ = 'risk_assessments'
     id                    = db.Column(db.String(30), primary_key=True)
-    # Page 1 — Administrator
+    # Page 1 - Administrator
     control_number        = db.Column(db.String(50))    # e.g. JAV/RA/2024/001
     responsible_name      = db.Column(db.String(100))
     assessors_names       = db.Column(db.String(300))   # comma-separated
     assessment_date       = db.Column(db.String(20))
     next_review_date      = db.Column(db.String(20))
     title                 = db.Column(db.String(200))
-    # Page 2 — General Information
+    # Page 2 - General Information
     hazard_id             = db.Column(db.String(30), db.ForeignKey('hazards.id'), unique=True)
     department_id         = db.Column(db.Integer, db.ForeignKey('departments.id'))
     general_description   = db.Column(db.Text)
@@ -1183,7 +1183,7 @@ class RiskAssessment(db.Model):
 
 class RARow(db.Model):
     """
-    Page 3 — Risk Table rows.
+    Page 3 - Risk Table rows.
     One row = one risk scenario within the assessment.
     Maps directly to each row of the risk table in the form.
     """
@@ -1192,7 +1192,7 @@ class RARow(db.Model):
     assessment_id             = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'), nullable=False)
     risk_id                   = db.Column(db.String(30), db.ForeignKey('risks.id'), nullable=True)
     seq_num                   = db.Column(db.Integer)        # SEQ column (1, 2, 3…)
-    # Form columns — left section
+    # Form columns - left section
     type_of_activity          = db.Column(db.String(200))    # "Type of Activity" column
     generic_hazard            = db.Column(db.String(200))    # "Generic Hazard" column
     specific_components       = db.Column(db.Text)           # "Specific Components of the Hazard"
@@ -1213,13 +1213,13 @@ class RARow(db.Model):
 
 class RAMitigation(db.Model):
     """
-    Page 4 — Implementation of Mitigations Responsibilities.
+    Page 4 - Implementation of Mitigations Responsibilities.
     Each row = one mitigation with a responsible manager.
     """
     __tablename__ = 'ra_mitigations'
     id                 = db.Column(db.Integer, primary_key=True)
     assessment_id      = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'), nullable=False)
-    hazard_seq         = db.Column(db.String(10))   # "Hazard Seq #" — references RARow.seq_num
+    hazard_seq         = db.Column(db.String(10))   # "Hazard Seq #" - references RARow.seq_num
     mitigation         = db.Column(db.Text)          # "Mitigations" column
     responsible_manager = db.Column(db.String(100)) # "Responsible Manager"
     due_date           = db.Column(db.String(20))
@@ -1228,20 +1228,20 @@ class RAMitigation(db.Model):
 
 class RAReview(db.Model):
     """
-    Page 5 — Risk Mitigation Review.
+    Page 5 - Risk Mitigation Review.
     Tracks effectiveness of each mitigation after implementation.
     """
     __tablename__ = 'ra_reviews'
     id                       = db.Column(db.Integer, primary_key=True)
     assessment_id            = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'), nullable=False)
-    risk_mitigation          = db.Column(db.String(200))  # "Risk Mitigation" — which mitigation
+    risk_mitigation          = db.Column(db.String(200))  # "Risk Mitigation" - which mitigation
     review_of_effectiveness  = db.Column(db.Text)         # "Review Of Mitigation Effectivity"
     effectiveness_rating     = db.Column(db.String(30))   # Effective / Partially Effective / Ineffective
     date_completed           = db.Column(db.String(20))   # "Date Completed"
     actioner                 = db.Column(db.String(100))  # "Actioner"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  GUIDED RA WORKFLOW — STEP TRACKING
+#  GUIDED RA WORKFLOW - STEP TRACKING
 #  Tracks progress through the 6-step risk assessment wizard
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1258,7 +1258,7 @@ class RAChecklistItem(db.Model):
 
 
 class Employee(db.Model):
-    """Mobile app employees — separate from admin/SAG users."""
+    """Mobile app employees - separate from admin/SAG users."""
     __tablename__ = 'employees'
     id            = db.Column(db.Integer, primary_key=True)
     employee_id   = db.Column(db.String(30), unique=True, nullable=False)  # e.g. JA-001
@@ -1284,7 +1284,7 @@ class ApiToken(db.Model):
 
     Replaces the in-memory _token_store dict so tokens survive Render
     spin-down and Gunicorn worker restarts. Token strings are generated
-    with secrets.token_urlsafe(32) — same as before. Expired rows are
+    with secrets.token_urlsafe(32) - same as before. Expired rows are
     cleaned up lazily on each login call.
     """
     __tablename__ = 'api_tokens'
@@ -1356,14 +1356,14 @@ class DeviceToken(db.Model):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  PHASE 1 — GOVERNANCE & AUTHORITY LAYER
-#  ICAO Annex 19 §4 / Doc 9859 §§3–4 — Management Commitment & Accountability
+#  PHASE 1 - GOVERNANCE & AUTHORITY LAYER
+#  ICAO Annex 19 s4 / Doc 9859 ss3–4 - Management Commitment & Accountability
 #  Gaps: 1 (SRB/MRB), 3 (Risk Acceptance), 4 (AE Identity), 10 (Four-Eyes)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class AccountableExecutive(db.Model):
     """
-    ICAO Doc 9859 §3.2 — Accountable Executive (AE).
+    ICAO Doc 9859 s3.2 - Accountable Executive (AE).
     The single named individual responsible for effective implementation of SMS.
     Linked to a real User account for approval queue integration.
     """
@@ -1391,7 +1391,7 @@ class AccountableExecutive(db.Model):
 class SRBMeeting(db.Model):
     """
     Safety Review Board / Management Review Board meeting record.
-    ICAO Annex 19 §4.1 — SMS management review.
+    ICAO Annex 19 s4.1 - SMS management review.
     Full lifecycle: Scheduled → In Progress → Minutes Draft → Completed / Cancelled.
     """
     __tablename__ = 'srb_meetings'
@@ -1502,7 +1502,7 @@ class SRBDecision(db.Model):
 
 class RiskAcceptance(db.Model):
     """
-    ICAO Doc 9859 §5.5 — Formal risk acceptance authority.
+    ICAO Doc 9859 s5.5 - Formal risk acceptance authority.
     INTOLERABLE risks MUST be formally accepted by the AE with documented justification.
     Creates an immutable governance record with full audit trail.
     """
@@ -1544,7 +1544,7 @@ class RiskAcceptance(db.Model):
 
 class GovernanceAuditLog(db.Model):
     """
-    ICAO Doc 9859 §3.4 — Four-eyes governance enforcement log.
+    ICAO Doc 9859 s3.4 - Four-eyes governance enforcement log.
     Immutable audit trail of every governance decision: who did what, when,
     and whether segregation-of-duties was respected.
     Reporter cannot self-close. Submitter cannot approve.
@@ -1563,7 +1563,7 @@ class GovernanceAuditLog(db.Model):
 class InvestigationEvent(db.Model):
     """
     Immutable audit trail for every lifecycle stage transition in an investigation.
-    ICAO Doc 9859 §6.3 — investigation progress must be formally documented.
+    ICAO Doc 9859 s6.3 - investigation progress must be formally documented.
     """
     __tablename__ = 'investigation_events'
     id              = db.Column(db.Integer, primary_key=True)
@@ -1578,7 +1578,7 @@ class InvestigationEvent(db.Model):
 
 class ERPDrill(db.Model):
     """
-    ICAO Annex 19 §8.3 / Doc 9859 §9 — Emergency drill records.
+    ICAO Annex 19 s8.3 / Doc 9859 s9 - Emergency drill records.
     Drills must be conducted periodically and outcomes documented to verify ERP effectiveness.
     """
     __tablename__ = 'erp_drills'
@@ -1613,7 +1613,7 @@ class ERPDrill(db.Model):
 class ERPActivation(db.Model):
     """
     Record of actual ERP activations (real emergencies).
-    ICAO Doc 9859 §9.3 — actual activation history must be maintained.
+    ICAO Doc 9859 s9.3 - actual activation history must be maintained.
     """
     __tablename__ = 'erp_activations'
     id              = db.Column(db.Integer, primary_key=True)
@@ -1649,22 +1649,63 @@ class ERPActivation(db.Model):
                           backref=db.backref('erp_activations', lazy=True))
 
 
+
+
 class ComplianceObligation(db.Model):
-    """
-    Regulatory Compliance Register — ICAO Doc 9859 §4.1 / Annex 19 §2.
-    Tracks mandatory regulatory requirements, their compliance status, and evidence.
-    Covers: ICAO Standards, CAA regulations, IOSA standards, EASA/FAA if applicable.
-    """
+    """Regulatory Compliance Register. ICAO Doc 9859 s4.1 / Annex 19 s2."""
     __tablename__ = 'compliance_obligations'
-    id              = db.Column(db.Integer, primary_key=True)
-    ref_number      = db.Column(db.String(30), unique=True)    # e.g. COMP-2026-001
-    regulation_body = db.Column(db.String(50))    # ICAO / JCAR / EASA / FAA / IOSA / Internal
-    standard_ref    = db.Column(db.String(100))   # e.g. ICAO Annex 19 §3.1.1
-    requirement_title = db.Column(db.String(200))
-    requirement_text  = db.Column(db.Text)
-    applicability   = db.Column(db.String(200))   # Which operations / departments
-    obligation_type = db.Column(db.String(30), default='Ongoing')
-    # Ongoing / Periodic / One-Time / Conditional
-    compliance_status = db.Column(db.String(30), default='Under Review')
-    # Compliant / Non-Compliant / Partially Compliant / Under Review / Not Applicable / Exempt
-    evidence_description = db.Column(db.Text)    # What 
+    id                   = db.Column(db.Integer, primary_key=True)
+    ref_number           = db.Column(db.String(30), unique=True)
+    regulation_body      = db.Column(db.String(50))
+    standard_ref         = db.Column(db.String(100))
+    requirement_title    = db.Column(db.String(200))
+    requirement_text     = db.Column(db.Text)
+    applicability        = db.Column(db.String(200))
+    obligation_type      = db.Column(db.String(30), default='Ongoing')
+    compliance_status    = db.Column(db.String(30), default='Under Review')
+    evidence_description = db.Column(db.Text)
+    evidence_ref         = db.Column(db.String(200))
+    responsible_dept     = db.Column(db.String(100))
+    review_frequency     = db.Column(db.String(30))
+    next_review_date     = db.Column(db.String(20))
+    last_reviewed_date   = db.Column(db.String(20))
+    last_reviewed_by     = db.Column(db.String(100))
+    non_compliance_risk  = db.Column(db.String(20), default='Medium')
+    notes                = db.Column(db.Text)
+    created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class AuditVerificationItem(db.Model):
+    """Safety Assurance Engine - Audit Verification Item (AVI). ICAO Annex 19 s3.4."""
+    __tablename__ = 'audit_verification_items'
+    id                      = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    source_module           = db.Column(db.String(50), nullable=False)
+    source_record_id        = db.Column(db.String(50), nullable=False)
+    source_description      = db.Column(db.Text)
+    department_id           = db.Column(db.Integer, db.ForeignKey('departments.id'))
+    linked_report_id        = db.Column(db.String(50))
+    linked_hazard_id        = db.Column(db.String(50))
+    linked_investigation_id = db.Column(db.String(50))
+    linked_spi_id           = db.Column(db.Integer)
+    linked_action_id        = db.Column(db.String(50))
+    linked_audit_id         = db.Column(db.Integer)
+    linked_finding_id       = db.Column(db.Integer)
+    linked_risk_id          = db.Column(db.String(50))
+    scheduled_audit_id      = db.Column(db.Integer, db.ForeignKey('audit_schedules.id'), nullable=True)
+    verification_area       = db.Column(db.String(100))
+    verification_objective  = db.Column(db.Text)
+    required_evidence       = db.Column(db.Text)
+    effectiveness_criteria  = db.Column(db.Text)
+    operational_risk        = db.Column(db.String(20), default='Medium')
+    due_audit_cycle         = db.Column(db.String(20))
+    due_date                = db.Column(db.String(20))
+    status                  = db.Column(db.String(30), default='Pending')
+    recurrence_count        = db.Column(db.Integer, default=0)
+    escalation_level        = db.Column(db.Integer, default=0)
+    completed_at            = db.Column(db.DateTime)
+    completed_by            = db.Column(db.String(100))
+    effectiveness_rating    = db.Column(db.String(30))
+    notes                   = db.Column(db.Text)
+    created_by              = db.Column(db.String(100))
+    created_at              = db.Column(db.DateTime, default=datetime.utcnow)
+    department              = db.relationship('Department', foreign_keys=[department_id])

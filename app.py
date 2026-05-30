@@ -4721,28 +4721,133 @@ def moc_close(mid):
 @app.route('/moc/<mid>/add-hazard', methods=['POST'])
 @require_login
 def moc_add_hazard(mid):
-    MOC.query.get_or_404(mid)
+    m = MOC.query.get_or_404(mid)
     f = request.form
-    h = MOCHazard(moc_id=mid,
-                  hazard_description=f.get('hazard_description',''),
-                  potential_consequence=f.get('potential_consequence',''),
-                  existing_controls=f.get('existing_controls',''),
-                  proposed_controls=f.get('proposed_controls',''),
-                  initial_risk=f.get('initial_risk','Medium'),
-                  residual_risk=f.get('residual_risk','Low'),
-                  acceptance_status=f.get('acceptance_status','Pending'),
-                  acceptance_authority=f.get('acceptance_authority',''))
-    db.session.add(h); db.session.commit()
-    flash('Hazard added to MOC Hazard Register.', 'success')
+    hazard_desc   = f.get('hazard_description', '')
+    consequence   = f.get('potential_consequence', '')
+    existing_ctrl = f.get('existing_controls', '')
+    proposed_ctrl = f.get('proposed_controls', '')
+    initial_risk  = f.get('initial_risk', 'Medium')
+    residual_risk = f.get('residual_risk', 'Low')
+    acceptance    = f.get('acceptance_status', 'Pending')
+    authority     = f.get('acceptance_authority', '')
+
+    # ── Risk level → matrix values mapping ──────────────────────────────────
+    _risk_map = {
+        'Low':      (1, 'A', '1A', 'Tolerable'),
+        'Medium':   (3, 'C', '3C', 'Tolerable'),
+        'High':     (4, 'D', '4D', 'Intolerable'),
+        'Critical': (5, 'E', '5E', 'Intolerable'),
+    }
+    il, isev, iidx, itol = _risk_map.get(initial_risk,  (2, 'B', '2B', 'Tolerable'))
+    rl, rsev, ridx, rtol = _risk_map.get(residual_risk, (1, 'A', '1A', 'Tolerable'))
+
+    # ── 1. Create real Hazard record in the Hazard Log ───────────────────────
+    haz_id = new_id('HAZ')
+    real_haz = Hazard(
+        id                  = haz_id,
+        source              = 'MOC',
+        linked_report_id    = mid,
+        department_id       = m.department_id,
+        classification      = 'Organizational',
+        type_of_activity    = 'Management of Change',
+        generic_hazard      = f'MOC: {m.title or mid}',
+        specific_components = hazard_desc,
+        consequences        = consequence,
+        status              = 'Open',
+    )
+    db.session.add(real_haz)
+    db.session.flush()   # get haz_id into DB before Risk FK
+
+    # ── 2. Create Risk record in the Risk Register ───────────────────────────
+    risk_id = new_id('RSK')
+    real_risk = Risk(
+        id                  = risk_id,
+        hazard_id           = haz_id,
+        description         = hazard_desc,
+        initial_likelihood  = il,
+        initial_severity    = isev,
+        initial_risk_index  = iidx,
+        initial_tolerance   = itol,
+        residual_likelihood = rl,
+        residual_severity   = rsev,
+        residual_risk_index = ridx,
+        residual_tolerance  = rtol,
+    )
+    db.session.add(real_risk)
+    db.session.flush()
+
+    # ── 3. Create Controls (existing + proposed) ─────────────────────────────
+    if existing_ctrl:
+        db.session.add(Control(
+            id           = new_id('CTL'),
+            risk_id      = risk_id,
+            control_type = 'Preventive',
+            description  = existing_ctrl,
+        ))
+    if proposed_ctrl:
+        db.session.add(Control(
+            id           = new_id('CTL'),
+            risk_id      = risk_id,
+            control_type = 'Preventive',
+            description  = proposed_ctrl,
+        ))
+
+    # ── 4. Create MOCHazard register entry linked to the real Hazard ─────────
+    mh = MOCHazard(
+        moc_id               = mid,
+        hazard_description   = hazard_desc,
+        potential_consequence= consequence,
+        existing_controls    = existing_ctrl,
+        proposed_controls    = proposed_ctrl,
+        initial_risk         = initial_risk,
+        residual_risk        = residual_risk,
+        acceptance_status    = acceptance,
+        acceptance_authority = authority,
+        linked_hazard_id     = haz_id,
+    )
+    db.session.add(mh)
+
+    # ── 5. Auto-generate Action for proposed controls ────────────────────────
+    if proposed_ctrl:
+        act = Action(
+            id          = new_id('ACT'),
+            source      = 'MOC',
+            hazard_id   = haz_id,
+            linked_ref_id = mid,
+            description = f'Implement proposed controls: {proposed_ctrl[:200]}',
+            owner       = session.get('username', ''),
+            due_date    = m.target_completion_date or '',
+            priority    = 'High' if initial_risk in ('High', 'Critical') else 'Medium',
+            status      = 'Open',
+        )
+        db.session.add(act)
+
+    # ── 6. Log the event ─────────────────────────────────────────────────────
+    db.session.add(MOCUpdate(
+        moc_id      = mid,
+        update_text = f'Hazard "{hazard_desc[:60]}" added to register. '
+                      f'Hazard Log: {haz_id} | Risk Register: {risk_id}.',
+        update_by   = session.get('username', 'System'),
+        update_type = 'Hazard',
+    ))
+    db.session.commit()
+    flash(f'Hazard added. Entries created in Hazard Log ({haz_id}) and Risk Register ({risk_id}).', 'success')
     return redirect(url_for('moc_detail', mid=mid) + '#hazards')
 
 @app.route('/moc/hazard/<int:hid>/delete', methods=['POST'])
 @require_login
 def moc_delete_hazard(hid):
-    h = MOCHazard.query.get_or_404(hid)
-    mid = h.moc_id
-    db.session.delete(h); db.session.commit()
-    flash('Hazard removed.', 'success')
+    mh = MOCHazard.query.get_or_404(hid)
+    mid = mh.moc_id
+    # Also delete the linked real Hazard (cascades to Risk + Controls)
+    if mh.linked_hazard_id:
+        real_haz = Hazard.query.get(mh.linked_hazard_id)
+        if real_haz:
+            db.session.delete(real_haz)
+    db.session.delete(mh)
+    db.session.commit()
+    flash('Hazard removed from register and Hazard Log.', 'success')
     return redirect(url_for('moc_detail', mid=mid) + '#hazards')
 
 @app.route('/moc/<mid>/add-milestone', methods=['POST'])
@@ -12644,26 +12749,36 @@ with app.app_context():
                 "  id SERIAL PRIMARY KEY,"
                 "  source_module VARCHAR(50) NOT NULL,"
                 "  source_record_id VARCHAR(50) NOT NULL,"
-                "  source_title VARCHAR(300),"
-                "  verification_type VARCHAR(50),"
-                "  description TEXT,"
-                "  status VARCHAR(20) DEFAULT 'Open',"
-                "  priority VARCHAR(20) DEFAULT 'Normal',"
-                "  assigned_to VARCHAR(100),"
+                "  source_description TEXT,"
+                "  department_id INTEGER REFERENCES departments(id),"
+                "  linked_report_id VARCHAR(50),"
+                "  linked_hazard_id VARCHAR(50),"
+                "  linked_investigation_id VARCHAR(50),"
+                "  linked_spi_id INTEGER,"
+                "  linked_action_id VARCHAR(50),"
+                "  linked_audit_id INTEGER,"
+                "  linked_finding_id INTEGER,"
+                "  linked_risk_id VARCHAR(50),"
+                "  scheduled_audit_id INTEGER REFERENCES audit_schedules(id),"
+                "  verification_area VARCHAR(100),"
+                "  verification_objective TEXT,"
+                "  required_evidence TEXT,"
+                "  effectiveness_criteria TEXT,"
+                "  operational_risk VARCHAR(20) DEFAULT 'Medium',"
+                "  due_audit_cycle VARCHAR(20),"
                 "  due_date VARCHAR(20),"
+                "  status VARCHAR(30) DEFAULT 'Pending',"
+                "  recurrence_count INTEGER DEFAULT 0,"
+                "  escalation_level INTEGER DEFAULT 0,"
                 "  completed_at TIMESTAMP,"
                 "  completed_by VARCHAR(100),"
-                "  evidence TEXT,"
-                "  effectiveness_rating VARCHAR(20),"
-                "  recurrence_count INTEGER DEFAULT 0,"
-                "  escalated BOOLEAN DEFAULT FALSE,"
-                "  escalation_reason TEXT,"
-                "  created_at TIMESTAMP DEFAULT NOW(),"
-                "  updated_at TIMESTAMP DEFAULT NOW()"
+                "  effectiveness_rating VARCHAR(30),"
+                "  notes TEXT,"
+                "  created_by VARCHAR(100),"
+                "  created_at TIMESTAMP DEFAULT NOW()"
                 ")"
             ))
-    except Exception:
-        pass
+    except Exception: pass
 
     # moc_hazards DDL
     try:
@@ -12679,7 +12794,7 @@ with app.app_context():
                 "  proposed_controls TEXT,"
                 "  initial_risk VARCHAR(20),"
                 "  residual_risk VARCHAR(20),"
-                "  acceptance_status VARCHAR(30) DEFAULT 'Pending',"
+                "  acceptance_status VARCHAR(20) DEFAULT 'Pending',"
                 "  acceptance_authority VARCHAR(100),"
                 "  linked_hazard_id VARCHAR(30),"
                 "  created_at TIMESTAMP DEFAULT NOW()"
