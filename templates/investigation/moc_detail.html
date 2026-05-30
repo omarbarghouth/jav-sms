@@ -192,7 +192,7 @@
           </div>
         </form>
       </div>
-      {% if m.moc_hazards %}
+      {% if moc_hazards %}
       <div class="tbl-wrap"><table>
         <thead><tr>
           <th>Hazard</th><th>Consequence</th><th>Existing Controls</th><th>Proposed Controls</th>
@@ -202,7 +202,7 @@
           <th style="width:40px"></th>
         </tr></thead>
         <tbody>
-        {% for h in m.moc_hazards %}
+        {% for h in moc_hazards %}
         {% set r_color = {'Low':'#15803d','Medium':'#d97706','High':'#dc2626','Critical':'#7c3aed'} %}
         <tr>
           <td style="font-size:12px;font-weight:600;max-width:130px">{{ (h.hazard_description or '—')[:80] }}</td>
@@ -259,9 +259,9 @@
           </div>
         </form>
       </div>
-      {% if m.moc_milestones %}
-      {% set ms_total = m.moc_milestones|length %}
-      {% set ms_done = m.moc_milestones|selectattr('status','eq','Complete')|list|length %}
+      {% if moc_milestones %}
+      {% set ms_total = moc_milestones|length %}
+      {% set ms_done = moc_milestones|selectattr('status','eq','Complete')|list|length %}
       {% set ms_pct = ((ms_done / ms_total) * 100)|int if ms_total else 0 %}
       <div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:5px">
@@ -271,7 +271,7 @@
           <div style="height:100%;width:{{ ms_pct }}%;background:{% if ms_pct==100 %}#15803d{% elif ms_pct>=50 %}#1d4ed8{% else %}#d97706{% endif %};border-radius:99px;transition:width .5s"></div>
         </div>
       </div>
-      {% for ms in m.moc_milestones %}
+      {% for ms in moc_milestones %}
       <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;{% if loop.last %}border-bottom:none{% endif %}">
         <div style="width:18px;height:18px;border-radius:50%;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;
           background:{% if ms.status=='Complete' %}#15803d{% elif ms.status=='In Progress' %}#1d4ed8{% else %}#f1f5f9{% endif %};
@@ -325,11 +325,11 @@
           </div>
         </form>
       </div>
-      {% if m.moc_stakeholders %}
+      {% if moc_stakeholders %}
       <div class="tbl-wrap"><table>
         <thead><tr><th>Department</th><th>Contact</th><th>Date</th><th>Comments</th><th>Status</th></tr></thead>
         <tbody>
-        {% for sk in m.moc_stakeholders %}
+        {% for sk in moc_stakeholders %}
         <tr>
           <td style="font-size:12px;font-weight:600">{{ sk.department_name or '—' }}</td>
           <td style="font-size:12px">{{ sk.contact_name or '—' }}</td>
@@ -409,10 +409,10 @@
           </div>
         </form>
       </div>
-      {% if m.moc_updates %}
+      {% if moc_updates %}
       {% set type_icons = {'Progress':'🔵','Evidence':'📎','Issue':'🔴','Resolution':'✅'} %}
       <div style="display:flex;flex-direction:column;gap:8px">
-      {% for upd in m.moc_updates %}
+      {% for upd in moc_updates %}
       <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;{% if loop.last %}border-bottom:none{% endif %}">
         <div style="font-size:18px;flex-shrink:0;margin-top:1px">{{ type_icons.get(upd.update_type,'📝') }}</div>
         <div style="flex:1">
@@ -553,25 +553,4 @@
         ('Raised', m.date_raised or (m.created_at.strftime('%Y-%m-%d') if m.created_at else None)),
         ('Submitted', m.submitted_date), ('Approved', m.approved_date),
         ('Impl. Start', m.implementation_start_date), ('Target Completion', m.target_completion_date),
-        ('Implemented', m.implemented_date), ('PIR Date', m.pir_date), ('Closed', m.closed_date),
-      ] %}
-      {% for label, val in key_dates %}
-      {% if val %}
-      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:11.5px">
-        <span style="color:var(--muted);font-weight:600">{{ label }}</span>
-        <span style="font-family:'IBM Plex Mono',monospace;font-weight:700">{{ val }}</span>
-      </div>
-      {% endif %}
-      {% endfor %}
-    </div>
-
-  </div><!-- END RIGHT COLUMN -->
-</div><!-- END GRID -->
-
-<script>
-function togglePanel(id) {
-  var el = document.getElementById(id);
-  el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-</script>
-{% endblock %}
+        ('Implemented', m.implemented_date), ('PIR Date', m.pir_
