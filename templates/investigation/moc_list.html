@@ -7,7 +7,7 @@
   <div>
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Management · ICAO Doc 9859 §7 · IOSA ISM · EASA SMS</div>
     <div class="page-title">Management of Change Register</div>
-    <div class="page-sub" style="margin-bottom:0">Controlled change governance with pre-change risk assessment · Approval workflow · Post-implementation review</div>
+    <div class="page-sub" style="margin-bottom:0">Change governance · Linked Risk Assessment workflow · Approval chain · Post-implementation review</div>
   </div>
   <a href="/moc/new" class="btn btn-nav">+ New MOC</a>
 </div>
@@ -25,6 +25,13 @@
 {% set mocs_crit_r   = mocs|selectattr('safety_impact_level','eq','Critical')|list %}
 {% set mocs_high     = (mocs_high_r + mocs_crit_r) %}
 {% set mocs_ineff    = mocs|selectattr('pir_effectiveness','eq','Ineffective')|list %}
+{% set mocs_ra_req   = mocs|selectattr('risk_assessment_required')|list %}
+{% set mocs_ra_pend  = [] %}
+{% for m in mocs_ra_req %}
+  {% if (m.ra_status or 'Not Started') not in ('Completed','Approved') %}
+    {% set _ = mocs_ra_pend.append(m) %}
+  {% endif %}
+{% endfor %}
 
 <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:16px">
   {% for label, val, col, sub in [
@@ -35,7 +42,7 @@
     ('Implementing', mocs_impl|length,   '#1d4ed8',  ''),
     ('PIR Due',      mocs_pir|length,    '#7c3aed',  '⚠ required'),
     ('High Risk',    mocs_high|length,   '#dc2626',  'High / Critical'),
-    ('Ineffective',  mocs_ineff|length,  '#9f1239',  'PIR result'),
+    ('RA Pending',   mocs_ra_pend|length,'#b45309',  'RA not approved'),
   ] %}
   <div style="background:#fff;border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);padding:10px 12px;box-shadow:var(--shadow)">
     <div style="font-size:20px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ col }};line-height:1;margin-bottom:2px">{{ val }}</div>
@@ -64,6 +71,12 @@
   <div style="font-size:12.5px;font-weight:700;color:#92400e">{{ mocs_review|length }} MOC(s) pending approval — review approval chain and record decisions</div>
 </div>
 {% endif %}
+{% if mocs_ra_pend|length > 0 %}
+<div style="background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #b45309;border-radius:var(--r);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:16px">🔬</span>
+  <div style="font-size:12.5px;font-weight:700;color:#92400e">{{ mocs_ra_pend|length }} MOC(s) require a Risk Assessment that is not yet Approved — SM approval is gated until RA status = Approved (ICAO Doc 9859 §7.3)</div>
+</div>
+{% endif %}
 
 <!-- MOC Table -->
 {% if mocs %}
@@ -81,6 +94,7 @@
           <th style="width:110px">Status</th>
           <th style="width:90px">Approval</th>
           <th style="width:80px">PIR</th>
+          <th style="width:90px">RA Status</th>
           <th style="width:60px">Hazard</th>
           <th style="width:100px"></th>
         </tr>
@@ -122,6 +136,15 @@
           {% elif m.pir_actual_outcome %}<span class="badge b-blue" style="font-size:9px">Done</span>
           {% elif st in ('Implemented','Post-Implementation Review') %}<span class="badge b-yellow" style="font-size:9px">⚠ Due</span>
           {% else %}<span style="color:var(--muted2);font-size:10px">—</span>{% endif %}
+        </td>
+        <td style="text-align:center">
+          {% if m.risk_assessment_required %}
+            {% set ra_st = m.ra_status or 'Not Started' %}
+            {% set ra_col = {'Not Started':'#6b7280','In Progress':'#d97706','Completed':'#1d4ed8','Approved':'#15803d'}.get(ra_st,'#6b7280') %}
+            <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:{{ ra_col }}15;color:{{ ra_col }};border:1px solid {{ ra_col }}40;white-space:nowrap">{{ ra_st }}</span>
+          {% else %}
+            <span style="color:var(--muted2);font-size:10px">N/A</span>
+          {% endif %}
         </td>
         <td>
           {% if m.hazard_id %}<a href="/hazard-log/{{ m.hazard_id }}" class="ctrl-num" style="font-size:9px;background:var(--red)" onclick="event.stopPropagation()">{{ m.hazard_id }}</a>

@@ -6,15 +6,15 @@
   <a href="{% if edit %}/moc/{{ m.id }}/detail{% else %}/moc{% endif %}" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← {% if edit %}Back to MOC{% else %}MOC Register{% endif %}</a>
 </div>
 <div style="margin-bottom:20px">
-  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">ICAO Doc 9859 §7 · IOSA ISM · EASA SMS</div>
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">ICAO Doc 9859 §7 · IOSA ISM · EASA SMS · Change Governance</div>
   <div class="page-title">{% if edit %}Edit MOC — {{ m.moc_number or m.id }}{% else %}New Management of Change{% endif %}</div>
-  <div class="page-sub" style="margin-bottom:0">Structured change governance with pre-change safety assessment and impact analysis</div>
+  <div class="page-sub" style="margin-bottom:0">Structured change governance · Risk Assessment is a separate linked module</div>
 </div>
 
-<!-- ICAO Banner -->
+<!-- Architecture notice -->
 <div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #1d4ed8;border-radius:var(--r);padding:11px 14px;margin-bottom:18px">
-  <div style="font-size:11px;font-weight:700;color:#1d4ed8;margin-bottom:2px">ICAO Doc 9859 §7 — Management of Change Requirement</div>
-  <div style="font-size:11px;color:#1e3a8a;line-height:1.5">All significant changes to the organisation, its operations, equipment, or personnel must be assessed for safety impact before implementation. A Hazard and Action will be automatically created.</div>
+  <div style="font-size:11px;font-weight:700;color:#1d4ed8;margin-bottom:2px">ICAO Doc 9859 §7 — Change Governance Architecture</div>
+  <div style="font-size:11px;color:#1e3a8a;line-height:1.5">This form captures <strong>change governance</strong> only. If a formal Risk Assessment is required, link it to this MOC after creation. The Risk Assessment module handles all hazard identification, likelihood/severity matrices, and controls — these are <em>not</em> embedded in the MOC form.</div>
 </div>
 
 <form class="form-card" method="POST" action="{% if edit %}/moc/{{ m.id }}/edit{% else %}/moc/new{% endif %}" style="max-width:1000px">
@@ -46,7 +46,7 @@
   <div class="g3">
     <div class="fg">
       <label>Change Initiator <span style="color:var(--red)">*</span></label>
-      <input type="text" name="initiator" required value="{{ m.initiator if m else '' }}" placeholder="Name / Department"/>
+      <input type="text" name="initiator" required value="{{ m.initiator if m else '' }}" placeholder="Name / Role"/>
     </div>
     <div class="fg">
       <label>Date Raised</label>
@@ -84,7 +84,7 @@
   <!-- ── SECTION 3: IMPACT ASSESSMENT ── -->
   <div class="sec" style="margin-top:4px">3 · Impact Assessment — Does this change affect…</div>
   <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:10px 14px;margin-bottom:14px">
-    <div style="font-size:11px;font-weight:700;color:#92400e">Check ALL areas that are affected by this change</div>
+    <div style="font-size:11px;font-weight:700;color:#92400e">Check ALL operational areas affected by this change</div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
     {% set impact_opts = [
@@ -103,22 +103,37 @@
     {% endfor %}
   </div>
 
-  <!-- ── SECTION 4: PRE-CHANGE RISK ── -->
-  <div class="sec" style="margin-top:4px">4 · Pre-Change Risk Assessment</div>
-  <div style="background:#fef3c7;border:1px solid #fde68a;border-left:4px solid #d97706;border-radius:var(--r);padding:10px 14px;margin-bottom:12px">
-    <div style="font-size:11px;font-weight:700;color:#92400e">ICAO Requirement — MANDATORY before implementation</div>
-    <div style="font-size:11px;color:#78350f;line-height:1.5;margin-top:2px">Identify all hazards introduced by this change. Assess likelihood and severity. A Hazard record will be auto-created.</div>
+  <!-- ── SECTION 4: SAFETY RISK ASSESSMENT REQUIREMENT ── -->
+  <div class="sec" style="margin-top:4px">4 · Safety Risk Assessment Requirement</div>
+  <div style="background:#f0fdf4;border:1px solid #86efac;border-left:4px solid #15803d;border-radius:var(--r);padding:11px 14px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:2px">Governance Gate — ICAO Doc 9859 §7.3</div>
+    <div style="font-size:11px;color:#14532d;line-height:1.5">Declare whether a formal Risk Assessment is required. If yes, the MOC cannot proceed to final approval until the linked Risk Assessment reaches <strong>Approved</strong> status. The Risk Assessment is managed in its own module — not embedded here.</div>
   </div>
-  <div class="fg">
-    <label>Pre-Change Risk Assessment <span style="color:var(--red)">*</span></label>
-    <textarea name="pre_change_risk" rows="5" required
-              placeholder="• What could go wrong during/after this change?&#10;• What is the likelihood and severity of each risk?&#10;• What controls and mitigations are proposed?&#10;• Are there residual risks that require monitoring?">{{ m.pre_change_risk if m else '' }}</textarea>
-  </div>
-  <div class="g3">
-    <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;background:var(--surface)">
-      <input type="checkbox" name="risk_assessment_required" value="1"{% if m and m.risk_assessment_required %} checked{% endif %} style="width:15px;height:15px;accent-color:#dc2626"/>
-      🔴 Formal Risk Assessment Required
-    </label>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+    <!-- RA Required toggle -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">Risk Assessment Required?</div>
+      <div style="display:flex;gap:8px">
+        <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;border:2px solid {% if m and m.risk_assessment_required %}#15803d{% else %}var(--border){% endif %};background:{% if m and m.risk_assessment_required %}#f0fdf4{% else %}var(--surface){% endif %};color:{% if m and m.risk_assessment_required %}#15803d{% else %}var(--muted){% endif %}" id="ra-yes-label">
+          <input type="radio" name="risk_assessment_required" value="yes"{% if m and m.risk_assessment_required %} checked{% endif %} style="accent-color:#15803d" onchange="toggleRAStatus()"/> ✅ Yes
+        </label>
+        <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;border:2px solid {% if not m or not m.risk_assessment_required %}#6b7280{% else %}var(--border){% endif %};background:{% if not m or not m.risk_assessment_required %}var(--surface){% else %}var(--surface){% endif %};color:#6b7280" id="ra-no-label">
+          <input type="radio" name="risk_assessment_required" value="no"{% if not m or not m.risk_assessment_required %} checked{% endif %} style="accent-color:#6b7280" onchange="toggleRAStatus()"/> — No
+        </label>
+      </div>
+    </div>
+
+    <!-- RA Status -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:14px" id="ra-status-box">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">Risk Assessment Status</div>
+      <select name="ra_status" style="width:100%">
+        {% for s in ['Not Started','In Progress','Completed','Approved'] %}
+        <option value="{{ s }}"{% if m and m.ra_status==s %} selected{% elif not m and s=='Not Started' %} selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">Update this status when the linked Risk Assessment progresses</div>
+    </div>
   </div>
 
   <!-- ── SECTION 5: REGULATORY COMPLIANCE ── -->
@@ -188,7 +203,7 @@
 
   <!-- ── SECTION 8: APPROVAL AUTHORITY ── -->
   <div class="sec" style="margin-top:4px">8 · Approval Authority</div>
-  <div id="ae-notice" style="display:{% if m and m.ae_approval_required %}block{% elif not m %}none{% else %}none{% endif %};background:#ede9fe;border:1px solid #c4b5fd;border-left:4px solid #7c3aed;border-radius:var(--r);padding:10px 14px;margin-bottom:12px">
+  <div id="ae-notice" style="display:{% if m and m.ae_approval_required %}block{% else %}none{% endif %};background:#ede9fe;border:1px solid #c4b5fd;border-left:4px solid #7c3aed;border-radius:var(--r);padding:10px 14px;margin-bottom:12px">
     <div style="font-size:11px;font-weight:700;color:#6d28d9">⚠ High / Critical Impact — Accountable Executive Approval Required</div>
     <div style="font-size:11px;color:#4c1d95">This change requires sign-off from the Accountable Executive per ICAO Annex 19 §6.2.4</div>
   </div>
@@ -216,6 +231,36 @@ function updateAERequired() {
     notice.style.display = 'none';
   }
 }
-document.addEventListener('DOMContentLoaded', updateAERequired);
+
+function toggleRAStatus() {
+  var radios = document.querySelectorAll('input[name="risk_assessment_required"]');
+  var required = false;
+  radios.forEach(function(r) { if (r.value === 'yes' && r.checked) required = true; });
+  var box = document.getElementById('ra-status-box');
+  var yesLabel = document.getElementById('ra-yes-label');
+  var noLabel  = document.getElementById('ra-no-label');
+  if (required) {
+    box.style.borderColor = '#15803d';
+    yesLabel.style.borderColor = '#15803d';
+    yesLabel.style.background = '#f0fdf4';
+    yesLabel.style.color = '#15803d';
+    noLabel.style.borderColor = 'var(--border)';
+    noLabel.style.background = 'var(--surface)';
+    noLabel.style.color = '#6b7280';
+  } else {
+    box.style.borderColor = 'var(--border)';
+    yesLabel.style.borderColor = 'var(--border)';
+    yesLabel.style.background = 'var(--surface)';
+    yesLabel.style.color = '#6b7280';
+    noLabel.style.borderColor = '#6b7280';
+    noLabel.style.background = 'var(--surface)';
+    noLabel.style.color = '#6b7280';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  updateAERequired();
+  toggleRAStatus();
+});
 </script>
 {% endblock %}
