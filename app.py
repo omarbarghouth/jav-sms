@@ -4488,9 +4488,25 @@ def _moc_impact_color(level):
 def moc_detail(mid):
     m = MOC.query.get_or_404(mid)
     all_departments = Department.query.order_by(Department.name).all()
-    actions = Action.query.filter_by(linked_ref_id=mid).all()
+    # Load actions with a fallback so a missing table never crashes the page
+    try:
+        actions = Action.query.filter_by(linked_ref_id=mid).all()
+    except Exception:
+        db.session.rollback()
+        actions = []
+    # Pre-load sub-relations explicitly so lazy-load errors are caught here
+    try:
+        moc_hazards     = MOCHazard.query.filter_by(moc_id=mid).order_by(MOCHazard.created_at).all()
+        moc_milestones  = MOCMilestone.query.filter_by(moc_id=mid).order_by(MOCMilestone.target_date).all()
+        moc_updates     = MOCUpdate.query.filter_by(moc_id=mid).order_by(MOCUpdate.created_at.desc()).all()
+        moc_stakeholders= MOCStakeholder.query.filter_by(moc_id=mid).order_by(MOCStakeholder.created_at).all()
+    except Exception:
+        db.session.rollback()
+        moc_hazards = moc_milestones = moc_updates = moc_stakeholders = []
     return render_template('investigation/moc_detail.html',
                            m=m, all_departments=all_departments, actions=actions,
+                           moc_hazards=moc_hazards, moc_milestones=moc_milestones,
+                           moc_updates=moc_updates, moc_stakeholders=moc_stakeholders,
                            status_color=_moc_status_color(m.status or 'Draft'),
                            impact_color=_moc_impact_color(m.safety_impact_level or 'Low'))
 
