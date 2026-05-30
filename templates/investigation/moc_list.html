@@ -155,8 +155,17 @@
               </form>
             </div>
           </details>
-          <a href="/pdf/moc/{{ m.id }}" target="_blank"
-             class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)" title="ICAO PDF">PDF</a>
+          <div style="display:flex;gap:5px;margin-top:4px">
+            <a href="/pdf/moc/{{ m.id }}" target="_blank"
+               class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)" title="ICAO PDF">PDF</a>
+            <form method="POST" action="/delete/moc/{{ m.id }}" style="display:inline"
+                  onsubmit="return confirm('Delete MOC {{ m.id }}?\n\nThis will also remove the linked hazard. This cannot be undone.')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="btn btn-sm"
+                      style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5"
+                      title="Delete MOC">🗑 Delete</button>
+            </form>
+          </div>
         </td>
       </tr>
       {% endfor %}

@@ -303,7 +303,10 @@
 
     <div class="sb-section">Investigation</div>
     <a href="/investigations" class="nav-a {% if '/investigations' in request.path %}active{% endif %}" data-tip="Investigations"><span class="nav-icon">🔎</span><span class="nav-label">Investigations</span></a>
-    <a href="/moc" class="nav-a {% if '/moc' in request.path %}active{% endif %}" data-tip="MOC"><span class="nav-icon">🔄</span><span class="nav-label">Management of Change</span></a>
+
+    <div class="sb-section">Management of Change</div>
+    <a href="/moc" class="nav-a {% if request.path == '/moc' or (request.path.startswith('/moc') and 'new' not in request.path) %}active{% endif %}" data-tip="MOC Register"><span class="nav-icon">🔄</span><span class="nav-label">MOC Register</span></a>
+    <a href="/moc/new" class="nav-a {% if '/moc/new' in request.path %}active{% endif %}" data-tip="New MOC"><span class="nav-icon">➕</span><span class="nav-label">New MOC</span></a>
 
     <div class="sb-section">SPI / SPT</div>
     <a href="/spi" class="nav-a {% if request.path=='/spi' %}active{% endif %}" data-tip="SPI Dashboard"><span class="nav-icon">📈</span><span class="nav-label">SPI Dashboard</span></a>
