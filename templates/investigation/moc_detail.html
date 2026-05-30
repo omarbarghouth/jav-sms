@@ -1,0 +1,564 @@
+{% extends "base.html" %}
+{% block title %}{{ m.moc_number or m.id }} — MOC Detail{% endblock %}
+{% block content %}
+
+{% set st = m.status or 'Draft' %}
+{% set sil = m.safety_impact_level or 'Low' %}
+{% set sil_color = {'Low':'#15803d','Medium':'#d97706','High':'#dc2626','Critical':'#7c3aed'}.get(sil,'#6b7280') %}
+{% set st_color = {'Draft':'#6b7280','Under Review':'#d97706','Approved':'#15803d','Implementing':'#1d4ed8','Implemented':'#0e7490','Post-Implementation Review':'#7c3aed','Closed':'#374151'}.get(st,'#6b7280') %}
+
+<!-- Breadcrumb + actions bar -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+  <div>
+    <a href="/moc" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← MOC Register</a>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-top:4px">ICAO Doc 9859 §7 · IOSA ISM · Management of Change</div>
+  </div>
+  <div style="display:flex;gap:7px;flex-wrap:wrap">
+    {% if st == 'Draft' %}
+    <a href="/moc/{{ m.id }}/edit" class="btn btn-outline btn-sm">✏️ Edit</a>
+    <form method="POST" action="/moc/{{ m.id }}/submit">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="btn btn-nav btn-sm">📤 Submit for Review</button>
+    </form>
+    {% elif st == 'Approved' %}
+    <form method="POST" action="/moc/{{ m.id }}/start-implementation">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="btn btn-nav btn-sm" style="background:#1d4ed8">🚀 Start Implementation</button>
+    </form>
+    {% elif st == 'Implementing' %}
+    <form method="POST" action="/moc/{{ m.id }}/mark-implemented">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="btn btn-nav btn-sm" style="background:#0e7490">✅ Mark Implemented</button>
+    </form>
+    {% elif st == 'Implemented' %}
+    <button class="btn btn-sm" style="background:#7c3aed;color:#fff"
+            onclick="document.getElementById('pir-panel').scrollIntoView({behavior:'smooth'})">📋 Complete PIR</button>
+    {% elif st == 'Post-Implementation Review' %}
+    <form method="POST" action="/moc/{{ m.id }}/close">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="btn btn-outline btn-sm" onclick="return confirm('Close this MOC?')">🔒 Close MOC</button>
+    </form>
+    {% endif %}
+    <a href="/pdf/moc/{{ m.id }}" target="_blank" class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)">📄 PDF</a>
+    <form method="POST" action="/delete/moc/{{ m.id }}"
+          onsubmit="return confirm('Permanently delete {{ m.id }}? This cannot be undone.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5">🗑 Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Header card -->
+<div style="background:#fff;border:1px solid var(--border);border-left:5px solid {{ st_color }};border-radius:var(--r);padding:18px 22px;margin-bottom:16px;box-shadow:var(--shadow)">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div style="flex:1">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--navy);background:var(--surface);padding:3px 10px;border-radius:4px;border:1px solid var(--border)">{{ m.moc_number or m.id }}</span>
+        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:{{ st_color }}20;color:{{ st_color }};border:1px solid {{ st_color }}40">{{ st }}</span>
+        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:{{ sil_color }}15;color:{{ sil_color }};border:1px solid {{ sil_color }}40">⚠ {{ sil }} Safety Impact</span>
+        {% if m.change_category %}<span style="font-size:10px;padding:2px 8px;background:var(--surface);border:1px solid var(--border);border-radius:20px;color:var(--muted)">{{ m.change_category }}</span>{% endif %}
+      </div>
+      <div style="font-size:20px;font-weight:800;color:#1e293b;line-height:1.3;margin-bottom:6px">{{ m.title or '—' }}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)">
+        <span>👤 {{ m.initiator or '—' }}</span>
+        <span>🏢 {{ m.department.name if m.department else '—' }}</span>
+        <span>📅 Raised: {{ m.date_raised or m.created_at.strftime('%Y-%m-%d') if m.created_at else '—' }}</span>
+        {% if m.target_completion_date %}<span>🎯 Target: {{ m.target_completion_date }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lifecycle timeline -->
+<div class="card" style="padding:16px 20px;margin-bottom:16px">
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:12px">MOC Lifecycle</div>
+  <div style="display:flex;align-items:center;gap:0;overflow-x:auto;padding-bottom:4px">
+    {% set stages = [('Draft','📝'),('Under Review','🔍'),('Approved','✅'),('Implementing','🚀'),('Implemented','🏁'),('Post-Implementation Review','📋'),('Closed','🔒')] %}
+    {% set stage_names = ['Draft','Under Review','Approved','Implementing','Implemented','Post-Implementation Review','Closed'] %}
+    {% set cur_idx = stage_names.index(st) if st in stage_names else 0 %}
+    {% for name, icon in stages %}
+    {% set idx = loop.index0 %}
+    {% set done = idx < cur_idx %}
+    {% set active = idx == cur_idx %}
+    <div style="display:flex;align-items:center;flex-shrink:0">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+        <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;
+          background:{% if done %}#15803d{% elif active %}{{ st_color }}{% else %}#f1f5f9{% endif %};
+          border:2px solid {% if done %}#15803d{% elif active %}{{ st_color }}{% else %}#e2e8f0{% endif %}">
+          {% if done %}✓{% else %}{{ icon }}{% endif %}
+        </div>
+        <div style="font-size:9px;font-weight:{% if active %}800{% else %}500{% endif %};color:{% if done %}#15803d{% elif active %}{{ st_color }}{% else %}#94a3b8{% endif %};text-align:center;max-width:70px;line-height:1.2">{{ name }}</div>
+      </div>
+      {% if not loop.last %}
+      <div style="height:2px;width:30px;background:{% if done %}#15803d{% else %}#e2e8f0{% endif %};margin:0 4px;margin-bottom:16px;flex-shrink:0"></div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Main 2-col layout -->
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px">
+
+  <!-- LEFT COLUMN -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- Change Details -->
+    <div class="card">
+      <div class="card-title">📋 Change Details</div>
+      {% if m.current_situation %}
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px">Current Situation</div>
+        <div style="font-size:13px;color:#374151;line-height:1.6;background:var(--surface);padding:10px 12px;border-radius:6px;border-left:3px solid #94a3b8">{{ m.current_situation }}</div>
+      </div>
+      {% endif %}
+      {% if m.proposed_change or m.description %}
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px">Proposed Change</div>
+        <div style="font-size:13px;color:#374151;line-height:1.6;background:#eff6ff;padding:10px 12px;border-radius:6px;border-left:3px solid #1d4ed8">{{ m.proposed_change or m.description }}</div>
+      </div>
+      {% endif %}
+      {% if m.reason_for_change %}
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px">Reason for Change</div>
+        <div style="font-size:13px;color:#374151;line-height:1.6">{{ m.reason_for_change }}</div>
+      </div>
+      {% endif %}
+      {% if m.expected_benefits %}
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px">Expected Benefits</div>
+        <div style="font-size:13px;color:#374151;line-height:1.6;background:#f0fdf4;padding:10px 12px;border-radius:6px;border-left:3px solid #15803d">{{ m.expected_benefits }}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Impact Assessment -->
+    <div class="card">
+      <div class="card-title">🎯 Impact Assessment</div>
+      {% set impact_fields = [
+        ('impact_aircraft_ops','Aircraft Operations'),('impact_flight_crew','Flight Crew'),
+        ('impact_cabin_crew','Cabin Crew'),('impact_ground_ops','Ground Operations'),
+        ('impact_maintenance','Maintenance'),('impact_occ','OCC'),
+        ('impact_training','Training'),('impact_safety_reporting','Safety Reporting'),
+        ('impact_erp','ERP'),('impact_security','Security'),
+        ('impact_regulatory','Regulatory Compliance'),('impact_contractor','Contractor Activities')
+      ] %}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
+        {% for field, label in impact_fields %}
+        {% set affected = m[field] if m[field] is not none else false %}
+        {% set affected = m|attr(field) %}
+        <div style="padding:7px 10px;border-radius:6px;display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+          background:{% if affected %}#fef2f2{% else %}var(--surface){% endif %};
+          border:1px solid {% if affected %}#fca5a5{% else %}var(--border){% endif %};
+          color:{% if affected %}#dc2626{% else %}#94a3b8{% endif %}">
+          <span style="font-size:13px">{% if affected %}⚠{% else %}○{% endif %}</span>{{ label }}
+        </div>
+        {% endfor %}
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        {% if m.training_required %}<span style="font-size:11px;padding:3px 9px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:20px;font-weight:600">📚 Training Required</span>{% endif %}
+        {% if m.documentation_update_required %}<span style="font-size:11px;padding:3px 9px;background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;border-radius:20px;font-weight:600">📄 Documentation Update</span>{% endif %}
+        {% if m.sop_revision_required %}<span style="font-size:11px;padding:3px 9px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:20px;font-weight:600">📑 SOP Revision</span>{% endif %}
+        {% if m.erp_update_required %}<span style="font-size:11px;padding:3px 9px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:20px;font-weight:600">🚨 ERP Update</span>{% endif %}
+      </div>
+    </div>
+
+    <!-- MOC Hazard Register -->
+    <div class="card" id="hazards">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">⚠ MOC Hazard Register</div>
+        <button class="btn btn-sm btn-outline" onclick="togglePanel('addHazardPanel')">+ Add Hazard</button>
+      </div>
+      <!-- Add Hazard Panel -->
+      <div id="addHazardPanel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+        <form method="POST" action="/moc/{{ m.id }}/add-hazard">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg" style="grid-column:1/-1;margin-bottom:0"><label>Hazard Description *</label><textarea name="hazard_description" rows="2" required></textarea></div>
+            <div class="fg" style="margin-bottom:0"><label>Potential Consequence</label><textarea name="potential_consequence" rows="2"></textarea></div>
+            <div class="fg" style="margin-bottom:0"><label>Existing Controls</label><textarea name="existing_controls" rows="2"></textarea></div>
+            <div class="fg" style="margin-bottom:0"><label>Proposed Controls</label><textarea name="proposed_controls" rows="2"></textarea></div>
+            <div class="fg" style="margin-bottom:0"><label>Acceptance Authority</label><input type="text" name="acceptance_authority"/></div>
+            <div class="fg" style="margin-bottom:0"><label>Initial Risk</label>
+              <select name="initial_risk"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div>
+            <div class="fg" style="margin-bottom:0"><label>Residual Risk (after controls)</label>
+              <select name="residual_risk"><option selected>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></div>
+            <div class="fg" style="margin-bottom:0"><label>Acceptance Status</label>
+              <select name="acceptance_status"><option selected>Pending</option><option>Accepted</option><option>Not Accepted</option></select></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button type="submit" class="btn btn-nav btn-sm">Add Hazard</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="togglePanel('addHazardPanel')">Cancel</button>
+          </div>
+        </form>
+      </div>
+      {% if m.moc_hazards %}
+      <div class="tbl-wrap"><table>
+        <thead><tr>
+          <th>Hazard</th><th>Consequence</th><th>Existing Controls</th><th>Proposed Controls</th>
+          <th style="width:80px">Initial</th><th style="width:80px">Residual</th>
+          <th style="width:90px">Acceptance</th><th style="width:70px"></th>
+        </tr></thead>
+        <tbody>
+        {% for h in m.moc_hazards %}
+        {% set r_color = {'Low':'#15803d','Medium':'#d97706','High':'#dc2626','Critical':'#7c3aed'} %}
+        <tr>
+          <td style="font-size:12px;font-weight:600;max-width:140px">{{ (h.hazard_description or '—')[:80] }}</td>
+          <td style="font-size:11px;color:var(--muted);max-width:120px">{{ (h.potential_consequence or '—')[:60] }}</td>
+          <td style="font-size:11px;max-width:100px">{{ (h.existing_controls or '—')[:50] }}</td>
+          <td style="font-size:11px;max-width:100px">{{ (h.proposed_controls or '—')[:50] }}</td>
+          <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:{{ r_color.get(h.initial_risk,'#6b7280') }}20;color:{{ r_color.get(h.initial_risk,'#6b7280') }}">{{ h.initial_risk or '—' }}</span></td>
+          <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:{{ r_color.get(h.residual_risk,'#6b7280') }}20;color:{{ r_color.get(h.residual_risk,'#6b7280') }}">{{ h.residual_risk or '—' }}</span></td>
+          <td style="font-size:10px;font-weight:600;color:{% if h.acceptance_status=='Accepted' %}#15803d{% elif h.acceptance_status=='Not Accepted' %}#dc2626{% else %}#d97706{% endif %}">{{ h.acceptance_status or 'Pending' }}</td>
+          <td>
+            <form method="POST" action="/moc/hazard/{{ h.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this hazard?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;padding:2px 7px;font-size:10px">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}
+      <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No hazards recorded yet. Add hazards to build the MOC Hazard Register.</div>
+      {% endif %}
+    </div>
+
+    <!-- Implementation Milestones -->
+    <div class="card" id="milestones">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">🗓 Implementation Milestones</div>
+        <button class="btn btn-sm btn-outline" onclick="togglePanel('addMilestonePanel')">+ Add Milestone</button>
+      </div>
+      <div id="addMilestonePanel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+        <form method="POST" action="/moc/{{ m.id }}/add-milestone">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg" style="grid-column:1/-1;margin-bottom:0"><label>Milestone Description *</label><input type="text" name="description" required/></div>
+            <div class="fg" style="margin-bottom:0"><label>Responsible Person</label><input type="text" name="responsible_person"/></div>
+            <div class="fg" style="margin-bottom:0"><label>Target Date</label><input type="date" name="target_date"/></div>
+            <div class="fg" style="margin-bottom:0"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button type="submit" class="btn btn-nav btn-sm">Add Milestone</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="togglePanel('addMilestonePanel')">Cancel</button>
+          </div>
+        </form>
+      </div>
+      {% if m.moc_milestones %}
+      {% set ms_total = m.moc_milestones|length %}
+      {% set ms_done = m.moc_milestones|selectattr('status','eq','Complete')|list|length %}
+      {% set ms_pct = ((ms_done / ms_total) * 100)|int if ms_total else 0 %}
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:5px">
+          <span>Implementation Progress</span><span>{{ ms_done }}/{{ ms_total }} complete</span>
+        </div>
+        <div style="height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden">
+          <div style="height:100%;width:{{ ms_pct }}%;background:{% if ms_pct==100 %}#15803d{% elif ms_pct>=50 %}#1d4ed8{% else %}#d97706{% endif %};border-radius:99px;transition:width .5s"></div>
+        </div>
+      </div>
+      {% for ms in m.moc_milestones %}
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;{% if loop.last %}border-bottom:none{% endif %}">
+        <div style="width:18px;height:18px;border-radius:50%;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;
+          background:{% if ms.status=='Complete' %}#15803d{% elif ms.status=='In Progress' %}#1d4ed8{% else %}#f1f5f9{% endif %};
+          color:{% if ms.status in ('Complete','In Progress') %}#fff{% else %}#94a3b8{% endif %}">
+          {% if ms.status=='Complete' %}✓{% elif ms.status=='In Progress' %}▶{% else %}○{% endif %}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:12.5px;font-weight:600;color:#1e293b">{{ ms.description }}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">
+            👤 {{ ms.responsible_person or '—' }} · 📅 {{ ms.target_date or '—' }}
+            {% if ms.completed_date %} · ✅ Done: {{ ms.completed_date }}{% endif %}
+          </div>
+        </div>
+        <form method="POST" action="/moc/milestone/{{ ms.id }}/update">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <select name="status" onchange="this.form.submit()" style="font-size:10px;padding:2px 6px;border:1px solid var(--border);border-radius:4px">
+            {% for s in ['Pending','In Progress','Complete','Overdue'] %}
+            <option {% if ms.status==s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No milestones added yet.</div>
+      {% endif %}
+    </div>
+
+    <!-- Stakeholder Consultation -->
+    <div class="card" id="stakeholders">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">👥 Stakeholder Consultation</div>
+        <button class="btn btn-sm btn-outline" onclick="togglePanel('addStakeholderPanel')">+ Add</button>
+      </div>
+      {% if m.stakeholder_summary %}
+      <div style="font-size:12.5px;color:#374151;line-height:1.6;background:var(--surface);padding:10px 12px;border-radius:6px;margin-bottom:12px;border-left:3px solid var(--navy)">{{ m.stakeholder_summary }}</div>
+      {% endif %}
+      <div id="addStakeholderPanel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+        <form method="POST" action="/moc/{{ m.id }}/add-stakeholder">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg" style="margin-bottom:0"><label>Department</label><input type="text" name="department_name"/></div>
+            <div class="fg" style="margin-bottom:0"><label>Contact Name</label><input type="text" name="contact_name"/></div>
+            <div class="fg" style="margin-bottom:0"><label>Consultation Date</label><input type="date" name="consultation_date"/></div>
+            <div class="fg" style="margin-bottom:0"><label><input type="checkbox" name="reviewed"/> Reviewed &amp; Confirmed</label></div>
+            <div class="fg" style="grid-column:1/-1;margin-bottom:0"><label>Comments</label><textarea name="comments" rows="2"></textarea></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button type="submit" class="btn btn-nav btn-sm">Add</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="togglePanel('addStakeholderPanel')">Cancel</button>
+          </div>
+        </form>
+      </div>
+      {% if m.moc_stakeholders %}
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Department</th><th>Contact</th><th>Date</th><th>Comments</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for sk in m.moc_stakeholders %}
+        <tr>
+          <td style="font-size:12px;font-weight:600">{{ sk.department_name or '—' }}</td>
+          <td style="font-size:12px">{{ sk.contact_name or '—' }}</td>
+          <td style="font-size:11px;font-family:'IBM Plex Mono',monospace">{{ sk.consultation_date or '—' }}</td>
+          <td style="font-size:11px;color:var(--muted);max-width:160px">{{ (sk.comments or '—')[:80] }}</td>
+          <td>{% if sk.reviewed %}<span class="badge b-green" style="font-size:9px">✓ Reviewed</span>{% else %}<span class="badge b-yellow" style="font-size:9px">Pending</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}
+      <div style="text-align:center;padding:18px;color:var(--muted);font-size:12px">No stakeholder consultations recorded.</div>
+      {% endif %}
+    </div>
+
+    <!-- Post-Implementation Review -->
+    <div class="card" id="pir-panel">
+      <div class="card-title">📋 Post-Implementation Review (PIR)</div>
+      {% if m.pir_actual_outcome %}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Review Date</div><div style="font-size:13px;font-weight:600">{{ m.pir_date or '—' }}</div></div>
+        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Reviewer</div><div style="font-size:13px;font-weight:600">{{ m.pir_reviewer or '—' }}</div></div>
+        <div style="grid-column:1/-1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Actual Outcome</div><div style="font-size:13px;color:#374151;line-height:1.6;background:var(--surface);padding:10px 12px;border-radius:6px">{{ m.pir_actual_outcome }}</div></div>
+        {% if m.pir_new_hazards %}<div style="grid-column:1/-1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#dc2626;margin-bottom:3px">New Hazards Identified</div><div style="font-size:13px;color:#374151;background:#fef2f2;padding:10px 12px;border-radius:6px;border-left:3px solid #dc2626">{{ m.pir_new_hazards }}</div></div>{% endif %}
+        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Effectiveness</div>
+          {% set eff_color = {'Effective':'#15803d','Partially Effective':'#d97706','Ineffective':'#dc2626'}.get(m.pir_effectiveness or '','#6b7280') %}
+          <span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;background:{{ eff_color }}15;color:{{ eff_color }};border:1px solid {{ eff_color }}40">{{ m.pir_effectiveness or '—' }}</span>
+        </div>
+        {% if m.pir_lessons_learned %}<div style="grid-column:1/-1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Lessons Learned</div><div style="font-size:13px;color:#374151;line-height:1.6">{{ m.pir_lessons_learned }}</div></div>{% endif %}
+      </div>
+      {% elif st == 'Implemented' %}
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #d97706;border-radius:var(--r);padding:12px 14px;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:2px">⚠ PIR Required — ICAO Doc 9859 §7.4</div>
+        <div style="font-size:11px;color:#78350f">This change has been implemented. Post-Implementation Review must be completed before closing.</div>
+      </div>
+      <form method="POST" action="/moc/{{ m.id }}/pir">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fg" style="margin-bottom:0"><label>Review Date *</label><input type="date" name="pir_date" required value="{{ now.strftime('%Y-%m-%d') if now else '' }}"/></div>
+          <div class="fg" style="margin-bottom:0"><label>Reviewer Name *</label><input type="text" name="pir_reviewer" required/></div>
+          <div class="fg" style="grid-column:1/-1;margin-bottom:0"><label>Actual Outcome *</label><textarea name="pir_actual_outcome" rows="3" required placeholder="Describe what actually happened after the change was implemented..."></textarea></div>
+          <div class="fg" style="grid-column:1/-1;margin-bottom:0"><label>New Hazards Identified (if any)</label><textarea name="pir_new_hazards" rows="2" placeholder="List any new hazards introduced by this change..."></textarea></div>
+          <div class="fg" style="margin-bottom:0"><label>Effectiveness Rating *</label>
+            <select name="pir_effectiveness" required>
+              <option value="">Select…</option>
+              <option>Effective</option><option>Partially Effective</option><option>Ineffective</option>
+            </select></div>
+          <div class="fg" style="margin-bottom:0"><label>Additional Actions Required</label><textarea name="pir_additional_actions" rows="2"></textarea></div>
+          <div class="fg" style="grid-column:1/-1;margin-bottom:0"><label>Lessons Learned</label><textarea name="pir_lessons_learned" rows="2"></textarea></div>
+        </div>
+        <button type="submit" class="btn btn-nav" style="margin-top:12px;background:#7c3aed">Submit PIR</button>
+      </form>
+      {% else %}
+      <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">PIR will be required once this change is marked as Implemented.</div>
+      {% endif %}
+    </div>
+
+    <!-- Progress Updates Log -->
+    <div class="card" id="updates">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">📝 Progress Log</div>
+        <button class="btn btn-sm btn-outline" onclick="togglePanel('addUpdatePanel')">+ Add Update</button>
+      </div>
+      <div id="addUpdatePanel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+        <form method="POST" action="/moc/{{ m.id }}/add-update">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg" style="grid-column:1/-1;margin-bottom:0"><label>Update *</label><textarea name="update_text" rows="3" required placeholder="Describe progress, issues, or evidence..."></textarea></div>
+            <div class="fg" style="margin-bottom:0"><label>Recorded By</label><input type="text" name="update_by" value="{{ session.get('username','') if session else '' }}"/></div>
+            <div class="fg" style="margin-bottom:0"><label>Type</label>
+              <select name="update_type"><option>Progress</option><option>Evidence</option><option>Issue</option><option>Resolution</option></select>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button type="submit" class="btn btn-nav btn-sm">Log Update</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="togglePanel('addUpdatePanel')">Cancel</button>
+          </div>
+        </form>
+      </div>
+      {% if m.moc_updates %}
+      {% set type_icons = {'Progress':'🔵','Evidence':'📎','Issue':'🔴','Resolution':'✅'} %}
+      <div style="display:flex;flex-direction:column;gap:8px">
+      {% for upd in m.moc_updates %}
+      <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;{% if loop.last %}border-bottom:none{% endif %}">
+        <div style="font-size:18px;flex-shrink:0;margin-top:1px">{{ type_icons.get(upd.update_type,'📝') }}</div>
+        <div style="flex:1">
+          <div style="font-size:12.5px;color:#374151;line-height:1.5">{{ upd.update_text }}</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:3px">
+            {{ upd.update_type }} · {{ upd.update_by or '—' }} · {{ upd.created_at.strftime('%d %b %Y %H:%M') if upd.created_at else '—' }}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      </div>
+      {% else %}
+      <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No updates logged yet.</div>
+      {% endif %}
+    </div>
+  </div><!-- END LEFT COLUMN -->
+
+  <!-- RIGHT COLUMN -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- Approval Chain -->
+    <div class="card">
+      <div class="card-title">✅ Approval Chain</div>
+      {% set approvals = [
+        ('Dept Manager', m.dept_manager_status, m.dept_manager_name, m.dept_manager_date, m.dept_manager_comments, 'approve-dept'),
+        ('Safety Review', m.safety_review_status, m.safety_reviewer_name, m.safety_review_date, m.safety_review_comments, 'approve-safety'),
+        ('Safety Manager', m.sm_approval_status, m.sm_name, m.sm_date, m.sm_comments, 'approve-sm'),
+      ] %}
+      {% for label, status, name, date, comments, endpoint in approvals %}
+      {% set ap_color = {'Approved':'#15803d','Rejected':'#dc2626','Pending':'#d97706'}.get(status or 'Pending','#d97706') %}
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:11.5px;font-weight:700;color:#1e293b">{{ label }}</div>
+          <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:{{ ap_color }}15;color:{{ ap_color }};border:1px solid {{ ap_color }}40">{{ status or 'Pending' }}</span>
+        </div>
+        {% if name %}<div style="font-size:11px;color:var(--muted)">{{ name }}{% if date %} · {{ date }}{% endif %}</div>{% endif %}
+        {% if comments %}<div style="font-size:11px;color:#374151;margin-top:4px;font-style:italic">"{{ comments[:80] }}"</div>{% endif %}
+        {% if st == 'Under Review' and (status or 'Pending') == 'Pending' %}
+        <details style="margin-top:8px">
+          <summary style="font-size:10px;cursor:pointer;color:var(--navy);font-weight:700;list-style:none">Record Decision ▼</summary>
+          <form method="POST" action="/moc/{{ m.id }}/{{ endpoint }}" style="margin-top:8px">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="fg" style="margin-bottom:6px"><label style="font-size:9.5px">Decision</label>
+              <select name="decision" style="font-size:11px;padding:4px">
+                <option>Approved</option><option>Rejected</option><option>Conditional</option>
+              </select></div>
+            <div class="fg" style="margin-bottom:6px"><label style="font-size:9.5px">Approver Name</label><input type="text" name="approver_name" style="font-size:11px;padding:4px"/></div>
+            <div class="fg" style="margin-bottom:6px"><label style="font-size:9.5px">Comments</label><textarea name="comments" rows="2" style="font-size:11px;padding:4px"></textarea></div>
+            <button type="submit" class="btn btn-nav btn-sm">Submit</button>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <!-- AE Approval (conditional) -->
+      {% if m.ae_approval_required %}
+      {% set ae_color = {'Approved':'#15803d','Rejected':'#dc2626','Pending':'#7c3aed'}.get(m.ae_approval_status or 'Pending','#7c3aed') %}
+      <div style="border:2px solid {{ ae_color }}50;border-radius:8px;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:11.5px;font-weight:700;color:#7c3aed">Accountable Executive <span style="font-size:9px;background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:20px">Required for High/Critical</span></div>
+          <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:{{ ae_color }}15;color:{{ ae_color }};border:1px solid {{ ae_color }}40">{{ m.ae_approval_status or 'Pending' }}</span>
+        </div>
+        {% if m.ae_name %}<div style="font-size:11px;color:var(--muted)">{{ m.ae_name }}{% if m.ae_date %} · {{ m.ae_date }}{% endif %}</div>{% endif %}
+        {% if st == 'Under Review' and (m.ae_approval_status or 'Pending') == 'Pending' %}
+        <details style="margin-top:8px">
+          <summary style="font-size:10px;cursor:pointer;color:#7c3aed;font-weight:700;list-style:none">Record AE Decision ▼</summary>
+          <form method="POST" action="/moc/{{ m.id }}/approve-ae" style="margin-top:8px">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="fg" style="margin-bottom:6px"><label style="font-size:9.5px">Decision</label>
+              <select name="decision" style="font-size:11px;padding:4px"><option>Approved</option><option>Rejected</option></select></div>
+            <div class="fg" style="margin-bottom:6px"><label style="font-size:9.5px">AE Name</label><input type="text" name="approver_name" style="font-size:11px;padding:4px"/></div>
+            <div class="fg" style="margin-bottom:6px"><label style="font-size:9.5px">Comments</label><textarea name="comments" rows="2" style="font-size:11px;padding:4px"></textarea></div>
+            <button type="submit" class="btn btn-nav btn-sm" style="background:#7c3aed">Submit AE Decision</button>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Regulatory Compliance -->
+    <div class="card">
+      <div class="card-title">🏛 Regulatory & Compliance</div>
+      {% set regs = [('icao_impact','ICAO Annex 19'),('iosa_impact','IOSA ISM'),('easa_impact','EASA SMS'),('national_authority_impact','National Authority'),('company_manual_impact','Company Manuals')] %}
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+        {% for field, label in regs %}
+        {% set hit = m|attr(field) %}
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:6px;background:{% if hit %}#fef2f2{% else %}var(--surface){% endif %};border:1px solid {% if hit %}#fca5a5{% else %}var(--border){% endif %}">
+          <span style="font-size:11.5px;font-weight:600;color:{% if hit %}#dc2626{% else %}#94a3b8{% endif %}">{{ label }}</span>
+          <span style="font-size:10px;font-weight:700">{% if hit %}⚠ Affected{% else %}Not Affected{% endif %}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% if m.regulatory_approval_required %}
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;color:#c2410c;margin-bottom:6px">⚠ REGULATORY APPROVAL REQUIRED</div>
+        {% if m.regulatory_approval_ref %}<div style="font-size:11px;color:#374151">Ref: {{ m.regulatory_approval_ref }}</div>{% endif %}
+        {% if m.regulatory_approval_date %}<div style="font-size:11px;color:#374151">Date: {{ m.regulatory_approval_date }}</div>{% endif %}
+        {% if m.regulatory_evidence %}<div style="font-size:11px;color:#374151;margin-top:4px">{{ m.regulatory_evidence[:120] }}</div>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Pre-Change Risk -->
+    {% if m.pre_change_risk %}
+    <div class="card">
+      <div class="card-title">🔍 Pre-Change Risk Assessment</div>
+      <div style="font-size:12.5px;color:#374151;line-height:1.6;background:#fff7ed;padding:10px 12px;border-radius:6px;border-left:3px solid #d97706">{{ m.pre_change_risk }}</div>
+      {% if m.hazard_id %}
+      <div style="margin-top:10px">
+        <a href="/hazard-log/{{ m.hazard_id }}" class="ctrl-num" style="font-size:10px;background:var(--red)">{{ m.hazard_id }}</a>
+        <span style="font-size:11px;color:var(--muted);margin-left:6px">Linked Hazard</span>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Linked Actions -->
+    {% if actions %}
+    <div class="card">
+      <div class="card-title">⚡ Linked Actions</div>
+      {% for a in actions %}
+      <div style="padding:7px 0;border-bottom:1px solid #f1f5f9;{% if loop.last %}border-bottom:none{% endif %}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="font-size:12px;color:#374151;flex:1">{{ (a.description or '—')[:80] }}</div>
+          <span class="badge {% if a.status=='Closed' %}b-green{% elif a.status=='In Progress' %}b-blue{% else %}b-yellow{% endif %}" style="font-size:9px;white-space:nowrap">{{ a.status }}</span>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:2px">{{ a.owner or '—' }} · Due: {{ a.due_date or '—' }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Key Dates -->
+    <div class="card">
+      <div class="card-title">📅 Key Dates</div>
+      {% set key_dates = [
+        ('Raised', m.date_raised or (m.created_at.strftime('%Y-%m-%d') if m.created_at else None)),
+        ('Submitted', m.submitted_date), ('Approved', m.approved_date),
+        ('Impl. Start', m.implementation_start_date), ('Target Completion', m.target_completion_date),
+        ('Implemented', m.implemented_date), ('PIR Date', m.pir_date), ('Closed', m.closed_date),
+      ] %}
+      {% for label, val in key_dates %}
+      {% if val %}
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:11.5px">
+        <span style="color:var(--muted);font-weight:600">{{ label }}</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-weight:700">{{ val }}</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+  </div><!-- END RIGHT COLUMN -->
+</div><!-- END GRID -->
+
+<script>
+function togglePanel(id) {
+  var el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

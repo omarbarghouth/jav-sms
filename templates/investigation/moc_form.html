@@ -1,88 +1,221 @@
 {% extends "base.html" %}
-{% block title %}New Management of Change{% endblock %}
+{% block title %}{% if edit %}Edit MOC — {{ m.id }}{% else %}New Management of Change{% endif %}{% endblock %}
 {% block content %}
 
-<!-- Header -->
 <div style="margin-bottom:14px">
-  <a href="/moc" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← MOC Register</a>
+  <a href="{% if edit %}/moc/{{ m.id }}/detail{% else %}/moc{% endif %}" style="color:var(--muted);font-size:11px;font-weight:600;text-decoration:none">← {% if edit %}Back to MOC{% else %}MOC Register{% endif %}</a>
 </div>
 <div style="margin-bottom:20px">
-  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Management · ICAO Doc 9859 §7</div>
-  <div class="page-title">New Management of Change</div>
-  <div class="page-sub" style="margin-bottom:0">Pre-change safety assessment · Automatic hazard record generation</div>
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">ICAO Doc 9859 §7 · IOSA ISM · EASA SMS</div>
+  <div class="page-title">{% if edit %}Edit MOC — {{ m.moc_number or m.id }}{% else %}New Management of Change{% endif %}</div>
+  <div class="page-sub" style="margin-bottom:0">Structured change governance with pre-change safety assessment and impact analysis</div>
 </div>
 
-<!-- ICAO info banner -->
-<div style="background:var(--blue-bg);border:1px solid var(--blue-border);border-left:4px solid var(--blue);border-radius:var(--r);
-            padding:10px 14px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">
-  <span style="font-size:16px;margin-top:1px">ℹ</span>
-  <div>
-    <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:3px">ICAO Doc 9859 §7 — Management of Change</div>
-    <div style="font-size:11px;color:var(--text);line-height:1.5">Submitting this MOC will automatically create a linked Hazard record in the Risk Register for tracking. Changes must be assessed for safety implications before implementation.</div>
-  </div>
+<!-- ICAO Banner -->
+<div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #1d4ed8;border-radius:var(--r);padding:11px 14px;margin-bottom:18px">
+  <div style="font-size:11px;font-weight:700;color:#1d4ed8;margin-bottom:2px">ICAO Doc 9859 §7 — Management of Change Requirement</div>
+  <div style="font-size:11px;color:#1e3a8a;line-height:1.5">All significant changes to the organisation, its operations, equipment, or personnel must be assessed for safety impact before implementation. A Hazard and Action will be automatically created.</div>
 </div>
 
-<form class="form-card" method="POST" style="max-width:900px">
+<form class="form-card" method="POST" action="{% if edit %}/moc/{{ m.id }}/edit{% else %}/moc/new{% endif %}" style="max-width:1000px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-  <!-- Section: Change Details -->
-  <div class="sec">Change Details</div>
-  <div class="fg">
-    <label>Change Title <span style="color:var(--red)">*</span></label>
-    <input type="text" name="title" required placeholder="e.g. Implementation of Electronic Flight Bag (EFB) — Flight Operations"/>
-  </div>
+  <!-- ── SECTION 1: CHANGE IDENTIFICATION ── -->
+  <div class="sec">1 · Change Identification</div>
   <div class="g3">
     <div class="fg">
-      <label>Change Type <span style="color:var(--red)">*</span></label>
-      <select name="change_type" required>
-        <option value="">Select type…</option>
-        <option value="Process">Process</option>
-        <option value="Equipment">Equipment</option>
-        <option value="Personnel">Personnel</option>
-        <option value="Regulatory">Regulatory</option>
-        <option value="Organizational">Organizational</option>
+      <label>Change Title <span style="color:var(--red)">*</span></label>
+      <input type="text" name="title" required value="{{ m.title if m else '' }}" placeholder="e.g. Implementation of Electronic Flight Bag (EFB)"/>
+    </div>
+    <div class="fg">
+      <label>Change Category <span style="color:var(--red)">*</span></label>
+      <select name="change_category" required>
+        <option value="">Select category…</option>
+        {% set cats = ['Operational','Flight Operations','Ground Operations','Engineering / Maintenance','Training','Organizational','Technology / IT','Infrastructure','Regulatory','Security','ERP','Supplier / Contractor','OCC'] %}
+        {% for c in cats %}<option value="{{ c }}"{% if m and m.change_category==c %} selected{% endif %}>{{ c }}</option>{% endfor %}
       </select>
     </div>
     <div class="fg">
       <label>Department <span style="color:var(--red)">*</span></label>
       <select name="department_id" required>
         <option value="">Select department…</option>
-        {% for d in all_departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+        {% for d in all_departments %}<option value="{{ d.id }}"{% if m and m.department_id==d.id %} selected{% endif %}>{{ d.name }}</option>{% endfor %}
       </select>
     </div>
+  </div>
+  <div class="g3">
     <div class="fg">
-      <label>Planned Implementation Date <span style="color:var(--red)">*</span></label>
-      <input type="date" name="planned_date" required/>
+      <label>Change Initiator <span style="color:var(--red)">*</span></label>
+      <input type="text" name="initiator" required value="{{ m.initiator if m else '' }}" placeholder="Name / Department"/>
+    </div>
+    <div class="fg">
+      <label>Date Raised</label>
+      <input type="date" name="date_raised" value="{{ m.date_raised if m else '' }}"/>
+    </div>
+    <div class="fg">
+      <label>Safety Impact Level <span style="color:var(--red)">*</span></label>
+      <select name="safety_impact_level" required id="silSelect" onchange="updateAERequired()">
+        {% for lv in ['Low','Medium','High','Critical'] %}
+        <option value="{{ lv }}"{% if m and m.safety_impact_level==lv %} selected{% elif not m and lv=='Low' %} selected{% endif %}>{{ lv }}</option>
+        {% endfor %}
+      </select>
     </div>
   </div>
+
+  <!-- ── SECTION 2: CHANGE DETAILS ── -->
+  <div class="sec" style="margin-top:4px">2 · Change Details</div>
   <div class="fg">
-    <label>Initiator <span style="color:var(--red)">*</span></label>
-    <input type="text" name="initiator" required placeholder="Name of person or department requesting the change"/>
+    <label>Current Situation <span style="color:var(--red)">*</span></label>
+    <textarea name="current_situation" rows="3" required placeholder="Describe the current state — what exists today that is changing…">{{ m.current_situation if m else '' }}</textarea>
   </div>
   <div class="fg">
-    <label>Description of Change <span style="color:var(--red)">*</span></label>
-    <textarea name="description" required rows="4" placeholder="Describe the change in detail — what is changing, why it is changing, and what the expected outcome is. Include scope and affected systems/personnel…"></textarea>
+    <label>Proposed Change <span style="color:var(--red)">*</span></label>
+    <textarea name="proposed_change" rows="4" required placeholder="Describe exactly what will change — systems, procedures, personnel, equipment, infrastructure…">{{ m.proposed_change or (m.description if m else '') }}</textarea>
+  </div>
+  <div class="fg">
+    <label>Reason for Change <span style="color:var(--red)">*</span></label>
+    <textarea name="reason_for_change" rows="3" required placeholder="Why is this change required? (Regulatory, operational need, safety improvement, efficiency…)">{{ m.reason_for_change if m else '' }}</textarea>
+  </div>
+  <div class="fg">
+    <label>Expected Benefits</label>
+    <textarea name="expected_benefits" rows="2" placeholder="What benefits or improvements will this change deliver?">{{ m.expected_benefits if m else '' }}</textarea>
   </div>
 
-  <!-- Section: Pre-Change Risk Assessment -->
-  <div class="sec" style="margin-top:8px">Pre-Change Risk Assessment</div>
-  <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:var(--r);padding:10px 14px;margin-bottom:14px">
-    <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:2px">ICAO Requirement — Pre-implementation Safety Assessment</div>
-    <div style="font-size:11px;color:var(--text);line-height:1.5">Identify and assess all safety risks associated with this change before implementation. Consider: what could go wrong, probability of occurrence, severity of consequence, and required controls.</div>
+  <!-- ── SECTION 3: IMPACT ASSESSMENT ── -->
+  <div class="sec" style="margin-top:4px">3 · Impact Assessment — Does this change affect…</div>
+  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r);padding:10px 14px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:#92400e">Check ALL areas that are affected by this change</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+    {% set impact_opts = [
+      ('impact_aircraft_ops','✈ Aircraft Operations'),('impact_flight_crew','👨‍✈️ Flight Crew'),
+      ('impact_cabin_crew','🧑‍✈️ Cabin Crew'),('impact_ground_ops','🚐 Ground Operations'),
+      ('impact_maintenance','🔧 Maintenance / Engineering'),('impact_occ','🖥 OCC'),
+      ('impact_training','📚 Training'),('impact_safety_reporting','📊 Safety Reporting'),
+      ('impact_erp','🚨 ERP / Emergency Response'),('impact_security','🔒 Security'),
+      ('impact_regulatory','⚖ Regulatory Compliance'),('impact_contractor','🤝 Contractor Activities')
+    ] %}
+    {% for fname, label in impact_opts %}
+    <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;color:#374151;background:var(--surface);transition:all .15s"
+           onmouseover="this.style.borderColor='var(--navy)'" onmouseout="this.style.borderColor='var(--border)'">
+      <input type="checkbox" name="{{ fname }}" value="1"{% if m and m|attr(fname) %} checked{% endif %} style="width:15px;height:15px;accent-color:var(--navy)"/>{{ label }}
+    </label>
+    {% endfor %}
+  </div>
+
+  <!-- ── SECTION 4: PRE-CHANGE RISK ── -->
+  <div class="sec" style="margin-top:4px">4 · Pre-Change Risk Assessment</div>
+  <div style="background:#fef3c7;border:1px solid #fde68a;border-left:4px solid #d97706;border-radius:var(--r);padding:10px 14px;margin-bottom:12px">
+    <div style="font-size:11px;font-weight:700;color:#92400e">ICAO Requirement — MANDATORY before implementation</div>
+    <div style="font-size:11px;color:#78350f;line-height:1.5;margin-top:2px">Identify all hazards introduced by this change. Assess likelihood and severity. A Hazard record will be auto-created.</div>
   </div>
   <div class="fg">
     <label>Pre-Change Risk Assessment <span style="color:var(--red)">*</span></label>
-    <textarea name="pre_change_risk" required rows="5"
-              placeholder="Identify risks associated with this change:&#10;— What could go wrong during/after implementation?&#10;— What is the likelihood and severity?&#10;— What controls and mitigations are required?&#10;— Are any regulatory approvals needed?"></textarea>
+    <textarea name="pre_change_risk" rows="5" required
+              placeholder="• What could go wrong during/after this change?&#10;• What is the likelihood and severity of each risk?&#10;• What controls and mitigations are proposed?&#10;• Are there residual risks that require monitoring?">{{ m.pre_change_risk if m else '' }}</textarea>
+  </div>
+  <div class="g3">
+    <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;background:var(--surface)">
+      <input type="checkbox" name="risk_assessment_required" value="1"{% if m and m.risk_assessment_required %} checked{% endif %} style="width:15px;height:15px;accent-color:#dc2626"/>
+      🔴 Formal Risk Assessment Required
+    </label>
   </div>
 
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
-    <span style="font-size:20px">⚡</span>
-    <div style="font-size:11.5px;color:var(--text)">A <strong>Hazard record</strong> will be automatically created from this MOC and linked to the Risk Register for ongoing monitoring and action tracking.</div>
+  <!-- ── SECTION 5: REGULATORY COMPLIANCE ── -->
+  <div class="sec" style="margin-top:4px">5 · Regulatory &amp; Compliance Impact</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+    {% set reg_opts = [
+      ('icao_impact','🌐 ICAO Annex 19'),('iosa_impact','✈ IOSA ISM'),
+      ('easa_impact','🇪🇺 EASA SMS'),('national_authority_impact','🏛 National Authority'),('company_manual_impact','📖 Company Manuals')
+    ] %}
+    {% for fname, label in reg_opts %}
+    <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;background:var(--surface)">
+      <input type="checkbox" name="{{ fname }}" value="1"{% if m and m|attr(fname) %} checked{% endif %} style="width:15px;height:15px;accent-color:#dc2626"/>{{ label }}
+    </label>
+    {% endfor %}
+    <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid #fca5a5;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;background:#fef2f2;color:#dc2626">
+      <input type="checkbox" name="regulatory_approval_required" value="1"{% if m and m.regulatory_approval_required %} checked{% endif %} style="width:15px;height:15px;accent-color:#dc2626"/>
+      ⚠ Regulatory Approval Required
+    </label>
+  </div>
+  <div class="g3">
+    <div class="fg">
+      <label>Approval Reference Number</label>
+      <input type="text" name="regulatory_approval_ref" value="{{ m.regulatory_approval_ref if m else '' }}" placeholder="e.g. CARC/SMS/2026/042"/>
+    </div>
+    <div class="fg">
+      <label>Approval Date</label>
+      <input type="date" name="regulatory_approval_date" value="{{ m.regulatory_approval_date if m else '' }}"/>
+    </div>
+    <div class="fg">
+      <label>Supporting Evidence</label>
+      <input type="text" name="regulatory_evidence" value="{{ m.regulatory_evidence if m else '' }}" placeholder="Document ref or summary"/>
+    </div>
   </div>
 
-  <div style="display:flex;gap:10px;margin-top:8px">
-    <button type="submit" class="btn btn-nav">Submit MOC</button>
-    <a href="/moc" class="btn btn-outline">Cancel</a>
+  <!-- ── SECTION 6: IMPLEMENTATION PLANNING ── -->
+  <div class="sec" style="margin-top:4px">6 · Implementation Planning</div>
+  <div class="g3">
+    <div class="fg">
+      <label>Implementation Start Date</label>
+      <input type="date" name="implementation_start_date" value="{{ m.implementation_start_date if m else '' }}"/>
+    </div>
+    <div class="fg">
+      <label>Target Completion Date</label>
+      <input type="date" name="target_completion_date" value="{{ m.target_completion_date or (m.planned_date if m else '') }}"/>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">
+    {% set impl_opts = [
+      ('training_required','📚 Training Required'),
+      ('documentation_update_required','📄 Documentation Update Required'),
+      ('sop_revision_required','📑 SOP / Procedure Revision Required'),
+      ('erp_update_required','🚨 ERP Update Required'),
+    ] %}
+    {% for fname, label in impl_opts %}
+    <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;background:var(--surface)">
+      <input type="checkbox" name="{{ fname }}" value="1"{% if m and m|attr(fname) %} checked{% endif %} style="width:15px;height:15px;accent-color:var(--navy)"/>{{ label }}
+    </label>
+    {% endfor %}
+  </div>
+
+  <!-- ── SECTION 7: STAKEHOLDER CONSULTATION ── -->
+  <div class="sec" style="margin-top:4px">7 · Stakeholder Consultation</div>
+  <div class="fg">
+    <label>Consultation Summary</label>
+    <textarea name="stakeholder_summary" rows="3" placeholder="Summarise which departments / personnel were consulted, their input, and any concerns raised…">{{ m.stakeholder_summary if m else '' }}</textarea>
+  </div>
+
+  <!-- ── SECTION 8: APPROVAL AUTHORITY ── -->
+  <div class="sec" style="margin-top:4px">8 · Approval Authority</div>
+  <div id="ae-notice" style="display:{% if m and m.ae_approval_required %}block{% elif not m %}none{% else %}none{% endif %};background:#ede9fe;border:1px solid #c4b5fd;border-left:4px solid #7c3aed;border-radius:var(--r);padding:10px 14px;margin-bottom:12px">
+    <div style="font-size:11px;font-weight:700;color:#6d28d9">⚠ High / Critical Impact — Accountable Executive Approval Required</div>
+    <div style="font-size:11px;color:#4c1d95">This change requires sign-off from the Accountable Executive per ICAO Annex 19 §6.2.4</div>
+  </div>
+  <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #c4b5fd;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;background:#faf5ff;color:#6d28d9;width:fit-content">
+    <input type="checkbox" name="ae_approval_required" id="aeCheck" value="1"{% if m and m.ae_approval_required %} checked{% endif %} style="width:15px;height:15px;accent-color:#7c3aed"/>
+    Accountable Executive Approval Required
+  </label>
+
+  <!-- Submit -->
+  <div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+    <button type="submit" class="btn btn-nav">{% if edit %}💾 Save Changes{% else %}📤 Create MOC{% endif %}</button>
+    <a href="{% if edit %}/moc/{{ m.id }}/detail{% else %}/moc{% endif %}" class="btn btn-outline">Cancel</a>
   </div>
 </form>
+
+<script>
+function updateAERequired() {
+  var sil = document.getElementById('silSelect').value;
+  var notice = document.getElementById('ae-notice');
+  var aeCheck = document.getElementById('aeCheck');
+  if (sil === 'High' || sil === 'Critical') {
+    notice.style.display = 'block';
+    aeCheck.checked = true;
+  } else {
+    notice.style.display = 'none';
+  }
+}
+document.addEventListener('DOMContentLoaded', updateAERequired);
+</script>
 {% endblock %}

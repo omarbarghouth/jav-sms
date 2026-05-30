@@ -1,169 +1,139 @@
 {% extends "base.html" %}
-{% from "_pagination.html" import render_pagination %}
-{% block title %}Management of Change{% endblock %}
+{% block title %}MOC Register — Management of Change{% endblock %}
 {% block content %}
 
-<!-- Page header -->
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+<!-- Page Header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
   <div>
-    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Management · ICAO Doc 9859 §7</div>
-    <div class="page-title">Management of Change</div>
-    <div class="page-sub" style="margin-bottom:0">Controlled change process with pre-change risk assessment · Auto-linked hazard tracking</div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px">Safety Management · ICAO Doc 9859 §7 · IOSA ISM · EASA SMS</div>
+    <div class="page-title">Management of Change Register</div>
+    <div class="page-sub" style="margin-bottom:0">Controlled change governance with pre-change risk assessment · Approval workflow · Post-implementation review</div>
   </div>
-  <div style="display:flex;gap:7px">
-    <a href="/investigations" class="btn btn-outline btn-sm">Investigations</a>
-    <a href="/moc/new" class="btn btn-gold btn-sm">+ New MOC</a>
-  </div>
+  <a href="/moc/new" class="btn btn-nav">+ New MOC</a>
 </div>
 
-<!-- KPI strip -->
-{% set moc_pending  = mocs|selectattr('approval_status','eq','Pending')|list|length %}
-{% set moc_approved = mocs|selectattr('approval_status','eq','Approved')|list|length %}
-{% set moc_rejected = mocs|selectattr('approval_status','eq','Rejected')|list|length %}
-{% set moc_done     = mocs|selectattr('implementation_status','eq','Completed')|list|length %}
-{% set moc_no_rev   = mocs|selectattr('post_change_review','eq',None)|list|length %}
-<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px">
-  {% for label, val, col in [
-    ('Total MOCs',       mocs|length,  '#374151'),
-    ('Pending Approval', moc_pending,  '#c2610a'),
-    ('Approved',         moc_approved, '#15803d'),
-    ('Rejected',         moc_rejected, '#dc2626'),
-    ('Completed',        moc_done,     '#1d4ed8'),
+<!-- Dashboard KPIs -->
+{% set mocs_draft    = mocs|selectattr('status','eq','Draft')|list %}
+{% set mocs_review   = mocs|selectattr('status','eq','Under Review')|list %}
+{% set mocs_approved = mocs|selectattr('status','eq','Approved')|list %}
+{% set mocs_impl_ing = mocs|selectattr('status','eq','Implementing')|list %}
+{% set mocs_impl_ed  = mocs|selectattr('status','eq','Implemented')|list %}
+{% set mocs_impl     = (mocs_impl_ing + mocs_impl_ed) %}
+{% set mocs_pir      = mocs|selectattr('status','eq','Post-Implementation Review')|list %}
+{% set mocs_closed   = mocs|selectattr('status','eq','Closed')|list %}
+{% set mocs_high_r   = mocs|selectattr('safety_impact_level','eq','High')|list %}
+{% set mocs_crit_r   = mocs|selectattr('safety_impact_level','eq','Critical')|list %}
+{% set mocs_high     = (mocs_high_r + mocs_crit_r) %}
+{% set mocs_ineff    = mocs|selectattr('pir_effectiveness','eq','Ineffective')|list %}
+
+<div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:16px">
+  {% for label, val, col, sub in [
+    ('Total MOCs',   mocs|length,        '#374151',  ''),
+    ('Draft',        mocs_draft|length,  '#6b7280',  ''),
+    ('Under Review', mocs_review|length, '#d97706',  '⏳ awaiting'),
+    ('Approved',     mocs_approved|length,'#15803d', ''),
+    ('Implementing', mocs_impl|length,   '#1d4ed8',  ''),
+    ('PIR Due',      mocs_pir|length,    '#7c3aed',  '⚠ required'),
+    ('High Risk',    mocs_high|length,   '#dc2626',  'High / Critical'),
+    ('Ineffective',  mocs_ineff|length,  '#9f1239',  'PIR result'),
   ] %}
-  <div style="background:#fff;border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);
-              padding:11px 14px;box-shadow:var(--shadow)">
-    <div style="font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ col }};line-height:1;margin-bottom:3px">{{ val }}</div>
-    <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">{{ label }}</div>
+  <div style="background:#fff;border:1px solid var(--border);border-top:3px solid {{ col }};border-radius:var(--r);padding:10px 12px;box-shadow:var(--shadow)">
+    <div style="font-size:20px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:{{ col }};line-height:1;margin-bottom:2px">{{ val }}</div>
+    <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">{{ label }}</div>
+    {% if sub %}<div style="font-size:9px;color:{{ col }};margin-top:1px">{{ sub }}</div>{% endif %}
   </div>
   {% endfor %}
 </div>
 
-<!-- Post-change review alert -->
-{% if moc_no_rev > 0 %}
-<div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-left:4px solid var(--amber);border-radius:var(--r);
-            padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
-  <span style="font-size:16px">⚠</span>
-  <div style="font-size:12.5px;font-weight:700;color:var(--amber)">{{ moc_no_rev }} MOC(s) missing post-change review documentation</div>
+<!-- Alert banners -->
+{% if mocs_pir|length > 0 %}
+<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-left:4px solid #7c3aed;border-radius:var(--r);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:16px">📋</span>
+  <div style="font-size:12.5px;font-weight:700;color:#6d28d9">{{ mocs_pir|length }} MOC(s) awaiting Post-Implementation Review — ICAO Doc 9859 §7.4 requires PIR before closure</div>
+</div>
+{% endif %}
+{% if mocs_ineff|length > 0 %}
+<div style="background:#fff1f2;border:1px solid #fda4af;border-left:4px solid #9f1239;border-radius:var(--r);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:16px">⛔</span>
+  <div style="font-size:12.5px;font-weight:700;color:#9f1239">{{ mocs_ineff|length }} MOC(s) rated Ineffective — additional actions and re-assessment required</div>
+</div>
+{% endif %}
+{% if mocs_review|length > 0 %}
+<div style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #d97706;border-radius:var(--r);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+  <span style="font-size:16px">⏳</span>
+  <div style="font-size:12.5px;font-weight:700;color:#92400e">{{ mocs_review|length }} MOC(s) pending approval — review approval chain and record decisions</div>
 </div>
 {% endif %}
 
-<!-- MOC table -->
+<!-- MOC Table -->
 {% if mocs %}
 <div class="card" style="padding:0">
   <div class="tbl-wrap">
     <table>
       <thead>
         <tr>
-          <th style="width:110px">MOC Ref</th>
-          <th>Title / Description</th>
-          <th style="width:100px">Type</th>
+          <th style="width:120px">MOC Ref</th>
+          <th>Title</th>
+          <th style="width:120px">Category</th>
           <th style="width:70px">Dept</th>
-          <th style="width:120px">Initiator</th>
-          <th style="width:90px">Planned Date</th>
-          <th style="width:110px">Approval</th>
-          <th style="width:110px">Implementation</th>
-          <th style="width:90px">Post-Review</th>
-          <th style="width:80px">Hazard</th>
-          <th style="width:130px"></th>
+          <th style="width:110px">Initiator</th>
+          <th style="width:70px">Impact</th>
+          <th style="width:110px">Status</th>
+          <th style="width:90px">Approval</th>
+          <th style="width:80px">PIR</th>
+          <th style="width:60px">Hazard</th>
+          <th style="width:100px"></th>
         </tr>
       </thead>
       <tbody>
       {% for m in mocs %}
-      <tr style="cursor:default;{% if not m.post_change_review and m.implementation_status=='Completed' %}background:var(--amber-bg){% endif %}">
-        <td>
-          <span class="ctrl-num" style="font-size:10px">{{ m.id }}</span>
-          {% if m.created_at %}
-          <div style="font-size:9px;color:var(--muted2);margin-top:2px;font-family:'IBM Plex Mono',monospace">{{ m.created_at.strftime('%d %b %Y') }}</div>
-          {% endif %}
+      {% set st = m.status or 'Draft' %}
+      {% set sil = m.safety_impact_level or 'Low' %}
+      {% set sil_color = {'Low':'#15803d','Medium':'#d97706','High':'#dc2626','Critical':'#7c3aed'}.get(sil,'#6b7280') %}
+      {% set st_color = {'Draft':'#6b7280','Under Review':'#d97706','Approved':'#15803d','Implementing':'#1d4ed8','Implemented':'#0e7490','Post-Implementation Review':'#7c3aed','Closed':'#374151'}.get(st,'#6b7280') %}
+      <tr onclick="window.location='/moc/{{ m.id }}/detail'" style="cursor:pointer">
+        <td onclick="event.stopPropagation()">
+          <a href="/moc/{{ m.id }}/detail" style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;color:var(--navy);text-decoration:none">{{ m.moc_number or m.id }}</a>
+          {% if m.created_at %}<div style="font-size:9px;color:var(--muted2);margin-top:2px">{{ m.created_at.strftime('%d %b %Y') }}</div>{% endif %}
         </td>
         <td style="max-width:200px">
-          <div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ (m.title or '—')[:70] }}</div>
-          {% if m.description %}
-          <div style="font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.description[:60] }}</div>
-          {% endif %}
+          <div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ (m.title or '—')[:65] }}</div>
+          {% if m.current_situation %}<div style="font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.current_situation[:55] }}</div>{% endif %}
         </td>
-        <td>
-          {% set type_colors = {'Process':'b-blue','Equipment':'b-navy','Personnel':'b-purple','Regulatory':'b-orange','Organizational':'b-gray'} %}
-          <span class="badge {{ type_colors.get(m.change_type,'b-gray') }}" style="font-size:9px">{{ m.change_type or '—' }}</span>
-        </td>
+        <td><span class="badge b-gray" style="font-size:9px">{{ (m.change_category or m.change_type or '—')[:20] }}</span></td>
         <td style="font-size:11px;font-weight:700;color:var(--navy)">{{ m.department.code if m.department else '—' }}</td>
-        <td style="font-size:12px;color:var(--text)">{{ m.initiator or '—' }}</td>
-        <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--muted)">{{ m.planned_date or '—' }}</td>
+        <td style="font-size:11px;color:var(--text)">{{ (m.initiator or '—')[:18] }}</td>
         <td>
-          {% if m.approval_status=='Approved' %}<span class="badge b-green" style="font-size:9.5px">✓ Approved</span>
-          {% elif m.approval_status=='Rejected' %}<span class="badge b-red" style="font-size:9.5px">✗ Rejected</span>
-          {% elif m.approval_status=='Conditional' %}<span class="badge b-yellow" style="font-size:9.5px">~ Conditional</span>
-          {% else %}<span class="badge b-yellow" style="font-size:9.5px">Pending</span>{% endif %}
-          {% if m.approved_by %}
-          <div style="font-size:9px;color:var(--muted);margin-top:2px">by {{ m.approved_by }}</div>
-          {% endif %}
+          <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:{{ sil_color }}15;color:{{ sil_color }};border:1px solid {{ sil_color }}40">{{ sil }}</span>
         </td>
         <td>
-          {% if m.implementation_status=='Completed' %}<span class="badge b-green" style="font-size:9.5px">Done</span>
-          {% elif m.implementation_status=='In Progress' %}<span class="badge b-blue" style="font-size:9.5px">In Progress</span>
-          {% elif m.implementation_status=='Cancelled' %}<span class="badge b-red" style="font-size:9.5px">Cancelled</span>
-          {% else %}<span class="badge b-gray" style="font-size:9.5px">Not Started</span>{% endif %}
+          <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:{{ st_color }}15;color:{{ st_color }};border:1px solid {{ st_color }}40;white-space:nowrap">{{ st }}</span>
+        </td>
+        <td>
+          {% if m.approval_status=='Approved' or m.sm_approval_status=='Approved' %}<span class="badge b-green" style="font-size:9px">✓ Approved</span>
+          {% elif m.approval_status=='Rejected' %}<span class="badge b-red" style="font-size:9px">✗ Rejected</span>
+          {% else %}<span class="badge b-yellow" style="font-size:9px">Pending</span>{% endif %}
+          {% if m.approved_by %}<div style="font-size:9px;color:var(--muted);margin-top:1px">{{ m.approved_by[:14] }}</div>{% endif %}
         </td>
         <td style="text-align:center">
-          {% if m.post_change_review %}
-          <span class="badge b-green" style="font-size:9px" title="{{ m.post_change_review }}">✓ Done</span>
-          {% else %}
-          <span class="badge b-yellow" style="font-size:9px">Pending</span>
-          {% endif %}
+          {% if m.pir_effectiveness == 'Effective' %}<span class="badge b-green" style="font-size:9px">✓ Effective</span>
+          {% elif m.pir_effectiveness == 'Partially Effective' %}<span class="badge b-yellow" style="font-size:9px">Partial</span>
+          {% elif m.pir_effectiveness == 'Ineffective' %}<span class="badge b-red" style="font-size:9px">⛔ Ineffective</span>
+          {% elif m.pir_actual_outcome %}<span class="badge b-blue" style="font-size:9px">Done</span>
+          {% elif st in ('Implemented','Post-Implementation Review') %}<span class="badge b-yellow" style="font-size:9px">⚠ Due</span>
+          {% else %}<span style="color:var(--muted2);font-size:10px">—</span>{% endif %}
         </td>
         <td>
-          {% if m.hazard_id %}
-          <a href="/hazard-log/{{ m.hazard_id }}" class="ctrl-num" style="font-size:9px;background:var(--red)">{{ m.hazard_id }}</a>
-          {% else %}
-          <span style="color:var(--muted2);font-size:10px">—</span>
-          {% endif %}
+          {% if m.hazard_id %}<a href="/hazard-log/{{ m.hazard_id }}" class="ctrl-num" style="font-size:9px;background:var(--red)" onclick="event.stopPropagation()">{{ m.hazard_id }}</a>
+          {% else %}<span style="color:var(--muted2);font-size:10px">—</span>{% endif %}
         </td>
         <td onclick="event.stopPropagation()">
-          <!-- Inline update via details -->
-          <details style="margin-bottom:6px">
-            <summary style="font-size:10px;cursor:pointer;color:var(--navy);font-weight:700;list-style:none;display:inline-flex;align-items:center;gap:4px;
-                           padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r2)">
-              ✎ Update
-            </summary>
-            <div style="position:absolute;z-index:100;background:#fff;border:1px solid var(--border2);border-radius:var(--r);
-                        box-shadow:var(--shadow2);padding:12px;min-width:260px;margin-top:4px">
-              <form method="POST" action="/moc/{{ m.id }}/update" style="display:flex;flex-direction:column;gap:8px">
-                <div class="fg" style="margin-bottom:0">
-                  <label style="font-size:9.5px">Approval Status</label>
-                  <select name="approval_status" style="font-size:11px;padding:5px">
-                    {% for s in ['Pending','Approved','Rejected','Conditional'] %}
-                    <option {% if m.approval_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-                  </select>
-                </div>
-                <div class="fg" style="margin-bottom:0">
-                  <label style="font-size:9.5px">Approved By</label>
-                  <input type="text" name="approved_by" value="{{ m.approved_by or '' }}" placeholder="Approving authority" style="font-size:11px;padding:5px"/>
-                </div>
-                <div class="fg" style="margin-bottom:0">
-                  <label style="font-size:9.5px">Implementation Status</label>
-                  <select name="implementation_status" style="font-size:11px;padding:5px">
-                    {% for s in ['Not Started','In Progress','Completed','Cancelled'] %}
-                    <option {% if m.implementation_status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
-                  </select>
-                </div>
-                <div class="fg" style="margin-bottom:0">
-                  <label style="font-size:9.5px">Post-Change Review <span style="color:var(--red)">*</span></label>
-                  <textarea name="post_change_review" rows="3" style="font-size:11px;padding:5px"
-                            placeholder="Document verification findings, effectiveness, residual risks…">{{ m.post_change_review or '' }}</textarea>
-                </div>
-                <button type="submit" class="btn btn-nav btn-sm">Save Changes</button>
-              </form>
-            </div>
-          </details>
-          <div style="display:flex;gap:5px;margin-top:4px">
-            <a href="/pdf/moc/{{ m.id }}" target="_blank"
-               class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold)" title="ICAO PDF">PDF</a>
-            <form method="POST" action="/delete/moc/{{ m.id }}" style="display:inline"
-                  onsubmit="return confirm('Delete MOC {{ m.id }}?\n\nThis will also remove the linked hazard. This cannot be undone.')">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <a href="/moc/{{ m.id }}/detail" class="btn btn-sm" style="background:var(--navy3);color:#fff;padding:3px 8px;font-size:10px;text-align:center">Detail</a>
+            <a href="/pdf/moc/{{ m.id }}" target="_blank" class="btn btn-sm" style="background:var(--navy3);color:var(--gold);border:1px solid var(--gold);padding:3px 8px;font-size:10px;text-align:center">PDF</a>
+            <form method="POST" action="/delete/moc/{{ m.id }}" onsubmit="return confirm('Delete {{ m.id }}? This cannot be undone.')">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-              <button type="submit" class="btn btn-sm"
-                      style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5"
-                      title="Delete MOC">🗑 Delete</button>
+              <button type="submit" class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;width:100%;padding:3px 8px;font-size:10px">🗑 Delete</button>
             </form>
           </div>
         </td>
@@ -174,12 +144,11 @@
   </div>
 </div>
 {% else %}
-<div class="card" style="text-align:center;padding:44px;border:2px dashed var(--border)">
-  <div style="font-size:32px;margin-bottom:10px">🔄</div>
-  <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:8px">No Management of Change records</div>
-  <a href="/moc/new" class="btn btn-nav btn-sm">+ Create First MOC</a>
+<div class="card" style="text-align:center;padding:52px;border:2px dashed var(--border)">
+  <div style="font-size:36px;margin-bottom:12px">🔄</div>
+  <div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:8px">No Management of Change records</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Create the first MOC to begin your change governance process</div>
+  <a href="/moc/new" class="btn btn-nav">+ Create First MOC</a>
 </div>
 {% endif %}
-
-{{ render_pagination(pagination) }}
 {% endblock %}
