@@ -4397,6 +4397,81 @@ def moc_list():
     all_moc = MOC.query.order_by(MOC.created_at.desc()).all()
     return render_template('investigation/moc_list.html', mocs=all_moc)
 
+def _moc_auto_generate_ra(m):
+    """
+    Auto-generate a Hazard + RiskAssessment when an MOC requires a pre-change RA.
+    Creates:
+      - Hazard (source='MOC', linked_report_id=m.id) in the Hazard Log
+      - RiskAssessment (status='Draft') in the Risk Register, linked to that Hazard
+      - MOCHazard junction record
+    Back-links m.hazard_id, m.linked_ra_id, sets m.ra_status = 'In Progress'.
+    Caller must call db.session.commit() after this function returns.
+    Returns (hazard, ra) on success, (None, None) on failure.
+    """
+    try:
+        # ── 1. Hazard ────────────────────────────────────────────────────────────
+        haz_id = new_id('HAZ')
+        hazard = Hazard(
+            id               = haz_id,
+            source           = 'MOC',
+            linked_report_id = m.id,
+            department_id    = m.department_id,
+            classification   = 'Organizational',
+            generic_hazard   = f'[MOC] {(m.title or "")[:180]}',
+            consequences     = (m.proposed_change or m.description or '')[:500],
+            status           = 'Open',
+        )
+        db.session.add(hazard)
+
+        # ── 2. RiskAssessment ────────────────────────────────────────────────────
+        dept      = Department.query.get(m.department_id)
+        dept_code = dept.code if dept else 'SMS'
+        ctrl_num  = gen_control_number(dept_code)
+        ra_id     = new_id('RA')
+        today     = datetime.utcnow().strftime('%Y-%m-%d')
+        ra = RiskAssessment(
+            id                  = ra_id,
+            control_number      = ctrl_num,
+            title               = f'MOC Risk Assessment — {(m.title or "")[:150]}',
+            hazard_id           = haz_id,
+            department_id       = m.department_id,
+            general_description = (m.current_situation or m.proposed_change or '')[:1000],
+            reasons             = f'Required by Management of Change {m.moc_number}. {(m.reason_for_change or "")}',
+            status              = 'Draft',
+            assessment_date     = today,
+        )
+        db.session.add(ra)
+
+        # ── 3. MOCHazard junction record ─────────────────────────────────────────
+        mh = MOCHazard(
+            moc_id               = m.id,
+            hazard_description   = f'[MOC] {(m.title or "")[:200]}',
+            potential_consequence= (m.proposed_change or '')[:500],
+            acceptance_status    = 'Pending',
+            linked_hazard_id     = haz_id,
+        )
+        db.session.add(mh)
+
+        # ── 4. Back-link MOC ─────────────────────────────────────────────────────
+        m.hazard_id    = haz_id
+        m.linked_ra_id = ra_id        # stores RA primary key so detail page can look it up
+        m.ra_status    = 'In Progress'
+
+        # ── 5. Audit trail ───────────────────────────────────────────────────────
+        db.session.add(MOCUpdate(
+            moc_id      = m.id,
+            update_text = (f'Auto-generated: Hazard [{haz_id}] and Risk Assessment '
+                           f'[{ctrl_num} / {ra_id}] created and linked to this MOC.'),
+            update_by   = 'System',
+            update_type = 'Progress',
+        ))
+        return hazard, ra
+    except Exception as e:
+        db.session.rollback()
+        print(f'_moc_auto_generate_ra error: {e}')
+        return None, None
+
+
 @app.route('/moc/new', methods=['GET','POST'])
 @require_login
 def new_moc():
@@ -4465,7 +4540,17 @@ def new_moc():
                       update_by=session.get('username','System'), update_type='Progress')
         db.session.add(u)
         db.session.commit()
-        flash(f'MOC {m.moc_number} created successfully.', 'success')
+        # Auto-generate Hazard + Risk Assessment if RA is required
+        if m.risk_assessment_required:
+            _moc_auto_generate_ra(m)
+            try:
+                db.session.commit()
+                flash(f'MOC {m.moc_number} created. Hazard and Risk Assessment auto-generated and linked.', 'success')
+            except Exception as _e:
+                db.session.rollback()
+                flash(f'MOC {m.moc_number} created (RA auto-generation failed: {_e}).', 'warning')
+        else:
+            flash(f'MOC {m.moc_number} created successfully.', 'success')
         return redirect(url_for('moc_detail', mid=mid_new))
     all_departments = Department.query.order_by(Department.name).all()
     return render_template('investigation/moc_form.html', m=None, edit=False, all_departments=all_departments)
@@ -4538,21 +4623,37 @@ def _moc_impact_color(level):
 @app.route('/moc/<mid>/update-ra-status', methods=['POST'])
 @require_login
 def moc_update_ra_status(mid):
-    """Update RA Required flag and RA Status from the detail page."""
+    """Update RA Required flag and RA Status from the detail page.
+       If RA is now required and no Hazard/RA are linked yet, auto-generates them.
+    """
     m = MOC.query.get_or_404(mid)
     f = request.form
-    m.risk_assessment_required = f.get('risk_assessment_required', 'no') == 'yes'
-    m.ra_status = f.get('ra_status', m.ra_status or 'Not Started')
-    m.linked_ra_id = f.get('linked_ra_id', m.linked_ra_id or '').strip() or None
+    ra_required_new = f.get('risk_assessment_required', 'no') == 'yes'
+    m.risk_assessment_required = ra_required_new
+    m.ra_status    = f.get('ra_status', m.ra_status or 'Not Started')
+    manual_ra_ref  = f.get('linked_ra_id', '').strip()
+    if manual_ra_ref:
+        m.linked_ra_id = manual_ra_ref   # user manually entered a reference
     db.session.commit()
-    db.session.add(MOCUpdate(
-        moc_id=mid,
-        update_text=f'RA Status updated to: {m.ra_status}. RA Required: {"Yes" if m.risk_assessment_required else "No"}.',
-        update_by=session.get('username', 'System'),
-        update_type='Progress',
-    ))
-    db.session.commit()
-    flash('Risk Assessment status updated.', 'success')
+    # Auto-generate Hazard + RA if RA is required and nothing linked yet
+    if ra_required_new and not m.linked_ra_id:
+        _moc_auto_generate_ra(m)
+        try:
+            db.session.commit()
+            flash('Risk Assessment required — Hazard and Risk Assessment auto-generated and linked.', 'success')
+            return redirect(url_for('moc_detail', mid=mid) + '#linked-records')
+        except Exception as _e:
+            db.session.rollback()
+            flash(f'RA auto-generation failed: {_e}', 'warning')
+    else:
+        db.session.add(MOCUpdate(
+            moc_id=mid,
+            update_text=f'RA Status updated to: {m.ra_status}. RA Required: {"Yes" if m.risk_assessment_required else "No"}.',
+            update_by=session.get('username', 'System'),
+            update_type='Progress',
+        ))
+        db.session.commit()
+        flash('Risk Assessment status updated.', 'success')
     return redirect(url_for('moc_detail', mid=mid) + '#ra-section')
 
 @app.route('/moc/<mid>/detail')
@@ -4589,16 +4690,30 @@ def moc_detail(mid):
         linked_avis = []
     # Build real linked hazards list (from moc_hazards linked_hazard_id)
     linked_hazard_ids = [mh.linked_hazard_id for mh in moc_hazards if mh.linked_hazard_id]
+    # Also include m.hazard_id if set and not already in the list
+    if m.hazard_id and m.hazard_id not in linked_hazard_ids:
+        linked_hazard_ids.append(m.hazard_id)
     try:
         linked_hazards = Hazard.query.filter(Hazard.id.in_(linked_hazard_ids)).all() if linked_hazard_ids else []
     except Exception:
         db.session.rollback()
         linked_hazards = []
+    # Load the actual RiskAssessment object for the linked_ra_id
+    linked_ra = None
+    if m.linked_ra_id:
+        try:
+            linked_ra = RiskAssessment.query.get(m.linked_ra_id)
+            # Fall back: maybe linked_ra_id stores control_number instead of id
+            if linked_ra is None:
+                linked_ra = RiskAssessment.query.filter_by(control_number=m.linked_ra_id).first()
+        except Exception:
+            db.session.rollback()
+            linked_ra = None
     return render_template('investigation/moc_detail.html',
                            m=m, all_departments=all_departments, actions=actions,
                            moc_hazards=moc_hazards, moc_milestones=moc_milestones,
                            moc_updates=moc_updates, moc_stakeholders=moc_stakeholders,
-                           linked_hazards=linked_hazards,
+                           linked_hazards=linked_hazards, linked_ra=linked_ra,
                            linked_investigations=linked_investigations,
                            linked_avis=linked_avis,
                            status_color=_moc_status_color(m.status or 'Draft'),
@@ -12848,90 +12963,7 @@ with app.app_context():
                 "  severity VARCHAR(20),"
                 "  department_id INTEGER,"
                 "  category VARCHAR(100),"
-                "  link_type VARCHAR(20) DEFAULT 'auto',"
-                "  created_at TIMESTAMP DEFAULT NOW()"
-                ")"
-            ))
-    except Exception as _sle:
-        pass
-
-    # audit_verification_items DDL
-    try:
-        with engine.connect() as conn:
-            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS audit_verification_items ("
-                "  id SERIAL PRIMARY KEY,"
-                "  source_module VARCHAR(50) NOT NULL,"
-                "  source_record_id VARCHAR(50) NOT NULL,"
-                "  source_description TEXT,"
-                "  department_id INTEGER REFERENCES departments(id),"
-                "  linked_report_id VARCHAR(50),"
-                "  linked_hazard_id VARCHAR(50),"
-                "  linked_investigation_id VARCHAR(50),"
-                "  linked_spi_id INTEGER,"
-                "  linked_action_id VARCHAR(50),"
-                "  linked_audit_id INTEGER,"
-                "  linked_finding_id INTEGER,"
-                "  linked_risk_id VARCHAR(50),"
-                "  scheduled_audit_id INTEGER REFERENCES audit_schedules(id),"
-                "  verification_area VARCHAR(100),"
-                "  verification_objective TEXT,"
-                "  required_evidence TEXT,"
-                "  effectiveness_criteria TEXT,"
-                "  operational_risk VARCHAR(20) DEFAULT 'Medium',"
-                "  due_audit_cycle VARCHAR(20),"
-                "  due_date VARCHAR(20),"
-                "  status VARCHAR(30) DEFAULT 'Pending',"
-                "  recurrence_count INTEGER DEFAULT 0,"
-                "  escalation_level INTEGER DEFAULT 0,"
-                "  completed_at TIMESTAMP,"
-                "  completed_by VARCHAR(100),"
-                "  effectiveness_rating VARCHAR(30),"
-                "  notes TEXT,"
-                "  created_by VARCHAR(100),"
-                "  created_at TIMESTAMP DEFAULT NOW()"
-                ")"
-            ))
-    except Exception: pass
-
-    # moc_hazards DDL
-    try:
-        with engine.connect() as conn:
-            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS moc_hazards ("
-                "  id SERIAL PRIMARY KEY,"
-                "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
-                "  hazard_description TEXT,"
-                "  potential_consequence TEXT,"
-                "  existing_controls TEXT,"
-                "  proposed_controls TEXT,"
-                "  initial_risk VARCHAR(20),"
-                "  residual_risk VARCHAR(20),"
-                "  acceptance_status VARCHAR(20) DEFAULT 'Pending',"
-                "  acceptance_authority VARCHAR(100),"
-                "  linked_hazard_id VARCHAR(30),"
-                "  created_at TIMESTAMP DEFAULT NOW()"
-                ")"
-            ))
-    except Exception: pass
-
-    # moc_milestones DDL
-    try:
-        with engine.connect() as conn:
-            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS moc_milestones ("
-                "  id SERIAL PRIMARY KEY,"
-                "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
-                "  description VARCHAR(300),"
-                "  responsible_person VARCHAR(100),"
-                "  target_date VARCHAR(20),"
-                "  status VARCHAR(20) DEFAULT 'Pending',"
-                "  completed_date VARCHAR(20),"
-                "  notes TEXT,"
-                "  created_at TIMESTAMP DEFAULT NOW()"
+                "  linked_at TIMESTAMP DEFAULT NOW()"
                 ")"
             ))
     except Exception: pass
