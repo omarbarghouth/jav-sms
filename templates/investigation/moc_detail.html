@@ -593,3 +593,22 @@
               <select name="pir_effectiveness" required>
                 <option value="">Select…</option>
                 <option>Effective</option><option>Partially Effective</option><option>Ineffective</option>
+              </select>
+            </div>
+            <div class="fg" style="grid-column:1/-1;margin-bottom:0"><label>Lessons Learned</label><textarea name="pir_lessons_learned" rows="2" placeholder="Key lessons for future change management…"></textarea></div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button type="submit" class="btn btn-nav">Submit PIR</button>
+            <button type="button" class="btn" onclick="document.getElementById('pir-panel-form').style.display='none'">Cancel</button>
+          </div>
+        </form>
+      </div>
+      <button class="btn btn-sm" onclick="document.getElementById('pir-panel-form').style.display='block'" style="margin-top:4px;font-size:11px">+ Record PIR</button>
+      {% else %}
+      <div style="font-size:12px;color:var(--muted);font-style:italic">PIR will be required once this change is marked as Implemented.</div>
+      {% endif %}
+    </div>
+
+  </div><!-- end right column -->
+</div><!-- end grid -->
+{% endblock %}
