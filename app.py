@@ -1,6 +1,7 @@
 import json
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog
+from sqlalchemy import text as _sa_text
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, ComplianceObligation
 try:
     from models import SPIEventLink
 except ImportError:
@@ -7573,6 +7574,169 @@ def sp_lesson_detail(lid):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  REGULATORY COMPLIANCE REGISTER — ICAO Annex 19 §2 / Doc 9859 §4.1
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_COMP_BODIES     = ['ICAO', 'JCAR', 'IOSA', 'EASA', 'FAA', 'JAA', 'Internal']
+_COMP_STATUSES   = ['Compliant', 'Partially Compliant', 'Non-Compliant',
+                    'Under Review', 'Not Applicable', 'Exempt']
+_COMP_OBL_TYPES  = ['Ongoing', 'Periodic', 'One-Time', 'Conditional']
+_COMP_FREQ       = ['Monthly', 'Quarterly', 'Semi-Annual', 'Annual', 'As Required']
+
+
+@app.route('/compliance')
+@require_login
+def compliance_list():
+    status_filter   = request.args.get('status', '')
+    body_filter     = request.args.get('body', '')
+    priority_filter = request.args.get('priority', '')
+
+    q = ComplianceObligation.query
+    if status_filter:
+        q = q.filter_by(compliance_status=status_filter)
+    if body_filter:
+        q = q.filter_by(regulation_body=body_filter)
+    if priority_filter:
+        q = q.filter_by(priority=priority_filter)
+    obligations = q.order_by(ComplianceObligation.regulation_body,
+                              ComplianceObligation.ref_number).all()
+
+    all_obs = ComplianceObligation.query.all()
+    today_str = datetime.utcnow().strftime('%Y-%m-%d')
+
+    return render_template('compliance/compliance_list.html',
+        obligations     = obligations,
+        total           = len(all_obs),
+        compliant       = sum(1 for o in all_obs if o.compliance_status == 'Compliant'),
+        partial         = sum(1 for o in all_obs if o.compliance_status == 'Partially Compliant'),
+        non_compliant   = sum(1 for o in all_obs if o.compliance_status == 'Non-Compliant'),
+        under_review    = sum(1 for o in all_obs if o.compliance_status == 'Under Review'),
+        overdue         = sum(1 for o in all_obs
+                              if o.next_review_due and o.next_review_due < today_str),
+        statuses        = _COMP_STATUSES,
+        bodies          = _COMP_BODIES,
+        status_filter   = status_filter,
+        body_filter     = body_filter,
+        priority_filter = priority_filter,
+    )
+
+
+@app.route('/compliance/<int:oid>')
+@require_login
+def compliance_detail(oid):
+    ob = ComplianceObligation.query.get_or_404(oid)
+    return render_template('compliance/compliance_detail.html', ob=ob)
+
+
+@app.route('/compliance/new', methods=['GET', 'POST'])
+@require_login
+def new_compliance():
+    if request.method == 'POST':
+        last = ComplianceObligation.query.order_by(
+                   ComplianceObligation.id.desc()).first()
+        seq  = (last.id + 1) if last else 1
+        ref  = request.form.get('ref_number', '').strip() or f'COMP-{seq:04d}'
+        dept_id = request.form.get('department_id') or None
+        ob = ComplianceObligation(
+            ref_number           = ref,
+            regulation_body      = request.form.get('regulation_body', ''),
+            standard_ref         = request.form.get('standard_ref', ''),
+            requirement_title    = request.form.get('requirement_title', ''),
+            requirement_text     = request.form.get('requirement_text', ''),
+            applicability        = request.form.get('applicability', ''),
+            obligation_type      = request.form.get('obligation_type', 'Ongoing'),
+            compliance_status    = request.form.get('compliance_status', 'Under Review'),
+            priority             = request.form.get('priority', 'Medium'),
+            evidence_description = request.form.get('evidence_description', ''),
+            evidence_location    = request.form.get('evidence_location', ''),
+            finding_ref          = request.form.get('finding_ref', ''),
+            linked_action_id     = request.form.get('linked_action_id', ''),
+            responsible_person   = request.form.get('responsible_person', ''),
+            responsible_dept     = request.form.get('responsible_person', ''),
+            department_id        = int(dept_id) if dept_id else None,
+            review_frequency     = request.form.get('review_frequency', 'Annual'),
+            next_review_due      = request.form.get('next_review_due', ''),
+            last_reviewed        = request.form.get('last_reviewed', ''),
+            notes                = request.form.get('notes', ''),
+            created_by           = session.get('user', {}).get('username', ''),
+        )
+        db.session.add(ob)
+        db.session.commit()
+        flash('Compliance obligation created.', 'success')
+        return redirect(url_for('compliance_detail', oid=ob.id))
+
+    last = ComplianceObligation.query.order_by(
+               ComplianceObligation.id.desc()).first()
+    seq  = (last.id + 1) if last else 1
+    return render_template('compliance/compliance_form.html',
+        edit              = False,
+        ob                = ComplianceObligation(),
+        suggested_ref     = f'COMP-{seq:04d}',
+        bodies            = _COMP_BODIES,
+        statuses          = _COMP_STATUSES,
+        obligation_types  = _COMP_OBL_TYPES,
+        review_frequencies= _COMP_FREQ,
+        departments       = Department.query.order_by(Department.name).all(),
+    )
+
+
+@app.route('/compliance/<int:oid>/edit', methods=['GET', 'POST'])
+@require_login
+def edit_compliance(oid):
+    ob = ComplianceObligation.query.get_or_404(oid)
+    if request.method == 'POST':
+        dept_id = request.form.get('department_id') or None
+        ob.regulation_body      = request.form.get('regulation_body', ob.regulation_body)
+        ob.standard_ref         = request.form.get('standard_ref', ob.standard_ref)
+        ob.requirement_title    = request.form.get('requirement_title', ob.requirement_title)
+        ob.requirement_text     = request.form.get('requirement_text', ob.requirement_text)
+        ob.applicability        = request.form.get('applicability', ob.applicability)
+        ob.obligation_type      = request.form.get('obligation_type', ob.obligation_type)
+        ob.compliance_status    = request.form.get('compliance_status', ob.compliance_status)
+        ob.priority             = request.form.get('priority', ob.priority)
+        ob.evidence_description = request.form.get('evidence_description', ob.evidence_description)
+        ob.evidence_location    = request.form.get('evidence_location', ob.evidence_location)
+        ob.finding_ref          = request.form.get('finding_ref', ob.finding_ref)
+        ob.linked_action_id     = request.form.get('linked_action_id', ob.linked_action_id)
+        ob.responsible_person   = request.form.get('responsible_person', ob.responsible_person)
+        ob.department_id        = int(dept_id) if dept_id else None
+        ob.review_frequency     = request.form.get('review_frequency', ob.review_frequency)
+        ob.next_review_due      = request.form.get('next_review_due', ob.next_review_due)
+        ob.last_reviewed        = request.form.get('last_reviewed', ob.last_reviewed)
+        ob.notes                = request.form.get('notes', ob.notes)
+        if request.form.get('ref_number', '').strip():
+            ob.ref_number = request.form['ref_number'].strip()
+        db.session.commit()
+        flash('Obligation updated.', 'success')
+        return redirect(url_for('compliance_detail', oid=ob.id))
+
+    return render_template('compliance/compliance_form.html',
+        edit              = True,
+        ob                = ob,
+        suggested_ref     = ob.ref_number,
+        bodies            = _COMP_BODIES,
+        statuses          = _COMP_STATUSES,
+        obligation_types  = _COMP_OBL_TYPES,
+        review_frequencies= _COMP_FREQ,
+        departments       = Department.query.order_by(Department.name).all(),
+    )
+
+
+@app.route('/compliance/<int:oid>/update-status', methods=['POST'])
+@require_login
+def update_compliance_status(oid):
+    ob = ComplianceObligation.query.get_or_404(oid)
+    ob.compliance_status    = request.form.get('compliance_status', ob.compliance_status)
+    ob.last_reviewed        = request.form.get('last_reviewed', ob.last_reviewed)
+    ob.next_review_due      = request.form.get('next_review_due', ob.next_review_due)
+    ob.evidence_description = request.form.get('evidence_description', ob.evidence_description)
+    ob.notes                = request.form.get('notes', ob.notes)
+    db.session.commit()
+    flash('Compliance status updated.', 'success')
+    return redirect(url_for('compliance_detail', oid=ob.id))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  TESTING-PHASE DELETE ROUTES — Safe cascade deletion for all major modules
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -12922,6 +13086,32 @@ with app.app_context():
         'moc_stakeholders': [
             ('reviewed',                'BOOLEAN DEFAULT FALSE'),
         ],
+        'compliance_obligations': [
+            ('priority',             "VARCHAR(20) DEFAULT 'Medium'"),
+            ('evidence_location',    'VARCHAR(500)'),
+            ('finding_ref',          'VARCHAR(100)'),
+            ('linked_action_id',     'VARCHAR(30)'),
+            ('responsible_person',   'VARCHAR(100)'),
+            ('department_id',        'INTEGER'),
+            ('next_review_due',      'VARCHAR(20)'),
+            ('last_reviewed',        'VARCHAR(20)'),
+            ('created_by',           'VARCHAR(100)'),
+        ],
+        'investigations': [
+            ('icao_occurrence_category', 'VARCHAR(100)'),
+            ('contributing_factors',     'TEXT'),
+            ('findings',                 'TEXT'),
+            ('regulatory_ref',           'VARCHAR(200)'),
+            ('notified_authority',       'VARCHAR(100)'),
+            ('erp_activated',            'BOOLEAN DEFAULT FALSE'),
+            ('closed_at',               'TIMESTAMP'),
+        ],
+        'actions': [
+            ('safety_culture_notes', 'TEXT'),
+        ],
+        'safety_surveys': [
+            ('target_audience', 'VARCHAR(200)'),
+        ],
     }
 
     # Run column migrations using a raw psycopg2 connection so they are
@@ -12950,9 +13140,9 @@ with app.app_context():
 
     # spi_event_links DDL
     try:
-        with engine.connect() as conn:
+        with db.engine.connect() as conn:
             conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(
+            conn.execute(_sa_text(
                 "CREATE TABLE IF NOT EXISTS spi_event_links ("
                 "  id SERIAL PRIMARY KEY,"
                 "  spi_id INTEGER NOT NULL REFERENCES spi_indicators(id) ON DELETE CASCADE,"
@@ -12970,9 +13160,9 @@ with app.app_context():
 
     # moc_updates DDL
     try:
-        with engine.connect() as conn:
+        with db.engine.connect() as conn:
             conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(
+            conn.execute(_sa_text(
                 "CREATE TABLE IF NOT EXISTS moc_updates ("
                 "  id SERIAL PRIMARY KEY,"
                 "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"
@@ -12986,9 +13176,9 @@ with app.app_context():
 
     # moc_stakeholders DDL
     try:
-        with engine.connect() as conn:
+        with db.engine.connect() as conn:
             conn = conn.execution_options(isolation_level="AUTOCOMMIT")
-            conn.execute(text(
+            conn.execute(_sa_text(
                 "CREATE TABLE IF NOT EXISTS moc_stakeholders ("
                 "  id SERIAL PRIMARY KEY,"
                 "  moc_id VARCHAR(30) NOT NULL REFERENCES moc(id) ON DELETE CASCADE,"

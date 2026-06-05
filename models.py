@@ -24,7 +24,7 @@ class User(db.Model):
     sag_role      = db.Column(db.String(80))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     last_login    = db.Column(db.DateTime)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("user_set", lazy=True))
 
 
 class VoluntaryReport(db.Model):
@@ -44,7 +44,7 @@ class VoluntaryReport(db.Model):
     status        = db.Column(db.String(20), default='Submitted')
     is_confidential = db.Column(db.Boolean, default=False)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("voluntary_report_set", lazy=True))
 
 
 class ConfidentialReport(db.Model):
@@ -63,7 +63,7 @@ class ConfidentialReport(db.Model):
     suggestion    = db.Column(db.Text)
     status        = db.Column(db.String(20), default='Submitted')
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("confidential_report_set", lazy=True))
 
 
 class HazardReport(db.Model):
@@ -89,7 +89,7 @@ class HazardReport(db.Model):
     # Submitted / Under Assessment / Actioned / Closed
     hazard_id     = db.Column(db.String(30), db.ForeignKey('hazards.id'))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("hazard_report_set", lazy=True))
 
 class ASRReport(db.Model):
     __tablename__ = 'asr_reports'
@@ -143,7 +143,7 @@ class Hazard(db.Model):
     status                 = db.Column(db.String(20), default='Open')
     owner                  = db.Column(db.String(100))
     created_at             = db.Column(db.DateTime, default=datetime.utcnow)
-    department             = db.relationship('Department', foreign_keys=[department_id])
+    department             = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("hazard_set", lazy=True))
     risks                  = db.relationship('Risk', backref='hazard', lazy=True, cascade='all, delete-orphan')
     actions                = db.relationship('Action', backref='hazard', lazy=True)
     hazard_reports         = db.relationship('HazardReport', backref='hazard_parent', lazy=True, foreign_keys='HazardReport.hazard_id')
@@ -239,6 +239,8 @@ class Action(db.Model):
     linked_audit_id      = db.Column(db.String(30))
     linked_ra_id         = db.Column(db.String(30))
     linked_risk_id       = db.Column(db.String(30))
+    # Extended safety culture field (added via migration)
+    safety_culture_notes = db.Column(db.Text)
     # NOTE: assigned_by declared once above (duplicate removed)
     # Relationship to SPI indicator
     spi_indicator        = db.relationship('SPIIndicator', foreign_keys=[spi_id],
@@ -271,7 +273,7 @@ class Audit(db.Model):
     status        = db.Column(db.String(20), default='Planned')  # Planned / In Progress / Closed
     summary       = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("audit_set", lazy=True))
     findings      = db.relationship('Finding', backref='audit', lazy=True, cascade='all, delete-orphan')
 
 class Finding(db.Model):
@@ -329,11 +331,19 @@ class Investigation(db.Model):
     target_close_date   = db.Column(db.String(20))
     final_findings      = db.Column(db.Text)
     closed_date         = db.Column(db.String(20))
+    closed_at           = db.Column(db.DateTime)
     closed_by           = db.Column(db.String(100))
     status              = db.Column(db.String(20), default='Open')
+    # ICAO Annex 13 extended fields (added via migration)
+    icao_occurrence_category = db.Column(db.String(100))
+    contributing_factors     = db.Column(db.Text)
+    findings                 = db.Column(db.Text)
+    regulatory_ref           = db.Column(db.String(200))
+    notified_authority       = db.Column(db.String(100))
+    erp_activated            = db.Column(db.Boolean, default=False)
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at          = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    department          = db.relationship('Department', foreign_keys=[department_id])
+    department          = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("investigation_set", lazy=True))
     timeline            = db.relationship('InvestigationEvent', backref='investigation',
                               lazy=True, order_by='InvestigationEvent.created_at')
 
@@ -441,7 +451,7 @@ class MOC(db.Model):
     pir_additional_actions      = db.Column(db.Text)
     pir_lessons_learned         = db.Column(db.Text)
     # ── Relationships ─────────────────────────────────────────────────────────
-    department      = db.relationship('Department', foreign_keys=[department_id])
+    department      = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("moc_set", lazy=True))
     moc_hazards     = db.relationship('MOCHazard', backref='moc', lazy=True,
                                        cascade='all, delete-orphan',
                                        order_by='MOCHazard.created_at')
@@ -614,7 +624,7 @@ class SafetyNewsletter(db.Model):
     status         = db.Column(db.String(20), default='Draft')  # Draft / Published / Archived
     attachment     = db.Column(db.String(200))   # uploaded file
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
-    department     = db.relationship('Department', foreign_keys=[department_id])
+    department     = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("safety_newsletter_set", lazy=True))
 
 
 class SafetyCampaign(db.Model):
@@ -631,7 +641,7 @@ class SafetyCampaign(db.Model):
     status         = db.Column(db.String(20), default='Active')  # Active / Completed / Planned
     attachment     = db.Column(db.String(200))
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
-    department     = db.relationship('Department', foreign_keys=[department_id])
+    department     = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("safety_campaign_set", lazy=True))
 
 
 class SafetySurvey(db.Model):
@@ -648,8 +658,9 @@ class SafetySurvey(db.Model):
     status         = db.Column(db.String(20), default='Draft')  # Draft / Active / Closed
     target_count   = db.Column(db.Integer, default=0)
     response_count = db.Column(db.Integer, default=0)
+    target_audience = db.Column(db.String(200))
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
-    department     = db.relationship('Department', foreign_keys=[department_id])
+    department     = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("safety_survey_set", lazy=True))
 
 
 class LessonLearned(db.Model):
@@ -669,7 +680,7 @@ class LessonLearned(db.Model):
     attachment     = db.Column(db.String(200))
     linked_hazard_id = db.Column(db.String(30), nullable=True)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
-    department     = db.relationship('Department', foreign_keys=[department_id])
+    department     = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("lesson_learned_set", lazy=True))
 
 
 class SafetyBulletin(db.Model):
@@ -688,7 +699,7 @@ class SafetyBulletin(db.Model):
     attachment    = db.Column(db.String(200))
     linked_hazard_id = db.Column(db.String(30), nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("safety_bulletin_set", lazy=True))
 
 class Training(db.Model):
     """
@@ -725,7 +736,7 @@ class Training(db.Model):
     notes            = db.Column(db.Text)
     updated_at       = db.Column(db.DateTime, default=datetime.utcnow)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
-    department       = db.relationship('Department', foreign_keys=[department_id])
+    department       = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("training_set", lazy=True))
 
 class AuditPlan(db.Model):
     """Annual audit plan - defines what must be audited in a given year."""
@@ -744,7 +755,7 @@ class AuditPlan(db.Model):
     planned_week       = db.Column(db.Integer)        # 1-4 (week of month)
     status             = db.Column(db.String(20), default='Planned')
     created_at         = db.Column(db.DateTime, default=datetime.utcnow)
-    department         = db.relationship('Department', foreign_keys=[department_id])
+    department         = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("audit_plan_set", lazy=True))
     schedules          = db.relationship('AuditSchedule', backref='plan', lazy=True,
                                          cascade='all, delete-orphan')
 
@@ -772,7 +783,7 @@ class AuditSchedule(db.Model):
     audit_result       = db.Column(db.String(80))
     followup_required  = db.Column(db.String(10))
     created_at         = db.Column(db.DateTime, default=datetime.utcnow)
-    department         = db.relationship('Department', foreign_keys=[department_id])
+    department         = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("audit_schedule_set", lazy=True))
     checklist_items    = db.relationship('AuditChecklist', backref='schedule', lazy=True,
                                           cascade='all, delete-orphan')
     findings           = db.relationship('AuditFinding', backref='schedule', lazy=True,
@@ -793,7 +804,7 @@ class ChecklistTemplate(db.Model):
     is_active     = db.Column(db.Boolean, default=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("checklist_template_set", lazy=True))
     items         = db.relationship('ChecklistTemplateItem', backref='template',
                                     lazy=True, cascade='all, delete-orphan',
                                     order_by='ChecklistTemplateItem.sequence')
@@ -936,7 +947,7 @@ class DistributionList(db.Model):
     is_active     = db.Column(db.Boolean, default=True)
     sag_role      = db.Column(db.String(80))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("distribution_list_set", lazy=True))
 
 class EmailLog(db.Model):
     __tablename__ = 'email_logs'
@@ -964,7 +975,7 @@ class SurveyResponse(db.Model):
     ip_address       = db.Column(db.String(50))
     survey           = db.relationship('SafetySurvey', foreign_keys=[survey_id],
                                        backref=db.backref('responses', lazy=True))
-    department       = db.relationship('Department', foreign_keys=[department_id])
+    department       = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("survey_response_set", lazy=True))
 
 class SafetyPolicy(db.Model):
     """Safety Policy Statement - versioned, signed by Accountable Manager."""
@@ -999,7 +1010,7 @@ class SafetyRole(db.Model):
     effective_from = db.Column(db.String(20))
     active        = db.Column(db.Boolean, default=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("safety_role_set", lazy=True))
 
 class SafetyPersonnel(db.Model):
     """Key safety personnel database."""
@@ -1017,7 +1028,7 @@ class SafetyPersonnel(db.Model):
     training_date = db.Column(db.String(20))
     active        = db.Column(db.Boolean, default=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("safety_personnel_set", lazy=True))
 
 class ERPlan(db.Model):
     """Emergency Response Plan - scenarios, procedures, contacts."""
@@ -1063,7 +1074,7 @@ class SMSDocument(db.Model):
     parent_doc_id = db.Column(db.String(50))     # previous version ID
     change_summary = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    department    = db.relationship('Department', foreign_keys=[department_id])
+    department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("sms_document_set", lazy=True))
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  DOCUMENT TRACEABILITY BACKBONE
@@ -1175,7 +1186,7 @@ class RiskAssessment(db.Model):
     created_at            = db.Column(db.DateTime, default=datetime.utcnow)
     # Relationships
     hazard                = db.relationship('Hazard', backref=db.backref('risk_assessment', uselist=False))
-    department            = db.relationship('Department', foreign_keys=[department_id])
+    department            = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("risk_assessment_set", lazy=True))
     rows                  = db.relationship('RARow', backref='assessment', lazy=True,
                                              cascade='all, delete-orphan',
                                              order_by='RARow.seq_num')
@@ -1276,7 +1287,7 @@ class Employee(db.Model):
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     last_login    = db.Column(db.DateTime)
 
-    department = db.relationship('Department', foreign_keys=[department_id])
+    department = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("employee_set", lazy=True))
 
     def __repr__(self):
         return f'<Employee {self.employee_id} {self.full_name}>'
@@ -1666,16 +1677,27 @@ class ComplianceObligation(db.Model):
     applicability        = db.Column(db.String(200))
     obligation_type      = db.Column(db.String(30), default='Ongoing')
     compliance_status    = db.Column(db.String(30), default='Under Review')
+    priority             = db.Column(db.String(20), default='Medium')
     evidence_description = db.Column(db.Text)
     evidence_ref         = db.Column(db.String(200))
+    evidence_location    = db.Column(db.String(500))
+    finding_ref          = db.Column(db.String(100))
+    linked_action_id     = db.Column(db.String(30))
     responsible_dept     = db.Column(db.String(100))
+    responsible_person   = db.Column(db.String(100))
+    department_id        = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     review_frequency     = db.Column(db.String(30))
     next_review_date     = db.Column(db.String(20))
+    next_review_due      = db.Column(db.String(20))
     last_reviewed_date   = db.Column(db.String(20))
+    last_reviewed        = db.Column(db.String(20))
     last_reviewed_by     = db.Column(db.String(100))
     non_compliance_risk  = db.Column(db.String(20), default='Medium')
     notes                = db.Column(db.Text)
+    created_by           = db.Column(db.String(100))
     created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+    department           = db.relationship('Department', foreign_keys=[department_id],
+                               backref=db.backref('compliance_obligations', lazy=True))
 
 
 class AuditVerificationItem(db.Model):
@@ -1711,4 +1733,4 @@ class AuditVerificationItem(db.Model):
     notes                   = db.Column(db.Text)
     created_by              = db.Column(db.String(100))
     created_at              = db.Column(db.DateTime, default=datetime.utcnow)
-    department              = db.relationship('Department', foreign_keys=[department_id])
+    department              = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("audit_verification_item_set", lazy=True))
