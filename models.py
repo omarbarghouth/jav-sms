@@ -185,9 +185,6 @@ class Risk(db.Model):
     residual_tolerance    = db.Column(db.String(20))
     created_at            = db.Column(db.DateTime, default=datetime.utcnow)
     controls              = db.relationship('Control', backref='risk', lazy=True, cascade='all, delete-orphan')
-    risk_actions          = db.relationship('RiskAction', backref='risk_parent', lazy=True,
-                                            cascade='all, delete-orphan',
-                                            foreign_keys='RiskAction.risk_id')
 
 class Control(db.Model):
     __tablename__ = 'controls'
@@ -1187,7 +1184,9 @@ class RiskAction(db.Model):
     effectiveness = db.Column(db.String(30))
     closed_date   = db.Column(db.String(20))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    risk          = db.relationship('Risk', backref=db.backref('risk_actions', lazy=True))
+    risk          = db.relationship('Risk', backref=db.backref('risk_actions', lazy=True,
+                                                               cascade='all, delete-orphan',
+                                                               single_parent=True))
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  RISK ASSESSMENT MODULE - Jav/SMS/001 Rev 01
