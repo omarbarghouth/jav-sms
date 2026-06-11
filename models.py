@@ -18,7 +18,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     full_name     = db.Column(db.String(100))
     role          = db.Column(db.String(30), default='safety_officer')
-    # Roles: admin / safety_manager / safety_officer / auditor
+    # Roles: admin / safety_manager / safety_officer / auditor /
+    #        accountable_executive / dept_manager / read_only
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     is_active     = db.Column(db.Boolean, default=True)
     sag_role      = db.Column(db.String(80))
@@ -89,6 +90,24 @@ class HazardReport(db.Model):
     # Submitted / Under Assessment / Actioned / Closed
     hazard_id     = db.Column(db.String(30), db.ForeignKey('hazards.id'))
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    # ── Phase 2: Reporter feedback lifecycle ─────────────────────────────────
+    reporter_user_id    = db.Column(db.String(30), nullable=True, index=True)
+    # 'emp_5' format — mobile reporter who submitted; null for web/anonymous
+    acknowledged_at     = db.Column(db.DateTime, nullable=True)
+    acknowledged_by     = db.Column(db.String(100), nullable=True)
+    acknowledgment_due  = db.Column(db.DateTime, nullable=True)
+    # SLA: 5 working days from submission
+    # ── Phase 2: Mandatory regulatory notification ───────────────────────────
+    requires_caa_notification   = db.Column(db.Boolean, default=False)
+    caa_notification_due        = db.Column(db.DateTime, nullable=True)
+    caa_notified_at             = db.Column(db.DateTime, nullable=True)
+    caa_notification_ref        = db.Column(db.String(50), nullable=True)
+    # ── Phase 2: Triage classification (validation of reporter severity) ─────
+    triage_severity     = db.Column(db.String(20), nullable=True)
+    # Official risk matrix classification set by Safety Officer during triage
+    triage_by           = db.Column(db.String(100), nullable=True)
+    triage_at           = db.Column(db.DateTime, nullable=True)
+    # submitted_by is preserved as reporter field above; triage is separate
     department    = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("hazard_report_set", lazy=True))
 
 class ASRReport(db.Model):
@@ -198,11 +217,17 @@ class Action(db.Model):
     priority         = db.Column(db.String(20), default='Medium')  # High / Medium / Low
     status           = db.Column(db.String(50), default='Open')
     # Open / In Progress / Closed / Overdue
-    # Effectiveness - only filled when closing
+    # Effectiveness — mandatory on closure (Phase 2 enforcement)
     effectiveness        = db.Column(db.String(30))
     # Effective / Partially Effective / Ineffective
     effectiveness_review = db.Column(db.Text)
     closed_date          = db.Column(db.String(20))
+    # Phase 2: Closure gate enforcement fields
+    closure_evidence_required = db.Column(db.Boolean, default=True)
+    # False only for SRB Standing actions that don't require physical evidence
+    auto_reopened_at     = db.Column(db.DateTime, nullable=True)
+    # Set when action is auto-reopened due to Ineffective rating
+    auto_reopened_reason = db.Column(db.Text, nullable=True)
     # SPI lifecycle fields
     spi_id               = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'), nullable=True)
     spi_alert_level      = db.Column(db.String(5))    # L1 / L2 / L3
@@ -343,6 +368,17 @@ class Investigation(db.Model):
     erp_activated            = db.Column(db.Boolean, default=False)
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at          = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # ── Phase 2: Mandatory timeline fields (ICAO Annex 13 §6.1) ─────────────
+    # Preliminary report due within 30 days for Accident/Serious Incident
+    preliminary_report_due      = db.Column(db.String(20), nullable=True)
+    preliminary_report_submitted = db.Column(db.Boolean, default=False)
+    final_report_due            = db.Column(db.String(20), nullable=True)
+    final_report_submitted      = db.Column(db.Boolean, default=False)
+    # CAA statutory notification (verbal 72h, written 30 days)
+    caa_notification_due_verbal  = db.Column(db.DateTime, nullable=True)
+    caa_notification_due_written = db.Column(db.String(20), nullable=True)
+    reg_notification_id         = db.Column(db.Integer, nullable=True)
+    # FK to regulatory_notifications — populated when notification is created
     department          = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("investigation_set", lazy=True))
     timeline            = db.relationship('InvestigationEvent', backref='investigation',
                               lazy=True, order_by='InvestigationEvent.created_at')
@@ -550,6 +586,11 @@ class SPIIndicator(db.Model):
     alert_l3       = db.Column(db.Float)   # Red    - Level 3 Critical
     auto_source      = db.Column(db.String(50))
     auto_category    = db.Column(db.String(50))
+    # Phase 2: Leading vs Lagging classification (ICAO Doc 9859 §11.2)
+    indicator_type   = db.Column(db.String(10), default='Lagging')
+    # Leading / Lagging — leading indicators auto-calculated via LeadingIndicatorConfig
+    industry_benchmark = db.Column(db.Float, nullable=True)
+    # Optional external benchmark value for comparison (e.g. IATA STEADES average)
     # Statistical monitoring
     baseline_months  = db.Column(db.Integer, default=3)   # months needed before stat mode
     improvement_pct  = db.Column(db.Float, default=5.0)   # target = avg * (1 - improvement/100)
@@ -1734,3 +1775,595 @@ class AuditVerificationItem(db.Model):
     created_by              = db.Column(db.String(100))
     created_at              = db.Column(db.DateTime, default=datetime.utcnow)
     department              = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("audit_verification_item_set", lazy=True))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PHASE 2 COMPLIANCE UPGRADE — SMS Production Readiness
+#  ICAO Annex 19 / Doc 9859 / IOSA ISM / EASA SMS
+#  Implements: Reporter Feedback Loop, SoD Enforcement, Investigation Timelines,
+#  Effectiveness Verification Gates, Just Culture, Leading SPIs, Regulatory
+#  Notification, Safety Recommendations, Confidential Access Audit
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ReportFeedback(db.Model):
+    """
+    ICAO Annex 19 §3.1.2 / Doc 9859 §5.3.3 — Reporter Feedback Loop.
+
+    Tracks the complete status lifecycle of a report as visible to the mobile
+    reporter. Every status transition creates an immutable feedback record.
+    The reporter sees their report progress without accessing internal SMS data.
+
+    Status stages:
+      1 Submitted → 2 Acknowledged → 3 Under Review → 4 Risk Assessment Initiated
+      5 Investigation Initiated → 6 Corrective Actions Created → 7 Closed
+      (Outcome Shared is a flag on the Closed record, not a separate stage)
+
+    Why: Without feedback, voluntary reporting culture collapses. Reporters who
+    never hear back from the system stop reporting. ICAO non-punitive principles
+    require visible systemic response.
+
+    Mobile impact: /api/mobile/report-status/<ref> returns this record to the
+    Flutter history screen. Push notifications are sent on every stage advance.
+    """
+    __tablename__ = 'report_feedback'
+    id              = db.Column(db.Integer, primary_key=True)
+    # Which report this tracks (polymorphic — any report type)
+    report_ref      = db.Column(db.String(30), nullable=False, index=True)
+    report_type     = db.Column(db.String(30), nullable=False)
+    # HazardReport / ASR / Voluntary / Confidential
+    reporter_user_id = db.Column(db.String(30), nullable=True, index=True)
+    # 'emp_5' format — links back to Employee or User; null for anonymous
+
+    # Current stage number and label (denormalized for fast mobile reads)
+    stage_num       = db.Column(db.Integer, default=1)
+    stage_label     = db.Column(db.String(50), default='Submitted')
+
+    # Stage timestamps — set once, never overwritten
+    submitted_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    acknowledged_at = db.Column(db.DateTime, nullable=True)
+    acknowledged_by = db.Column(db.String(100), nullable=True)
+    # SLA: acknowledgment must happen within 5 working days
+    acknowledgment_due = db.Column(db.DateTime, nullable=True)
+
+    review_started_at   = db.Column(db.DateTime, nullable=True)
+    ra_initiated_at     = db.Column(db.DateTime, nullable=True)
+    investigation_at    = db.Column(db.DateTime, nullable=True)
+    actions_created_at  = db.Column(db.DateTime, nullable=True)
+    closed_at           = db.Column(db.DateTime, nullable=True)
+    closed_by           = db.Column(db.String(100), nullable=True)
+
+    # Outcome — shared with reporter on closure (ICAO §5.3.3)
+    outcome_shared      = db.Column(db.Boolean, default=False)
+    outcome_summary     = db.Column(db.Text, nullable=True)
+    # Human-readable: "A corrective action was raised and closed. Risk level
+    # reduced from INTOLERABLE to TOLERABLE."
+    outcome_actions_taken = db.Column(db.Text, nullable=True)
+    outcome_risk_level  = db.Column(db.String(20), nullable=True)
+    # Risk level at closure: INTOLERABLE / TOLERABLE / ACCEPTABLE / Closed
+    lessons_learned_ref = db.Column(db.String(30), nullable=True)
+    # Optional link to a LessonLearned record created from this report
+
+    # Guidance text shown to reporter at current stage (plain language, no jargon)
+    current_guidance    = db.Column(db.Text, nullable=True)
+
+    # Push notification sent for latest stage change
+    push_sent           = db.Column(db.Boolean, default=False)
+    push_sent_at        = db.Column(db.DateTime, nullable=True)
+
+    created_at          = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at          = db.Column(db.DateTime, default=datetime.utcnow,
+                                    onupdate=datetime.utcnow)
+
+    # Stage guidance text — written in plain, non-punitive language
+    STAGE_GUIDANCE = {
+        1: ("Your report has been received by the Safety Department. "
+            "A Safety Officer will review it shortly. Thank you for contributing "
+            "to safety."),
+        2: ("Your report has been acknowledged. A Safety Officer is now reviewing "
+            "the details you provided."),
+        3: ("Your report is under active review. The Safety team is assessing the "
+            "hazard and determining the appropriate response."),
+        4: ("A formal risk assessment has been initiated based on your report. "
+            "Safety specialists are evaluating the risk level and controls."),
+        5: ("An investigation has been opened to analyse this occurrence in depth. "
+            "Findings will inform corrective actions."),
+        6: ("Corrective actions have been raised and assigned to the responsible "
+            "teams. Implementation is underway."),
+        7: ("This report has been closed. The outcome summary below describes what "
+            "actions were taken as a result of your report."),
+    }
+
+    @property
+    def is_overdue_acknowledgment(self):
+        """True if not yet acknowledged and acknowledgment_due has passed."""
+        if self.acknowledged_at:
+            return False
+        if self.acknowledgment_due and datetime.utcnow() > self.acknowledgment_due:
+            return True
+        return False
+
+
+class JustCulturePolicy(db.Model):
+    """
+    ICAO Annex 19 §3.1.2 — Just Culture Policy.
+
+    A formal, AE-signed policy record that defines the organisation's commitment
+    to non-punitive reporting. Must be reviewed annually. Linked to Safety Policy
+    versioning. Separate from SafetyPolicy to allow independent review cycles.
+
+    Why: System-level enforcement of non-punitive principles requires a documented
+    and signed policy that can be presented during IOSA audits and CAA inspections.
+    Without this, confidential and voluntary reporting has no legal/policy basis.
+    """
+    __tablename__ = 'just_culture_policies'
+    id              = db.Column(db.Integer, primary_key=True)
+    version         = db.Column(db.String(10), nullable=False)   # JC-REV0, JC-REV1
+    version_num     = db.Column(db.Integer, default=0)
+    title           = db.Column(db.String(200), nullable=False,
+                                default='Just Culture Policy Statement')
+    content         = db.Column(db.Text, nullable=False)
+    # Full policy statement covering: non-punitive reporting, protected disclosures,
+    # what constitutes 'blameable' vs 'system' error, whistleblower protections
+
+    # AE formal sign-off (ICAO requirement — must be signed by Accountable Executive)
+    ae_name         = db.Column(db.String(100), nullable=True)
+    ae_title        = db.Column(db.String(100), nullable=True)
+    ae_signed_at    = db.Column(db.DateTime, nullable=True)
+    ae_user_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # References the User with role='accountable_executive' who signed
+
+    effective_date  = db.Column(db.String(20), nullable=True)
+    review_date     = db.Column(db.String(20), nullable=True)
+    # Annual review required — alert when review_date approaches
+
+    status          = db.Column(db.String(20), default='Draft')
+    # Draft / Active / Archived
+
+    # Distribution confirmation — percentage of staff who acknowledged
+    distribution_sent_at   = db.Column(db.DateTime, nullable=True)
+    acknowledgment_rate_pct = db.Column(db.Float, nullable=True)
+    # Updated by background job counting SafetyPromoAck records
+
+    change_summary  = db.Column(db.String(300), nullable=True)
+    created_by      = db.Column(db.String(100), nullable=True)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+    ae_user         = db.relationship('User', foreign_keys=[ae_user_id],
+                          backref=db.backref('just_culture_signatures', lazy=True))
+
+
+class ConfidentialAccessLog(db.Model):
+    """
+    ICAO Annex 19 §3.1.2 / IOSA ISM 1.2.3 — Confidential Report Access Audit.
+
+    Every access to a confidential report (read, not just write) must be logged
+    with the accessor's identity and their justification for access. Without this,
+    the confidentiality guarantee cannot be verified during an audit.
+
+    Why: Confidential reports store position and department data that can
+    de-anonymise reporters in small teams. Access logging creates accountability
+    for anyone who views protected reporter data, and deters unauthorised access.
+
+    This table is append-only. No deletion. Used in governance audit reviews.
+    """
+    __tablename__ = 'confidential_access_logs'
+    id              = db.Column(db.Integer, primary_key=True)
+    report_ref      = db.Column(db.String(30), nullable=False, index=True)
+    report_type     = db.Column(db.String(30), nullable=False, default='Confidential')
+    # ConfidentialReport / VoluntaryReport (when marked is_confidential=True)
+
+    accessed_by     = db.Column(db.String(100), nullable=False)
+    accessor_role   = db.Column(db.String(50), nullable=True)
+    access_type     = db.Column(db.String(20), nullable=False, default='view')
+    # view / export / assign / close
+
+    justification   = db.Column(db.Text, nullable=True)
+    # Required text explaining why access was needed (enforced at route level)
+
+    ip_address      = db.Column(db.String(45), nullable=True)
+    accessed_at     = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Flags for audit review
+    flagged_for_review  = db.Column(db.Boolean, default=False)
+    review_notes        = db.Column(db.Text, nullable=True)
+
+
+class SafetyRecommendation(db.Model):
+    """
+    ICAO Annex 13 §6.8 — Formal Safety Recommendation register.
+
+    A Safety Recommendation (SR) is a formally numbered, tracked recommendation
+    addressed to a responsible authority (internal or external). SRs are generated
+    from investigations and audits. Each SR has a formal response deadline and
+    closure verification.
+
+    Unlike corrective actions (internal, operational), SRs can be addressed to
+    external authorities (CAA, ANSP, manufacturer, airport) and require formal
+    written responses.
+
+    Why: ICAO Annex 13 §6.8 requires operators to issue and track formal safety
+    recommendations from investigations. This is a specific audit finding in IOSA
+    ISM reviews — investigators must produce numbered SRs, not just free-text
+    recommendations.
+    """
+    __tablename__ = 'safety_recommendations'
+    id              = db.Column(db.Integer, primary_key=True)
+    sr_number       = db.Column(db.String(30), unique=True, nullable=False)
+    # Format: JAV/SR/2026/001
+
+    # Source
+    source_type     = db.Column(db.String(30), nullable=False)
+    # Investigation / Audit / SRB / Incident Review
+    source_id       = db.Column(db.String(30), nullable=True)
+    # ID of the Investigation or AuditFinding that generated this SR
+    investigation_id = db.Column(db.String(30), db.ForeignKey('investigations.id'),
+                                  nullable=True)
+    audit_finding_id = db.Column(db.String(30), db.ForeignKey('audit_findings.id'),
+                                  nullable=True)
+
+    # Content
+    title           = db.Column(db.String(200), nullable=False)
+    description     = db.Column(db.Text, nullable=False)
+    safety_issue    = db.Column(db.Text, nullable=True)
+    # The underlying safety deficiency this recommendation addresses
+
+    # Addressee — may be internal department or external authority
+    addressee_type  = db.Column(db.String(20), default='Internal')
+    # Internal / External
+    addressee_name  = db.Column(db.String(200), nullable=False)
+    # e.g. 'Flight Operations Director' or 'Jordan Civil Aviation Authority'
+    addressee_email = db.Column(db.String(200), nullable=True)
+    department_id   = db.Column(db.Integer, db.ForeignKey('departments.id'),
+                                 nullable=True)
+
+    # Priority and classification
+    priority        = db.Column(db.String(20), default='High')
+    # Critical / High / Medium / Low
+    icao_reference  = db.Column(db.String(100), nullable=True)
+
+    # Lifecycle
+    issued_date     = db.Column(db.String(20), nullable=True)
+    issued_by       = db.Column(db.String(100), nullable=True)
+    response_due_date = db.Column(db.String(20), nullable=True)
+    # Deadline for addressee to respond with implementation plan
+
+    status          = db.Column(db.String(30), default='Open')
+    # Open / Response Received / Under Implementation / Closed / Overdue / Rejected
+
+    # Response from addressee
+    response_text   = db.Column(db.Text, nullable=True)
+    response_date   = db.Column(db.String(20), nullable=True)
+    response_by     = db.Column(db.String(100), nullable=True)
+
+    # Linked action when addressee is internal
+    linked_action_id = db.Column(db.String(30), db.ForeignKey('actions.id'),
+                                  nullable=True)
+
+    # Closure verification
+    closure_verified_by   = db.Column(db.String(100), nullable=True)
+    closure_date          = db.Column(db.String(20), nullable=True)
+    closure_notes         = db.Column(db.Text, nullable=True)
+    effectiveness_rating  = db.Column(db.String(30), nullable=True)
+    # Effective / Partially Effective / Ineffective
+
+    created_by      = db.Column(db.String(100), nullable=True)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at      = db.Column(db.DateTime, default=datetime.utcnow,
+                                onupdate=datetime.utcnow)
+
+    # Relationships
+    investigation   = db.relationship('Investigation', foreign_keys=[investigation_id],
+                          backref=db.backref('safety_recommendations', lazy=True))
+    audit_finding   = db.relationship('AuditFinding', foreign_keys=[audit_finding_id],
+                          backref=db.backref('safety_recommendations', lazy=True))
+    linked_action   = db.relationship('Action', foreign_keys=[linked_action_id],
+                          backref=db.backref('safety_recommendation', uselist=False))
+    department      = db.relationship('Department', foreign_keys=[department_id],
+                          backref=db.backref('safety_recommendations', lazy=True))
+
+
+class InvestigationTimeline(db.Model):
+    """
+    ICAO Annex 13 §6.1, §7.1 — Investigation Mandatory Timeline Enforcement.
+
+    Tracks statutory report deadlines for each investigation:
+      - Preliminary report: due within 30 days of occurrence (serious incidents/accidents)
+      - Interim report: due at 12-month intervals if investigation ongoing
+      - Final report: must be completed within a reasonable timeframe
+
+    Separate from InvestigationEvent (which tracks lifecycle stage changes) —
+    this model specifically tracks REGULATORY DEADLINE compliance.
+
+    Why: ICAO Annex 13 §6.1 is a hard legal obligation. Missing preliminary
+    report deadlines is a direct CAA finding. The system must enforce these
+    deadlines automatically, not leave them to manual tracking.
+    """
+    __tablename__ = 'investigation_timelines'
+    id                  = db.Column(db.Integer, primary_key=True)
+    investigation_id    = db.Column(db.String(30), db.ForeignKey('investigations.id'),
+                                     nullable=False)
+
+    # Preliminary report (ICAO Annex 13 §6.1)
+    preliminary_due_date    = db.Column(db.String(20), nullable=True)
+    preliminary_submitted   = db.Column(db.Boolean, default=False)
+    preliminary_submitted_at = db.Column(db.DateTime, nullable=True)
+    preliminary_submitted_by = db.Column(db.String(100), nullable=True)
+    preliminary_ref         = db.Column(db.String(50), nullable=True)
+    preliminary_overdue_notified = db.Column(db.Boolean, default=False)
+
+    # Interim reports (12-month intervals)
+    interim_due_date        = db.Column(db.String(20), nullable=True)
+    interim_submitted       = db.Column(db.Boolean, default=False)
+    interim_submitted_at    = db.Column(db.DateTime, nullable=True)
+    interim_overdue_notified = db.Column(db.Boolean, default=False)
+
+    # Final report
+    final_due_date          = db.Column(db.String(20), nullable=True)
+    final_submitted         = db.Column(db.Boolean, default=False)
+    final_submitted_at      = db.Column(db.DateTime, nullable=True)
+    final_submitted_by      = db.Column(db.String(100), nullable=True)
+    final_ref               = db.Column(db.String(50), nullable=True)
+    final_overdue_notified  = db.Column(db.Boolean, default=False)
+
+    # CAA submission tracking
+    caa_notified            = db.Column(db.Boolean, default=False)
+    caa_notified_at         = db.Column(db.DateTime, nullable=True)
+    caa_notification_ref    = db.Column(db.String(50), nullable=True)
+    caa_authority_name      = db.Column(db.String(100), nullable=True)
+    # e.g. 'Jordan Civil Aviation Regulatory Commission (CARC)'
+
+    # Escalation tracking
+    escalation_count        = db.Column(db.Integer, default=0)
+    last_escalated_at       = db.Column(db.DateTime, nullable=True)
+    last_escalated_to       = db.Column(db.String(100), nullable=True)
+
+    created_at              = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at              = db.Column(db.DateTime, default=datetime.utcnow,
+                                        onupdate=datetime.utcnow)
+
+    investigation = db.relationship('Investigation', foreign_keys=[investigation_id],
+                        backref=db.backref('timeline_record', uselist=False))
+
+
+class RegulatoryNotification(db.Model):
+    """
+    ICAO Annex 13 §6.1 / IOSA ISM 1.2.2 — Mandatory Regulatory Reporting.
+
+    Tracks occurrence reports that must be filed with the CAA / national authority
+    within statutory timeframes (typically 72 hours for serious incidents,
+    30 days for written preliminary reports). Filing status is monitored and
+    overdue cases are escalated automatically.
+
+    This is separate from ERPActivation.caa_notified (which tracks ERP-level
+    notification) because not every regulatory notification involves ERP activation.
+
+    Why: Failure to notify the CAA within statutory timeframes is a regulatory
+    offence in most jurisdictions. This table creates a mandatory tracking record
+    for every notifiable occurrence, with deadline enforcement.
+    """
+    __tablename__ = 'regulatory_notifications'
+    id              = db.Column(db.Integer, primary_key=True)
+    ref_number      = db.Column(db.String(30), unique=True, nullable=False)
+    # Format: REGNOT/2026/001
+
+    # Source occurrence
+    source_type     = db.Column(db.String(30), nullable=False)
+    # HazardReport / ASR / Investigation / ERP
+    source_ref      = db.Column(db.String(30), nullable=False)
+    # The report/investigation reference number
+    occurrence_date = db.Column(db.String(20), nullable=True)
+    occurrence_description = db.Column(db.Text, nullable=True)
+
+    # Mandatory reporting classification
+    notification_class = db.Column(db.String(30), nullable=False)
+    # Accident / Serious Incident / Incident / Mandatory Occurrence Report
+    requires_notification = db.Column(db.Boolean, default=True)
+    notification_trigger  = db.Column(db.Text, nullable=True)
+    # Text describing WHY this is notifiable (regulation reference)
+
+    # Authority
+    authority_name  = db.Column(db.String(100), nullable=False,
+                                default='Civil Aviation Regulatory Commission')
+    authority_ref   = db.Column(db.String(50), nullable=True)
+    # Reference number issued by the authority
+
+    # Deadline tracking (72-hour verbal / 30-day written)
+    verbal_notification_due     = db.Column(db.DateTime, nullable=True)
+    verbal_notification_done    = db.Column(db.Boolean, default=False)
+    verbal_notification_at      = db.Column(db.DateTime, nullable=True)
+    verbal_notification_by      = db.Column(db.String(100), nullable=True)
+    verbal_notification_method  = db.Column(db.String(50), nullable=True)
+    # Phone / Email / EFIS / Online Portal
+
+    written_notification_due    = db.Column(db.String(20), nullable=True)
+    written_notification_done   = db.Column(db.Boolean, default=False)
+    written_notification_at     = db.Column(db.DateTime, nullable=True)
+    written_notification_by     = db.Column(db.String(100), nullable=True)
+    written_ref                 = db.Column(db.String(50), nullable=True)
+    # Reference number of submitted written report
+
+    # Overdue escalation
+    verbal_overdue_notified     = db.Column(db.Boolean, default=False)
+    written_overdue_notified    = db.Column(db.Boolean, default=False)
+
+    status          = db.Column(db.String(30), default='Pending')
+    # Pending / Verbal Sent / Written Sent / Complete / Overdue / Exempt
+
+    # Exemption (if not actually notifiable after review)
+    exempt          = db.Column(db.Boolean, default=False)
+    exempt_reason   = db.Column(db.Text, nullable=True)
+    exempt_by       = db.Column(db.String(100), nullable=True)
+
+    notes           = db.Column(db.Text, nullable=True)
+    department_id   = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    created_by      = db.Column(db.String(100), nullable=True)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at      = db.Column(db.DateTime, default=datetime.utcnow,
+                                onupdate=datetime.utcnow)
+
+    department      = db.relationship('Department', foreign_keys=[department_id],
+                          backref=db.backref('regulatory_notifications', lazy=True))
+
+    @property
+    def verbal_is_overdue(self):
+        if self.verbal_notification_done or self.exempt:
+            return False
+        if self.verbal_notification_due and datetime.utcnow() > self.verbal_notification_due:
+            return True
+        return False
+
+    @property
+    def written_is_overdue(self):
+        if self.written_notification_done or self.exempt:
+            return False
+        if not self.written_notification_due:
+            return False
+        try:
+            due = datetime.strptime(self.written_notification_due, '%Y-%m-%d')
+            return datetime.utcnow() > due
+        except (ValueError, TypeError):
+            return False
+
+
+class SoDViolationBlock(db.Model):
+    """
+    Phase 1 SoD Enforcement — records every BLOCKED violation attempt.
+
+    When the enforcement engine blocks a user from performing an action that
+    violates segregation of duties (e.g., closing their own corrective action),
+    a record is written here. This is audit evidence that the system actively
+    enforces SoD, not just logs it.
+
+    Distinct from GovernanceAuditLog (which records approved actions) —
+    this table records REJECTED attempts.
+
+    Why: IOSA audit finding C-10 requires that SoD is enforced at system level,
+    not just logged post-facto. A system that logs violations it allows is a
+    compliance liability. This table proves enforcement.
+    """
+    __tablename__ = 'sod_violation_blocks'
+    id              = db.Column(db.Integer, primary_key=True)
+    attempted_by    = db.Column(db.String(100), nullable=False)
+    attempted_role  = db.Column(db.String(50), nullable=True)
+    entity_type     = db.Column(db.String(50), nullable=False)
+    # Action / RiskAssessment / AuditFinding / Investigation / MOC / RiskAcceptance
+    entity_id       = db.Column(db.String(50), nullable=False)
+    attempted_action = db.Column(db.String(50), nullable=False)
+    # close / approve / verify / sign_off
+
+    violation_rule  = db.Column(db.String(100), nullable=False)
+    # e.g. 'action_owner_cannot_verify_own_closure'
+    violation_detail = db.Column(db.Text, nullable=True)
+    # Human-readable explanation of the conflict
+
+    original_submitter = db.Column(db.String(100), nullable=True)
+    # The user whose record was being operated on
+
+    ip_address      = db.Column(db.String(45), nullable=True)
+    blocked_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class RAReviewCycle(db.Model):
+    """
+    ICAO Doc 9859 §10.3.3 — Risk Assessment Review Cycle Enforcement.
+
+    Tracks each scheduled and completed review of a RiskAssessment. The system
+    automatically creates a RAReviewCycle record when a RA is activated and
+    sets the next review date. When the review date approaches or passes, the
+    Safety Manager is alerted. If overdue, the RA is flagged.
+
+    Why: Active risk assessments that are never reviewed create false safety
+    assurance. Controls may have lapsed, incidents may have occurred that
+    change the risk picture, or mitigations may have been superseded.
+    """
+    __tablename__ = 'ra_review_cycles'
+    id              = db.Column(db.Integer, primary_key=True)
+    ra_id           = db.Column(db.String(30), db.ForeignKey('risk_assessments.id'),
+                                 nullable=False)
+    cycle_number    = db.Column(db.Integer, default=1)
+    # 1 = first review, 2 = second review, etc.
+
+    due_date        = db.Column(db.String(20), nullable=False)
+    # When this review is due
+
+    status          = db.Column(db.String(20), default='Pending')
+    # Pending / Overdue / Completed / Waived
+
+    # Alert tracking
+    warning_sent_at     = db.Column(db.DateTime, nullable=True)
+    # 90-day advance warning
+    overdue_notified_at = db.Column(db.DateTime, nullable=True)
+    # Notification when overdue (30 days past due_date)
+    escalated_at        = db.Column(db.DateTime, nullable=True)
+    escalated_to        = db.Column(db.String(100), nullable=True)
+
+    # Completion
+    completed_at        = db.Column(db.DateTime, nullable=True)
+    completed_by        = db.Column(db.String(100), nullable=True)
+    review_outcome      = db.Column(db.Text, nullable=True)
+    # What was found / confirmed / changed
+    new_review_date     = db.Column(db.String(20), nullable=True)
+    # Date of the next cycle set at completion
+    ra_revised          = db.Column(db.Boolean, default=False)
+    # Was the RA revised as a result of this review?
+    new_ra_id           = db.Column(db.String(30), nullable=True)
+    # If ra_revised=True, the new RA created from this review
+
+    # Waiver (if review is deferred with justification)
+    waived_by           = db.Column(db.String(100), nullable=True)
+    waiver_reason       = db.Column(db.Text, nullable=True)
+    waived_until        = db.Column(db.String(20), nullable=True)
+
+    created_at          = db.Column(db.DateTime, default=datetime.utcnow)
+
+    ra = db.relationship('RiskAssessment', foreign_keys=[ra_id],
+             backref=db.backref('review_cycles', lazy=True,
+                                order_by='RAReviewCycle.cycle_number'))
+
+
+class LeadingIndicatorConfig(db.Model):
+    """
+    ICAO Doc 9859 §11.2 — Leading Safety Performance Indicator Configuration.
+
+    Leading indicators measure proactive safety performance — training currency,
+    reporting rates, audit closure rates — as forward-looking safety signals.
+    Unlike lagging indicators (incident counts), leading indicators can detect
+    deteriorating safety conditions before an accident occurs.
+
+    This model stores the calculation configuration for each leading indicator
+    auto-source. The SPIIndicator.indicator_type='Leading' field on the main
+    SPI table identifies the type; this table stores the auto-calculation rules.
+
+    Why: ICAO Doc 9859 §11.2 explicitly requires both leading and lagging
+    indicators. A system with only lagging indicators is entirely reactive.
+    """
+    __tablename__ = 'leading_indicator_configs'
+    id              = db.Column(db.Integer, primary_key=True)
+    spi_id          = db.Column(db.Integer, db.ForeignKey('spi_indicators.id'),
+                                 nullable=False, unique=True)
+
+    indicator_source = db.Column(db.String(50), nullable=False)
+    # training_compliance / safety_reporting_rate / audit_closure_rate /
+    # action_closure_rate / survey_participation_rate / cap_overdue_rate /
+    # ra_review_compliance / acknowledgment_rate
+
+    # Calculation parameters
+    training_type_filter    = db.Column(db.String(200), nullable=True)
+    # Comma-separated training types to include (for training_compliance)
+    department_filter       = db.Column(db.String(100), nullable=True)
+    # Comma-separated dept IDs to scope the calculation
+    lookback_months         = db.Column(db.Integer, default=1)
+    # How many months to look back for the numerator
+
+    # Thresholds (override SPIIndicator alerts for leading-indicator-specific logic)
+    minimum_acceptable_pct  = db.Column(db.Float, default=85.0)
+    # Below this → immediate escalation regardless of L1/L2/L3 thresholds
+
+    last_auto_calculated_at = db.Column(db.DateTime, nullable=True)
+    auto_calculate          = db.Column(db.Boolean, default=True)
+
+    created_at              = db.Column(db.DateTime, default=datetime.utcnow)
+
+    spi = db.relationship('SPIIndicator', foreign_keys=[spi_id],
+              backref=db.backref('leading_config', uselist=False))

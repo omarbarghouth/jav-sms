@@ -5,11 +5,24 @@ from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazar
 try:
     from models import SPIEventLink
 except ImportError:
-    SPIEventLink = None  # models.py not yet deployed with SPIEventLink — will work after next redeploy
+    SPIEventLink = None
 try:
     from models import AuditVerificationItem
 except ImportError:
-    AuditVerificationItem = None  # models.py not yet deployed with AuditVerificationItem — will work after next redeploy
+    AuditVerificationItem = None
+# Phase 2 enforcement models
+try:
+    from models import (
+        ReportFeedback, JustCulturePolicy, ConfidentialAccessLog,
+        SafetyRecommendation, InvestigationTimeline, RegulatoryNotification,
+        SoDViolationBlock, RAReviewCycle, LeadingIndicatorConfig,
+    )
+    _ENFORCEMENT_MODELS = True
+except ImportError:
+    _ENFORCEMENT_MODELS = False
+    ReportFeedback = JustCulturePolicy = ConfidentialAccessLog = None
+    SafetyRecommendation = InvestigationTimeline = RegulatoryNotification = None
+    SoDViolationBlock = RAReviewCycle = LeadingIndicatorConfig = None
 from datetime import datetime, date
 import os, uuid, io, hashlib, functools
 from werkzeug.security import generate_password_hash, check_password_hash as _wz_check
@@ -151,6 +164,16 @@ limiter = Limiter(
 from governance import gov as governance_bp
 app.register_blueprint(governance_bp)
 
+# ── Enforcement Blueprint (Phase 2 — SoD, Gates, Feedback, Timeline) ──────────
+from sms_enforcement import enf as enforcement_bp
+from sms_enforcement import (
+    advance_report_feedback, enforce_sod, validate_action_closure,
+    process_ineffective_action, initialize_investigation_timeline,
+    create_regulatory_notification, log_confidential_access,
+    get_or_create_feedback,
+)
+app.register_blueprint(enforcement_bp)
+
 # ─── Global error handlers ────────────────────────────────────────────────────
 @app.errorhandler(404)
 def err_404(e):
@@ -285,7 +308,8 @@ def inject_globals():
         db.session.rollback()
         avi_open = 0
     now = datetime.utcnow()
-    return dict(all_departments=depts, now=now, get_tolerance=get_tolerance,
+    return dict(all_departments=depts, now=now, today=date.today(),
+                get_tolerance=get_tolerance,
                 nav_overdue=overdue, nav_avi_open=avi_open, enumerate=enumerate)
 
 
@@ -1124,6 +1148,21 @@ def api_mobile_hazard():
             status               = 'Submitted',
         )
         db.session.add(rep)
+        db.session.flush()
+
+        # Phase 2: Create reporter feedback record (ICAO Annex 19 §3.1.2)
+        try:
+            reporter_uid = None
+            if token:
+                tok = ApiToken.query.filter_by(token=token).first()
+                if tok:
+                    reporter_uid = tok.user_id
+                    rep.reporter_user_id = reporter_uid
+            fb = get_or_create_feedback(rep.id, 'HazardReport', reporter_uid)
+            db.session.add(fb)
+        except Exception:
+            pass
+
         db.session.commit()
         return api_ok({'report_id': rep.id, 'hazard_id': haz.id}, 'Hazard report submitted successfully', 201)
     except Exception as e:
@@ -1916,22 +1955,38 @@ def api_mobile_history():
             try:
                 wf_status, wf_color, wf_stage, timeline, wf_guidance, wf_responsible, wf_next = \
                     resolve_report_status(hazard_id=r.hazard_id, hr_status=r.status)
+                # Phase 2: enrich with reporter feedback outcome if available
+                fb_outcome = ''
+                fb_actions = ''
+                fb_risk    = ''
+                if _ENFORCEMENT_MODELS and ReportFeedback:
+                    try:
+                        fb = ReportFeedback.query.filter_by(report_ref=r.id).first()
+                        if fb and fb.outcome_shared:
+                            fb_outcome = fb.outcome_summary or ''
+                            fb_actions = fb.outcome_actions_taken or ''
+                            fb_risk    = fb.outcome_risk_level or ''
+                    except Exception:
+                        pass
                 records.append({
-                    'id':          r.id,
-                    'type':        r.report_type or 'Hazard Report',
-                    'title':       r.generic_hazard or (r.description or '')[:60],
-                    'description': (r.description or '')[:80],
-                    'status':      wf_status,
-                    'status_color':wf_color,
-                    'stage':       wf_stage,
-                    'guidance':    wf_guidance,
-                    'responsible': wf_responsible,
-                    'next_step':   wf_next,
-                    'date':        r.date or '',
-                    'location':    r.location or '',
-                    'severity':    r.reporter_severity or 'Medium',
-                    'created_at':  r.created_at.isoformat() if r.created_at else '',
-                    'timeline':    timeline[:6],
+                    'id':                  r.id,
+                    'type':                r.report_type or 'Hazard Report',
+                    'title':               r.generic_hazard or (r.description or '')[:60],
+                    'description':         (r.description or '')[:80],
+                    'status':              wf_status,
+                    'status_color':        wf_color,
+                    'stage':               wf_stage,
+                    'guidance':            wf_guidance,
+                    'responsible':         wf_responsible,
+                    'next_step':           wf_next,
+                    'date':                r.date or '',
+                    'location':            r.location or '',
+                    'severity':            r.reporter_severity or 'Medium',
+                    'created_at':          r.created_at.isoformat() if r.created_at else '',
+                    'timeline':            timeline[:6],
+                    'outcome_summary':     fb_outcome,
+                    'outcome_actions_taken': fb_actions,
+                    'outcome_risk_level':  fb_risk,
                 })
             except Exception:
                 pass
@@ -3133,6 +3188,18 @@ def safety_closure_approve(rid):
             db.session.commit()
         except Exception:
             pass
+        # Phase 2: advance reporter feedback to Closed with outcome summary
+        try:
+            outcome_summary = notes or 'Report reviewed and closed by Safety Management.'
+            actor = session.get('admin_name', session.get('admin_user', 'System'))
+            advance_report_feedback(
+                rid, 'Closed', actor,
+                outcome_summary=outcome_summary,
+                actions_taken=f'Corrective actions implemented. See actions register for details.',
+                risk_level=hr.severity or 'Medium',
+            )
+        except Exception:
+            pass
         flash(f'✓ Occurrence {rid} officially closed by Safety Management. Closure approved.', 'success')
     except Exception as e:
         db.session.rollback()
@@ -3252,8 +3319,15 @@ def hazard_report_detail(rid):
 @require_login
 def hazard_report_update_status(rid):
     rep = HazardReport.query.get_or_404(rid)
-    rep.status = request.form.get('status', rep.status)
+    new_st = request.form.get('status', rep.status)
+    rep.status = new_st
     db.session.commit()
+    # Phase 2: advance reporter feedback lifecycle (ICAO Annex 19 §3.1.2)
+    try:
+        actor = session.get('admin_name', session.get('admin_user', 'System'))
+        advance_report_feedback(rid, new_st, actor)
+    except Exception:
+        pass
     flash(f'✓ Report {rid} status updated to {rep.status}.', 'success')
     return redirect(url_for('hazard_report_detail', rid=rid))
 
@@ -3771,20 +3845,37 @@ def update_action(aid):
     effectiveness = f.get('effectiveness', '')
     return_url    = f.get('return_url', url_for('actions'))
 
-    # Only Safety Review step can close — require review fields
-    if new_status == 'Closed' and not effectiveness:
-        flash('⚠ Please select Effectiveness rating before closing the action.', 'error')
-        return redirect(return_url)
+    actor = session.get('admin_name', session.get('admin_user', 'System'))
 
-    # If ineffective → re-open automatically
+    # SoD enforcement: action owner / assigner cannot close their own action
+    if new_status == 'Closed':
+        sod_result = enforce_sod('Action', aid, a, 'close', actor)
+        if not sod_result['allowed']:
+            flash(f'⛔ Segregation of Duties violation blocked: {sod_result["reason"]}', 'error')
+            return redirect(return_url)
+
+    # Full effectiveness gate — all fields required before closure
+    if new_status == 'Closed':
+        gate_errors = validate_action_closure(a, f)
+        if gate_errors:
+            for err in gate_errors:
+                flash(f'⚠ {err}', 'error')
+            return redirect(return_url)
+
+    # If ineffective → auto-reopen with full audit trail
     if new_status == 'Closed' and effectiveness == 'Ineffective':
-        a.status            = 'Open'
-        a.effectiveness     = None
+        a.effectiveness        = effectiveness
         a.effectiveness_review = f.get('effectiveness_review', '')
-        flash('⚠ Action re-opened — effectiveness was Ineffective. Please update the approach.', 'error')
+        a.verified_by          = f.get('verified_by', '')
+        a.verified_date        = f.get('verified_date', '')
+        result = process_ineffective_action(a, actor, f.get('effectiveness_review', ''))
         db.session.commit()
         sync_report_status(a.hazard_id)
         db.session.commit()
+        flash(f'⚠ {result["message"]}', 'warning')
+        if result.get('srb_escalation'):
+            flash('🔴 This action has been reopened 2+ times — escalation to SRB is recommended.',
+                  'error')
         return redirect(return_url)
 
     # Normal update
@@ -4212,6 +4303,18 @@ def new_investigation():
             )
         except Exception:
             pass
+        # ICAO Annex 13 timeline enforcement — set statutory deadlines
+        try:
+            tl = initialize_investigation_timeline(
+                inv, session.get('admin_name', session.get('admin_user', 'System')))
+            db.session.add(tl)
+            db.session.commit()
+            if inv.classification in ('Accident', 'Serious Incident'):
+                flash('⚠ Statutory timelines set: CAA verbal notification required within 72 hours. '
+                      'Preliminary report due within 30 days (ICAO Annex 13).', 'warning')
+        except Exception:
+            pass
+
         flash(f'✓ Investigation {inv.id} opened.', 'success')
         return redirect(url_for('investigation_detail', iid=inv.id))
     hazards = Hazard.query.order_by(Hazard.created_at.desc()).all()
