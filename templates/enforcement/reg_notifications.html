@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Regulatory Notifications{% endblock %}
+{% block content %}
+<div class="page-title">Regulatory Notification Register</div>
+<div class="page-sub">ICAO Annex 13 §6.1 — Mandatory occurrence reporting to CARC. Verbal 72h · Written 30 days</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #dc2626">
+    <div style="font-size:26px;font-weight:900;color:#dc2626">{{ overdue|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Overdue</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #f59e0b">
+    <div style="font-size:26px;font-weight:900;color:#f59e0b">{{ pending|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Pending</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #22c55e">
+    <div style="font-size:26px;font-weight:900;color:#22c55e">{{ complete|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Complete</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px">
+    <div style="font-size:26px;font-weight:900;color:var(--navy)">{{ notifs|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Total</div>
+  </div>
+</div>
+
+<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+  <a href="{{ url_for('enforcement.reg_notif_new') }}" class="btn" style="background:var(--navy);color:#fff">+ New Notification</a>
+  <a href="{{ url_for('enforcement.verification_queue') }}" class="btn btn-outline">← Verification Queue</a>
+</div>
+
+{% if notifs %}
+<div style="overflow-x:auto">
+<table class="table">
+  <thead><tr>
+    <th>Ref Number</th><th>Source</th><th>Classification</th><th>Occurrence</th>
+    <th>Verbal Due (72h)</th><th>Written Due (30d)</th><th>Status</th><th>Actions</th>
+  </tr></thead>
+  <tbody>
+  {% for n in notifs %}
+  {% set verbal_overdue = not n.verbal_notification_done and n.verbal_notification_due and n.verbal_notification_due < now %}
+  {% set written_overdue = not n.written_notification_done and n.written_notification_due and n.written_notification_due < today.isoformat() %}
+  <tr {% if verbal_overdue or written_overdue %}style="background:#fef2f2"{% endif %}>
+    <td><strong style="font-family:monospace">{{ n.ref_number }}</strong></td>
+    <td style="font-size:12px">
+      {{ n.source_type }}<br>
+      <a href="#" style="font-size:11px">{{ n.source_ref or '—' }}</a>
+    </td>
+    <td><span class="badge badge-{% if 'Accident' in (n.notification_class or '') %}red{% else %}orange{% endif %}">{{ n.notification_class or '—' }}</span></td>
+    <td style="font-size:12px">{{ n.occurrence_date or '—' }}</td>
+    <td style="font-size:12px">
+      {% if n.verbal_notification_done %}
+        <span style="color:#22c55e">✓ {{ n.verbal_notification_at.strftime('%Y-%m-%d %H:%M') if n.verbal_notification_at else 'Done' }}</span>
+      {% elif verbal_overdue %}
+        <span style="color:#ef4444;font-weight:700">OVERDUE ⚠</span><br>
+        <span style="font-size:11px;color:var(--muted)">{{ n.verbal_notification_due.strftime('%Y-%m-%d %H:%M') if n.verbal_notification_due else '—' }}</span>
+      {% else %}
+        <span style="color:#f59e0b">{{ n.verbal_notification_due.strftime('%Y-%m-%d %H:%M') if n.verbal_notification_due else '—' }}</span>
+      {% endif %}
+    </td>
+    <td style="font-size:12px">
+      {% if n.written_notification_done %}
+        <span style="color:#22c55e">✓ {{ n.written_notification_at.strftime('%Y-%m-%d') if n.written_notification_at else 'Done' }}</span>
+      {% elif written_overdue %}
+        <span style="color:#ef4444;font-weight:700">{{ n.written_notification_due }} OVERDUE ⚠</span>
+      {% else %}
+        {{ n.written_notification_due or '—' }}
+      {% endif %}
+    </td>
+    <td>
+      <span class="badge badge-{% if n.status == 'Complete' %}green{% elif 'Overdue' in (n.status or '') or verbal_overdue or written_overdue %}red{% else %}orange{% endif %}">
+        {{ n.status }}
+      </span>
+    </td>
+    <td style="white-space:nowrap">
+      {% if not n.verbal_notification_done %}
+      <button class="btn btn-sm btn-outline" onclick="openVerbalModal({{ n.id }})">Record Verbal</button>
+      {% endif %}
+      {% if not n.written_notification_done %}
+      <button class="btn btn-sm btn-outline" onclick="openWrittenModal({{ n.id }})">Record Written</button>
+      {% endif %}
+      {% if n.verbal_notification_done and n.written_notification_done %}
+      <span style="color:#22c55e;font-size:12px">Complete</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% if n.occurrence_description %}
+  <tr style="background:#f8fafc">
+    <td></td>
+    <td colspan="7" style="font-size:12px;color:var(--muted);padding:4px 12px">
+      {{ n.occurrence_description[:200] }}
+    </td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:20px;text-align:center;color:var(--muted)">No regulatory notifications on record.</div>
+{% endif %}
+
+<!-- Verbal Modal -->
+<div id="verbalModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div class="card" style="max-width:460px;width:90%;padding:24px">
+    <h3 style="margin:0 0 14px">Record Verbal CAA Notification</h3>
+    <form id="verbalForm" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group" style="margin-bottom:10px">
+        <label>Method</label>
+        <select name="method" class="form-control">
+          <option>Phone</option>
+          <option>In Person</option>
+          <option>Radio</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label>CARC Reference / Confirmation Number</label>
+        <input name="authority_ref" class="form-control" placeholder="Reference provided by CARC officer">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="submit" class="btn" style="background:var(--navy);color:#fff">Save</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('verbalModal').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Written Modal -->
+<div id="writtenModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div class="card" style="max-width:460px;width:90%;padding:24px">
+    <h3 style="margin:0 0 14px">Record Written Submission to CARC</h3>
+    <form id="writtenForm" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group" style="margin-bottom:10px">
+        <label>Written Report Reference</label>
+        <input name="written_ref" class="form-control" placeholder="e.g. CARC-SUBM-2026-001">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="submit" class="btn" style="background:var(--navy);color:#fff">Save</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('writtenModal').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openVerbalModal(nid) {
+  document.getElementById('verbalForm').action = '/enforcement/regulatory-notifications/' + nid + '/update-verbal';
+  document.getElementById('verbalModal').style.display = 'flex';
+}
+function openWrittenModal(nid) {
+  document.getElementById('writtenForm').action = '/enforcement/regulatory-notifications/' + nid + '/update-written';
+  document.getElementById('writtenModal').style.display = 'flex';
+}
+</script>
+{% endblock %}

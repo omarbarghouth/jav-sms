@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}New Regulatory Notification{% endblock %}
+{% block content %}
+<div class="page-title">Create Regulatory Notification</div>
+<div class="page-sub">ICAO Annex 13 §6.1 — Mandatory occurrence reporting to Jordan CARC. Auto-assigns REGNOT/YYYY/NNN reference.</div>
+
+<div class="card" style="padding:14px 18px;background:#fef2f2;border-left:4px solid #dc2626;margin-bottom:20px">
+  <strong style="color:#dc2626">Statutory deadlines:</strong>
+  Verbal notification to CARC within <strong>72 hours</strong> of becoming aware of the occurrence.
+  Written report within <strong>30 days</strong>. (ICAO Annex 13 §6.1)
+</div>
+
+<form method="POST" style="max-width:720px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-weight:700;margin-bottom:14px;color:var(--navy)">Occurrence Details</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="form-group">
+        <label>Source Type *</label>
+        <select name="source_type" class="form-control" required>
+          <option value="Investigation">Investigation</option>
+          <option value="HazardReport">Hazard Report</option>
+          <option value="ASR">Air Safety Report</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Source Reference *</label>
+        <input name="source_ref" class="form-control" required placeholder="e.g. INV/SMS/042 or HR/SMS/018">
+      </div>
+      <div class="form-group">
+        <label>Notification Classification *</label>
+        <select name="notification_class" class="form-control" required>
+          <option value="">— Select —</option>
+          <option value="Accident">Accident</option>
+          <option value="Serious Incident">Serious Incident</option>
+          <option value="Incident">Incident (reportable)</option>
+          <option value="Occurrence">Occurrence (voluntary)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Occurrence Date *</label>
+        <input name="occurrence_date" class="form-control" type="date" required>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Occurrence Description *</label>
+        <textarea name="occurrence_description" class="form-control" rows="4" required
+          placeholder="Provide a factual description of the occurrence suitable for regulatory submission..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Department</label>
+        <select name="department_id" class="form-control">
+          <option value="">— All / Unknown —</option>
+          {% for d in departments %}
+          <option value="{{ d.id }}">{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px">
+    <button type="submit" class="btn" style="background:#dc2626;color:#fff">Create Regulatory Notification</button>
+    <a href="{{ url_for('enforcement.reg_notif_list') }}" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}

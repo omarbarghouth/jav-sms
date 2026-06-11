@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Confidential Access Log{% endblock %}
+{% block content %}
+<div class="page-title">Confidential Report Access Log</div>
+<div class="page-sub">IOSA ISM 1.2.3 — Append-only audit trail of every access to confidential safety reports. Protects reporter identity.</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">
+  <div class="card" style="text-align:center;padding:14px">
+    <div style="font-size:26px;font-weight:900;color:var(--navy)">{{ logs|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Total Accesses</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #dc2626">
+    <div style="font-size:26px;font-weight:900;color:#dc2626">{{ flagged|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Flagged for Review</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px">
+    <div style="font-size:26px;font-weight:900;color:var(--navy)">
+      {{ logs|map(attribute='accessed_by')|unique|list|length }}
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Unique Accessors</div>
+  </div>
+</div>
+
+<div class="card" style="padding:12px 16px;background:#fffbeb;border-left:4px solid #f59e0b;margin-bottom:20px">
+  <strong>Privacy notice:</strong> This log exists to protect reporter confidentiality. Unexplained or unjustified accesses should be investigated.
+  Patterns of access without justification must be escalated to the Accountable Executive.
+</div>
+
+{% if flagged %}
+<div class="card" style="padding:14px 18px;background:#fef2f2;border-left:4px solid #dc2626;margin-bottom:16px">
+  <strong style="color:#dc2626">⚠ {{ flagged|length }} access(es) flagged for review.</strong>
+  These records have been marked as potentially inappropriate or require justification.
+</div>
+{% endif %}
+
+{% if logs %}
+<div style="overflow-x:auto">
+<table class="table">
+  <thead><tr>
+    <th>Date/Time (UTC)</th>
+    <th>Accessed By</th>
+    <th>Role</th>
+    <th>Report Ref</th>
+    <th>Report Type</th>
+    <th>Access Type</th>
+    <th>Justification</th>
+    <th>IP Address</th>
+    <th>Flag</th>
+  </tr></thead>
+  <tbody>
+  {% for log in logs %}
+  <tr {% if log.flagged_for_review %}style="background:#fef2f2"{% endif %}>
+    <td style="white-space:nowrap;font-size:12px">
+      {{ log.accessed_at.strftime('%Y-%m-%d %H:%M') if log.accessed_at else '—' }}
+    </td>
+    <td><strong>{{ log.accessed_by }}</strong></td>
+    <td><span class="badge">{{ log.accessor_role or '—' }}</span></td>
+    <td><code style="font-size:12px">{{ log.report_ref }}</code></td>
+    <td style="font-size:12px">{{ log.report_type or '—' }}</td>
+    <td>
+      <span class="badge badge-{% if log.access_type == 'view' %}blue{% elif log.access_type == 'export' %}orange{% else %}red{% endif %}">
+        {{ log.access_type or 'view' }}
+      </span>
+    </td>
+    <td style="font-size:12px;max-width:200px;color:var(--muted)">
+      {{ log.justification or '<span style="color:#ef4444">None provided</span>' | safe }}
+    </td>
+    <td style="font-size:11px;color:var(--muted)">{{ log.ip_address or '—' }}</td>
+    <td>
+      {% if log.flagged_for_review %}
+      <span style="color:#ef4444;font-weight:700">⚠ Flagged</span>
+      {% else %}
+      <span style="color:#22c55e;font-size:12px">OK</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:20px;text-align:center;color:var(--muted)">
+  No confidential report accesses on record.
+</div>
+{% endif %}
+{% endblock %}

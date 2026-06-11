@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Issue Safety Recommendation{% endblock %}
+{% block content %}
+<div class="page-title">Issue Safety Recommendation</div>
+<div class="page-sub">ICAO Annex 13 §6.8 — Formal SR with auto-assigned reference number (JAV/SR/YYYY/NNN)</div>
+
+<form method="POST" style="max-width:800px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-weight:700;margin-bottom:14px;color:var(--navy)">Source</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="form-group">
+        <label>Source Type *</label>
+        <select name="source_type" class="form-control" required onchange="toggleSource(this.value)">
+          <option value="Investigation">Investigation</option>
+          <option value="Audit">Audit Finding</option>
+          <option value="SRB">SRB Decision</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group" id="srcRefGroup">
+        <label>Source Reference</label>
+        <input name="source_ref" class="form-control" placeholder="e.g. INV/SMS/042">
+      </div>
+      <div class="form-group" id="invGroup">
+        <label>Linked Investigation</label>
+        <select name="investigation_id" class="form-control">
+          <option value="">— None —</option>
+          {% for inv in investigations %}
+          <option value="{{ inv.id }}">{{ inv.id }} — {{ (inv.title or '')[:60] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" id="findingGroup" style="display:none">
+        <label>Linked Audit Finding</label>
+        <select name="audit_finding_id" class="form-control">
+          <option value="">— None —</option>
+          {% for f in findings %}
+          <option value="{{ f.id }}">{{ f.id }} — {{ (f.finding_text or f.description or '')[:60] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-weight:700;margin-bottom:14px;color:var(--navy)">Recommendation Details</div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Title *</label>
+      <input name="title" class="form-control" required placeholder="Short, actionable title for this safety recommendation">
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Safety Issue Identified *</label>
+      <textarea name="safety_issue" class="form-control" rows="2" required
+        placeholder="Describe the safety issue this recommendation addresses..."></textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Recommendation Description *</label>
+      <textarea name="description" class="form-control" rows="4" required
+        placeholder="Describe the specific action recommended. Be precise — this text is sent to the addressee."></textarea>
+    </div>
+    <div class="form-group">
+      <label>ICAO / Regulatory Reference</label>
+      <input name="icao_reference" class="form-control" placeholder="e.g. ICAO Annex 6 §4.2.1">
+    </div>
+  </div>
+
+  <div class="card" style="padding:20px;margin-bottom:16px">
+    <div style="font-weight:700;margin-bottom:14px;color:var(--navy)">Addressee</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="form-group">
+        <label>Addressee Type *</label>
+        <select name="addressee_type" class="form-control" required>
+          <option value="Internal">Internal (Jordan Aviation dept.)</option>
+          <option value="External">External (Authority / Manufacturer)</option>
+          <option value="CARC">CARC (Civil Aviation)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Addressee Name *</label>
+        <input name="addressee_name" class="form-control" required placeholder="Department or organisation name">
+      </div>
+      <div class="form-group">
+        <label>Addressee Email</label>
+        <input name="addressee_email" class="form-control" type="email" placeholder="For notification">
+      </div>
+      <div class="form-group">
+        <label>Priority *</label>
+        <select name="priority" class="form-control" required>
+          <option value="Critical">Critical</option>
+          <option value="High" selected>High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Response Due Date</label>
+        <input name="response_due_date" class="form-control" type="date">
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px">
+    <button type="submit" class="btn" style="background:var(--navy);color:#fff">Issue Safety Recommendation</button>
+    <a href="{{ url_for('enforcement.sr_list') }}" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+
+<script>
+function toggleSource(val) {
+  document.getElementById('invGroup').style.display = val === 'Investigation' ? '' : 'none';
+  document.getElementById('findingGroup').style.display = val === 'Audit' ? '' : 'none';
+}
+</script>
+{% endblock %}

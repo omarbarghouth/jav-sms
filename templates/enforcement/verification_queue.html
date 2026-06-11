@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Audit Verification Queue{% endblock %}
+{% block content %}
+<div class="page-title">Audit Verification Queue</div>
+<div class="page-sub">IOSA ISM / ICAO Annex 19 §5.3 — Items requiring auditor effectiveness verification</div>
+
+<!-- KPI Strip -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #dc2626">
+    <div style="font-size:28px;font-weight:900;color:#dc2626">{{ queue_total }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Total Pending</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #f59e0b">
+    <div style="font-size:28px;font-weight:900;color:#f59e0b">{{ actions_pending|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Actions Pending Verification</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #7c3aed">
+    <div style="font-size:28px;font-weight:900;color:#7c3aed">{{ open_srs|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Open Safety Recommendations</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #ef4444">
+    <div style="font-size:28px;font-weight:900;color:#ef4444">{{ reg_overdue|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Regulatory Overdue</div>
+  </div>
+</div>
+
+<!-- Quick nav -->
+<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+  <a href="#actions" class="btn btn-sm btn-outline">Actions ({{ actions_pending|length }})</a>
+  <a href="#partial" class="btn btn-sm btn-outline">Partially Effective ({{ actions_partial|length }})</a>
+  <a href="#srs" class="btn btn-sm btn-outline">Safety Recommendations ({{ open_srs|length }})</a>
+  <a href="#moc" class="btn btn-sm btn-outline">MOC PIR ({{ moc_pir_pending|length }})</a>
+  <a href="#regulatory" class="btn btn-sm btn-outline">Regulatory ({{ reg_overdue|length }})</a>
+  <a href="{{ url_for('enforcement.sod_violations') }}" class="btn btn-sm" style="background:#dc2626;color:#fff">SoD Violations</a>
+  <a href="{{ url_for('enforcement.investigation_timelines') }}" class="btn btn-sm" style="background:#1e40af;color:#fff">Investigation Timelines</a>
+  <a href="{{ url_for('enforcement.reg_notif_list') }}" class="btn btn-sm btn-outline">Regulatory Notifications</a>
+</div>
+
+<!-- 1. Actions pending effectiveness verification -->
+<div id="actions">
+<div class="section-header" style="margin-bottom:10px">
+  <strong>Corrective Actions — Effectiveness Not Yet Verified</strong>
+  <span style="color:var(--muted);font-size:12px;margin-left:8px">ICAO Annex 19 §5.3.3 — effectiveness rating required</span>
+</div>
+{% if actions_pending %}
+<div style="overflow-x:auto;margin-bottom:24px">
+<table class="table">
+  <thead><tr>
+    <th>Action ID</th><th>Description</th><th>Owner</th><th>Closed Date</th><th>Source</th><th>Action</th>
+  </tr></thead>
+  <tbody>
+  {% for a in actions_pending %}
+  <tr>
+    <td><a href="/actions/{{ a.id }}">{{ a.id }}</a></td>
+    <td>{{ (a.description or '')[:80] }}</td>
+    <td>{{ a.owner or '—' }}</td>
+    <td>{{ a.closed_date or '—' }}</td>
+    <td><span class="badge">{{ a.source or 'SMS' }}</span></td>
+    <td>
+      <button class="btn btn-sm btn-outline" onclick="openVerifyModal('{{ a.id }}')">Verify</button>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:14px;color:var(--muted);margin-bottom:24px">No actions pending effectiveness verification.</div>
+{% endif %}
+</div>
+
+<!-- 2. Partially effective actions -->
+<div id="partial">
+<div class="section-header" style="margin-bottom:10px">
+  <strong>Partially Effective Actions — Follow-up Required</strong>
+  <span style="color:#f59e0b;font-size:12px;margin-left:8px">Requires additional corrective action or monitoring</span>
+</div>
+{% if actions_partial %}
+<div style="overflow-x:auto;margin-bottom:24px">
+<table class="table">
+  <thead><tr><th>Action ID</th><th>Description</th><th>Owner</th><th>Closed</th><th>Action</th></tr></thead>
+  <tbody>
+  {% for a in actions_partial %}
+  <tr style="background:#fffbeb">
+    <td><a href="/actions/{{ a.id }}">{{ a.id }}</a></td>
+    <td>{{ (a.description or '')[:80] }}</td>
+    <td>{{ a.owner or '—' }}</td>
+    <td>{{ a.closed_date or '—' }}</td>
+    <td><button class="btn btn-sm btn-outline" onclick="openVerifyModal('{{ a.id }}')">Add Follow-up</button></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:14px;color:var(--muted);margin-bottom:24px">No partially effective actions awaiting follow-up.</div>
+{% endif %}
+</div>
+
+<!-- 3. Safety Recommendations -->
+<div id="srs">
+<div class="section-header" style="margin-bottom:10px">
+  <strong>Open Safety Recommendations</strong>
+  <span style="color:var(--muted);font-size:12px;margin-left:8px">ICAO Annex 13 §6.8 — formal SR register</span>
+  <a href="{{ url_for('enforcement.sr_new') }}" class="btn btn-sm" style="margin-left:12px;background:var(--navy);color:#fff">+ New SR</a>
+</div>
+{% if open_srs %}
+<div style="overflow-x:auto;margin-bottom:24px">
+<table class="table">
+  <thead><tr><th>SR Number</th><th>Title</th><th>Addressee</th><th>Priority</th><th>Due</th><th>Status</th><th>Action</th></tr></thead>
+  <tbody>
+  {% for sr in open_srs %}
+  {% set overdue = sr.response_due_date and sr.response_due_date < today.isoformat() %}
+  <tr {% if overdue %}style="background:#fef2f2"{% endif %}>
+    <td><strong>{{ sr.sr_number }}</strong></td>
+    <td>{{ sr.title[:60] }}</td>
+    <td>{{ sr.addressee_name or '—' }}</td>
+    <td><span class="badge badge-{% if sr.priority == 'Critical' %}red{% elif sr.priority == 'High' %}orange{% else %}blue{% endif %}">{{ sr.priority }}</span></td>
+    <td>{% if overdue %}<span style="color:#ef4444;font-weight:700">{{ sr.response_due_date }} ⚠</span>{% else %}{{ sr.response_due_date or '—' }}{% endif %}</td>
+    <td>{{ sr.status }}</td>
+    <td>
+      <a href="{{ url_for('enforcement.sr_list') }}" class="btn btn-sm btn-outline">View</a>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:14px;color:var(--muted);margin-bottom:24px">No open Safety Recommendations.</div>
+{% endif %}
+</div>
+
+<!-- 4. MOC Post-PIR -->
+<div id="moc">
+<div class="section-header" style="margin-bottom:10px">
+  <strong>MOC Post-Implementation Reviews (PIR) Pending</strong>
+  <span style="color:var(--muted);font-size:12px;margin-left:8px">MOCs implemented but PIR not yet completed</span>
+</div>
+{% if moc_pir_pending %}
+<div style="overflow-x:auto;margin-bottom:24px">
+<table class="table">
+  <thead><tr><th>MOC ID</th><th>Title</th><th>Implemented</th><th>Action</th></tr></thead>
+  <tbody>
+  {% for m in moc_pir_pending %}
+  <tr>
+    <td><a href="/moc/{{ m.id }}">{{ m.id }}</a></td>
+    <td>{{ (m.title or '')[:70] }}</td>
+    <td>{{ m.implemented_date or '—' }}</td>
+    <td><a href="/moc/{{ m.id }}" class="btn btn-sm btn-outline">Schedule PIR</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:14px;color:var(--muted);margin-bottom:24px">No MOC PIRs pending.</div>
+{% endif %}
+</div>
+
+<!-- 5. Regulatory Overdue -->
+<div id="regulatory">
+<div class="section-header" style="margin-bottom:10px">
+  <strong>Overdue Regulatory Notifications</strong>
+  <span style="color:#ef4444;font-size:12px;margin-left:8px">ICAO Annex 13 §6.1 — statutory reporting obligations</span>
+</div>
+{% if reg_overdue %}
+<div style="overflow-x:auto;margin-bottom:24px">
+<table class="table">
+  <thead><tr><th>Ref</th><th>Source</th><th>Classification</th><th>Written Due</th><th>Status</th><th>Action</th></tr></thead>
+  <tbody>
+  {% for n in reg_overdue %}
+  <tr style="background:#fef2f2">
+    <td><strong>{{ n.ref_number }}</strong></td>
+    <td>{{ n.source_ref or '—' }}</td>
+    <td>{{ n.notification_class or '—' }}</td>
+    <td><span style="color:#ef4444;font-weight:700">{{ n.written_notification_due }} ⚠</span></td>
+    <td>{{ n.status }}</td>
+    <td><a href="{{ url_for('enforcement.reg_notif_list') }}" class="btn btn-sm btn-outline">Update</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:14px;color:var(--muted);margin-bottom:24px">No overdue regulatory notifications.</div>
+{% endif %}
+</div>
+
+<!-- Effectiveness Verification Modal -->
+<div id="verifyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div class="card" style="max-width:500px;width:90%;padding:24px">
+    <h3 style="margin:0 0 16px">Verify Action Effectiveness</h3>
+    <form id="verifyForm" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label>Effectiveness Rating *</label>
+        <select name="effectiveness" class="form-control" required>
+          <option value="">— Select —</option>
+          <option>Effective</option>
+          <option>Partially Effective</option>
+          <option>Ineffective</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Effectiveness Review Notes</label>
+        <textarea name="effectiveness_review" class="form-control" rows="3"
+          placeholder="Describe evidence reviewed, observations, or reason for ineffective rating..."></textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn">Submit Verification</button>
+        <button type="button" class="btn btn-outline" onclick="closeVerifyModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openVerifyModal(actionId) {
+  document.getElementById('verifyForm').action = '/enforcement/verify-action/' + actionId;
+  document.getElementById('verifyModal').style.display = 'flex';
+}
+function closeVerifyModal() {
+  document.getElementById('verifyModal').style.display = 'none';
+}
+</script>
+{% endblock %}

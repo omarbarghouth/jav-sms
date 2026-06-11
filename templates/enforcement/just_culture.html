@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Just Culture Policy{% endblock %}
+{% block content %}
+<div class="page-title">Just Culture Policy</div>
+<div class="page-sub">ICAO Annex 19 §3.1.2 — AE-signed, versioned Just Culture policy statement with non-punitive reporting commitment</div>
+
+{% if active %}
+<div class="card" style="padding:18px;border-left:4px solid #22c55e;margin-bottom:20px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Active Policy</div>
+      <div style="font-size:18px;font-weight:900">{{ active.title }}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">
+        Version: <strong>{{ active.version }}</strong> &nbsp;·&nbsp;
+        Effective: <strong>{{ active.effective_date or '—' }}</strong> &nbsp;·&nbsp;
+        Review due: <strong>{{ active.review_date or '—' }}</strong>
+      </div>
+      {% if active.ae_name %}
+      <div style="font-size:12px;margin-top:6px">
+        Signed by: <strong>{{ active.ae_name }}</strong> ({{ active.ae_title or 'Accountable Executive' }})
+        {% if active.ae_signed_at %}
+        · <span style="color:#22c55e">✓ Signed {{ active.ae_signed_at.strftime('%Y-%m-%d') }}</span>
+        {% else %}
+        · <span style="color:#f59e0b">⚠ AE signature pending</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <span class="badge badge-green">ACTIVE</span>
+  </div>
+  {% if active.content %}
+  <div style="margin-top:16px;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
+    <div style="font-size:13px;color:#166534;white-space:pre-wrap;line-height:1.7">{{ active.content }}</div>
+  </div>
+  {% endif %}
+  {% if active.change_summary %}
+  <div style="margin-top:10px;font-size:12px;color:var(--muted)">
+    <strong>Change summary:</strong> {{ active.change_summary }}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="card" style="padding:18px;border-left:4px solid #dc2626;margin-bottom:20px;background:#fef2f2">
+  <strong style="color:#dc2626">⚠ No active Just Culture Policy.</strong>
+  ICAO Annex 19 §3.1.2 requires an AE-signed Just Culture policy as a foundation of the SMS.
+  Create one immediately.
+</div>
+{% endif %}
+
+<div style="display:flex;gap:10px;margin-bottom:20px">
+  <a href="{{ url_for('enforcement.just_culture_new') }}" class="btn" style="background:var(--navy);color:#fff">
+    {% if active %}+ Issue New Version{% else %}+ Create Just Culture Policy{% endif %}
+  </a>
+  <a href="{{ url_for('enforcement.confidential_access_log') }}" class="btn btn-outline">Confidential Access Log</a>
+</div>
+
+{% if policies|length > 1 %}
+<div style="font-weight:700;margin-bottom:10px">Previous Versions</div>
+<table class="table">
+  <thead><tr><th>Version</th><th>Title</th><th>Effective</th><th>AE</th><th>Status</th><th>Archived</th></tr></thead>
+  <tbody>
+  {% for p in policies %}
+  {% if p.status != 'Active' %}
+  <tr>
+    <td><span class="badge">{{ p.version }}</span></td>
+    <td>{{ p.title }}</td>
+    <td>{{ p.effective_date or '—' }}</td>
+    <td>{{ p.ae_name or '—' }}</td>
+    <td><span class="badge">{{ p.status }}</span></td>
+    <td style="font-size:12px;color:var(--muted)">{{ p.created_by or '—' }}</td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Investigation Timelines{% endblock %}
+{% block content %}
+<div class="page-title">Investigation Timeline Compliance</div>
+<div class="page-sub">ICAO Annex 13 §6.1 / §7.1 — Statutory reporting deadlines for Accident and Serious Incident investigations</div>
+
+{% if overdue_count > 0 %}
+<div class="card" style="padding:14px 18px;background:#fef2f2;border-left:4px solid #dc2626;margin-bottom:16px">
+  <strong style="color:#dc2626">⚠ {{ overdue_count }} investigation(s) have CRITICAL overdue obligations.</strong>
+  Statutory deadlines under ICAO Annex 13 have been breached. Immediate action required — notify the Accountable Executive and CARC without delay.
+</div>
+{% endif %}
+
+<div style="display:flex;gap:10px;margin-bottom:16px">
+  <a href="{{ url_for('enforcement.verification_queue') }}" class="btn btn-outline">← Verification Queue</a>
+  <a href="{{ url_for('enforcement.reg_notif_list') }}" class="btn btn-outline">Regulatory Notifications</a>
+</div>
+
+{% if inv_data %}
+{% for d in inv_data %}
+{% set inv = d.inv %}
+{% set alerts = d.alerts %}
+<div class="card" style="margin-bottom:14px;padding:0;overflow:hidden;border-left:4px solid {% if d.critical %}#dc2626{% elif alerts %}#f59e0b{% else %}#22c55e{% endif %}">
+  <div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-weight:800;font-size:14px">
+        <a href="/investigations/{{ inv.id }}">{{ inv.id }}</a> — {{ inv.title or '' }}
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">
+        Classification: <strong>{{ inv.classification or '—' }}</strong> &nbsp;·&nbsp;
+        Occurrence: <strong>{{ inv.date_of_occurrence or '—' }}</strong> &nbsp;·&nbsp;
+        Investigator: {{ inv.investigator or '—' }}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="badge badge-{% if inv.status == 'Closed' %}green{% else %}orange{% endif %}">{{ inv.status }}</span>
+      {% if inv.classification in ('Accident','Serious Incident') %}
+      <span class="badge badge-red">Statutory</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if alerts %}
+  <div style="padding:10px 18px;background:#fef2f2;border-top:1px solid #fecaca">
+    {% for alert in alerts %}
+    <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;{% if not loop.last %}border-bottom:1px solid #fde8e8;padding-bottom:6px{% endif %}">
+      <span style="font-size:16px">{% if alert.severity == 'CRITICAL' %}🔴{% else %}🟡{% endif %}</span>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:{% if alert.severity == 'CRITICAL' %}#dc2626{% else %}#d97706{% endif %}">
+          {{ alert.severity }} — {{ alert.type.replace('_',' ').title() }}
+        </div>
+        <div style="font-size:12px;color:var(--muted)">{{ alert.message }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Timeline milestones -->
+  {% set tl = inv.timeline_record if inv.timeline_record else none %}
+  <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:20px;flex-wrap:wrap">
+    <div style="font-size:12px">
+      <div style="color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:2px">Preliminary Report Due</div>
+      <strong>{{ (tl.preliminary_due_date if tl else inv.preliminary_report_due) or '—' }}</strong>
+      {% if tl and tl.preliminary_submitted %}<span style="color:#22c55e;margin-left:6px">✓ Submitted</span>{% endif %}
+    </div>
+    <div style="font-size:12px">
+      <div style="color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:2px">CAA Notified</div>
+      {% if tl and tl.caa_notified %}
+        <strong style="color:#22c55e">✓ {{ tl.caa_notified_at.strftime('%Y-%m-%d') if tl.caa_notified_at else 'Yes' }}</strong>
+      {% else %}
+        <strong style="color:#ef4444">Pending</strong>
+      {% endif %}
+    </div>
+    <div style="font-size:12px">
+      <div style="color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:2px">12-Month Interim Due</div>
+      <strong>{{ (tl.interim_due_date if tl else '') or '—' }}</strong>
+      {% if tl and tl.interim_submitted %}<span style="color:#22c55e;margin-left:6px">✓ Submitted</span>{% endif %}
+    </div>
+    <div style="font-size:12px">
+      <div style="color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:2px">Final Report</div>
+      <strong>{{ (tl.final_submitted_at.strftime('%Y-%m-%d') if tl and tl.final_submitted_at else (inv.final_report_submitted and 'Submitted' or 'Pending')) }}</strong>
+    </div>
+
+    {% if not (tl and tl.preliminary_submitted) and inv.classification in ('Accident','Serious Incident') %}
+    <div style="margin-left:auto">
+      <button class="btn btn-sm" style="background:var(--navy);color:#fff"
+        onclick="document.getElementById('prelim_{{ inv.id }}').style.display='flex'">
+        Record Preliminary Submission
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Preliminary submission modal per investigation -->
+<div id="prelim_{{ inv.id }}" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div class="card" style="max-width:480px;width:90%;padding:24px">
+    <h3 style="margin:0 0 14px">Record Preliminary Report — {{ inv.id }}</h3>
+    <form method="POST" action="{{ url_for('enforcement.submit_preliminary', inv_id=inv.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group" style="margin-bottom:10px">
+        <label>Preliminary Report Reference</label>
+        <input name="preliminary_ref" class="form-control" placeholder="e.g. PRELIM/2026/001">
+      </div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label><input type="checkbox" name="caa_notified" value="1"> CAA (CARC) also notified</label>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>CAA Notification Reference</label>
+        <input name="caa_ref" class="form-control" placeholder="e.g. CARC-2026-REF-001">
+      </div>
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn" style="background:var(--navy);color:#fff">Save</button>
+        <button type="button" class="btn btn-outline"
+          onclick="document.getElementById('prelim_{{ inv.id }}').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="card" style="padding:20px;text-align:center;color:var(--muted)">No open investigations.</div>
+{% endif %}
+{% endblock %}

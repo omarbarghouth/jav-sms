@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Safety Recommendations{% endblock %}
+{% block content %}
+<div class="page-title">Safety Recommendation Register</div>
+<div class="page-sub">ICAO Annex 13 §6.8 — Formal numbered SR register with addressee tracking and closure verification</div>
+
+<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+  <a href="{{ url_for('enforcement.sr_new') }}" class="btn" style="background:var(--navy);color:#fff">+ Issue Safety Recommendation</a>
+  <a href="{{ url_for('enforcement.verification_queue') }}" class="btn btn-outline">← Verification Queue</a>
+  {% for st in ['Open','Response Received','Closed'] %}
+  <a href="?status={{ st }}" class="btn btn-sm {% if status_filter == st %}btn-navy{% else %}btn-outline{% endif %}">{{ st }}</a>
+  {% endfor %}
+  {% if status_filter %}<a href="?" class="btn btn-sm btn-outline">Clear</a>{% endif %}
+</div>
+
+{% if srs %}
+<div style="overflow-x:auto">
+<table class="table">
+  <thead><tr>
+    <th>SR Number</th><th>Title</th><th>Source</th><th>Addressee</th>
+    <th>Priority</th><th>Issued</th><th>Due</th><th>Status</th><th>Actions</th>
+  </tr></thead>
+  <tbody>
+  {% for sr in srs %}
+  {% set overdue = sr.response_due_date and sr.response_due_date < today.isoformat() and sr.status != 'Closed' %}
+  <tr {% if overdue %}style="background:#fef2f2"{% endif %}>
+    <td><strong style="font-family:monospace">{{ sr.sr_number }}</strong></td>
+    <td>
+      <div style="font-weight:600;max-width:240px">{{ sr.title[:70] }}</div>
+      {% if sr.icao_reference %}<div style="font-size:11px;color:var(--muted)">{{ sr.icao_reference }}</div>{% endif %}
+    </td>
+    <td style="font-size:12px">
+      {{ sr.source_type }}<br>
+      {% if sr.investigation_id %}<a href="/investigations/{{ sr.investigation_id }}" style="font-size:11px">{{ sr.investigation_id }}</a>{% endif %}
+    </td>
+    <td>
+      <div>{{ sr.addressee_name or '—' }}</div>
+      <div style="font-size:11px;color:var(--muted)">{{ sr.addressee_type }}</div>
+    </td>
+    <td>
+      <span class="badge badge-{% if sr.priority == 'Critical' %}red{% elif sr.priority == 'High' %}orange{% else %}blue{% endif %}">
+        {{ sr.priority }}
+      </span>
+    </td>
+    <td style="font-size:12px">{{ sr.issued_date or '—' }}</td>
+    <td style="font-size:12px">
+      {% if overdue %}
+        <span style="color:#ef4444;font-weight:700">{{ sr.response_due_date }} ⚠</span>
+      {% else %}
+        {{ sr.response_due_date or '—' }}
+      {% endif %}
+    </td>
+    <td>
+      <span class="badge badge-{% if sr.status == 'Closed' %}green{% elif sr.status == 'Response Received' %}blue{% else %}orange{% endif %}">
+        {{ sr.status }}
+      </span>
+    </td>
+    <td>
+      {% if sr.status == 'Open' %}
+      <button class="btn btn-sm btn-outline" onclick="openRespondModal({{ sr.id }})">Record Response</button>
+      {% elif sr.status == 'Response Received' %}
+      <button class="btn btn-sm btn-outline" onclick="openCloseModal({{ sr.id }}, '{{ sr.sr_number }}')">Close SR</button>
+      {% else %}
+      <span style="color:var(--muted);font-size:12px">{{ sr.closure_date or 'Closed' }}</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% if sr.status == 'Closed' and sr.closure_notes %}
+  <tr style="background:#f0fdf4">
+    <td></td>
+    <td colspan="8" style="font-size:12px;color:#166534;padding:6px 12px">
+      <strong>Closure:</strong> {{ sr.closure_notes }} — {{ sr.effectiveness_rating }} (verified by {{ sr.closure_verified_by or '—' }}, {{ sr.closure_date }})
+    </td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:20px;text-align:center;color:var(--muted)">No Safety Recommendations found.</div>
+{% endif %}
+
+<!-- Respond Modal -->
+<div id="respondModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div class="card" style="max-width:500px;width:90%;padding:24px">
+    <h3 style="margin:0 0 16px">Record SR Response</h3>
+    <form id="respondForm" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label>Response / Action Taken *</label>
+        <textarea name="response_text" class="form-control" rows="4" required
+          placeholder="Describe actions taken in response to this Safety Recommendation..."></textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn">Save Response</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('respondModal').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Close Modal -->
+<div id="closeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div class="card" style="max-width:500px;width:90%;padding:24px">
+    <h3 style="margin:0 0 4px">Close Safety Recommendation</h3>
+    <p id="closeModalRef" style="color:var(--muted);font-size:13px;margin:0 0 16px"></p>
+    <form id="closeForm" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label>Effectiveness Rating *</label>
+        <select name="effectiveness_rating" class="form-control" required>
+          <option value="">— Select —</option>
+          <option>Effective</option>
+          <option>Partially Effective</option>
+          <option>Ineffective</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Closure Notes *</label>
+        <textarea name="closure_notes" class="form-control" rows="3" required
+          placeholder="Describe evidence reviewed confirming the SR has been adequately addressed..."></textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn">Close SR</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('closeModal').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openRespondModal(srId) {
+  document.getElementById('respondForm').action = '/enforcement/safety-recommendations/' + srId + '/respond';
+  document.getElementById('respondModal').style.display = 'flex';
+}
+function openCloseModal(srId, srNum) {
+  document.getElementById('closeForm').action = '/enforcement/safety-recommendations/' + srId + '/close';
+  document.getElementById('closeModalRef').textContent = srNum;
+  document.getElementById('closeModal').style.display = 'flex';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}SoD Violation Log{% endblock %}
+{% block content %}
+<div class="page-title">Segregation of Duties — Violation Block Log</div>
+<div class="page-sub">IOSA ISM / ICAO Annex 19 §4 — Immutable record of all blocked SoD violations</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">
+  <div class="card" style="text-align:center;padding:14px;border-left:4px solid #dc2626">
+    <div style="font-size:28px;font-weight:900;color:#dc2626">{{ violations|length }}</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Total Blocked</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px">
+    <div style="font-size:28px;font-weight:900;color:var(--navy)">
+      {{ violations|selectattr('entity_type','equalto','Action')|list|length }}
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Action Blocks</div>
+  </div>
+  <div class="card" style="text-align:center;padding:14px">
+    <div style="font-size:28px;font-weight:900;color:var(--navy)">
+      {{ violations|selectattr('entity_type','equalto','Investigation')|list|length }}
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-top:2px">Investigation Blocks</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:20px;padding:12px 16px;background:#fef2f2;border-left:4px solid #dc2626">
+  <strong style="color:#dc2626">Regulatory basis:</strong>
+  These records are append-only and cannot be deleted. Each entry documents a blocked attempt
+  to violate the four-eyes principle. Patterns of repeated violations must be escalated to
+  the Accountable Executive. (IOSA ISM 3.7.3 / ICAO Doc 9859 §4.6.2)
+</div>
+
+{% if violations %}
+<div style="overflow-x:auto">
+<table class="table">
+  <thead><tr>
+    <th>Date/Time (UTC)</th>
+    <th>Attempted By</th>
+    <th>Role</th>
+    <th>Entity</th>
+    <th>Entity ID</th>
+    <th>Action Attempted</th>
+    <th>Violation Rule</th>
+    <th>Detail</th>
+    <th>IP</th>
+  </tr></thead>
+  <tbody>
+  {% for v in violations %}
+  <tr>
+    <td style="white-space:nowrap;font-size:12px">{{ v.blocked_at.strftime('%Y-%m-%d %H:%M') if v.blocked_at else '—' }}</td>
+    <td><strong>{{ v.attempted_by }}</strong></td>
+    <td><span class="badge">{{ v.attempted_role or '—' }}</span></td>
+    <td>{{ v.entity_type }}</td>
+    <td><code>{{ v.entity_id or '—' }}</code></td>
+    <td><span class="badge badge-red">{{ v.attempted_action }}</span></td>
+    <td style="font-size:11px;color:#7c2d12;max-width:180px">{{ v.violation_rule or '—' }}</td>
+    <td style="font-size:11px;max-width:260px;color:var(--muted)">{{ v.violation_detail or '—' }}</td>
+    <td style="font-size:11px;color:var(--muted)">{{ v.ip_address or '—' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:20px;text-align:center;color:var(--muted)">
+  No SoD violations have been blocked. The system is operating within governance boundaries.
+</div>
+{% endif %}
+{% endblock %}
