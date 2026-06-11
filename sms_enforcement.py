@@ -43,10 +43,7 @@ except ImportError:
     AuditVerificationItem = None
 from datetime import datetime, date, timedelta
 import functools, os, json
-try:
-    import requests as _http_req
-except ImportError:
-    _http_req = None
+import urllib.request as _urllib_req
 
 enf = Blueprint('enforcement', __name__, url_prefix='/enforcement')
 
@@ -466,14 +463,17 @@ def _push_feedback_notification(fb: ReportFeedback, stage_label: str):
                 },
                 # data-only: no 'notification' key — content only visible after auth
             }
-            if _http_req:
-                _http_req.post(
-                    'https://fcm.googleapis.com/fcm/send',
-                    json=payload,
-                    headers={'Authorization': f'key={fcm_key}',
-                             'Content-Type': 'application/json'},
-                    timeout=5,
-                )
+            body = json.dumps(payload).encode('utf-8')
+            req = _urllib_req.Request(
+                'https://fcm.googleapis.com/fcm/send',
+                data=body,
+                headers={
+                    'Authorization': f'key={fcm_key}',
+                    'Content-Type': 'application/json',
+                },
+                method='POST',
+            )
+            _urllib_req.urlopen(req, timeout=5)
             fb.push_sent    = True
             fb.push_sent_at = datetime.utcnow()
         except Exception:
