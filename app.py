@@ -13302,6 +13302,9 @@ with app.app_context():
         'safety_surveys': [
             ('target_audience', 'VARCHAR(200)'),
         ],
+        'distribution_lists': [
+            ('sag_role', 'VARCHAR(80)'),
+        ],
     }
 
     # Run column migrations using a raw psycopg2 connection so they are
