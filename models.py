@@ -166,6 +166,9 @@ class Hazard(db.Model):
     risks                  = db.relationship('Risk', backref='hazard', lazy=True, cascade='all, delete-orphan')
     actions                = db.relationship('Action', backref='hazard', lazy=True)
     hazard_reports         = db.relationship('HazardReport', backref='hazard_parent', lazy=True, foreign_keys='HazardReport.hazard_id')
+    occurrences            = db.relationship('RiskOccurrence', backref='hazard_parent', lazy=True,
+                                             cascade='all, delete-orphan',
+                                             foreign_keys='RiskOccurrence.hazard_id')
 
 class Risk(db.Model):
     __tablename__ = 'risks'
@@ -182,6 +185,9 @@ class Risk(db.Model):
     residual_tolerance    = db.Column(db.String(20))
     created_at            = db.Column(db.DateTime, default=datetime.utcnow)
     controls              = db.relationship('Control', backref='risk', lazy=True, cascade='all, delete-orphan')
+    risk_actions          = db.relationship('RiskAction', backref='risk_parent', lazy=True,
+                                            cascade='all, delete-orphan',
+                                            foreign_keys='RiskAction.risk_id')
 
 class Control(db.Model):
     __tablename__ = 'controls'
@@ -381,7 +387,8 @@ class Investigation(db.Model):
     # FK to regulatory_notifications — populated when notification is created
     department          = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("investigation_set", lazy=True))
     timeline            = db.relationship('InvestigationEvent', backref='investigation',
-                              lazy=True, order_by='InvestigationEvent.created_at')
+                              lazy=True, order_by='InvestigationEvent.created_at',
+                              cascade='all, delete-orphan')
 
 class MOC(db.Model):
     """
@@ -702,6 +709,9 @@ class SafetySurvey(db.Model):
     target_audience = db.Column(db.String(200))
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
     department     = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("safety_survey_set", lazy=True))
+    responses      = db.relationship('SurveyResponse', backref='survey_parent',
+                                     lazy=True, cascade='all, delete-orphan',
+                                     foreign_keys='SurveyResponse.survey_id')
 
 
 class LessonLearned(db.Model):
@@ -2123,7 +2133,9 @@ class InvestigationTimeline(db.Model):
                                         onupdate=datetime.utcnow)
 
     investigation = db.relationship('Investigation', foreign_keys=[investigation_id],
-                        backref=db.backref('timeline_record', uselist=False))
+                        backref=db.backref('timeline_record', uselist=False,
+                                           cascade='all, delete-orphan',
+                                           single_parent=True))
 
 
 class RegulatoryNotification(db.Model):

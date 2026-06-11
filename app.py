@@ -5143,19 +5143,56 @@ def moc_add_hazard(mid):
     flash(f'Hazard added. Entries created in Hazard Log ({haz_id}) and Risk Register ({risk_id}).', 'success')
     return redirect(url_for('moc_detail', mid=mid) + '#hazards')
 
+def _safe_delete_hazard(hid):
+    """Shared helper: safely delete a Hazard and all its children.
+    Handles NOT NULL FK constraints on risk_occurrences and risk_actions.
+    Called from moc_delete_hazard and delete_moc to avoid code duplication.
+    """
+    nullable_tables = ['hazard_reports', 'asr_reports', 'actions', 'investigations',
+                       'audit_findings', 'audit_actions', 'risk_actions', 'risk_assessments']
+    for tbl in nullable_tables:
+        try:
+            db.session.execute(
+                db.text(f"UPDATE {tbl} SET hazard_id = NULL WHERE hazard_id = :hid"),
+                {'hid': hid}
+            )
+        except Exception:
+            pass
+    # DELETE occurrences (NOT NULL — cannot nullify)
+    RiskOccurrence.query.filter_by(hazard_id=hid).delete(synchronize_session=False)
+    # Clean RiskAction per risk (NOT NULL risk_id) then delete risks
+    for r in Risk.query.filter_by(hazard_id=hid).all():
+        RiskAction.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
+        try:
+            db.session.execute(
+                db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),
+                {'rid': r.id}
+            )
+        except Exception:
+            pass
+        Control.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
+        db.session.delete(r)
+    db.session.flush()
+    haz = Hazard.query.get(hid)
+    if haz:
+        _avi_purge(linked_hazard_id=hid)
+        db.session.delete(haz)
+
+
 @app.route('/moc/hazard/<int:hid>/delete', methods=['POST'])
 @require_login
 def moc_delete_hazard(hid):
     mh = MOCHazard.query.get_or_404(hid)
     mid = mh.moc_id
-    # Also delete the linked real Hazard (cascades to Risk + Controls)
-    if mh.linked_hazard_id:
-        real_haz = Hazard.query.get(mh.linked_hazard_id)
-        if real_haz:
-            db.session.delete(real_haz)
-    db.session.delete(mh)
-    db.session.commit()
-    flash('Hazard removed from register and Hazard Log.', 'success')
+    try:
+        if mh.linked_hazard_id:
+            _safe_delete_hazard(mh.linked_hazard_id)
+        db.session.delete(mh)
+        db.session.commit()
+        flash('Hazard removed from register and Hazard Log.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not remove hazard: {str(e)[:120]}', 'error')
     return redirect(url_for('moc_detail', mid=mid) + '#hazards')
 
 @app.route('/moc/<mid>/add-milestone', methods=['POST'])
@@ -7869,32 +7906,16 @@ def delete_hazard_report(rid):
         db.session.delete(rep)
         db.session.flush()
 
-        # Step 4: If a linked Hazard exists, cascade-delete everything under it
+        # Step 4: If a linked Hazard exists, use the safe helper
         if hid:
-            # Nullify hazard_id on ALL tables that reference hazards.id
-            tables_to_nullify = [
-                'asr_reports', 'actions', 'investigations',
-                'audit_findings', 'audit_actions', 'risk_occurrences',
-                'risk_actions', 'risk_assessments',
-            ]
-            for tbl in tables_to_nullify:
-                db.session.execute(
-                    db.text(f"UPDATE {tbl} SET hazard_id = NULL WHERE hazard_id = :hid"),
-                    {'hid': hid}
-                )
-            db.session.flush()
-            for r in Risk.query.filter_by(hazard_id=hid).all():
-                db.session.execute(
-                    db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),
-                    {'rid': r.id}
-                )
-                Control.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
-                db.session.delete(r)
-            db.session.flush()
-            haz = Hazard.query.get(hid)
-            if haz:
-                _avi_purge(linked_hazard_id=hid)
-                db.session.delete(haz)
+            # Clean Phase 2 reporter feedback
+            try:
+                if _ENFORCEMENT_MODELS and ReportFeedback:
+                    ReportFeedback.query.filter_by(
+                        report_ref=rid).delete(synchronize_session=False)
+            except Exception:
+                pass
+            _safe_delete_hazard(hid)
         db.session.commit()
         flash(f'✓ Hazard Report {rid} deleted.', 'success')
     except Exception as e:
@@ -7906,24 +7927,29 @@ def delete_hazard_report(rid):
 @app.route('/delete/hazard/<hid>', methods=['POST'])
 @require_login
 def delete_hazard(hid):
-    """Safe delete hazard: nullify ALL FK references across all 10 tables first."""
+    """Safe delete hazard: cascade-delete or nullify ALL FK references first."""
     h = Hazard.query.get_or_404(hid)
     try:
-        # Nullify hazard_id on every table that references hazards.id
-        tables_to_nullify = [
+        # Step 1: Nullify NULLABLE hazard_id references (these columns allow NULL)
+        nullable_tables = [
             'hazard_reports', 'asr_reports', 'actions', 'investigations',
-            'audit_findings', 'audit_actions', 'risk_occurrences',
-            'risk_actions', 'risk_assessments',
+            'audit_findings', 'audit_actions', 'risk_actions', 'risk_assessments',
         ]
-        for tbl in tables_to_nullify:
+        for tbl in nullable_tables:
             db.session.execute(
                 db.text(f"UPDATE {tbl} SET hazard_id = NULL WHERE hazard_id = :hid"),
                 {'hid': hid}
             )
         db.session.flush()
 
-        # Delete risks under this hazard (and their controls + ra_rows)
+        # Step 2: DELETE risk_occurrences — hazard_id is NOT NULL so must delete, not nullify
+        RiskOccurrence.query.filter_by(hazard_id=hid).delete(synchronize_session=False)
+        db.session.flush()
+
+        # Step 3: Delete risks under this hazard
+        # — clean RiskAction (risk_id is NOT NULL FK) before deleting each Risk
         for r in Risk.query.filter_by(hazard_id=hid).all():
+            RiskAction.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
             db.session.execute(
                 db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),
                 {'rid': r.id}
@@ -7947,16 +7973,26 @@ def delete_hazard(hid):
 def delete_asr(aid):
     rec = ASRReport.query.get_or_404(aid)
     try:
-        # Also clean up linked HazardReport and Hazard if they exist
         if rec.hazard_id:
-            HazardReport.query.filter_by(hazard_id=rec.hazard_id).delete(synchronize_session=False)
-            # Delete linked actions
-            acts = Action.query.filter_by(hazard_id=rec.hazard_id).all()
+            hid = rec.hazard_id
+            HazardReport.query.filter_by(hazard_id=hid).delete(synchronize_session=False)
+            # Clean actions and their history
+            acts = Action.query.filter_by(hazard_id=hid).all()
             for a in acts:
                 ActionHistory.query.filter_by(action_id=a.id).delete(synchronize_session=False)
                 db.session.delete(a)
-            haz = Hazard.query.get(rec.hazard_id)
-            if haz: db.session.delete(haz)
+            db.session.flush()
+            # RiskOccurrence.hazard_id is NOT NULL — delete, not nullify
+            RiskOccurrence.query.filter_by(hazard_id=hid).delete(synchronize_session=False)
+            # Clean RiskAction per risk before deleting risks
+            for r in Risk.query.filter_by(hazard_id=hid).all():
+                RiskAction.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
+                Control.query.filter_by(risk_id=r.id).delete(synchronize_session=False)
+                db.session.delete(r)
+            db.session.flush()
+            haz = Hazard.query.get(hid)
+            if haz:
+                db.session.delete(haz)
         _avi_purge(source_record_id=aid)
         db.session.delete(rec)
         db.session.commit()
@@ -8105,15 +8141,49 @@ def delete_audit_finding(fid):
 def delete_investigation(iid):
     inv = Investigation.query.get_or_404(iid)
     try:
+        # Step 1: Clean up SAG actions linked to this investigation
         linked_acts = Action.query.filter_by(linked_ref_id=str(iid)).all()
         for la in linked_acts:
             ActionHistory.query.filter_by(action_id=la.id).delete(synchronize_session=False)
             db.session.delete(la)
         db.session.flush()
+
+        # Step 2: Delete InvestigationEvent timeline records (NOT NULL FK — CRITICAL)
+        InvestigationEvent.query.filter_by(
+            investigation_id=iid).delete(synchronize_session=False)
+        db.session.flush()
+
+        # Step 3: Nullify ERPActivation.investigation_id (nullable FK)
+        try:
+            db.session.execute(
+                db.text("UPDATE erp_activations SET investigation_id = NULL "
+                        "WHERE investigation_id = :iid"),
+                {'iid': iid}
+            )
+        except Exception:
+            pass
+        db.session.flush()
+
+        # Step 4: Clean Phase 2 models
+        try:
+            if _ENFORCEMENT_MODELS and InvestigationTimeline:
+                InvestigationTimeline.query.filter_by(
+                    investigation_id=iid).delete(synchronize_session=False)
+        except Exception:
+            pass
+        try:
+            if _ENFORCEMENT_MODELS and SoDViolationBlock:
+                SoDViolationBlock.query.filter_by(
+                    entity_type='Investigation',
+                    entity_id=str(iid)).delete(synchronize_session=False)
+        except Exception:
+            pass
+
+        # Step 5: Delete AVIs and the investigation record itself
         _avi_purge(source_record_id=iid, linked_investigation_id=iid)
         db.session.delete(inv)
         db.session.commit()
-        flash('✓ Investigation and linked SAG actions deleted.', 'success')
+        flash('✓ Investigation and all linked records deleted.', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'⚠ Could not delete: {str(e)[:120]}', 'error')
@@ -8154,9 +8224,16 @@ def delete_newsletter(nid):
 @require_login
 def delete_survey(sid):
     s = SafetySurvey.query.get_or_404(sid)
-    db.session.delete(s)
-    db.session.commit()
-    flash('✓ Survey deleted.', 'success')
+    try:
+        # SurveyResponse has NOT NULL FK to safety_surveys.id — must delete first
+        SurveyResponse.query.filter_by(survey_id=sid).delete(synchronize_session=False)
+        db.session.flush()
+        db.session.delete(s)
+        db.session.commit()
+        flash('✓ Survey and all responses deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete survey: {str(e)[:120]}', 'error')
     return redirect('/safety-promotion/surveys')
 
 
@@ -8195,13 +8272,20 @@ def delete_spi_data(did):
 @require_login
 def delete_moc(mid):
     m = MOC.query.get_or_404(mid)
-    if m.hazard_id:
-        Action.query.filter_by(hazard_id=m.hazard_id).update({'hazard_id': None})
-        haz = Hazard.query.get(m.hazard_id)
-        if haz: db.session.delete(haz)
-    db.session.delete(m)
-    db.session.commit()
-    flash('✓ MOC record deleted.', 'success')
+    try:
+        if m.hazard_id:
+            # Unlink actions first (don't delete — they may be referenced elsewhere)
+            Action.query.filter_by(hazard_id=m.hazard_id).update(
+                {'hazard_id': None}, synchronize_session=False)
+            db.session.flush()
+            # Use safe helper to cascade-delete hazard and all children
+            _safe_delete_hazard(m.hazard_id)
+        db.session.delete(m)
+        db.session.commit()
+        flash('✓ MOC record deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'⚠ Could not delete MOC: {str(e)[:120]}', 'error')
     return redirect(url_for('moc_list'))
 
 
@@ -11659,6 +11743,9 @@ def delete_risk_record(rid):
     """Safe delete a Risk row and its controls."""
     r = Risk.query.get_or_404(rid)
     try:
+        # RiskAction.risk_id is NOT NULL FK — must delete before deleting Risk
+        RiskAction.query.filter_by(risk_id=rid).delete(synchronize_session=False)
+        db.session.flush()
         # Nullify ra_rows referencing this risk
         db.session.execute(
             db.text("UPDATE ra_rows SET risk_id = NULL WHERE risk_id = :rid"),

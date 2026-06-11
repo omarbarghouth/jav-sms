@@ -894,12 +894,9 @@ def _calc_acknowledgment_rate(dept_ids=None) -> float:
     if emp_count == 0:
         return 0.0
     expected = active_bulletins * emp_count
-    acks = db.session.query(db.func.count(
-        db.func.distinct(db.text('user_id || content_id'))
-    )).filter(
-        db.text("content_type = 'bulletin'")
-    ).scalar() or 0
-    return round((acks / expected) * 100, 1)
+    # Count distinct (user_id, content_id) ack pairs for bulletins
+    acks = SafetyPromoAck.query.filter_by(content_type='bulletin').count()
+    return round((min(acks, expected) / expected) * 100, 1)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
