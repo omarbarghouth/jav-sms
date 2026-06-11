@@ -709,9 +709,6 @@ class SafetySurvey(db.Model):
     target_audience = db.Column(db.String(200))
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
     department     = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("safety_survey_set", lazy=True))
-    responses      = db.relationship('SurveyResponse', backref='survey_parent',
-                                     lazy=True, cascade='all, delete-orphan',
-                                     foreign_keys='SurveyResponse.survey_id')
 
 
 class LessonLearned(db.Model):
@@ -1025,7 +1022,9 @@ class SurveyResponse(db.Model):
     submitted_at     = db.Column(db.DateTime, default=datetime.utcnow)
     ip_address       = db.Column(db.String(50))
     survey           = db.relationship('SafetySurvey', foreign_keys=[survey_id],
-                                       backref=db.backref('responses', lazy=True))
+                                       backref=db.backref('responses', lazy=True,
+                                                          cascade='all, delete-orphan',
+                                                          single_parent=True))
     department       = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("survey_response_set", lazy=True))
 
 class SafetyPolicy(db.Model):
