@@ -1817,6 +1817,277 @@ def api_me():
         return api_err(str(e)[:120], 500)
 
 
+@app.route('/api/mobile/profile/full', methods=['GET'])
+@csrf.exempt
+def api_mobile_profile_full():
+    """Employee Portal: Personal info + safety statistics aggregate."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str = str(data['user_id'])
+        emp = None
+        emp_name = ''
+        emp_username = ''
+        if uid_str.startswith('emp_'):
+            emp = Employee.query.get(int(uid_str.replace('emp_', '')))
+            emp_name    = emp.full_name if emp else ''
+            emp_username = emp.username if emp else ''
+
+        # Count submitted reports
+        from sqlalchemy import or_
+        total_reports = 0
+        reports_by_type = {}
+        if emp_name:
+            hz   = Hazard.query.filter(or_(Hazard.reporter_name == emp_name,
+                       Hazard.reporter_name == emp_username)).count()
+            asr  = ASR.query.filter(or_(ASR.reporter_name == emp_name,
+                       ASR.reporter_name == emp_username)).count()
+            vol  = VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name,
+                       VoluntaryReport.reporter_name == emp_username)).count()
+            conf = ConfidentialReport.query.filter(or_(ConfidentialReport.reporter_name == emp_name,
+                       ConfidentialReport.reporter_name == emp_username)).count()
+            total_reports = hz + asr + vol + conf
+            reports_by_type = {'Hazard': hz, 'ASR': asr, 'Voluntary': vol, 'Confidential': conf}
+
+        # Open / overdue actions owned by this employee
+        open_actions  = 0
+        overdue_count = 0
+        if emp_name:
+            open_actions  = Action.query.filter(Action.owner == emp_name,
+                Action.status.in_(['Open', 'In Progress', 'Overdue'])).count()
+            overdue_count = Action.query.filter(Action.owner == emp_name,
+                Action.status == 'Overdue').count()
+
+        safety_score = max(0, 100 - overdue_count * 10 - open_actions * 5)
+
+        return api_ok({
+            'total_reports':   total_reports,
+            'reports_by_type': reports_by_type,
+            'open_actions':    open_actions,
+            'safety_score':    safety_score,
+            'employee_id':     emp.employee_id if emp else '',
+            'email':           emp_obj.email or '' if emp_obj else '',
+            'phone':           emp_obj.mobile or '' if emp_obj else '',
+            'base':            'AMM',
+        }, 'Profile loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/profile/training', methods=['GET'])
+@csrf.exempt
+def api_mobile_profile_training():
+    """Employee Portal: Training records for current employee."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str = str(data['user_id'])
+        emp_id = None
+        emp_name = ''
+        if uid_str.startswith('emp_'):
+            emp_id = int(uid_str.replace('emp_', ''))
+            emp = Employee.query.get(emp_id)
+            emp_name = emp.full_name if emp else ''
+
+        records = []
+        if emp_name:
+            trainings = Training.query.filter(
+                Training.employee_name == emp_name
+            ).order_by(Training.created_at.desc()).limit(20).all()
+            for t in trainings:
+                records.append({
+                    'training_name': t.training_program or t.training_type or '',
+                    'status':        t.status or 'Completed',
+                    'training_date': t.training_date or '',
+                    'expiry_date':   t.expiry_date or '',
+                    'score':         None,
+                    'provider':      t.instructor or '',
+                })
+        return api_ok(records, 'Training records loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/profile/actions', methods=['GET'])
+@csrf.exempt
+def api_mobile_profile_actions():
+    """Employee Portal: Corrective actions assigned to current employee."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str = str(data['user_id'])
+        emp_name = ''
+        if uid_str.startswith('emp_'):
+            emp_id = int(uid_str.replace('emp_', ''))
+            emp = Employee.query.get(emp_id)
+            emp_name = emp.full_name if emp else ''
+
+        records = []
+        if emp_name:
+            actions = Action.query.filter(
+                Action.owner == emp_name
+            ).order_by(Action.due_date.asc()).limit(30).all()
+            for a in actions:
+                records.append({
+                    'ref':      a.id or '',
+                    'title':    (a.description or '')[:80],
+                    'status':   a.status or 'Open',
+                    'priority': a.priority or 'Medium',
+                    'due_date': a.due_date or '',
+                })
+        return api_ok(records, 'Actions loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/profile/timeline', methods=['GET'])
+@csrf.exempt
+def api_mobile_profile_timeline():
+    """Employee Portal: Combined safety activity timeline for current employee."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str = str(data['user_id'])
+        emp_id = None
+        emp_name = ''
+        emp_username = ''
+        if uid_str.startswith('emp_'):
+            emp_id = int(uid_str.replace('emp_', ''))
+            emp = Employee.query.get(emp_id)
+            emp_name = emp.full_name if emp else ''
+            emp_username = emp.username if emp else ''
+
+        events = []
+        from sqlalchemy import or_
+
+        # Hazard reports
+        hazards = Hazard.query.filter(
+            or_(Hazard.reporter_name == emp_name,
+                Hazard.reporter_name == emp_username)
+        ).order_by(Hazard.date_reported.desc()).limit(10).all()
+        for h in hazards:
+            events.append({
+                'type': 'Report', 'title': h.hazard_title or 'Hazard Report',
+                'detail': h.ref_number or '',
+                'date': h.date_reported.isoformat()[:10] if h.date_reported else '',
+                'ts': h.date_reported,
+            })
+
+        # ASR reports
+        asrs = ASR.query.filter(
+            or_(ASR.reporter_name == emp_name,
+                ASR.reporter_name == emp_username)
+        ).order_by(ASR.date.desc()).limit(10).all()
+        for a in asrs:
+            events.append({
+                'type': 'Report', 'title': a.event_category or 'ASR Report',
+                'detail': a.ref_number or '',
+                'date': a.date.isoformat()[:10] if a.date else '',
+                'ts': a.date,
+            })
+
+        # Assigned actions
+        if emp_name:
+            actions = Action.query.filter(
+                Action.owner == emp_name
+            ).order_by(Action.created_at.desc()).limit(10).all()
+            for ac in actions:
+                events.append({
+                    'type': 'Action', 'title': (ac.description or 'Corrective Action')[:60],
+                    'detail': f'Status: {ac.status or "Open"}',
+                    'date': ac.created_at.isoformat()[:10] if ac.created_at else '',
+                    'ts': ac.created_at,
+                })
+
+        # Training
+        if emp_name:
+            trainings = Training.query.filter(
+                Training.employee_name == emp_name
+            ).order_by(Training.created_at.desc()).limit(5).all()
+            for t in trainings:
+                events.append({
+                    'type': 'Training', 'title': t.training_program or t.training_type or 'Training',
+                    'detail': t.status or 'Completed',
+                    'date': t.training_date or '',
+                    'ts': t.created_at,
+                })
+
+        # Sort all events by timestamp descending, take top 20
+        events.sort(key=lambda x: x.get('ts') or '', reverse=True)
+        result = [{'type': e['type'], 'title': e['title'],
+                   'detail': e['detail'], 'date': e['date']}
+                  for e in events[:20]]
+        return api_ok(result, 'Timeline loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/profile/notifications', methods=['GET'])
+@csrf.exempt
+def api_mobile_profile_notifications():
+    """Employee Portal: In-app notifications for current user."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str = str(data['user_id'])
+        emp_id = None
+        if uid_str.startswith('emp_'):
+            emp_id = int(uid_str.replace('emp_', ''))
+
+        # No per-employee notification log yet; returns empty for now
+        return api_ok([], 'Notifications loaded')
+    except Exception as e:
+        return api_ok([], 'No notifications')
+
+
+@app.route('/api/mobile/profile/feedback', methods=['GET'])
+@csrf.exempt
+def api_mobile_profile_feedback():
+    """Employee Portal: Reporter feedback on submitted reports."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str = str(data['user_id'])
+        emp_id = None
+        emp_name = ''
+        emp_username = ''
+        if uid_str.startswith('emp_'):
+            emp_id = int(uid_str.replace('emp_', ''))
+            emp = Employee.query.get(emp_id)
+            emp_name = emp.full_name if emp else ''
+            emp_username = emp.username if emp else ''
+
+        records = []
+        if uid_str:
+            feedbacks = ReportFeedback.query.filter_by(
+                reporter_user_id=uid_str
+            ).order_by(ReportFeedback.submitted_at.desc()).limit(20).all()
+            for f in feedbacks:
+                records.append({
+                    'ref':     f.report_ref or '—',
+                    'type':    f.report_type or 'Report',
+                    'status':  f.stage_label or 'Submitted',
+                    'message': f.outcome_summary or '',
+                    'outcome': f.outcome_actions_taken or '',
+                    'date':    f.submitted_at.isoformat()[:10] if f.submitted_at else '',
+                })
+        return api_ok(records, 'Feedback loaded')
+    except Exception as e:
+        return api_ok([], 'No feedback found')
+
+
 @app.route('/api/logout', methods=['POST', 'OPTIONS'])
 @csrf.exempt
 def api_logout():
