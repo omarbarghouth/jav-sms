@@ -62,7 +62,7 @@ SMTP_PORT=int(os.environ.get('SMTP_PORT',587))
 SMTP_USER=os.environ.get('SMTP_USER','')
 SMTP_PASSWORD=os.environ.get('SMTP_PASSWORD','')
 SMTP_FROM=os.environ.get('SMTP_FROM','safety@jordanaviation.com')
-SMTP_FROM_NAME=os.environ.get('SMTP_FROM_NAME','Jordan Aviation Safety')
+SMTP_FROM_NAME=os.environ.get('SMTP_FROM_NAME','AviaS Safety')
 
 def send_email(to_list, subject, html_body):
     if not SMTP_HOST or not SMTP_USER: return len(to_list), None
@@ -90,14 +90,14 @@ def email_html(title, subtitle, body_html, ref='', dt=''):
     return ('<!DOCTYPE html><html><body style="background:#f0f2f8;font-family:Arial,sans-serif;padding:24px">'
             '<table width="580" style="background:#fff;border-radius:12px;overflow:hidden;margin:0 auto">'
             '<tr><td style="background:#0f1c3f;padding:18px 26px;border-bottom:3px solid #c9a84c">'
-            '<span style="color:#fff;font-size:14px;font-weight:800">✈ Jordan Aviation</span></td></tr>'
+            '<span style="color:#fff;font-size:14px;font-weight:800">✈ AviaS</span></td></tr>'
             '<tr><td style="background:#0f1c3f;padding:16px 26px">'
             '<div style="color:rgba(255,255,255,.5);font-size:10px;text-transform:uppercase;letter-spacing:1px">'+subtitle+'</div>'
             '<div style="color:#fff;font-size:20px;font-weight:800;margin-top:4px">'+title+'</div>'
             +ref_line+'</td></tr>'
             '<tr><td style="padding:22px 26px;font-size:14px;color:#374151;line-height:1.7">'+body_html+'</td></tr>'
             '<tr><td style="background:#f8f9fc;padding:12px 26px;font-size:11px;color:#9ca3af">'
-            'Jordan Aviation · Safety Management System · ICAO Annex 19</td></tr>'
+            'AviaS · Safety Management System · ICAO Annex 19</td></tr>'
             '</table></body></html>')
 
 # Evidence file uploads
@@ -1489,7 +1489,7 @@ def api_report_detail(rid):
 @app.route('/api/mobile/ping', methods=['GET'])
 def api_ping():
     """Flutter: Health check — verify API is reachable."""
-    return api_ok({'server': 'Jordan Aviation SMS', 'version': '1.0'}, 'API online')
+    return api_ok({'server': 'AviaS Safety Management System', 'version': '1.0'}, 'API online')
 
 
 @app.route('/api/mobile/register_token', methods=['POST', 'OPTIONS'])
@@ -7334,7 +7334,7 @@ def sp_training_export_xlsx():
 
     # Title row
     ws.merge_cells('A1:L1')
-    ws['A1'] = 'JORDAN AVIATION — SAFETY TRAINING RECORDS'
+    ws['A1'] = 'AviaS — SAFETY TRAINING RECORDS'
     ws['A1'].font = Font(name='Arial', bold=True, size=14, color='FFFFFF')
     ws['A1'].fill = navy
     ws['A1'].alignment = center
@@ -8658,11 +8658,11 @@ def _email_html(title, subtitle, body, color='#0f1c3f'):
         '.b{padding:22px 28px;font-size:14px;color:#374151;line-height:1.7}'
         '.f{background:#f8f9fc;padding:12px 28px;font-size:11px;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb}'
         '</style></head><body><div class="w">'
-        '<div class="h"><div class="hl">&#x2708; Jordan Aviation</div>'
+        '<div class="h"><div class="hl">&#x2708; AviaS</div>'
         '<div class="hs">Safety Management System</div></div>'
         '<div class="tb"><h1>' + title + '</h1><p>' + subtitle + '</p></div>'
         '<div class="b">' + body + '</div>'
-        '<div class="f">Jordan Aviation SMS &middot; Official Safety Communication</div>'
+        '<div class="f">AviaS Safety Management System &middot; Official Safety Communication</div>'
         '</div></body></html>'
     )
 
@@ -12108,8 +12108,8 @@ def srm_dashboard():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RISK ASSESSMENT MODULE — Jav/SMS/001 Rev 01
-#  Converts the Jordan Aviation RA form into a full system module
+#  RISK ASSESSMENT MODULE — AviaS/SMS/001 Rev 01
+#  Converts the AviaS RA form into a full system module
 #  Connected to: Hazard Log, Risk Register, Actions, Documents
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -12822,14 +12822,14 @@ def hazard_log_excel():
 
     # Title row
     ws1.merge_cells('A1:L1')
-    ws1['A1'] = 'JORDAN AVIATION — HAZARD LOG'
+    ws1['A1'] = 'AviaS — HAZARD LOG'
     ws1['A1'].font = Font(bold=True, size=14, color=WHITE, name='Calibri')
     ws1['A1'].fill = fill(NAVY)
     ws1['A1'].alignment = Alignment(horizontal='center', vertical='center')
     ws1.row_dimensions[1].height = 28
 
     ws1.merge_cells('A2:L2')
-    ws1['A2'] = f'Generated: {datetime.now().strftime("%d %b %Y %H:%M")} | Total Hazards: {len(hazards)} | Ref: Jav/SMS/001'
+    ws1['A2'] = f'Generated: {datetime.now().strftime("%d %b %Y %H:%M")} | Total Hazards: {len(hazards)} | Ref: AviaS/SMS/001'
     ws1['A2'].font = Font(size=9, color="6B7280", name='Calibri')
     ws1['A2'].fill = fill(GRAY)
     ws1['A2'].alignment = Alignment(horizontal='center')
@@ -12887,14 +12887,14 @@ def hazard_log_excel():
     # ── Sheet 2: Risk Register ────────────────────────────────────────────────
     ws2 = wb.create_sheet("Risk Register")
     ws2.merge_cells('A1:K1')
-    ws2['A1'] = 'JORDAN AVIATION — RISK REGISTER'
+    ws2['A1'] = 'AviaS — RISK REGISTER'
     ws2['A1'].font = Font(bold=True, size=14, color=WHITE, name='Calibri')
     ws2['A1'].fill = fill(NAVY)
     ws2['A1'].alignment = Alignment(horizontal='center', vertical='center')
     ws2.row_dimensions[1].height = 28
 
     ws2.merge_cells('A2:K2')
-    ws2['A2'] = f'Generated: {datetime.now().strftime("%d %b %Y %H:%M")} | ICAO Annex 19 / Jav/SMS/001'
+    ws2['A2'] = f'Generated: {datetime.now().strftime("%d %b %Y %H:%M")} | ICAO Annex 19 / AviaS/SMS/001'
     ws2['A2'].font = Font(size=9, color="6B7280", name='Calibri')
     ws2['A2'].fill = fill(GRAY)
     ws2['A2'].alignment = Alignment(horizontal='center')
@@ -12946,7 +12946,7 @@ def hazard_log_excel():
     # ── Sheet 3: Actions ──────────────────────────────────────────────────────
     ws3 = wb.create_sheet("Open Actions")
     ws3.merge_cells('A1:H1')
-    ws3['A1'] = 'JORDAN AVIATION — OPEN ACTIONS'
+    ws3['A1'] = 'AviaS — OPEN ACTIONS'
     ws3['A1'].font = Font(bold=True, size=14, color=WHITE, name='Calibri')
     ws3['A1'].fill = fill(NAVY)
     ws3['A1'].alignment = Alignment(horizontal='center', vertical='center')

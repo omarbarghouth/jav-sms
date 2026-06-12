@@ -1189,8 +1189,8 @@ class RiskAction(db.Model):
                                                                single_parent=True))
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RISK ASSESSMENT MODULE - Jav/SMS/001 Rev 01
-#  Exact replica of Jordan Aviation Risk Assessment Form
+#  RISK ASSESSMENT MODULE - AviaS/SMS/001 Rev 01
+#  Exact replica of AviaS Risk Assessment Form
 #  Pages 1-5 of the uploaded form → database structure
 # ═══════════════════════════════════════════════════════════════════════════════
 
