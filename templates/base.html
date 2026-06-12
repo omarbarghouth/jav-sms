@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>{% block title %}Jordan Aviation SMS{% endblock %}</title>
+  <title>{% block title %}AviaS Safety Management System{% endblock %}</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
     :root{
@@ -262,7 +262,7 @@
   <div class="sb-logo" onclick="toggleSidebar()" title="Toggle sidebar">
     <div class="sb-icon">✈</div>
     <div class="sb-text">
-      <div class="sb-name">Jordan Aviation</div>
+      <div class="sb-name">AviaS</div>
       <div class="sb-sub-name">SAFETY MANAGEMENT SYSTEM</div>
     </div>
     <div class="sb-toggle">◀</div>
@@ -362,7 +362,7 @@
 
   <div class="sb-foot">
     <strong>ICAO</strong> Annex 19 · Doc 9859<br>
-    <strong>IOSA</strong> Compliant · Jav/SMS/001<br>
+    <strong>IOSA</strong> Compliant · AviaS/SMS/001<br>
     Rev 03 — {{ now.year }}
   </div>
 </aside>
@@ -370,10 +370,10 @@
 <!-- ── MAIN AREA ───────────────────────────────────────────────── -->
 <div class="main">
   <div class="topbar">
-    <div class="topbar-brand">Jordan Aviation <span>Safety Management System</span></div>
+    <div class="topbar-brand">AviaS <span>Safety Management System</span></div>
     <div class="topbar-right">
       <a href="/admin/reports" class="topbar-inbox">📬 Inbox</a>
-      <span class="topbar-ref">JAV/SMS/001</span>
+      <span class="topbar-ref">AviaS/SMS/001</span>
       <span class="topbar-date">{{ now.strftime('%d %b %Y') }}</span>
       <div class="topbar-user">
         <div class="topbar-avatar">{{ (session.get('admin_name','A')[:1])|upper }}</div>
