@@ -172,10 +172,10 @@ def ae_setup():
 @require_login
 def srb_delete(mid):
     mtg = SRBMeeting.query.get_or_404(mid)
-    # Cascade delete: agenda items, attendees, decisions
-    SRBAgendaItem.query.filter_by(meeting_id=mid).delete()
-    SRBAttendee.query.filter_by(meeting_id=mid).delete()
-    SRBDecision.query.filter_by(meeting_id=mid).delete()
+    # Delete decisions first — FK references srb_agenda_items.id
+    SRBDecision.query.filter_by(meeting_id=mid).delete(synchronize_session=False)
+    SRBAgendaItem.query.filter_by(meeting_id=mid).delete(synchronize_session=False)
+    SRBAttendee.query.filter_by(meeting_id=mid).delete(synchronize_session=False)
     db.session.delete(mtg)
     db.session.commit()
     flash(f'Meeting {mid} deleted.', 'success')
