@@ -3649,6 +3649,46 @@ def conf_report_review(rid):
     return redirect(url_for('admin_reports_inbox'))
 
 
+@app.route('/admin/reports/voluntary/<int:rid>/delete', methods=['POST'])
+@require_login
+def vol_report_delete(rid):
+    r = VoluntaryReport.query.get_or_404(rid)
+    db.session.delete(r)
+    db.session.commit()
+    flash('Voluntary report deleted.', 'success')
+    return redirect(url_for('admin_reports_inbox'))
+
+
+@app.route('/admin/reports/confidential/<int:rid>/delete', methods=['POST'])
+@require_login
+def conf_report_delete(rid):
+    r = ConfidentialReport.query.get_or_404(rid)
+    db.session.delete(r)
+    db.session.commit()
+    flash('Confidential report deleted.', 'success')
+    return redirect(url_for('admin_reports_inbox'))
+
+
+@app.route('/admin/reports/hazard/<rid>/delete', methods=['POST'])
+@require_login
+def hazard_report_delete(rid):
+    r = HazardReport.query.get_or_404(rid)
+    db.session.delete(r)
+    db.session.commit()
+    flash('Hazard report deleted.', 'success')
+    return redirect(url_for('admin_reports_inbox'))
+
+
+@app.route('/admin/reports/asr/<rid>/delete', methods=['POST'])
+@require_login
+def asr_report_delete(rid):
+    r = ASRReport.query.get_or_404(rid)
+    db.session.delete(r)
+    db.session.commit()
+    flash('ASR report deleted.', 'success')
+    return redirect(url_for('admin_reports_inbox'))
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  INTERNAL ADMIN DASHBOARD  — login required
 # ═══════════════════════════════════════════════════════════════════════════════
