@@ -1866,17 +1866,17 @@ def api_mobile_profile_full():
         from sqlalchemy import or_
         uid_str, emp, emp_name, emp_username = _resolve_employee(data)
 
-        reports_by_type = {'Hazard': 0, 'ASR': 0, 'Voluntary': 0, 'Confidential': 0}
+        reports_by_type = {'Hazard': 0, 'ASR': 0, 'Voluntary': 0}
         total_reports = 0
         if emp_name:
-            name_filter = or_(Hazard.reporter_name == emp_name, Hazard.reporter_name == emp_username)
-            reports_by_type['Hazard'] = Hazard.query.filter(name_filter).count()
-            asr_filter = or_(ASR.reporter_name == emp_name, ASR.reporter_name == emp_username)
-            reports_by_type['ASR'] = ASR.query.filter(asr_filter).count()
-            vol_filter = or_(VoluntaryReport.reporter_name == emp_name, VoluntaryReport.reporter_name == emp_username)
-            reports_by_type['Voluntary'] = VoluntaryReport.query.filter(vol_filter).count()
-            conf_filter = or_(ConfidentialReport.reporter_name == emp_name, ConfidentialReport.reporter_name == emp_username)
-            reports_by_type['Confidential'] = ConfidentialReport.query.filter(conf_filter).count()
+            reports_by_type['Hazard'] = HazardReport.query.filter(or_(
+                HazardReport.reporter == emp_name,
+                HazardReport.reporter_user_id == uid_str)).count()
+            reports_by_type['ASR'] = ASRReport.query.filter(or_(
+                ASRReport.captain == emp_name,
+                ASRReport.copilot == emp_name)).count()
+            reports_by_type['Voluntary'] = VoluntaryReport.query.filter(
+                VoluntaryReport.reporter_name == emp_name).count()
             total_reports = sum(reports_by_type.values())
 
         open_actions = overdue_count = closed_actions = 0
@@ -1946,9 +1946,11 @@ def api_mobile_profile_safety_score():
         from sqlalchemy import or_
         total_reports = 0
         if emp_name:
-            hz  = Hazard.query.filter(or_(Hazard.reporter_name == emp_name)).count()
-            asr = ASR.query.filter(or_(ASR.reporter_name == emp_name)).count()
-            vol = VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name)).count()
+            hz  = HazardReport.query.filter(or_(HazardReport.reporter == emp_name,
+                      HazardReport.reporter_user_id == uid_str)).count()
+            asr = ASRReport.query.filter(or_(ASRReport.captain == emp_name,
+                      ASRReport.copilot == emp_name)).count()
+            vol = VoluntaryReport.query.filter(VoluntaryReport.reporter_name == emp_name).count()
             total_reports = hz + asr + vol
         reporting_score = min(30, total_reports * 5)
 
@@ -2009,7 +2011,7 @@ def api_mobile_profile_training():
                     'expiry_date':   t.expiry_date or '',
                     'scheduled_date': t.scheduled_date or '',
                     'provider':      t.instructor or '',
-                    'category':      t.training_category or '',
+                    'category':      t.training_type or '',
                 })
         return api_ok(records, 'Training records loaded')
     except Exception as e:
@@ -2060,20 +2062,31 @@ def api_mobile_profile_timeline():
         events = []
 
         if emp_name:
-            for h in Hazard.query.filter(or_(Hazard.reporter_name == emp_name, Hazard.reporter_name == emp_username)).order_by(Hazard.date_reported.desc()).limit(10).all():
-                events.append({'type': 'Report', 'subtype': 'Hazard', 'title': h.hazard_title or 'Hazard Report',
-                    'detail': h.ref_number or '', 'status': h.status or '',
-                    'date': h.date_reported.isoformat()[:10] if h.date_reported else '', 'ts': h.date_reported})
+            for h in HazardReport.query.filter(or_(
+                    HazardReport.reporter == emp_name,
+                    HazardReport.reporter_user_id == uid_str)).order_by(HazardReport.created_at.desc()).limit(10).all():
+                events.append({'type': 'Report', 'subtype': 'Hazard',
+                    'title': (h.generic_hazard or h.description or 'Hazard Report')[:80],
+                    'detail': h.id or '', 'status': h.status or '',
+                    'date': h.date or (h.created_at.isoformat()[:10] if h.created_at else ''),
+                    'ts': h.created_at})
 
-            for a in ASR.query.filter(or_(ASR.reporter_name == emp_name, ASR.reporter_name == emp_username)).order_by(ASR.date.desc()).limit(10).all():
-                events.append({'type': 'Report', 'subtype': 'ASR', 'title': a.event_category or 'ASR Report',
-                    'detail': a.ref_number or '', 'status': a.status or '',
-                    'date': a.date.isoformat()[:10] if a.date else '', 'ts': a.date})
+            for a in ASRReport.query.filter(or_(
+                    ASRReport.captain == emp_name,
+                    ASRReport.copilot == emp_name)).order_by(ASRReport.created_at.desc()).limit(10).all():
+                events.append({'type': 'Report', 'subtype': 'ASR',
+                    'title': (a.occurrence_type or f'ASR {a.flight_no or ""}').strip() or 'ASR Report',
+                    'detail': a.id or '', 'status': a.status or '',
+                    'date': a.date or (a.created_at.isoformat()[:10] if a.created_at else ''),
+                    'ts': a.created_at})
 
-            for v in VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name, VoluntaryReport.reporter_name == emp_username)).order_by(VoluntaryReport.date_of_event.desc()).limit(5).all():
-                events.append({'type': 'Report', 'subtype': 'Voluntary', 'title': v.event_type or 'Voluntary Report',
+            for v in VoluntaryReport.query.filter(
+                    VoluntaryReport.reporter_name == emp_name).order_by(VoluntaryReport.created_at.desc()).limit(5).all():
+                events.append({'type': 'Report', 'subtype': 'Voluntary',
+                    'title': (v.report_type or 'Voluntary Report'),
                     'detail': v.ref_number or '', 'status': v.status or '',
-                    'date': v.date_of_event or '', 'ts': v.date_of_event})
+                    'date': v.date or (v.created_at.isoformat()[:10] if v.created_at else ''),
+                    'ts': v.created_at})
 
             for ac in Action.query.filter(Action.owner == emp_name).order_by(Action.created_at.desc()).limit(10).all():
                 events.append({'type': 'Action', 'subtype': ac.status or 'Open',
@@ -2571,7 +2584,7 @@ def api_admin_employees_training_list(emp_id):
     return api_ok([{
         'id':            t.id,
         'training_name': t.training_program or t.training_type or '',
-        'category':      t.training_category or '',
+        'category':      t.training_type or '',
         'status':        t.status or 'Completed',
         'training_date': t.training_date or '',
         'expiry_date':   t.expiry_date or '',
