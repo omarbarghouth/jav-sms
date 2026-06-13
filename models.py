@@ -1335,11 +1335,17 @@ class Employee(db.Model):
     is_active         = db.Column(db.Boolean, default=True)
     created_at        = db.Column(db.DateTime, default=datetime.utcnow)
     last_login        = db.Column(db.DateTime)
-    profile_image     = db.Column(db.String(200))
-    base_station      = db.Column(db.String(10), default='AMM')
-    join_date         = db.Column(db.String(20))
-    employment_status = db.Column(db.String(30), default='Active')
-    position          = db.Column(db.String(100))
+    profile_image        = db.Column(db.String(200))
+    base_station         = db.Column(db.String(10), default='AMM')
+    join_date            = db.Column(db.String(20))
+    employment_status    = db.Column(db.String(30), default='Active')
+    position             = db.Column(db.String(100))
+    # Flutter-editable preferences
+    language_preference  = db.Column(db.String(10), default='en')
+    dark_mode            = db.Column(db.Boolean, default=False)
+    notification_prefs   = db.Column(db.Text, default='{}')  # JSON
+    privacy_settings     = db.Column(db.Text, default='{}')  # JSON
+    password_changed_at  = db.Column(db.DateTime)
 
     department = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("employee_set", lazy=True))
 

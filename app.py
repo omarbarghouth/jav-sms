@@ -1783,24 +1783,37 @@ def api_me():
             if emp.department_id:
                 dept = Department.query.get(emp.department_id)
                 dept_name = dept.name if dept else ''
+            import json as _json
             profile_image_url = f'/static/profile_images/{emp.profile_image}' if emp.profile_image else None
+            try:
+                notif_prefs    = _json.loads(emp.notification_prefs or '{}')
+                privacy_prefs  = _json.loads(emp.privacy_settings or '{}')
+            except Exception:
+                notif_prefs    = {}
+                privacy_prefs  = {}
             return api_ok({
-                'user_id':           uid_str,
-                'username':          emp.username,
-                'full_name':         emp.full_name,
-                'role':              emp.role or 'employee',
-                'department':        dept_name,
-                'department_id':     emp.department_id,
-                'employee_id':       emp.employee_id,
-                'email':             emp.email or '',
-                'mobile':            emp.mobile or '',
-                'account_type':      'employee',
-                'last_login':        emp.last_login.isoformat() if emp.last_login else '',
-                'profile_image_url': profile_image_url,
-                'base_station':      emp.base_station or 'AMM',
-                'join_date':         emp.join_date or '',
-                'employment_status': emp.employment_status or 'Active',
-                'position':          emp.position or '',
+                # Identity (read-only in Flutter — managed by web admin)
+                'user_id':            uid_str,
+                'username':           emp.username,
+                'full_name':          emp.full_name,
+                'role':               emp.role or 'employee',
+                'department':         dept_name,
+                'department_id':      emp.department_id,
+                'employee_id':        emp.employee_id,
+                'email':              emp.email or '',
+                'mobile':             emp.mobile or '',
+                'base_station':       emp.base_station or 'AMM',
+                'join_date':          emp.join_date or '',
+                'employment_status':  emp.employment_status or 'Active',
+                'position':           emp.position or '',
+                'account_type':       'employee',
+                'last_login':         emp.last_login.isoformat() if emp.last_login else '',
+                'profile_image_url':  profile_image_url,
+                # Preferences (Flutter-editable)
+                'language_preference': emp.language_preference or 'en',
+                'dark_mode':           emp.dark_mode or False,
+                'notification_prefs':  notif_prefs,
+                'privacy_settings':    privacy_prefs,
             }, 'Profile loaded')
         else:
             # Web admin / safety user account
@@ -2174,25 +2187,66 @@ def api_mobile_profile_feedback():
         return api_ok([], 'No feedback found')
 
 
-@app.route('/api/mobile/profile/update', methods=['PATCH'])
+@app.route('/api/mobile/profile/preferences', methods=['PATCH'])
 @csrf.exempt
-def api_mobile_profile_update():
-    """Employee Portal: Update editable profile fields (phone, base_station, position)."""
+def api_mobile_profile_preferences():
+    """Flutter: Update user-owned preferences only.
+    Admin-managed fields (position, base_station, department, etc.) are read-only
+    from the mobile app — edit them through the Web Admin Employee Management module.
+    """
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     data = _verify_token(token)
     if not data:
         return api_err('Unauthorized', 401)
     try:
-        uid_str, emp, _, _ = _resolve_employee(data)
+        import json as _json
+        _, emp, _, _ = _resolve_employee(data)
         if not emp:
             return api_err('Employee record not found', 404)
         body = request.get_json(silent=True) or {}
-        allowed = {'mobile', 'base_station', 'position', 'join_date'}
-        for field in allowed:
-            if field in body:
-                setattr(emp, field, (body[field] or '').strip())
+        # Only these fields may be changed from the mobile app
+        if 'language_preference' in body:
+            lang = (body['language_preference'] or 'en').strip()[:10]
+            emp.language_preference = lang if lang in ('en', 'ar') else 'en'
+        if 'dark_mode' in body:
+            emp.dark_mode = bool(body['dark_mode'])
+        if 'notification_prefs' in body and isinstance(body['notification_prefs'], dict):
+            emp.notification_prefs = _json.dumps(body['notification_prefs'])
+        if 'privacy_settings' in body and isinstance(body['privacy_settings'], dict):
+            emp.privacy_settings = _json.dumps(body['privacy_settings'])
         db.session.commit()
-        return api_ok({}, 'Profile updated')
+        return api_ok({}, 'Preferences saved')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/profile/change-password', methods=['POST'])
+@csrf.exempt
+def api_mobile_profile_change_password():
+    """Flutter: Change own password. Requires current password for verification."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        from werkzeug.security import check_password_hash, generate_password_hash
+        _, emp, _, _ = _resolve_employee(data)
+        if not emp:
+            return api_err('Employee record not found', 404)
+        body = request.get_json(silent=True) or {}
+        current_pw = body.get('current_password', '')
+        new_pw     = body.get('new_password', '')
+        if not current_pw or not new_pw:
+            return api_err('current_password and new_password are required', 400)
+        if len(new_pw) < 8:
+            return api_err('New password must be at least 8 characters', 400)
+        if not check_password_hash(emp.password_hash, current_pw):
+            return api_err('Current password is incorrect', 403)
+        emp.password_hash = generate_password_hash(new_pw)
+        emp.password_changed_at = datetime.utcnow()
+        db.session.commit()
+        return api_ok({}, 'Password changed successfully')
     except Exception as e:
         db.session.rollback()
         return api_err(str(e)[:120], 500)
@@ -2226,6 +2280,326 @@ def api_mobile_profile_upload_image():
         emp.profile_image = filename
         db.session.commit()
         return api_ok({'profile_image_url': f'/static/profile_images/{filename}'}, 'Image uploaded')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  WEB ADMIN — EMPLOYEE MANAGEMENT MODULE
+#  All admin routes require a logged-in web session (require_login).
+#  Flutter app has NO access to these routes.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/employee-management')
+@require_login
+def employee_management():
+    """Web Admin: Employee Management landing page."""
+    departments = Department.query.order_by(Department.name).all()
+    employees   = Employee.query.order_by(Employee.full_name).all()
+    return render_template('employee_management.html',
+                           employees=employees, departments=departments,
+                           page_title='Employee Management')
+
+
+@app.route('/employee-management/<int:emp_id>', methods=['GET'])
+@require_login
+def employee_detail(emp_id):
+    """Web Admin: Employee detail/edit page."""
+    from sqlalchemy import or_
+    emp         = Employee.query.get_or_404(emp_id)
+    departments = Department.query.order_by(Department.name).all()
+    uid_str     = f'emp_{emp.id}'
+    emp_name    = emp.full_name
+
+    training_records = Training.query.filter_by(employee_name=emp_name).order_by(Training.created_at.desc()).all()
+    actions          = Action.query.filter(Action.owner == emp_name).order_by(Action.due_date.asc()).limit(20).all()
+    total_reports    = (Hazard.query.filter(or_(Hazard.reporter_name == emp_name)).count() +
+                        ASR.query.filter(or_(ASR.reporter_name == emp_name)).count() +
+                        VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name)).count())
+    reads_count      = SafetyPromoRead.query.filter_by(user_id=uid_str).count()
+
+    return render_template('employee_detail.html',
+                           emp=emp, departments=departments,
+                           training_records=training_records,
+                           actions=actions,
+                           total_reports=total_reports,
+                           reads_count=reads_count,
+                           page_title=f'Employee — {emp.full_name}')
+
+
+@app.route('/api/admin/employees', methods=['GET'])
+@require_login
+def api_admin_employees_list():
+    """Web Admin API: List employees with optional search."""
+    q    = request.args.get('q', '').strip()
+    dept = request.args.get('dept', '')
+    page = int(request.args.get('page', 1))
+    per  = min(int(request.args.get('per', 50)), 200)
+
+    query = Employee.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(
+            db.or_(Employee.full_name.ilike(like),
+                   Employee.employee_id.ilike(like),
+                   Employee.email.ilike(like),
+                   Employee.username.ilike(like))
+        )
+    if dept:
+        query = query.filter(Employee.department_id == int(dept))
+
+    total = query.count()
+    emps  = query.order_by(Employee.full_name).offset((page - 1) * per).limit(per).all()
+
+    return api_ok({
+        'total': total, 'page': page, 'per': per,
+        'employees': [{
+            'id':                e.id,
+            'employee_id':       e.employee_id,
+            'full_name':         e.full_name,
+            'username':          e.username,
+            'email':             e.email or '',
+            'mobile':            e.mobile or '',
+            'role':              e.role or 'employee',
+            'department_id':     e.department_id,
+            'position':          e.position or '',
+            'base_station':      e.base_station or '',
+            'employment_status': e.employment_status or 'Active',
+            'is_active':         e.is_active,
+            'last_login':        e.last_login.isoformat() if e.last_login else '',
+        } for e in emps]
+    }, 'Employees loaded')
+
+
+@app.route('/api/admin/employees', methods=['POST'])
+@require_login
+def api_admin_employees_create():
+    """Web Admin API: Create a new employee account."""
+    from werkzeug.security import generate_password_hash
+    body = request.get_json(silent=True) or {}
+    required = ['employee_id', 'username', 'full_name', 'password']
+    for field in required:
+        if not body.get(field, '').strip():
+            return api_err(f'{field} is required', 400)
+
+    if Employee.query.filter_by(username=body['username'].strip()).first():
+        return api_err('Username already exists', 409)
+    if Employee.query.filter_by(employee_id=body['employee_id'].strip()).first():
+        return api_err('Employee ID already exists', 409)
+
+    try:
+        emp = Employee(
+            employee_id       = body['employee_id'].strip(),
+            username          = body['username'].strip().lower(),
+            password_hash     = generate_password_hash(body['password']),
+            full_name         = body['full_name'].strip(),
+            email             = body.get('email', '').strip(),
+            mobile            = body.get('mobile', '').strip(),
+            department_id     = body.get('department_id') or None,
+            role              = body.get('role', 'employee').strip(),
+            position          = body.get('position', '').strip(),
+            base_station      = body.get('base_station', 'AMM').strip().upper(),
+            join_date         = body.get('join_date', '').strip(),
+            employment_status = body.get('employment_status', 'Active').strip(),
+            is_active         = True,
+        )
+        db.session.add(emp)
+        db.session.commit()
+        return api_ok({'id': emp.id, 'employee_id': emp.employee_id}, 'Employee created', 201)
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/admin/employees/<int:emp_id>', methods=['GET'])
+@require_login
+def api_admin_employees_get(emp_id):
+    """Web Admin API: Get full employee detail."""
+    import json as _json
+    emp = Employee.query.get_or_404(emp_id)
+    dept_name = emp.department.name if emp.department else ''
+    try:
+        notif_prefs   = _json.loads(emp.notification_prefs or '{}')
+        privacy_prefs = _json.loads(emp.privacy_settings or '{}')
+    except Exception:
+        notif_prefs = privacy_prefs = {}
+    return api_ok({
+        'id':                 emp.id,
+        'employee_id':        emp.employee_id,
+        'username':           emp.username,
+        'full_name':          emp.full_name,
+        'email':              emp.email or '',
+        'mobile':             emp.mobile or '',
+        'role':               emp.role or 'employee',
+        'department_id':      emp.department_id,
+        'department':         dept_name,
+        'position':           emp.position or '',
+        'base_station':       emp.base_station or 'AMM',
+        'join_date':          emp.join_date or '',
+        'employment_status':  emp.employment_status or 'Active',
+        'is_active':          emp.is_active,
+        'profile_image_url':  f'/static/profile_images/{emp.profile_image}' if emp.profile_image else None,
+        'created_at':         emp.created_at.isoformat() if emp.created_at else '',
+        'last_login':         emp.last_login.isoformat() if emp.last_login else '',
+        'language_preference': emp.language_preference or 'en',
+        'dark_mode':           emp.dark_mode or False,
+        'notification_prefs':  notif_prefs,
+        'privacy_settings':    privacy_prefs,
+        'password_changed_at': emp.password_changed_at.isoformat() if emp.password_changed_at else '',
+    }, 'Employee loaded')
+
+
+@app.route('/api/admin/employees/<int:emp_id>', methods=['PUT'])
+@require_login
+def api_admin_employees_update(emp_id):
+    """Web Admin API: Update admin-managed employee fields."""
+    emp  = Employee.query.get_or_404(emp_id)
+    body = request.get_json(silent=True) or {}
+    admin_fields = {
+        'full_name', 'email', 'mobile', 'role',
+        'department_id', 'position', 'base_station',
+        'join_date', 'employment_status',
+    }
+    try:
+        for field in admin_fields:
+            if field in body:
+                val = body[field]
+                if isinstance(val, str):
+                    val = val.strip() or None
+                setattr(emp, field, val)
+        if 'employee_id' in body:
+            new_eid = body['employee_id'].strip()
+            if new_eid and new_eid != emp.employee_id:
+                if Employee.query.filter(Employee.employee_id == new_eid, Employee.id != emp_id).first():
+                    return api_err('Employee ID already taken', 409)
+                emp.employee_id = new_eid
+        db.session.commit()
+        return api_ok({'id': emp.id}, 'Employee updated')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/admin/employees/<int:emp_id>/status', methods=['PATCH'])
+@require_login
+def api_admin_employees_status(emp_id):
+    """Web Admin API: Activate or deactivate an employee account."""
+    emp  = Employee.query.get_or_404(emp_id)
+    body = request.get_json(silent=True) or {}
+    if 'is_active' not in body:
+        return api_err('is_active field required', 400)
+    try:
+        emp.is_active         = bool(body['is_active'])
+        emp.employment_status = 'Active' if emp.is_active else 'Inactive'
+        db.session.commit()
+        return api_ok({'is_active': emp.is_active}, 'Status updated')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/admin/employees/<int:emp_id>/reset-password', methods=['POST'])
+@require_login
+def api_admin_employees_reset_password(emp_id):
+    """Web Admin API: Reset employee password (no current password needed)."""
+    from werkzeug.security import generate_password_hash
+    emp  = Employee.query.get_or_404(emp_id)
+    body = request.get_json(silent=True) or {}
+    new_pw = body.get('new_password', '').strip()
+    if len(new_pw) < 8:
+        return api_err('Password must be at least 8 characters', 400)
+    try:
+        emp.password_hash       = generate_password_hash(new_pw)
+        emp.password_changed_at = datetime.utcnow()
+        db.session.commit()
+        return api_ok({}, 'Password reset successfully')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/admin/employees/<int:emp_id>/training', methods=['GET'])
+@require_login
+def api_admin_employees_training_list(emp_id):
+    """Web Admin API: Get training records for an employee."""
+    emp      = Employee.query.get_or_404(emp_id)
+    records  = Training.query.filter_by(employee_name=emp.full_name).order_by(Training.created_at.desc()).all()
+    return api_ok([{
+        'id':            t.id,
+        'training_name': t.training_program or t.training_type or '',
+        'category':      t.training_category or '',
+        'status':        t.status or 'Completed',
+        'training_date': t.training_date or '',
+        'expiry_date':   t.expiry_date or '',
+        'scheduled_date': t.scheduled_date or '',
+        'instructor':    t.instructor or '',
+    } for t in records], 'Training records loaded')
+
+
+@app.route('/api/admin/employees/<int:emp_id>/training', methods=['POST'])
+@require_login
+def api_admin_employees_training_create(emp_id):
+    """Web Admin API: Add a training record for an employee."""
+    emp  = Employee.query.get_or_404(emp_id)
+    body = request.get_json(silent=True) or {}
+    if not body.get('training_program', '').strip():
+        return api_err('training_program is required', 400)
+    try:
+        t = Training(
+            employee_name     = emp.full_name,
+            training_program  = body.get('training_program', '').strip(),
+            training_category = body.get('category', '').strip(),
+            status            = body.get('status', 'Completed').strip(),
+            training_date     = body.get('training_date', '').strip(),
+            expiry_date       = body.get('expiry_date', '').strip(),
+            scheduled_date    = body.get('scheduled_date', '').strip(),
+            instructor        = body.get('instructor', '').strip(),
+            department_id     = emp.department_id,
+        )
+        db.session.add(t)
+        db.session.commit()
+        return api_ok({'id': t.id}, 'Training record added', 201)
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/admin/employees/training/<int:tid>', methods=['PUT'])
+@require_login
+def api_admin_employees_training_update(tid):
+    """Web Admin API: Update a training record."""
+    t    = Training.query.get_or_404(tid)
+    body = request.get_json(silent=True) or {}
+    editable = {
+        'training_program': 'training_program',
+        'category':         'training_category',
+        'status':           'status',
+        'training_date':    'training_date',
+        'expiry_date':      'expiry_date',
+        'scheduled_date':   'scheduled_date',
+        'instructor':       'instructor',
+    }
+    try:
+        for key, attr in editable.items():
+            if key in body:
+                setattr(t, attr, (body[key] or '').strip())
+        db.session.commit()
+        return api_ok({'id': t.id}, 'Training record updated')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/admin/employees/training/<int:tid>', methods=['DELETE'])
+@require_login
+def api_admin_employees_training_delete(tid):
+    """Web Admin API: Delete a training record."""
+    t = Training.query.get_or_404(tid)
+    try:
+        db.session.delete(t)
+        db.session.commit()
+        return api_ok({}, 'Training record deleted')
     except Exception as e:
         db.session.rollback()
         return api_err(str(e)[:120], 500)
@@ -13969,6 +14343,11 @@ with app.app_context():
             ('join_date', 'VARCHAR(20)'),
             ('employment_status', "VARCHAR(30) DEFAULT 'Active'"),
             ('position', 'VARCHAR(100)'),
+            ('language_preference', "VARCHAR(10) DEFAULT 'en'"),
+            ('dark_mode', 'BOOLEAN DEFAULT FALSE'),
+            ('notification_prefs', "TEXT DEFAULT '{}'"),
+            ('privacy_settings', "TEXT DEFAULT '{}'"),
+            ('password_changed_at', 'TIMESTAMP'),
         ],
         'employee_notification_log': [
             ('employee_user_id', 'VARCHAR(30)'),
