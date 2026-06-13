@@ -2274,6 +2274,7 @@ def api_mobile_profile_upload_image():
 
 # ── Admin: upload employee profile photo ────────────────────────────────────
 @app.route('/api/admin/employees/<int:emp_id>/photo', methods=['POST'])
+@csrf.exempt
 @require_login
 def api_admin_employee_photo_upload(emp_id):
     """Web Admin: Upload or replace employee profile photo."""
@@ -2303,6 +2304,7 @@ def api_admin_employee_photo_upload(emp_id):
 
 # ── Admin: delete employee profile photo ────────────────────────────────────
 @app.route('/api/admin/employees/<int:emp_id>/photo', methods=['DELETE'])
+@csrf.exempt
 @require_login
 def api_admin_employee_photo_delete(emp_id):
     """Web Admin: Remove employee profile photo."""
