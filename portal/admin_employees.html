@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Employee Management{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Employee Management</div>
+    <div class="page-sub">Mobile app employees · Flutter login accounts · Report ownership</div>
+  </div>
+  <button onclick="document.getElementById('new-modal').style.display='flex'"
+    class="btn btn-gold">+ Add Employee</button>
+</div>
+
+<!-- Stats row -->
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+  <div class="card" style="padding:16px;text-align:center">
+    <div style="font-size:28px;font-weight:900;color:var(--gold)">{{ total }}</div>
+    <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">Total Employees</div>
+  </div>
+  <div class="card" style="padding:16px;text-align:center">
+    <div style="font-size:28px;font-weight:900;color:#22c55e">{{ active }}</div>
+    <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">Active</div>
+  </div>
+  <div class="card" style="padding:16px;text-align:center">
+    <div style="font-size:28px;font-weight:900;color:#ef4444">{{ total - active }}</div>
+    <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px">Inactive</div>
+  </div>
+</div>
+
+<!-- Info box -->
+<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:12.5px;color:#1d4ed8;line-height:1.7">
+  📱 <strong>Mobile App Employees</strong> — These accounts are for the <strong>ASS Flutter mobile app only</strong>.
+  Employees login with their username and password to submit safety reports from their phones.
+  They cannot access the admin web dashboard.
+</div>
+
+{% if employees %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:var(--navy);border-bottom:2px solid var(--gold)">
+        {% for h in ['Employee ID','Full Name','Username','Role','Department','Status','Last Login','Actions'] %}
+        <th style="padding:11px 14px;text-align:left;font-size:10px;font-weight:800;
+          text-transform:uppercase;letter-spacing:.5px;color:rgba(255,255,255,.6)">{{ h }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in employees %}
+    <tr style="border-bottom:1px solid var(--border)"
+        onmouseover="this.style.background='rgba(255,255,255,.03)'"
+        onmouseout="this.style.background='transparent'">
+      <td style="padding:12px 14px">
+        <span style="font-family:monospace;font-size:12px;font-weight:800;
+          color:var(--gold);background:rgba(201,168,76,.1);
+          padding:2px 8px;border-radius:5px">{{ e.employee_id }}</span>
+      </td>
+      <td style="padding:12px 14px">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">{{ e.full_name }}</div>
+        {% if e.email %}<div style="font-size:11px;color:var(--muted)">{{ e.email }}</div>{% endif %}
+      </td>
+      <td style="padding:12px 14px;font-family:monospace;font-size:12px;color:var(--muted)">
+        {{ e.username }}
+      </td>
+      <td style="padding:12px 14px">
+        {% set rc = {'captain':'#1d4ed8','first_officer':'#0369a1','cabin_crew':'#6d28d9',
+          'engineer':'#b45309','ground_ops':'#15803d','occ':'#dc2626','employee':'#374151'} %}
+        <span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;
+          background:{{ rc.get(e.role,'#374151') }}22;color:{{ rc.get(e.role,'#6b7280') }};
+          border:1px solid {{ rc.get(e.role,'#374151') }}44;text-transform:uppercase">
+          {{ e.role or 'employee' }}</span>
+      </td>
+      <td style="padding:12px 14px;font-size:12px;color:var(--muted)">
+        {{ e.department.name if e.department else '—' }}
+      </td>
+      <td style="padding:12px 14px">
+        <span style="font-size:10px;font-weight:800;padding:3px 10px;border-radius:99px;
+          {% if e.is_active %}background:#dcfce7;color:#15803d{% else %}background:#fee2e2;color:#dc2626{% endif %}">
+          {{ 'Active' if e.is_active else 'Inactive' }}
+        </span>
+      </td>
+      <td style="padding:12px 14px;font-size:11px;color:var(--muted)">
+        {{ e.last_login.strftime('%d %b %Y %H:%M') if e.last_login else 'Never' }}
+      </td>
+      <td style="padding:12px 14px">
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <!-- Toggle active -->
+          <form method="POST" action="/admin/employees/{{ e.id }}/toggle" style="display:inline">
+            <button type="submit" style="padding:4px 10px;border-radius:6px;font-size:11px;
+              font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid;
+              {% if e.is_active %}background:rgba(220,38,38,.1);color:#ef4444;border-color:rgba(220,38,38,.3)
+              {% else %}background:rgba(34,197,94,.1);color:#22c55e;border-color:rgba(34,197,94,.3){% endif %}">
+              {{ 'Disable' if e.is_active else 'Enable' }}
+            </button>
+          </form>
+          <!-- Reset password -->
+          <button onclick="showResetPw({{ e.id }},'{{ e.full_name }}')"
+            style="padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;
+              cursor:pointer;font-family:inherit;background:rgba(201,168,76,.1);
+              color:var(--gold);border:1.5px solid rgba(201,168,76,.3)">
+            Reset PW
+          </button>
+          <!-- Delete -->
+          <form method="POST" action="/admin/employees/{{ e.id }}/delete" style="display:inline"
+            onsubmit="return confirm('Delete {{ e.full_name }}? This cannot be undone.')">
+            <button type="submit" style="padding:4px 10px;border-radius:6px;font-size:11px;
+              font-weight:700;cursor:pointer;font-family:inherit;
+              background:rgba(220,38,38,.08);color:#ef4444;border:1.5px solid rgba(220,38,38,.2)">
+              Delete
+            </button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:48px">
+  <div style="font-size:48px;margin-bottom:14px">👥</div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:6px">No Employees Yet</div>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:20px">
+    Create employee accounts so staff can login to the ASS mobile app.
+  </div>
+  <button onclick="document.getElementById('new-modal').style.display='flex'"
+    class="btn btn-gold">+ Add First Employee</button>
+</div>
+{% endif %}
+
+<!-- NEW EMPLOYEE MODAL -->
+<div id="new-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
+  z-index:1000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#1a2846;border:1px solid var(--border);border-radius:16px;
+    padding:28px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div>
+        <div style="font-size:17px;font-weight:800">Add New Employee</div>
+        <div style="font-size:12px;color:var(--muted)">Mobile app login account</div>
+      </div>
+      <button onclick="document.getElementById('new-modal').style.display='none'"
+        style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+    </div>
+    <form method="POST" action="/admin/employees/new">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="fg">
+          <label>Employee ID *</label>
+          <input type="text" name="employee_id" required placeholder="e.g. JA-001"/>
+        </div>
+        <div class="fg">
+          <label>Full Name *</label>
+          <input type="text" name="full_name" required placeholder="Ahmed Al-Rashid"/>
+        </div>
+        <div class="fg">
+          <label>Username * <span style="color:var(--muted);font-size:10px">(for app login)</span></label>
+          <input type="text" name="username" required placeholder="ahmed.rashid"/>
+        </div>
+        <div class="fg">
+          <label>Password *</label>
+          <input type="password" name="password" required placeholder="Min 6 characters"/>
+        </div>
+        <div class="fg">
+          <label>Role</label>
+          <select name="role">
+            <option value="employee">Employee</option>
+            <option value="captain">Captain / PIC</option>
+            <option value="first_officer">First Officer</option>
+            <option value="cabin_crew">Cabin Crew</option>
+            <option value="engineer">Aircraft Engineer</option>
+            <option value="ground_ops">Ground Operations</option>
+            <option value="occ">OCC / Dispatcher</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="atc">ATC</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Department</label>
+          <select name="department_id">
+            <option value="">— Select —</option>
+            {% for d in departments %}
+            <option value="{{ d.id }}">{{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Email (optional)</label>
+          <input type="email" name="email" placeholder="ahmed@jordanaviation.jo"/>
+        </div>
+        <div class="fg">
+          <label>Mobile (optional)</label>
+          <input type="text" name="mobile" placeholder="+962 7x xxx xxxx"/>
+        </div>
+      </div>
+      <div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);
+        border-radius:8px;padding:10px 14px;margin:14px 0;font-size:12px;color:var(--muted);line-height:1.6">
+        📱 The employee will use their <strong>username + password</strong> to login to the ASS mobile app.
+        They will NOT have access to this admin dashboard.
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+        <button type="button"
+          onclick="document.getElementById('new-modal').style.display='none'"
+          class="btn btn-outline">Cancel</button>
+        <button type="submit" class="btn btn-gold">Create Employee Account</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- RESET PASSWORD MODAL -->
+<div id="reset-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
+  z-index:1001;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#1a2846;border:1px solid var(--border);border-radius:14px;
+    padding:24px;width:100%;max-width:380px">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px">Reset Password</div>
+    <div id="reset-name" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+    <form id="reset-form" method="POST">
+      <div class="fg">
+        <label>New Password *</label>
+        <input type="password" name="new_password" id="new-pw" required
+          placeholder="Min 6 characters" style="font-size:15px"/>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+        <button type="button"
+          onclick="document.getElementById('reset-modal').style.display='none'"
+          class="btn btn-outline">Cancel</button>
+        <button type="submit" class="btn btn-gold">Reset Password</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showResetPw(eid, name) {
+  document.getElementById('reset-name').textContent = name;
+  document.getElementById('reset-form').action = '/admin/employees/' + eid + '/reset-password';
+  document.getElementById('new-pw').value = '';
+  document.getElementById('reset-modal').style.display = 'flex';
+}
+// Close modals on backdrop click
+['new-modal','reset-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+  });
+});
+</script>
+{% endblock %}
