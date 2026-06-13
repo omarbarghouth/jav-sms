@@ -3604,6 +3604,107 @@ def admin_notifications():
         page_title='Notification Monitor')
 
 
+# ── Alerts: content existence check ───────────────────────────────────────────
+
+def _content_exists(ctype, cid):
+    """Return True if the source record still exists in the DB."""
+    try:
+        if ctype == 'training':
+            return db.session.get(Training, int(cid)) is not None
+        if ctype == 'action':
+            return db.session.get(Action, str(cid)) is not None
+        if ctype == 'audit_finding':
+            return db.session.get(AuditFinding, str(cid)) is not None
+        if ctype == 'hazard':
+            return db.session.get(HazardReport, str(cid)) is not None
+        if ctype == 'investigation':
+            return db.session.get(Investigation, str(cid)) is not None
+        if ctype == 'moc':
+            return db.session.get(MOC, str(cid)) is not None
+        if ctype == 'bulletin':
+            return db.session.get(SafetyBulletin, str(cid)) is not None
+        if ctype == 'newsletter':
+            return db.session.get(SafetyNewsletter, int(cid)) is not None
+        if ctype == 'survey':
+            return db.session.get(SafetySurvey, int(cid)) is not None
+        return True
+    except Exception:
+        return True  # safe fallback — unknown types stay visible
+
+
+# ── API: actionable alerts (Alerts tab) ───────────────────────────────────────
+_ALERT_TYPES = {'action_assigned', 'system'}
+
+@app.route('/api/mobile/alerts', methods=['GET'])
+@csrf.exempt
+def api_mobile_alerts():
+    """
+    Returns only actionable notifications for the Alerts tab.
+    Stale entries (source deleted) are pruned automatically.
+    """
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data  = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str, _, _, _ = _resolve_employee(data)
+        logs = EmployeeNotificationLog.query.filter(
+            EmployeeNotificationLog.employee_user_id == uid_str,
+            EmployeeNotificationLog.notification_type.in_(_ALERT_TYPES),
+        ).order_by(EmployeeNotificationLog.sent_at.desc()).limit(100).all()
+
+        records = []
+        stale_ids = []
+        for n in logs:
+            ctype = n.content_type or ''
+            cid   = n.content_id   or ''
+            # Prune stale entries whose source record was deleted
+            if ctype and cid and not _content_exists(ctype, cid):
+                stale_ids.append(n.id)
+                continue
+            records.append({
+                'id':                n.id,
+                'title':             n.title,
+                'body':              n.body or '',
+                'notification_type': n.notification_type or '',
+                'content_type':      ctype,
+                'content_id':        cid,
+                'is_read':           n.is_read,
+                'sent_at':           n.sent_at.isoformat()[:16] if n.sent_at else '',
+            })
+
+        if stale_ids:
+            EmployeeNotificationLog.query.filter(
+                EmployeeNotificationLog.id.in_(stale_ids)).delete(synchronize_session=False)
+            db.session.commit()
+
+        return api_ok(records, 'Alerts loaded')
+    except Exception as e:
+        app.logger.exception('api_mobile_alerts error')
+        return api_ok([], 'No alerts')
+
+
+# ── API: mark single alert read ────────────────────────────────────────────────
+@app.route('/api/mobile/alerts/<int:alert_id>/read', methods=['POST'])
+@csrf.exempt
+def api_mobile_alert_read(alert_id):
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data  = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str = f"emp_{data['user_id']}"
+        n = EmployeeNotificationLog.query.filter_by(
+            id=alert_id, employee_user_id=uid_str).first()
+        if n and not n.is_read:
+            n.is_read = True
+            db.session.commit()
+        return api_ok({}, 'Marked read')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
 # ── API: unread count for Flutter badge ───────────────────────────────────────
 @app.route('/api/mobile/notifications/unread-count')
 @csrf.exempt
@@ -3616,8 +3717,12 @@ def api_mobile_notif_unread_count():
     if not uid:
         return api_err('Employee not found', 404)
     user_id = f'emp_{uid}'
-    count   = EmployeeNotificationLog.query.filter_by(
-        employee_user_id=user_id, is_read=False).count()
+    # Count only actionable (Alerts tab) unread — not safety_promo informational
+    count = EmployeeNotificationLog.query.filter(
+        EmployeeNotificationLog.employee_user_id == user_id,
+        EmployeeNotificationLog.is_read == False,
+        EmployeeNotificationLog.notification_type.in_(_ALERT_TYPES),
+    ).count()
     return api_ok({'unread_count': count})
 
 
