@@ -2314,9 +2314,14 @@ def employee_detail(emp_id):
 
     training_records     = Training.query.filter_by(employee_name=emp_name).order_by(Training.created_at.desc()).all()
     all_actions          = Action.query.filter(Action.owner == emp_name).all()
-    total_reports        = (Hazard.query.filter(or_(Hazard.reporter_name == emp_name)).count() +
-                            ASR.query.filter(or_(ASR.reporter_name == emp_name)).count() +
-                            VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name)).count())
+    total_reports        = (HazardReport.query.filter(or_(
+                                HazardReport.reporter == emp_name,
+                                HazardReport.reporter_user_id == uid_str)).count() +
+                            ASRReport.query.filter(or_(
+                                ASRReport.captain == emp_name,
+                                ASRReport.copilot == emp_name)).count() +
+                            VoluntaryReport.query.filter(
+                                VoluntaryReport.reporter_name == emp_name).count())
     reads_count          = SafetyPromoRead.query.filter_by(user_id=uid_str).count()
     completed_trainings  = sum(1 for t in training_records if (t.status or '') == 'Completed')
     closed_actions       = sum(1 for a in all_actions if (a.status or '') == 'Closed')
