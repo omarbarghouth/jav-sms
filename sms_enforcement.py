@@ -436,48 +436,102 @@ def _map_status_to_stage(report_type: str, status: str) -> tuple:
     return _HAZARD_STAGE_MAP.get(status, (1, status))
 
 
+def _get_fcm_app_enf():
+    """Return initialized firebase_admin App for sms_enforcement.py (same as app.py helper)."""
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+        if not firebase_admin._apps:
+            sa_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT', '')
+            if not sa_json:
+                return None
+            import json as _json_mod, tempfile
+            sa_dict = _json_mod.loads(sa_json)
+            cred = credentials.Certificate(sa_dict)
+            firebase_admin.initialize_app(cred)
+        return firebase_admin.get_app()
+    except Exception:
+        return None
+
+
 def _push_feedback_notification(fb: ReportFeedback, stage_label: str):
     """
-    Send FCM push notification to the reporter's mobile device.
-    Uses Firebase Cloud Messaging data-only message (no lock-screen content leak).
+    Send FCM v1 push notification to the reporter's mobile device via firebase-admin SDK.
+    Replaces the legacy fcm.googleapis.com/fcm/send endpoint (shut down June 2024).
     """
-    fcm_key = os.environ.get('FCM_SERVER_KEY', '')
-    if not fcm_key or not fb.reporter_user_id:
+    if not fb.reporter_user_id:
         return
 
     tokens = DeviceToken.query.filter_by(user_id=fb.reporter_user_id).all()
     if not tokens:
         return
 
-    for dt in tokens:
-        try:
-            payload = {
-                'to': dt.fcm_token,
-                'data': {
-                    'type':       'report_status',
-                    'report_ref': fb.report_ref,
-                    'stage_num':  str(fb.stage_num),
-                    'stage_label': stage_label,
-                    'guidance':   fb.current_guidance or '',
-                    'outcome_shared': str(fb.outcome_shared),
-                },
-                # data-only: no 'notification' key — content only visible after auth
-            }
-            body = json.dumps(payload).encode('utf-8')
-            req = _urllib_req.Request(
-                'https://fcm.googleapis.com/fcm/send',
-                data=body,
-                headers={
-                    'Authorization': f'key={fcm_key}',
-                    'Content-Type': 'application/json',
-                },
-                method='POST',
+    fcm_app = _get_fcm_app_enf()
+    if fcm_app is None:
+        return  # FIREBASE_SERVICE_ACCOUNT not configured — skip silently
+
+    try:
+        import firebase_admin
+        from firebase_admin import messaging
+
+        stage_icons = {
+            'Submitted': '📋', 'Acknowledged': '✅', 'Under Review': '🔍',
+            'Action Taken': '⚡', 'Closed': '🔒',
+        }
+        icon  = stage_icons.get(stage_label, '📄')
+        title = f'{icon} Report Update: {fb.report_ref}'
+        body  = (
+            f'Your report has been updated to: {stage_label}. '
+            f'{fb.current_guidance[:80] if fb.current_guidance else ""}'
+        )
+        data = {
+            'type':          'hazard',
+            'id':            fb.report_ref,
+            'ntype':         'system',
+            'stage_num':     str(fb.stage_num),
+            'stage_label':   stage_label,
+            'outcome_shared': str(getattr(fb, 'outcome_shared', False)),
+        }
+        msgs = [
+            messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data={k: str(v) for k, v in data.items()},
+                android=messaging.AndroidConfig(priority='high',
+                    notification=messaging.AndroidNotification(
+                        sound='default', channel_id='avias_alerts')),
+                apns=messaging.APNSConfig(payload=messaging.APNSPayload(
+                    aps=messaging.Aps(sound='default', badge=1))),
+                token=dt.fcm_token,
             )
-            _urllib_req.urlopen(req, timeout=5)
+            for dt in tokens
+        ]
+        resp = messaging.send_each(msgs)
+        if resp.success_count > 0:
             fb.push_sent    = True
             fb.push_sent_at = datetime.utcnow()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+        # Also write in-app notification log
+        try:
+            from models import EmployeeNotificationLog
+            log = EmployeeNotificationLog(
+                employee_user_id  = fb.reporter_user_id,
+                title             = title,
+                body              = body,
+                notification_type = 'system',
+                content_type      = fb.report_type.lower().replace(' ', '_') if fb.report_type else 'hazard',
+                content_id        = fb.report_ref,
+            )
+            db.session.add(log)
+            db.session.commit()
         except Exception:
-            pass  # notification failure must never break the main workflow
+            db.session.rollback()
+
+    except Exception:
+        pass  # notification failure must never break the main workflow
 
 
 # ══════════════════════════════════════════════════════════════════════════════

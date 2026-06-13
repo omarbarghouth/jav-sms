@@ -3455,9 +3455,16 @@ def _get_fcm_app():
 
 def _fcm_send_multicast(tokens, title, body, data):
     """Send FCM v1 multicast message. Returns (success_count, failure_count)."""
+    if not tokens:
+        return 0, 0
+    fcm_app = _get_fcm_app()
+    if fcm_app is None:
+        app.logger.warning(
+            'FCM not configured: FIREBASE_SERVICE_ACCOUNT env var is missing or invalid. '
+            'Push notification NOT sent. In-app log will still be written.')
+        return 0, len(tokens)
     try:
         from firebase_admin import messaging
-        _get_fcm_app()
         msgs = [
             messaging.Message(
                 notification=messaging.Notification(title=title, body=body),
@@ -3471,14 +3478,19 @@ def _fcm_send_multicast(tokens, title, body, data):
             ) for t in tokens
         ]
         ok = fail = 0
-        # Firebase batch limit = 500 per call
         for i in range(0, len(msgs), 500):
             resp = messaging.send_each(msgs[i:i+500])
             ok   += resp.success_count
             fail += resp.failure_count
+            # Log individual failures so stale tokens are visible in logs
+            for idx, r in enumerate(resp.responses):
+                if not r.success:
+                    app.logger.warning(
+                        f'FCM token failure [{i+idx}]: {r.exception}')
+        app.logger.info(f'FCM sent: {ok} success, {fail} failure, title="{title[:60]}"')
         return ok, fail
     except Exception as e:
-        app.logger.warning(f'FCM send error: {e}')
+        app.logger.error(f'FCM send_each exception: {e}')
         return 0, len(tokens)
 
 
@@ -3506,12 +3518,17 @@ def push_notify_all(title, body, ntype, ctype, cid):
     """
     try:
         tokens_rows = DeviceToken.query.all()
+        app.logger.info(
+            f'push_notify_all: title="{title[:60]}" '
+            f'tokens={len(tokens_rows)} ctype={ctype} cid={cid}')
         if tokens_rows:
             data = {'type': ctype, 'id': str(cid), 'ntype': ntype}
             _fcm_send_multicast([r.fcm_token for r in tokens_rows], title, body, data)
-        # Log for every active employee user
-        for emp in Employee.query.filter_by(is_active=True).all():
+        # Log for every active employee — always, even when no device tokens registered
+        employees = Employee.query.filter_by(is_active=True).all()
+        for emp in employees:
             _log_notification(f'emp_{emp.id}', title, body, ntype, ctype, str(cid))
+        app.logger.info(f'push_notify_all: in-app log written for {len(employees)} employees')
     except Exception as e:
         app.logger.warning(f'push_notify_all error: {e}')
 
@@ -3524,6 +3541,9 @@ def push_notify_user(user_id, title, body, ntype, ctype, cid):
     """
     try:
         tokens_rows = DeviceToken.query.filter_by(user_id=user_id).all()
+        app.logger.info(
+            f'push_notify_user: user={user_id} title="{title[:60]}" '
+            f'tokens={len(tokens_rows)} ctype={ctype} cid={cid}')
         if tokens_rows:
             data = {'type': ctype, 'id': str(cid), 'ntype': ntype}
             _fcm_send_multicast([r.fcm_token for r in tokens_rows], title, body, data)
@@ -3535,12 +3555,24 @@ def push_notify_user(user_id, title, body, ntype, ctype, cid):
 def push_notify_by_name(employee_name, title, body, ntype, ctype, cid):
     """
     Resolve employee full_name → user_id, then push_notify_user.
-    Used for action/training owner lookup by name string.
+    Falls back to case-insensitive / stripped comparison if exact match fails.
     """
+    if not employee_name:
+        return
     try:
-        emp = Employee.query.filter_by(full_name=employee_name).first()
+        name = employee_name.strip()
+        emp = Employee.query.filter_by(full_name=name).first()
+        if not emp:
+            # Case-insensitive fallback
+            emp = Employee.query.filter(
+                db.func.lower(Employee.full_name) == name.lower()
+            ).first()
         if emp:
             push_notify_user(f'emp_{emp.id}', title, body, ntype, ctype, cid)
+        else:
+            app.logger.warning(
+                f'push_notify_by_name: no Employee found for name="{name}" — '
+                f'in-app log NOT written, push NOT sent.')
     except Exception as e:
         app.logger.warning(f'push_notify_by_name error: {e}')
 
@@ -3587,6 +3619,65 @@ def api_mobile_notif_unread_count():
     count   = EmployeeNotificationLog.query.filter_by(
         employee_user_id=user_id, is_read=False).count()
     return api_ok({'unread_count': count})
+
+
+@app.route('/api/admin/notifications/diagnose', methods=['GET'])
+@csrf.exempt
+@require_login
+def api_notifications_diagnose():
+    """
+    Diagnostic endpoint — verifies the full notification pipeline without sending real events.
+    Returns JSON with status of each component: FCM config, device tokens, DB log table.
+    Optionally sends a test push if ?send_test=1&user_id=emp_5
+    """
+    report = {}
+
+    # 1. FCM app initialisation
+    fcm_app = _get_fcm_app()
+    report['fcm_configured'] = fcm_app is not None
+    report['firebase_service_account_set'] = bool(os.environ.get('FIREBASE_SERVICE_ACCOUNT', ''))
+
+    # 2. Device tokens in DB
+    try:
+        all_tokens = DeviceToken.query.all()
+        report['device_tokens_total'] = len(all_tokens)
+        report['device_tokens'] = [
+            {'user_id': dt.user_id,
+             'token_preview': dt.fcm_token[:20] + '…',
+             'updated_at': str(dt.updated_at)}
+            for dt in all_tokens[:50]
+        ]
+    except Exception as e:
+        report['device_tokens_error'] = str(e)
+
+    # 3. EmployeeNotificationLog recent rows
+    try:
+        recent = EmployeeNotificationLog.query.order_by(
+            EmployeeNotificationLog.sent_at.desc()).limit(5).all()
+        report['notification_log_recent'] = [
+            {'id': n.id, 'user': n.employee_user_id, 'title': n.title,
+             'type': n.notification_type, 'is_read': n.is_read, 'sent_at': str(n.sent_at)}
+            for n in recent
+        ]
+    except Exception as e:
+        report['notification_log_error'] = str(e)
+
+    # 4. Optional test push
+    test_user = request.args.get('user_id', '')
+    send_test = request.args.get('send_test', '') == '1'
+    if send_test and test_user:
+        try:
+            push_notify_user(
+                test_user,
+                '🧪 AviaS Test Notification',
+                'This is a diagnostic test from the AviaS notification system.',
+                'system', 'system', '0')
+            report['test_push_sent_to'] = test_user
+            report['test_push_status']  = 'called — check device and logs'
+        except Exception as e:
+            report['test_push_error'] = str(e)
+
+    return api_ok(report)
 
 
 @app.route('/api/admin/notifications/send-overdue-reminders', methods=['POST'])
@@ -8071,6 +8162,13 @@ def new_training():
         )
         db.session.add(t)
         db.session.commit()
+        # Notify the assigned employee
+        if t.employee_name:
+            push_notify_by_name(
+                t.employee_name,
+                f'📚 Training Assigned: {t.training_program}',
+                f'Scheduled for {t.scheduled_date or t.training_date or "TBD"}. Please review your training plan.',
+                'action_assigned', 'training', t.id)
         flash(f'✓ Training record saved for {t.employee_name}.', 'success')
         return redirect(url_for('sp_training'))
     return render_template('spi/sp_training_form.html', now=datetime.utcnow(), editing=False)
