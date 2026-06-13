@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>{% block title %}AviaS Safety Management System{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/avias-logo.svg"/>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
     :root{
@@ -260,7 +261,9 @@
 <!-- ── SIDEBAR ─────────────────────────────────────────────────── -->
 <aside class="sb" id="sidebar">
   <div class="sb-logo" onclick="toggleSidebar()" title="Toggle sidebar">
-    <div class="sb-icon">✈</div>
+    <div class="sb-icon" style="background:none;padding:0;display:flex;align-items:center;justify-content:center">
+      <img src="/static/avias-logo.svg" alt="AviaS" style="width:34px;height:34px;border-radius:8px;display:block"/>
+    </div>
     <div class="sb-text">
       <div class="sb-name">AviaS</div>
       <div class="sb-sub-name">SAFETY MANAGEMENT SYSTEM</div>
