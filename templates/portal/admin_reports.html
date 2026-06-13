@@ -104,6 +104,14 @@
             background:rgba(201,168,76,.1);color:var(--gold);border:1.5px solid rgba(201,168,76,.3)">
             📄 PDF
           </a>
+          <form method="POST" action="/admin/reports/voluntary/{{ r.id }}/delete" style="display:inline"
+            onsubmit="return confirm('Delete this voluntary report ({{ r.ref_number }})? This cannot be undone.')">
+            <button type="submit" onclick="event.stopPropagation()"
+              style="padding:4px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;
+              font-family:inherit;background:rgba(220,38,38,.1);color:#ef4444;border:1.5px solid rgba(220,38,38,.3)">
+              🗑
+            </button>
+          </form>
         </div>
       </td>
     </tr>
@@ -176,6 +184,14 @@
             background:rgba(201,168,76,.1);color:var(--gold);border:1.5px solid rgba(201,168,76,.3)">
             📄 PDF
           </a>
+          <form method="POST" action="/admin/reports/confidential/{{ r.id }}/delete" style="display:inline"
+            onsubmit="return confirm('Delete confidential report {{ r.ref_number }}? This cannot be undone.')">
+            <button type="submit"
+              style="padding:4px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;
+              font-family:inherit;background:rgba(220,38,38,.1);color:#ef4444;border:1.5px solid rgba(220,38,38,.3)">
+              🗑
+            </button>
+          </form>
         </div>
       </td>
     </tr>
@@ -231,11 +247,21 @@
         {% endif %}
       </td>
       <td style="padding:10px 14px">
-        <a href="/hazard-reports/{{ r.id }}" onclick="event.stopPropagation()"
-          style="padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;
-          background:var(--navy);color:#fff;border:none;display:inline-block">
-          Detail →
-        </a>
+        <div style="display:flex;gap:6px;align-items:center">
+          <a href="/hazard-reports/{{ r.id }}" onclick="event.stopPropagation()"
+            style="padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;
+            background:var(--navy);color:#fff;border:none;display:inline-block">
+            Detail →
+          </a>
+          <form method="POST" action="/admin/reports/hazard/{{ r.id }}/delete" style="display:inline"
+            onsubmit="return confirm('Delete hazard report {{ r.id }}? This cannot be undone.')">
+            <button type="submit" onclick="event.stopPropagation()"
+              style="padding:4px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;
+              font-family:inherit;background:rgba(220,38,38,.1);color:#ef4444;border:1.5px solid rgba(220,38,38,.3)">
+              🗑
+            </button>
+          </form>
+        </div>
       </td>
     </tr>
     {% endfor %}
@@ -282,11 +308,21 @@
           {{ r.status or 'Submitted' }}</span>
       </td>
       <td style="padding:10px 14px">
-        <a href="/asr/{{ r.id }}" onclick="event.stopPropagation()"
-          style="padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;
-          background:var(--navy);color:#fff;border:none;display:inline-block">
-          Detail →
-        </a>
+        <div style="display:flex;gap:6px;align-items:center">
+          <a href="/asr/{{ r.id }}" onclick="event.stopPropagation()"
+            style="padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;
+            background:var(--navy);color:#fff;border:none;display:inline-block">
+            Detail →
+          </a>
+          <form method="POST" action="/admin/reports/asr/{{ r.id }}/delete" style="display:inline"
+            onsubmit="return confirm('Delete ASR report {{ r.id }}? This cannot be undone.')">
+            <button type="submit" onclick="event.stopPropagation()"
+              style="padding:4px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;
+              font-family:inherit;background:rgba(220,38,38,.1);color:#ef4444;border:1.5px solid rgba(220,38,38,.3)">
+              🗑
+            </button>
+          </form>
+        </div>
       </td>
     </tr>
     {% endfor %}
