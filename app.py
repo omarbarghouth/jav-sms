@@ -2639,6 +2639,11 @@ def api_admin_employees_training_create(emp_id):
         )
         db.session.add(t)
         db.session.commit()
+        push_notify_user(
+            f'emp_{emp.id}',
+            f'📚 Training Assigned: {t.training_program}',
+            f'Scheduled for {t.scheduled_date or t.training_date or "TBD"}. Please review your training plan.',
+            'action_assigned', 'training', t.id)
         return api_ok({'id': t.id}, 'Training record added', 201)
     except Exception as e:
         db.session.rollback()
@@ -3426,40 +3431,184 @@ def api_mobile_safety_survey_respond():
         return api_err(str(e)[:200], 500)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  FCM Push helper — Safety Promotion publish hook
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PUSH NOTIFICATION ENGINE  (Firebase Admin SDK v1 API)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-def _sp_push_notify(title, body, ctype, cid, dept_id=None):
-    """Send FCM push to all device tokens (optionally filtered by dept_id)."""
+def _get_fcm_app():
+    """Return initialized firebase_admin App, or None if not configured."""
     try:
-        import json, urllib.request, urllib.error
-        server_key = os.environ.get('FCM_SERVER_KEY', '')
-        if not server_key:
-            return  # FCM not configured — skip silently
-
-        q = DeviceToken.query
-        tokens = [dt.fcm_token for dt in q.all()]
-        if not tokens:
-            return
-
-        headers = {
-            'Authorization': f'key={server_key}',
-            'Content-Type':  'application/json',
-        }
-        payload = json.dumps({
-            'registration_ids': tokens,
-            'notification': {'title': title, 'body': body, 'sound': 'default'},
-            'data':         {'type': ctype, 'id': str(cid), 'click_action': 'FLUTTER_NOTIFICATION_CLICK'},
-            'priority':     'high',
-        }).encode()
-
-        req = urllib.request.Request(
-            'https://fcm.googleapis.com/fcm/send',
-            data=payload, headers=headers, method='POST')
-        urllib.request.urlopen(req, timeout=5)
+        import firebase_admin
+        from firebase_admin import credentials
+        if not firebase_admin._apps:
+            sa_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT', '')
+            if not sa_json:
+                return None
+            import json, tempfile
+            sa_dict = json.loads(sa_json)
+            cred = credentials.Certificate(sa_dict)
+            firebase_admin.initialize_app(cred)
+        return firebase_admin.get_app()
     except Exception:
-        pass  # Never let push failure break the publish flow
+        return None
+
+
+def _fcm_send_multicast(tokens, title, body, data):
+    """Send FCM v1 multicast message. Returns (success_count, failure_count)."""
+    try:
+        from firebase_admin import messaging
+        _get_fcm_app()
+        msgs = [
+            messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data={k: str(v) for k, v in data.items()},
+                android=messaging.AndroidConfig(priority='high',
+                    notification=messaging.AndroidNotification(
+                        sound='default', channel_id='avias_alerts')),
+                apns=messaging.APNSConfig(payload=messaging.APNSPayload(
+                    aps=messaging.Aps(sound='default', badge=1))),
+                token=t,
+            ) for t in tokens
+        ]
+        ok = fail = 0
+        # Firebase batch limit = 500 per call
+        for i in range(0, len(msgs), 500):
+            resp = messaging.send_each(msgs[i:i+500])
+            ok   += resp.success_count
+            fail += resp.failure_count
+        return ok, fail
+    except Exception as e:
+        app.logger.warning(f'FCM send error: {e}')
+        return 0, len(tokens)
+
+
+def _log_notification(user_id, title, body, ntype, ctype, cid):
+    """Persist an EmployeeNotificationLog row for in-app notification centre."""
+    try:
+        log = EmployeeNotificationLog(
+            employee_user_id=user_id,
+            title=title, body=body,
+            notification_type=ntype,
+            content_type=ctype,
+            content_id=str(cid),
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning(f'Notification log error: {e}')
+
+
+def push_notify_all(title, body, ntype, ctype, cid):
+    """
+    Broadcast push + in-app log to ALL registered employees.
+    Used for: bulletin, newsletter, survey.
+    """
+    try:
+        tokens_rows = DeviceToken.query.all()
+        if tokens_rows:
+            data = {'type': ctype, 'id': str(cid), 'ntype': ntype}
+            _fcm_send_multicast([r.fcm_token for r in tokens_rows], title, body, data)
+        # Log for every active employee user
+        for emp in Employee.query.filter_by(is_active=True).all():
+            _log_notification(f'emp_{emp.id}', title, body, ntype, ctype, str(cid))
+    except Exception as e:
+        app.logger.warning(f'push_notify_all error: {e}')
+
+
+def push_notify_user(user_id, title, body, ntype, ctype, cid):
+    """
+    Push + in-app log to a SINGLE employee user.
+    Used for: action assign, training assign, investigation update, audit finding.
+    user_id format: 'emp_5'
+    """
+    try:
+        tokens_rows = DeviceToken.query.filter_by(user_id=user_id).all()
+        if tokens_rows:
+            data = {'type': ctype, 'id': str(cid), 'ntype': ntype}
+            _fcm_send_multicast([r.fcm_token for r in tokens_rows], title, body, data)
+        _log_notification(user_id, title, body, ntype, ctype, cid)
+    except Exception as e:
+        app.logger.warning(f'push_notify_user error: {e}')
+
+
+def push_notify_by_name(employee_name, title, body, ntype, ctype, cid):
+    """
+    Resolve employee full_name → user_id, then push_notify_user.
+    Used for action/training owner lookup by name string.
+    """
+    try:
+        emp = Employee.query.filter_by(full_name=employee_name).first()
+        if emp:
+            push_notify_user(f'emp_{emp.id}', title, body, ntype, ctype, cid)
+    except Exception as e:
+        app.logger.warning(f'push_notify_by_name error: {e}')
+
+
+# Keep legacy name as alias (not used anywhere but kept for safety)
+def _sp_push_notify(title, body, ctype, cid, dept_id=None):
+    push_notify_all(title, body, 'safety_promo', ctype, cid)
+
+
+# ── Admin: Notification monitoring ────────────────────────────────────────────
+@app.route('/admin/notifications')
+@require_login
+def admin_notifications():
+    page    = request.args.get('page', 1, type=int)
+    ntype_f = request.args.get('ntype', '')
+    q = EmployeeNotificationLog.query.order_by(EmployeeNotificationLog.sent_at.desc())
+    if ntype_f:
+        q = q.filter(EmployeeNotificationLog.notification_type == ntype_f)
+    total   = q.count()
+    logs    = q.offset((page-1)*50).limit(50).all()
+    unread  = EmployeeNotificationLog.query.filter_by(is_read=False).count()
+    by_type = db.session.query(
+        EmployeeNotificationLog.notification_type,
+        db.func.count(EmployeeNotificationLog.id)
+    ).group_by(EmployeeNotificationLog.notification_type).all()
+    return render_template('admin/notification_monitor.html',
+        logs=logs, total=total, unread=unread, page=page,
+        ntype_f=ntype_f, by_type=by_type,
+        page_title='Notification Monitor')
+
+
+# ── API: unread count for Flutter badge ───────────────────────────────────────
+@app.route('/api/mobile/notifications/unread-count')
+@csrf.exempt
+def api_mobile_notif_unread_count():
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data  = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    uid, _, _, _ = _resolve_employee(data)
+    if not uid:
+        return api_err('Employee not found', 404)
+    user_id = f'emp_{uid}'
+    count   = EmployeeNotificationLog.query.filter_by(
+        employee_user_id=user_id, is_read=False).count()
+    return api_ok({'unread_count': count})
+
+
+@app.route('/api/admin/notifications/send-overdue-reminders', methods=['POST'])
+@csrf.exempt
+@require_login
+def api_send_overdue_reminders():
+    """Send push reminders to owners of overdue actions. Call manually or via scheduler."""
+    try:
+        overdue = Action.query.filter_by(status='Overdue').all()
+        sent = 0
+        for a in overdue:
+            if a.owner:
+                push_notify_by_name(
+                    a.owner,
+                    f'⏰ Overdue Action: {a.title or a.action_id}',
+                    f'This action was due {a.due_date}. Please update its status immediately.',
+                    'action_assigned', 'action', str(a.id))
+                sent += 1
+        return api_ok({'reminders_sent': sent})
+    except Exception as e:
+        app.logger.error(f'Overdue reminder error: {e}')
+        return api_err(str(e), 500)
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
@@ -4238,6 +4387,18 @@ def hazard_report_update_status(rid):
         advance_report_feedback(rid, new_st, actor)
     except Exception:
         pass
+    # Push notification to reporter
+    if rep.reporter_user_id:
+        status_msgs = {
+            'Under Review': 'Your report is now under safety review.',
+            'Action Assigned': 'A corrective action has been assigned based on your report.',
+            'Closed': 'Your safety report has been reviewed and closed. Thank you.',
+        }
+        push_notify_user(
+            rep.reporter_user_id,
+            f'📄 Report Update: {rid}',
+            status_msgs.get(new_st, f'Your report status has been updated to: {new_st}'),
+            'system', 'hazard', rid)
     flash(f'✓ Report {rid} status updated to {rep.status}.', 'success')
     return redirect(url_for('hazard_report_detail', rid=rid))
 
@@ -4710,6 +4871,12 @@ def new_action():
             )
         except Exception:
             pass
+        if a.owner:
+            push_notify_by_name(
+                a.owner,
+                f'⚡ Action Assigned: {a.id}',
+                f'{a.description[:80] if a.description else "A corrective action has been assigned to you."}  Due: {a.due_date or "TBD"}',
+                'action_assigned', 'action', a.id)
         flash(f'✓ Action {a.id} created successfully.', 'success')
         # Return to wherever the user came from
         return_url = f.get('return_url', url_for('actions'))
@@ -5329,6 +5496,13 @@ def advance_investigation(iid):
         inv.status = 'In Progress'
     elif nxt == 'Closed':
         inv.status = 'Closed'
+    # Notify investigation lead if set
+    if inv.lead_investigator:
+        push_notify_by_name(
+            inv.lead_investigator,
+            f'🔍 Investigation Update: {inv.ref_number or inv.id}',
+            f'Stage advanced to "{nxt}". Please review the investigation.',
+            'system', 'investigation', iid)
     evt = InvestigationEvent(
         investigation_id=iid,
         event_type='stage_advance',
@@ -6149,10 +6323,17 @@ def moc_add_stakeholder(mid):
 def moc_add_update(mid):
     MOC.query.get_or_404(mid)
     f = request.form
+    m = MOC.query.get_or_404(mid)
     u = MOCUpdate(moc_id=mid, update_text=f.get('update_text',''),
                   update_by=f.get('update_by', session.get('username','')),
                   update_type=f.get('update_type','Progress'))
     db.session.add(u); db.session.commit()
+    if m.initiator:
+        push_notify_by_name(
+            m.initiator,
+            f'🔄 MoC Update: {m.change_title or mid}',
+            f'{u.update_type}: {(u.update_text or "")[:100]}',
+            'system', 'moc', str(mid))
     flash('Update logged.', 'success')
     return redirect(url_for('moc_detail', mid=mid) + '#updates')
 
@@ -7746,6 +7927,10 @@ def new_bulletin():
             )
         except Exception:
             pass
+        push_notify_all(
+            f'🛡 Safety Bulletin: {f["title"]}',
+            f.get("recommendations") or f.get("content", "")[:100] or 'New safety bulletin published.',
+            'safety_promo', 'bulletin', bid)
         flash(f'✓ Bulletin {bid} published.', 'success')
         return redirect(url_for('sp_bulletins'))
     return render_template('spi/sp_bulletin_form.html',
@@ -7807,6 +7992,10 @@ def sp_newsletter_detail(nid):
 def sp_newsletter_publish(nid):
     n = SafetyNewsletter.query.get_or_404(nid)
     n.status = 'Published'; db.session.commit()
+    push_notify_all(
+        f'📰 New Newsletter: {n.title}',
+        n.summary or 'A new safety newsletter has been published.',
+        'safety_promo', 'newsletter', nid)
     flash('✓ Newsletter published.', 'success')
     return redirect(url_for('sp_newsletters'))
 
@@ -8171,6 +8360,10 @@ def sp_survey_edit(sid):
 def sp_survey_activate(sid):
     s = SafetySurvey.query.get_or_404(sid)
     s.status = 'Active'; db.session.commit()
+    push_notify_all(
+        f'📋 Safety Survey: {s.title}',
+        s.description or 'A new safety survey has been assigned to you. Please complete it.',
+        'safety_promo', 'survey', sid)
     flash('✓ Survey activated.', 'success')
     return redirect('/safety-promotion/surveys')
 
@@ -10978,6 +11171,12 @@ def finding_detail(fid):
                                        f'Created from Audit Finding {fid}', 'assignment')
 
             db.session.commit()
+            if finding.assigned_to:
+                push_notify_by_name(
+                    finding.assigned_to,
+                    f'🔎 Audit Finding Assigned: {fid}',
+                    f'You have been assigned an audit finding requiring a Corrective Action Plan. Due: {finding.cap_due_date or "TBD"}',
+                    'action_assigned', 'audit_finding', fid)
             flash(f'✓ Finding {fid} assigned to {finding.assigned_to}'
                   + (f' · Action routed to SAG member {sag_user}' if sag_user else '') + '.', 'success')
 
