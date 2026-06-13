@@ -1,0 +1,598 @@
+{% extends "base.html" %}
+{% block title %}{{ emp.full_name }} — Employee Detail{% endblock %}
+{% block content %}
+
+<style>
+.det-tab{padding:9px 20px;border-radius:8px 8px 0 0;font-size:12px;font-weight:800;cursor:pointer;
+  border:none;font-family:inherit;transition:.15s;background:transparent;
+  color:var(--muted);border-bottom:3px solid transparent;letter-spacing:.3px}
+.det-tab.active{color:var(--gold);border-bottom-color:var(--gold);background:var(--card)}
+.tab-pane{display:none}.tab-pane.active{display:block}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.field-row.three{grid-template-columns:1fr 1fr 1fr}
+.fg label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);margin-bottom:5px;display:block}
+.fg input,.fg select,.fg textarea{width:100%;padding:9px 12px;border-radius:8px;
+  background:var(--navy);border:1px solid var(--border);color:var(--text);
+  font-size:13px;font-family:inherit;box-sizing:border-box}
+.fg textarea{resize:vertical;min-height:70px}
+.fg input:focus,.fg select:focus{outline:none;border-color:var(--gold)}
+.read-val{padding:9px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:8px;font-size:13px;min-height:38px;color:var(--text)}
+.section-title{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.7px;
+  color:var(--gold);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.score-bar{height:8px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:5px}
+.score-fill{height:100%;border-radius:4px;transition:.6s}
+.training-row td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:12.5px;vertical-align:middle}
+.training-row td:first-child{padding-left:0}
+.badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;text-transform:uppercase}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;
+  align-items:center;justify-content:center;padding:20px}
+.modal-box{background:#1a2846;border:1px solid var(--border);border-radius:16px;
+  padding:26px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto}
+.alert{border-radius:10px;padding:11px 16px;font-size:12.5px;margin-bottom:14px}
+.alert-info{background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd}
+.alert-warn{background:#451a03;border:1px solid #f97316;color:#fed7aa}
+</style>
+
+<!-- Breadcrumb -->
+<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px">
+  <a href="/employee-management" style="color:var(--muted);text-decoration:none">Employee Management</a>
+  <span>›</span>
+  <span style="color:var(--text);font-weight:700">{{ emp.full_name }}</span>
+</div>
+
+<!-- Header card -->
+<div class="card" style="margin-bottom:16px;padding:20px">
+  <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    <!-- Avatar -->
+    <div style="width:64px;height:64px;border-radius:50%;border:2px solid var(--gold);
+      background:#1a2846;overflow:hidden;flex-shrink:0">
+      {% if emp.profile_image %}
+      <img src="{{ emp.profile_image }}" style="width:100%;height:100%;object-fit:cover"/>
+      {% else %}
+      <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+        font-size:24px;font-weight:900;color:var(--gold)">
+        {{ emp.full_name[0]|upper if emp.full_name else '?' }}
+      </div>
+      {% endif %}
+    </div>
+    <!-- Identity -->
+    <div style="flex:1">
+      <div style="font-size:20px;font-weight:900">{{ emp.full_name }}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:center">
+        <span style="font-family:monospace;font-size:12px;font-weight:800;color:var(--gold);
+          background:rgba(201,168,76,.12);padding:2px 10px;border-radius:6px">
+          {{ emp.employee_id }}</span>
+        <span style="font-size:12px;color:var(--muted)">@{{ emp.username }}</span>
+        <span class="badge" style="
+          {% if emp.is_active %}background:#dcfce7;color:#15803d{% else %}background:#fee2e2;color:#dc2626{% endif %}">
+          {{ 'Active' if emp.is_active else 'Inactive' }}</span>
+        {% if emp.position %}
+        <span style="font-size:12px;color:var(--muted)">{{ emp.position }}</span>
+        {% endif %}
+        {% if emp.department %}
+        <span style="font-size:12px;color:var(--muted)">· {{ emp.department.name }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <!-- Quick actions -->
+    <div style="display:flex;gap:8px;flex-shrink:0">
+      <button onclick="openResetPw()"
+        style="padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+          font-family:inherit;background:rgba(59,130,246,.12);color:#60a5fa;
+          border:1px solid rgba(59,130,246,.3)">Reset Password</button>
+      <button onclick="quickToggle()"
+        style="padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+          font-family:inherit;border:1px solid;
+          {% if emp.is_active %}background:rgba(220,38,38,.1);color:#ef4444;border-color:rgba(220,38,38,.3)
+          {% else %}background:rgba(34,197,94,.1);color:#22c55e;border-color:rgba(34,197,94,.3){% endif %}">
+        {{ 'Deactivate' if emp.is_active else 'Activate' }}</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px">
+  <button class="det-tab active" onclick="switchTab('profile',this)">Profile &amp; Info</button>
+  <button class="det-tab" onclick="switchTab('training',this)">Training Records</button>
+  <button class="det-tab" onclick="switchTab('activity',this)">Safety Activity</button>
+  <button class="det-tab" onclick="switchTab('account',this)">Account &amp; Access</button>
+</div>
+
+<div id="save-banner" style="display:none" class="alert alert-info">✓ Changes saved successfully.</div>
+<div id="error-banner" style="display:none" class="alert alert-warn"></div>
+
+
+<!-- ═══════════════════════════════ PROFILE TAB ══════════════════════════════ -->
+<div id="tab-profile" class="tab-pane active">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <button onclick="saveProfile()" class="btn btn-gold">Save Changes</button>
+  </div>
+
+  <div class="alert alert-info" style="margin-bottom:16px">
+    ✏️ All fields below are <strong>admin-managed</strong>. Changes sync instantly to the employee's mobile app.
+    The employee <em>cannot</em> edit these fields from their phone.
+  </div>
+
+  <div class="card">
+    <div class="section-title">Identity</div>
+    <div class="field-row">
+      <div class="fg"><label>Employee ID</label>
+        <input id="f-eid" type="text" value="{{ emp.employee_id }}"/></div>
+      <div class="fg"><label>Full Name</label>
+        <input id="f-name" type="text" value="{{ emp.full_name }}"/></div>
+    </div>
+    <div class="field-row three">
+      <div class="fg"><label>Position / Job Title</label>
+        <input id="f-position" type="text" value="{{ emp.position or '' }}"/></div>
+      <div class="fg"><label>Department</label>
+        <select id="f-dept">
+          <option value="">— None —</option>
+          {% for d in departments %}
+          <option value="{{ d.id }}" {{ 'selected' if emp.department_id == d.id }}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fg"><label>Base Station</label>
+        <input id="f-base" type="text" value="{{ emp.base_station or '' }}" maxlength="10"/></div>
+    </div>
+
+    <div class="section-title">Contact</div>
+    <div class="field-row">
+      <div class="fg"><label>Email</label>
+        <input id="f-email" type="email" value="{{ emp.email or '' }}"/></div>
+      <div class="fg"><label>Mobile / Phone</label>
+        <input id="f-mobile" type="text" value="{{ emp.mobile or '' }}"/></div>
+    </div>
+
+    <div class="section-title">Employment</div>
+    <div class="field-row three">
+      <div class="fg"><label>Join Date</label>
+        <input id="f-join" type="date"
+          value="{{ emp.join_date if emp.join_date and '-' in emp.join_date else '' }}"/></div>
+      <div class="fg"><label>Employment Status</label>
+        <select id="f-empstatus">
+          {% for s in ['Active','Probation','Suspended','Inactive'] %}
+          <option value="{{ s }}" {{ 'selected' if (emp.employment_status or 'Active') == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fg"><label>License / Cert No.</label>
+        <input id="f-license" type="text" value="{{ emp.license_number or '' }}"/></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════ TRAINING TAB ═════════════════════════════ -->
+<div id="tab-training" class="tab-pane">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="font-size:13px;color:var(--muted)">
+      Manage {{ emp.full_name }}'s training records. Visible in the mobile app (read-only).
+    </div>
+    <button onclick="openAddTraining()" class="btn btn-gold">+ Add Record</button>
+  </div>
+
+  {% if training_records %}
+  <div class="card" style="padding:0;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:var(--navy);border-bottom:2px solid var(--gold)">
+          <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;
+            text-transform:uppercase;color:rgba(255,255,255,.5);letter-spacing:.5px">Program</th>
+          <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;
+            text-transform:uppercase;color:rgba(255,255,255,.5);letter-spacing:.5px">Type</th>
+          <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;
+            text-transform:uppercase;color:rgba(255,255,255,.5);letter-spacing:.5px">Trained</th>
+          <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;
+            text-transform:uppercase;color:rgba(255,255,255,.5);letter-spacing:.5px">Expires</th>
+          <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;
+            text-transform:uppercase;color:rgba(255,255,255,.5);letter-spacing:.5px">Status</th>
+          <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;
+            text-transform:uppercase;color:rgba(255,255,255,.5);letter-spacing:.5px">Score</th>
+          <th style="padding:10px;width:80px"></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for t in training_records %}
+      <tr class="training-row">
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:12.5px;font-weight:600">
+          {{ t.training_program or t.training_type or '—' }}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">
+          {{ t.training_type or '—' }}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px">
+          {{ t.training_date or '—' }}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px">
+          {{ t.expiry_date or 'No expiry' }}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border)">
+          <span class="badge"
+            style="{% if t.status == 'Completed' %}background:#dcfce7;color:#15803d
+                   {% elif t.status == 'Expired' %}background:#fee2e2;color:#dc2626
+                   {% elif t.status == 'Scheduled' %}background:#dbeafe;color:#1d4ed8
+                   {% else %}background:rgba(255,255,255,.08);color:var(--muted){% endif %}">
+            {{ t.status or 'Pending' }}</span>
+        </td>
+        <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px">
+          {{ t.score if t.score is not none else '—' }}</td>
+        <td style="padding:10px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;gap:4px">
+            <button onclick="editTraining({{ t.id }},'{{ t.training_program or t.training_type or '' }}',
+              '{{ t.training_type or '' }}','{{ t.training_date or '' }}','{{ t.expiry_date or '' }}',
+              '{{ t.status or '' }}','{{ t.score or '' }}')"
+              style="padding:3px 10px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;
+                font-family:inherit;background:rgba(201,168,76,.12);color:var(--gold);
+                border:1px solid rgba(201,168,76,.3)">Edit</button>
+            <button onclick="deleteTraining({{ t.id }})"
+              style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;
+                font-family:inherit;background:rgba(220,38,38,.1);color:#ef4444;
+                border:1px solid rgba(220,38,38,.3)">✕</button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card" style="text-align:center;padding:44px">
+    <div style="font-size:36px;margin-bottom:10px">📋</div>
+    <div style="font-size:15px;font-weight:800;margin-bottom:4px">No Training Records</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Add training records for {{ emp.full_name }}</div>
+    <button onclick="openAddTraining()" class="btn btn-gold">+ Add First Record</button>
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ════════════════════════════ SAFETY ACTIVITY TAB ════════════════════════ -->
+<div id="tab-activity" class="tab-pane">
+  <div class="alert alert-info" style="margin-bottom:16px">
+    📊 Read-only view — this data is computed from the employee's activity in AviaS.
+  </div>
+
+  {% if stats %}
+  <!-- Safety score overview -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+    {% set components = [
+      ('Reports Filed', stats.total_reports, 30, '#3b82f6'),
+      ('Trainings Done', stats.completed_trainings, 30, '#8b5cf6'),
+      ('Actions Closed', stats.closed_actions, 25, '#f59e0b'),
+      ('Promotions Read', stats.promos_read, 15, '#10b981'),
+    ] %}
+    {% for label, val, max_pts, color in components %}
+    <div class="card" style="padding:16px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+        color:var(--muted);margin-bottom:8px">{{ label }}</div>
+      <div style="font-size:26px;font-weight:900;color:{{ color }}">{{ val }}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Max {{ max_pts }} pts</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="section-title">Safety Score Breakdown</div>
+    {% set score_rows = [
+      ('Incident Reporting (30 pts)', stats.report_score, 30, '#3b82f6'),
+      ('Training Compliance (30 pts)', stats.training_score, 30, '#8b5cf6'),
+      ('Action Completion (25 pts)', stats.action_score, 25, '#f59e0b'),
+      ('Engagement (15 pts)', stats.engagement_score, 15, '#10b981'),
+    ] %}
+    {% for label, score, max_score, color in score_rows %}
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span>{{ label }}</span>
+        <span style="font-weight:800;color:{{ color }}">{{ score }} / {{ max_score }}</span>
+      </div>
+      <div class="score-bar">
+        <div class="score-fill" style="width:{{ [(score/max_score*100),100]|min }}%;background:{{ color }}"></div>
+      </div>
+    </div>
+    {% endfor %}
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;
+      display:flex;justify-content:space-between;font-size:14px;font-weight:900">
+      <span>Total Safety Score</span>
+      <span style="color:var(--gold)">{{ stats.total_score }} / 100</span>
+    </div>
+  </div>
+  {% else %}
+  <div class="card" style="text-align:center;padding:44px;color:var(--muted);font-size:13px">
+    No safety activity data yet.
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ════════════════════════════════ ACCOUNT TAB ════════════════════════════ -->
+<div id="tab-account" class="tab-pane">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+    <!-- Role & Permissions -->
+    <div class="card">
+      <div class="section-title">Role &amp; Permissions</div>
+      <div class="fg" style="margin-bottom:14px"><label>Role</label>
+        <select id="acc-role">
+          {% for r in ['employee','captain','first_officer','cabin_crew','engineer',
+            'ground_ops','occ','maintenance','atc'] %}
+          <option value="{{ r }}" {{ 'selected' if emp.role == r }}>{{ r }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fg" style="margin-bottom:14px"><label>Admin Access</label>
+        <select id="acc-admin">
+          <option value="false" {{ 'selected' if not emp.is_admin }}>No admin access</option>
+          <option value="true" {{ 'selected' if emp.is_admin }}>Admin (web dashboard)</option>
+        </select>
+      </div>
+      <button onclick="saveAccount()" class="btn btn-gold" style="width:100%">Save Account Settings</button>
+    </div>
+
+    <!-- Password reset -->
+    <div class="card">
+      <div class="section-title">Reset Password</div>
+      <div class="alert alert-info" style="margin-bottom:12px;font-size:11.5px">
+        Admin reset does not require the employee's current password. The new password takes effect immediately.
+      </div>
+      <div class="fg" style="margin-bottom:12px"><label>New Password</label>
+        <input id="acc-pw1" type="password" placeholder="Min 8 characters"/></div>
+      <div class="fg" style="margin-bottom:14px"><label>Confirm Password</label>
+        <input id="acc-pw2" type="password" placeholder="Repeat password"/></div>
+      <div id="pw-err" style="display:none;color:#ef4444;font-size:12px;margin-bottom:10px"></div>
+      <button onclick="adminResetPw()" class="btn" style="width:100%;background:#3b82f6;color:#fff">
+        Reset Password</button>
+    </div>
+
+  </div>
+
+  <!-- Danger zone -->
+  <div class="card" style="margin-top:16px;border-color:#7f1d1d">
+    <div style="font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;
+      color:#ef4444;margin-bottom:12px">Danger Zone</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:3px">
+          {{ 'Deactivate' if emp.is_active else 'Activate' }} Account
+        </div>
+        <div style="font-size:12px;color:var(--muted)">
+          {% if emp.is_active %}
+          Prevents the employee from logging into the mobile app. All data is preserved.
+          {% else %}
+          Restores mobile app access for this employee.
+          {% endif %}
+        </div>
+      </div>
+      <button onclick="quickToggle()"
+        style="padding:9px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+          font-family:inherit;border:1px solid;
+          {% if emp.is_active %}background:rgba(220,38,38,.1);color:#ef4444;border-color:rgba(220,38,38,.4)
+          {% else %}background:rgba(34,197,94,.1);color:#22c55e;border-color:rgba(34,197,94,.4){% endif %}">
+        {{ 'Deactivate Account' if emp.is_active else 'Activate Account' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════ TRAINING ADD/EDIT MODAL ════════════════ -->
+<div id="training-modal" class="modal-bg">
+<div class="modal-box">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+    <div style="font-size:16px;font-weight:800" id="tr-modal-title">Add Training Record</div>
+    <button onclick="closeModal('training-modal')"
+      style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer">×</button>
+  </div>
+  <input type="hidden" id="tr-id"/>
+  <div class="field-row">
+    <div class="fg"><label>Program / Course Name *</label>
+      <input id="tr-program" type="text" placeholder="CRM Level 3"/></div>
+    <div class="fg"><label>Type / Category</label>
+      <select id="tr-type">
+        {% for t in ['Initial','Recurrent','OJT','Simulator','Emergency','Safety','Regulatory','Other'] %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="field-row three">
+    <div class="fg"><label>Training Date</label>
+      <input id="tr-date" type="date"/></div>
+    <div class="fg"><label>Expiry Date</label>
+      <input id="tr-expiry" type="date"/></div>
+    <div class="fg"><label>Score (%)</label>
+      <input id="tr-score" type="number" min="0" max="100" placeholder="—"/></div>
+  </div>
+  <div class="fg" style="margin-bottom:14px"><label>Status</label>
+    <select id="tr-status">
+      {% for s in ['Completed','Scheduled','In Progress','Expired','Cancelled'] %}
+      <option value="{{ s }}">{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div id="tr-err" style="display:none;color:#ef4444;font-size:12px;margin-bottom:10px"></div>
+  <div style="display:flex;gap:10px;justify-content:flex-end">
+    <button onclick="closeModal('training-modal')" class="btn btn-outline">Cancel</button>
+    <button onclick="saveTraining()" class="btn btn-gold" id="tr-submit">Save Record</button>
+  </div>
+</div>
+</div>
+
+
+<script>
+const EMP_ID = {{ emp.id }};
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.det-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+document.querySelectorAll('.modal-bg').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
+});
+
+function showBanner(ok, msg) {
+  const b = document.getElementById(ok ? 'save-banner' : 'error-banner');
+  const ob = document.getElementById(ok ? 'error-banner' : 'save-banner');
+  ob.style.display = 'none';
+  b.textContent = msg || (ok ? '✓ Changes saved.' : 'An error occurred.');
+  b.style.display = 'block';
+  if (ok) setTimeout(() => b.style.display = 'none', 3000);
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+/* ── Save profile ────────────────────────────────────────────────────────── */
+async function saveProfile() {
+  try {
+    const r = await fetch(`/api/admin/employees/${EMP_ID}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        employee_id:       document.getElementById('f-eid').value.trim(),
+        full_name:         document.getElementById('f-name').value.trim(),
+        position:          document.getElementById('f-position').value.trim(),
+        department_id:     document.getElementById('f-dept').value || null,
+        base_station:      document.getElementById('f-base').value.trim().toUpperCase(),
+        email:             document.getElementById('f-email').value.trim(),
+        mobile:            document.getElementById('f-mobile').value.trim(),
+        join_date:         document.getElementById('f-join').value,
+        employment_status: document.getElementById('f-empstatus').value,
+        license_number:    document.getElementById('f-license').value.trim(),
+      })
+    });
+    const j = await r.json();
+    j.status === 'ok' ? showBanner(true) : showBanner(false, j.message || 'Save failed');
+  } catch(e) { showBanner(false, 'Network error: ' + e.message); }
+}
+
+/* ── Save account (role/admin) ───────────────────────────────────────────── */
+async function saveAccount() {
+  try {
+    const r = await fetch(`/api/admin/employees/${EMP_ID}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        role:     document.getElementById('acc-role').value,
+        is_admin: document.getElementById('acc-admin').value === 'true',
+      })
+    });
+    const j = await r.json();
+    j.status === 'ok' ? showBanner(true, '✓ Account settings saved.') : showBanner(false, j.message);
+  } catch(e) { showBanner(false, 'Network error'); }
+}
+
+/* ── Toggle active status ────────────────────────────────────────────────── */
+async function quickToggle() {
+  const active = {{ 'true' if emp.is_active else 'false' }};
+  if (!confirm(`${active ? 'Deactivate' : 'Activate'} account for {{ emp.full_name }}?`)) return;
+  const r = await fetch(`/api/admin/employees/${EMP_ID}/status`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({is_active: !active})
+  });
+  const j = await r.json();
+  if (j.status === 'ok') location.reload();
+  else showBanner(false, j.message || 'Update failed');
+}
+
+/* ── Admin password reset ────────────────────────────────────────────────── */
+async function adminResetPw() {
+  const pw1 = document.getElementById('acc-pw1').value;
+  const pw2 = document.getElementById('acc-pw2').value;
+  const errEl = document.getElementById('pw-err');
+  if (pw1.length < 8) { errEl.textContent='Min 8 characters'; errEl.style.display='block'; return; }
+  if (pw1 !== pw2)    { errEl.textContent='Passwords do not match'; errEl.style.display='block'; return; }
+  errEl.style.display = 'none';
+  const r = await fetch(`/api/admin/employees/${EMP_ID}/reset-password`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({password: pw1})
+  });
+  const j = await r.json();
+  if (j.status === 'ok') {
+    document.getElementById('acc-pw1').value = '';
+    document.getElementById('acc-pw2').value = '';
+    showBanner(true, '✓ Password reset successfully.');
+  } else showBanner(false, j.message || 'Reset failed');
+}
+
+/* ── Training CRUD ───────────────────────────────────────────────────────── */
+function openAddTraining() {
+  document.getElementById('tr-modal-title').textContent = 'Add Training Record';
+  document.getElementById('tr-id').value = '';
+  ['tr-program','tr-date','tr-expiry','tr-score'].forEach(id =>
+    document.getElementById(id).value = '');
+  document.getElementById('tr-type').value   = 'Recurrent';
+  document.getElementById('tr-status').value = 'Completed';
+  document.getElementById('tr-err').style.display = 'none';
+  document.getElementById('training-modal').style.display = 'flex';
+}
+
+function editTraining(id, program, type, date, expiry, status, score) {
+  document.getElementById('tr-modal-title').textContent = 'Edit Training Record';
+  document.getElementById('tr-id').value      = id;
+  document.getElementById('tr-program').value = program;
+  document.getElementById('tr-date').value    = date;
+  document.getElementById('tr-expiry').value  = expiry;
+  document.getElementById('tr-score').value   = score;
+  const sel = (sel_id, val) => {
+    const el = document.getElementById(sel_id);
+    [...el.options].forEach(o => o.selected = o.value === val);
+  };
+  sel('tr-type', type); sel('tr-status', status);
+  document.getElementById('tr-err').style.display = 'none';
+  document.getElementById('training-modal').style.display = 'flex';
+}
+
+async function saveTraining() {
+  const id      = document.getElementById('tr-id').value;
+  const program = document.getElementById('tr-program').value.trim();
+  const errEl   = document.getElementById('tr-err');
+  if (!program) { errEl.textContent='Program name is required'; errEl.style.display='block'; return; }
+  errEl.style.display = 'none';
+
+  const payload = {
+    training_program: program,
+    training_type:    document.getElementById('tr-type').value,
+    training_date:    document.getElementById('tr-date').value,
+    expiry_date:      document.getElementById('tr-expiry').value,
+    status:           document.getElementById('tr-status').value,
+    score:            document.getElementById('tr-score').value || null,
+  };
+
+  const btn = document.getElementById('tr-submit');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    let r;
+    if (id) {
+      r = await fetch(`/api/admin/employees/training/${id}`, {
+        method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+      });
+    } else {
+      r = await fetch(`/api/admin/employees/${EMP_ID}/training`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+      });
+    }
+    const j = await r.json();
+    if (j.status === 'ok') location.reload();
+    else { errEl.textContent = j.message || 'Save failed'; errEl.style.display = 'block'; }
+  } catch(e) {
+    errEl.textContent = 'Network error: ' + e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Record';
+  }
+}
+
+async function deleteTraining(id) {
+  if (!confirm('Delete this training record? This cannot be undone.')) return;
+  const r = await fetch(`/api/admin/employees/training/${id}`, {method: 'DELETE'});
+  const j = await r.json();
+  if (j.status === 'ok') location.reload();
+  else showBanner(false, j.message || 'Delete failed');
+}
+</script>
+
+{% endblock %}

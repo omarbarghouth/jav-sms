@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+{% block title %}Employee Management — AviaS{% endblock %}
+{% block content %}
+
+<style>
+.em-stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center}
+.em-stat .num{font-size:30px;font-weight:900;line-height:1}
+.em-stat .lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-top:6px}
+.em-table{width:100%;border-collapse:collapse}
+.em-table th{padding:10px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.5px;color:rgba(255,255,255,.5);background:var(--navy);border-bottom:2px solid var(--gold)}
+.em-table td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.em-table tr:hover td{background:rgba(255,255,255,.025)}
+.role-badge{font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;text-transform:uppercase;border:1px solid}
+.status-pill{font-size:10px;font-weight:800;padding:3px 10px;border-radius:99px}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;
+  align-items:center;justify-content:center;padding:20px}
+.modal-box{background:#1a2846;border:1px solid var(--border);border-radius:16px;
+  padding:28px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto}
+.tab-btn{padding:8px 18px;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;
+  cursor:pointer;border:none;font-family:inherit;transition:.15s;background:transparent;
+  color:var(--muted);border-bottom:2px solid transparent}
+.tab-btn.active{background:var(--card);color:var(--text);border-bottom:2px solid var(--gold)}
+.info-banner{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;
+  padding:12px 16px;font-size:12.5px;color:#1d4ed8;line-height:1.7}
+</style>
+
+<!-- Header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="page-title">Employee Management</div>
+    <div class="page-sub">Master profiles · Training records · Roles · Permissions — all changes sync instantly to the mobile app</div>
+  </div>
+  <button onclick="openNewModal()" class="btn btn-gold">+ Add Employee</button>
+</div>
+
+<!-- Stats row -->
+{% set active_count = employees|selectattr('is_active')|list|length %}
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+  <div class="em-stat">
+    <div class="num" style="color:var(--gold)">{{ employees|length }}</div>
+    <div class="lbl">Total Employees</div>
+  </div>
+  <div class="em-stat">
+    <div class="num" style="color:#22c55e">{{ active_count }}</div>
+    <div class="lbl">Active</div>
+  </div>
+  <div class="em-stat">
+    <div class="num" style="color:#ef4444">{{ employees|length - active_count }}</div>
+    <div class="lbl">Inactive</div>
+  </div>
+  <div class="em-stat">
+    <div class="num" style="color:#3b82f6">{{ departments|length }}</div>
+    <div class="lbl">Departments</div>
+  </div>
+</div>
+
+<!-- Info banner -->
+<div class="info-banner" style="margin-bottom:20px">
+  📱 <strong>Admin-managed profiles</strong> — All fields on this page are <strong>read-only in the Flutter app</strong>.
+  Employees may only change their profile photo, password, language, and notification preferences from their phones.
+  Every change you make here syncs to the mobile app instantly on the employee's next screen load.
+</div>
+
+<!-- Search + filter bar -->
+<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+  <input id="search-input" type="text" placeholder="Search by name, ID, email…"
+    oninput="filterTable()"
+    style="flex:1;min-width:200px;padding:9px 14px;border-radius:8px;
+      background:var(--card);border:1px solid var(--border);color:var(--text);font-size:13px"/>
+  <select id="dept-filter" onchange="filterTable()"
+    style="padding:9px 14px;border-radius:8px;background:var(--card);border:1px solid var(--border);
+      color:var(--text);font-size:13px">
+    <option value="">All Departments</option>
+    {% for d in departments %}
+    <option value="{{ d.id }}">{{ d.name }}</option>
+    {% endfor %}
+  </select>
+  <select id="status-filter" onchange="filterTable()"
+    style="padding:9px 14px;border-radius:8px;background:var(--card);border:1px solid var(--border);
+      color:var(--text);font-size:13px">
+    <option value="">All Status</option>
+    <option value="active">Active Only</option>
+    <option value="inactive">Inactive Only</option>
+  </select>
+</div>
+
+<!-- Employee table -->
+{% if employees %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="em-table" id="em-table">
+    <thead>
+      <tr>
+        {% for h in ['Employee ID','Full Name','Position / Dept','Base','Role','Status','Last Login','Actions'] %}
+        <th>{{ h }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in employees %}
+    {% set dept_name = e.department.name if e.department else '' %}
+    <tr class="em-row"
+        data-name="{{ e.full_name|lower }}"
+        data-id="{{ e.employee_id|lower }}"
+        data-email="{{ (e.email or '')|lower }}"
+        data-dept="{{ e.department_id or '' }}"
+        data-status="{{ 'active' if e.is_active else 'inactive' }}">
+      <td>
+        <span style="font-family:monospace;font-size:12px;font-weight:800;
+          color:var(--gold);background:rgba(201,168,76,.1);padding:2px 8px;border-radius:5px">
+          {{ e.employee_id }}</span>
+      </td>
+      <td>
+        <div style="font-weight:700;color:var(--text)">{{ e.full_name }}</div>
+        {% if e.email %}<div style="font-size:11px;color:var(--muted)">{{ e.email }}</div>{% endif %}
+        {% if e.mobile %}<div style="font-size:11px;color:var(--muted)">{{ e.mobile }}</div>{% endif %}
+      </td>
+      <td>
+        <div style="font-size:12px">{{ e.position or '—' }}</div>
+        <div style="font-size:11px;color:var(--muted)">{{ dept_name or '—' }}</div>
+      </td>
+      <td style="font-size:12px;color:var(--muted)">{{ e.base_station or '—' }}</td>
+      <td>
+        {% set rc = {'captain':'#1d4ed8','first_officer':'#0369a1','cabin_crew':'#6d28d9',
+          'engineer':'#b45309','ground_ops':'#15803d','occ':'#dc2626','maintenance':'#92400e','atc':'#0f766e','employee':'#374151'} %}
+        <span class="role-badge"
+          style="background:{{ rc.get(e.role,'#374151') }}22;color:{{ rc.get(e.role,'#9ca3af') }};border-color:{{ rc.get(e.role,'#374151') }}44">
+          {{ e.role or 'employee' }}</span>
+      </td>
+      <td>
+        <span class="status-pill" style="
+          {% if e.is_active %}background:#dcfce7;color:#15803d{% else %}background:#fee2e2;color:#dc2626{% endif %}">
+          {{ 'Active' if e.is_active else 'Inactive' }}
+        </span>
+      </td>
+      <td style="font-size:11px;color:var(--muted)">
+        {{ e.last_login.strftime('%d %b %Y') if e.last_login else 'Never' }}
+      </td>
+      <td>
+        <div style="display:flex;gap:5px">
+          <a href="/employee-management/{{ e.id }}"
+            style="padding:4px 11px;border-radius:6px;font-size:11px;font-weight:700;
+              background:rgba(201,168,76,.12);color:var(--gold);border:1px solid rgba(201,168,76,.3);
+              text-decoration:none;white-space:nowrap">Edit</a>
+          <button onclick="toggleStatus({{ e.id }},'{{ e.full_name }}',{{ 'false' if e.is_active else 'true' }})"
+            style="padding:4px 11px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;
+              font-family:inherit;border:1px solid;
+              {% if e.is_active %}background:rgba(220,38,38,.1);color:#ef4444;border-color:rgba(220,38,38,.3)
+              {% else %}background:rgba(34,197,94,.1);color:#22c55e;border-color:rgba(34,197,94,.3){% endif %}">
+            {{ 'Disable' if e.is_active else 'Enable' }}
+          </button>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:56px">
+  <div style="font-size:48px;margin-bottom:14px">👥</div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:6px">No Employees Yet</div>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:20px">
+    Add employee accounts so staff can login to the AviaS mobile app.
+  </div>
+  <button onclick="openNewModal()" class="btn btn-gold">+ Add First Employee</button>
+</div>
+{% endif %}
+
+
+<!-- ── NEW EMPLOYEE MODAL ─────────────────────────────────────────────────── -->
+<div id="new-modal" class="modal-bg">
+<div class="modal-box">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div>
+      <div style="font-size:17px;font-weight:800">Add New Employee</div>
+      <div style="font-size:12px;color:var(--muted)">Creates mobile app login account</div>
+    </div>
+    <button onclick="closeModal('new-modal')"
+      style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;line-height:1">×</button>
+  </div>
+
+  <div id="new-error" style="display:none;background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;
+    padding:10px 14px;font-size:12.5px;color:#fca5a5;margin-bottom:14px"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="fg">
+      <label>Employee ID *</label>
+      <input id="n-eid" type="text" placeholder="e.g. RJ-001"/>
+    </div>
+    <div class="fg">
+      <label>Full Name *</label>
+      <input id="n-name" type="text" placeholder="Ahmed Al-Rashid"/>
+    </div>
+    <div class="fg">
+      <label>Username * <span style="color:var(--muted);font-size:10px">(app login)</span></label>
+      <input id="n-user" type="text" placeholder="ahmed.rashid"/>
+    </div>
+    <div class="fg">
+      <label>Password * <span style="color:var(--muted);font-size:10px">(min 8 chars)</span></label>
+      <input id="n-pw" type="password" placeholder="••••••••"/>
+    </div>
+    <div class="fg">
+      <label>Position</label>
+      <input id="n-pos" type="text" placeholder="Senior Captain"/>
+    </div>
+    <div class="fg">
+      <label>Base Station</label>
+      <input id="n-base" type="text" placeholder="AMM" maxlength="10"/>
+    </div>
+    <div class="fg">
+      <label>Role</label>
+      <select id="n-role">
+        <option value="employee">Employee</option>
+        <option value="captain">Captain / PIC</option>
+        <option value="first_officer">First Officer</option>
+        <option value="cabin_crew">Cabin Crew</option>
+        <option value="engineer">Aircraft Engineer</option>
+        <option value="ground_ops">Ground Operations</option>
+        <option value="occ">OCC / Dispatcher</option>
+        <option value="maintenance">Maintenance</option>
+        <option value="atc">ATC</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Department</label>
+      <select id="n-dept">
+        <option value="">— Select —</option>
+        {% for d in departments %}
+        <option value="{{ d.id }}">{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Email</label>
+      <input id="n-email" type="email" placeholder="ahmed@airline.com"/>
+    </div>
+    <div class="fg">
+      <label>Mobile</label>
+      <input id="n-mobile" type="text" placeholder="+962 79 000 0000"/>
+    </div>
+    <div class="fg">
+      <label>Join Date</label>
+      <input id="n-join" type="date"/>
+    </div>
+    <div class="fg">
+      <label>Employment Status</label>
+      <select id="n-status">
+        <option value="Active">Active</option>
+        <option value="Probation">Probation</option>
+        <option value="Suspended">Suspended</option>
+        <option value="Inactive">Inactive</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="info-banner" style="margin:14px 0;font-size:11.5px">
+    📱 The employee uses <strong>username + password</strong> to login to the AviaS mobile app.
+    They cannot access this admin dashboard.
+  </div>
+
+  <div style="display:flex;gap:10px;justify-content:flex-end">
+    <button onclick="closeModal('new-modal')" class="btn btn-outline">Cancel</button>
+    <button id="new-submit" onclick="submitNew()" class="btn btn-gold">Create Employee</button>
+  </div>
+</div>
+</div>
+
+
+<script>
+/* ── Table filtering ─────────────────────────────────────────────────────── */
+function filterTable() {
+  const q      = document.getElementById('search-input').value.toLowerCase();
+  const dept   = document.getElementById('dept-filter').value;
+  const status = document.getElementById('status-filter').value;
+  document.querySelectorAll('.em-row').forEach(row => {
+    const nameOk   = !q || row.dataset.name.includes(q) || row.dataset.id.includes(q) || row.dataset.email.includes(q);
+    const deptOk   = !dept || row.dataset.dept === dept;
+    const statusOk = !status || row.dataset.status === status;
+    row.style.display = (nameOk && deptOk && statusOk) ? '' : 'none';
+  });
+}
+
+/* ── Modal helpers ───────────────────────────────────────────────────────── */
+function openNewModal() { document.getElementById('new-modal').style.display = 'flex'; }
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+document.querySelectorAll('.modal-bg').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
+});
+
+/* ── Create employee ─────────────────────────────────────────────────────── */
+async function submitNew() {
+  const btn  = document.getElementById('new-submit');
+  const errEl = document.getElementById('new-error');
+  errEl.style.display = 'none';
+
+  const eid   = document.getElementById('n-eid').value.trim();
+  const name  = document.getElementById('n-name').value.trim();
+  const user  = document.getElementById('n-user').value.trim();
+  const pw    = document.getElementById('n-pw').value;
+  if (!eid || !name || !user || !pw) {
+    errEl.textContent = 'Employee ID, Full Name, Username and Password are required.';
+    errEl.style.display = 'block'; return;
+  }
+  if (pw.length < 8) {
+    errEl.textContent = 'Password must be at least 8 characters.';
+    errEl.style.display = 'block'; return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    const r = await fetch('/api/admin/employees', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        employee_id:       eid,
+        full_name:         name,
+        username:          user,
+        password:          pw,
+        position:          document.getElementById('n-pos').value.trim(),
+        base_station:      document.getElementById('n-base').value.trim().toUpperCase(),
+        role:              document.getElementById('n-role').value,
+        department_id:     document.getElementById('n-dept').value || null,
+        email:             document.getElementById('n-email').value.trim(),
+        mobile:            document.getElementById('n-mobile').value.trim(),
+        join_date:         document.getElementById('n-join').value,
+        employment_status: document.getElementById('n-status').value,
+      })
+    });
+    const j = await r.json();
+    if (j.status === 'ok') {
+      location.reload();
+    } else {
+      errEl.textContent = j.message || 'Creation failed.';
+      errEl.style.display = 'block';
+    }
+  } catch(e) {
+    errEl.textContent = 'Network error: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Create Employee';
+  }
+}
+
+/* ── Toggle active status ────────────────────────────────────────────────── */
+async function toggleStatus(empId, name, newActive) {
+  if (!confirm(`${newActive ? 'Enable' : 'Disable'} account for ${name}?`)) return;
+  const r = await fetch(`/api/admin/employees/${empId}/status`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({is_active: newActive === true || newActive === 'true'})
+  });
+  const j = await r.json();
+  if (j.status === 'ok') location.reload();
+  else alert(j.message || 'Update failed');
+}
+</script>
+
+{% endblock %}
