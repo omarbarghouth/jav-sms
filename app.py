@@ -2268,34 +2268,55 @@ def api_mobile_profile_change_password():
 @app.route('/api/mobile/profile/upload_image', methods=['POST'])
 @csrf.exempt
 def api_mobile_profile_upload_image():
-    """Employee Portal: Upload profile photo. Saved to static/profile_images/."""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    data = _verify_token(token)
-    if not data:
-        return api_err('Unauthorized', 401)
-    try:
-        import uuid, os
-        _, emp, _, _ = _resolve_employee(data)
-        if not emp:
-            return api_err('Employee record not found', 404)
-        if 'image' not in request.files:
-            return api_err('No image file provided', 400)
-        file = request.files['image']
-        if not file.filename:
-            return api_err('Empty filename', 400)
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
-            return api_err('Unsupported image format', 400)
-        save_dir = os.path.join(app.static_folder, 'profile_images')
-        os.makedirs(save_dir, exist_ok=True)
-        filename = f'{emp.employee_id}_{uuid.uuid4().hex[:8]}{ext}'
-        file.save(os.path.join(save_dir, filename))
-        emp.profile_image = filename
-        db.session.commit()
-        return api_ok({'profile_image_url': f'/static/profile_images/{filename}'}, 'Image uploaded')
-    except Exception as e:
-        db.session.rollback()
-        return api_err(str(e)[:120], 500)
+    """DISABLED: Profile photos are managed exclusively by administrators via the web portal."""
+    return api_err('Profile photo changes must be made by an administrator via the web portal.', 403)
+
+
+# ── Admin: upload employee profile photo ────────────────────────────────────
+@app.route('/api/admin/employees/<int:emp_id>/photo', methods=['POST'])
+@require_login
+def api_admin_employee_photo_upload(emp_id):
+    """Web Admin: Upload or replace employee profile photo."""
+    import uuid, os
+    emp = Employee.query.get_or_404(emp_id)
+    if 'photo' not in request.files:
+        return api_err('No photo file provided', 400)
+    file = request.files['photo']
+    if not file.filename:
+        return api_err('Empty filename', 400)
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+        return api_err('Unsupported format. Use JPG, PNG or WEBP.', 400)
+    save_dir = os.path.join(app.static_folder, 'profile_images')
+    os.makedirs(save_dir, exist_ok=True)
+    # Delete old file if present
+    if emp.profile_image:
+        old_path = os.path.join(save_dir, emp.profile_image)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    filename = f'{emp.employee_id}_{uuid.uuid4().hex[:8]}{ext}'
+    file.save(os.path.join(save_dir, filename))
+    emp.profile_image = filename
+    db.session.commit()
+    return api_ok({'profile_image_url': f'/static/profile_images/{filename}'}, 'Photo updated')
+
+
+# ── Admin: delete employee profile photo ────────────────────────────────────
+@app.route('/api/admin/employees/<int:emp_id>/photo', methods=['DELETE'])
+@require_login
+def api_admin_employee_photo_delete(emp_id):
+    """Web Admin: Remove employee profile photo."""
+    import os
+    emp = Employee.query.get_or_404(emp_id)
+    if not emp.profile_image:
+        return api_err('No photo to delete', 400)
+    save_dir = os.path.join(app.static_folder, 'profile_images')
+    old_path = os.path.join(save_dir, emp.profile_image)
+    if os.path.exists(old_path):
+        os.remove(old_path)
+    emp.profile_image = None
+    db.session.commit()
+    return api_ok({}, 'Photo removed')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
