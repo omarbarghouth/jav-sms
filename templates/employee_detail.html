@@ -46,17 +46,37 @@
 <!-- Header card -->
 <div class="card" style="margin-bottom:16px;padding:20px">
   <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-    <!-- Avatar -->
-    <div style="width:64px;height:64px;border-radius:50%;border:2px solid var(--gold);
-      background:#1a2846;overflow:hidden;flex-shrink:0">
-      {% if emp.profile_image %}
-      <img src="{{ emp.profile_image }}" style="width:100%;height:100%;object-fit:cover"/>
-      {% else %}
-      <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;
-        font-size:24px;font-weight:900;color:var(--gold)">
-        {{ emp.full_name[0]|upper if emp.full_name else '?' }}
+    <!-- Avatar + photo management -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex-shrink:0">
+      <div id="avatar-wrap" style="width:72px;height:72px;border-radius:50%;border:2px solid var(--gold);
+        background:#1a2846;overflow:hidden;position:relative">
+        {% if emp.profile_image %}
+        <img id="avatar-img" src="/static/profile_images/{{ emp.profile_image }}"
+          style="width:100%;height:100%;object-fit:cover"/>
+        {% else %}
+        <div id="avatar-initials" style="width:100%;height:100%;display:flex;align-items:center;
+          justify-content:center;font-size:26px;font-weight:900;color:var(--gold)">
+          {{ emp.full_name[0]|upper if emp.full_name else '?' }}
+        </div>
+        {% endif %}
       </div>
-      {% endif %}
+      <div style="display:flex;gap:5px">
+        <label for="photo-input"
+          style="padding:4px 10px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer;
+            background:rgba(201,168,76,.12);color:var(--gold);border:1px solid rgba(201,168,76,.3);
+            white-space:nowrap">
+          📷 Upload Photo
+          <input id="photo-input" type="file" accept=".jpg,.jpeg,.png,.webp"
+            style="display:none" onchange="uploadPhoto({{ emp.id }}, this)"/>
+        </label>
+        {% if emp.profile_image %}
+        <button id="del-photo-btn" onclick="deletePhoto({{ emp.id }})"
+          style="padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer;
+            font-family:inherit;background:rgba(220,38,38,.1);color:#ef4444;
+            border:1px solid rgba(220,38,38,.3)" title="Remove photo">✕</button>
+        {% endif %}
+      </div>
+      <div id="photo-msg" style="font-size:10px;color:var(--muted);text-align:center;min-height:14px"></div>
     </div>
     <!-- Identity -->
     <div style="flex:1">
@@ -584,6 +604,79 @@ async function saveTraining() {
     errEl.textContent = 'Network error: ' + e.message; errEl.style.display = 'block';
   } finally {
     btn.disabled = false; btn.textContent = 'Save Record';
+  }
+}
+
+/* ── Profile photo management ────────────────────────────────────────────── */
+async function uploadPhoto(empId, input) {
+  if (!input.files.length) return;
+  const msg = document.getElementById('photo-msg');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Uploading…';
+  const fd = new FormData();
+  fd.append('photo', input.files[0]);
+  try {
+    const r = await fetch(`/api/admin/employees/${empId}/photo`, { method: 'POST', body: fd });
+    const j = await r.json();
+    if (j.status === 'ok') {
+      msg.style.color = '#22c55e';
+      msg.textContent = 'Photo updated';
+      // Update avatar in-place
+      const wrap = document.getElementById('avatar-wrap');
+      let img = document.getElementById('avatar-img');
+      if (!img) {
+        wrap.innerHTML = '';
+        img = document.createElement('img');
+        img.id = 'avatar-img';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+        wrap.appendChild(img);
+      }
+      img.src = j.data.profile_image_url + '?t=' + Date.now();
+      // Show delete button
+      const existingDel = document.getElementById('del-photo-btn');
+      if (!existingDel) {
+        const delBtn = document.createElement('button');
+        delBtn.id = 'del-photo-btn';
+        delBtn.title = 'Remove photo';
+        delBtn.textContent = '✕';
+        delBtn.style.cssText = 'padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;background:rgba(220,38,38,.1);color:#ef4444;border:1px solid rgba(220,38,38,.3)';
+        delBtn.onclick = () => deletePhoto(empId);
+        document.querySelector('label[for="photo-input"]').insertAdjacentElement('afterend', delBtn);
+      }
+    } else {
+      msg.style.color = '#ef4444';
+      msg.textContent = j.message || 'Upload failed';
+    }
+  } catch(e) {
+    msg.style.color = '#ef4444';
+    msg.textContent = 'Network error';
+  }
+  input.value = '';
+}
+
+async function deletePhoto(empId) {
+  if (!confirm('Remove this employee\'s profile photo?')) return;
+  const msg = document.getElementById('photo-msg');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Removing…';
+  try {
+    const r = await fetch(`/api/admin/employees/${empId}/photo`, { method: 'DELETE' });
+    const j = await r.json();
+    if (j.status === 'ok') {
+      msg.style.color = '#22c55e';
+      msg.textContent = 'Photo removed';
+      const wrap = document.getElementById('avatar-wrap');
+      const initial = '{{ emp.full_name[0]|upper if emp.full_name else "?" }}';
+      wrap.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:var(--gold)">${initial}</div>`;
+      const delBtn = document.getElementById('del-photo-btn');
+      if (delBtn) delBtn.remove();
+    } else {
+      msg.style.color = '#ef4444';
+      msg.textContent = j.message || 'Remove failed';
+    }
+  } catch(e) {
+    msg.style.color = '#ef4444';
+    msg.textContent = 'Network error';
   }
 }
 
