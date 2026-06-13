@@ -2591,15 +2591,15 @@ def api_admin_employees_training_create(emp_id):
         return api_err('training_program is required', 400)
     try:
         t = Training(
-            employee_name     = emp.full_name,
-            training_program  = body.get('training_program', '').strip(),
-            training_category = body.get('category', '').strip(),
-            status            = body.get('status', 'Completed').strip(),
-            training_date     = body.get('training_date', '').strip(),
-            expiry_date       = body.get('expiry_date', '').strip(),
-            scheduled_date    = body.get('scheduled_date', '').strip(),
-            instructor        = body.get('instructor', '').strip(),
-            department_id     = emp.department_id,
+            employee_name    = emp.full_name,
+            training_program = body.get('training_program', '').strip(),
+            training_type    = body.get('training_type', '').strip(),
+            status           = body.get('status', 'Completed').strip(),
+            training_date    = body.get('training_date', '').strip(),
+            expiry_date      = body.get('expiry_date', '').strip(),
+            scheduled_date   = body.get('scheduled_date', '').strip(),
+            instructor       = body.get('instructor', '').strip(),
+            department_id    = emp.department_id,
         )
         db.session.add(t)
         db.session.commit()
@@ -2618,7 +2618,7 @@ def api_admin_employees_training_update(tid):
     body = request.get_json(silent=True) or {}
     editable = {
         'training_program': 'training_program',
-        'category':         'training_category',
+        'training_type':    'training_type',
         'status':           'status',
         'training_date':    'training_date',
         'expiry_date':      'expiry_date',
