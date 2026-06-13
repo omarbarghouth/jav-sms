@@ -10,6 +10,12 @@ try:
     from models import AuditVerificationItem
 except ImportError:
     AuditVerificationItem = None
+# Employee notification log
+try:
+    from models import EmployeeNotificationLog
+except ImportError:
+    EmployeeNotificationLog = None
+
 # Phase 2 enforcement models
 try:
     from models import (
@@ -1777,18 +1783,24 @@ def api_me():
             if emp.department_id:
                 dept = Department.query.get(emp.department_id)
                 dept_name = dept.name if dept else ''
+            profile_image_url = f'/static/profile_images/{emp.profile_image}' if emp.profile_image else None
             return api_ok({
-                'user_id':       uid_str,
-                'username':      emp.username,
-                'full_name':     emp.full_name,
-                'role':          emp.role or 'employee',
-                'department':    dept_name,
-                'department_id': emp.department_id,
-                'employee_id':   emp.employee_id,
-                'email':         emp.email or '',
-                'mobile':        emp.mobile or '',
-                'account_type':  'employee',
-                'last_login':    emp.last_login.isoformat() if emp.last_login else '',
+                'user_id':           uid_str,
+                'username':          emp.username,
+                'full_name':         emp.full_name,
+                'role':              emp.role or 'employee',
+                'department':        dept_name,
+                'department_id':     emp.department_id,
+                'employee_id':       emp.employee_id,
+                'email':             emp.email or '',
+                'mobile':            emp.mobile or '',
+                'account_type':      'employee',
+                'last_login':        emp.last_login.isoformat() if emp.last_login else '',
+                'profile_image_url': profile_image_url,
+                'base_station':      emp.base_station or 'AMM',
+                'join_date':         emp.join_date or '',
+                'employment_status': emp.employment_status or 'Active',
+                'position':          emp.position or '',
             }, 'Profile loaded')
         else:
             # Web admin / safety user account
@@ -1817,61 +1829,146 @@ def api_me():
         return api_err(str(e)[:120], 500)
 
 
+def _resolve_employee(data):
+    """Resolve token data to (uid_str, emp, emp_name, emp_username) or None tuple."""
+    uid_str = str(data['user_id'])
+    emp, emp_name, emp_username = None, '', ''
+    if uid_str.startswith('emp_'):
+        emp = Employee.query.get(int(uid_str.replace('emp_', '')))
+        if emp:
+            emp_name = emp.full_name
+            emp_username = emp.username
+    return uid_str, emp, emp_name, emp_username
+
+
 @app.route('/api/mobile/profile/full', methods=['GET'])
 @csrf.exempt
 def api_mobile_profile_full():
-    """Employee Portal: Personal info + safety statistics aggregate."""
+    """Employee Portal: Personal info + comprehensive safety statistics."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     data = _verify_token(token)
     if not data:
         return api_err('Unauthorized', 401)
     try:
-        uid_str = str(data['user_id'])
-        emp = None
-        emp_name = ''
-        emp_username = ''
-        if uid_str.startswith('emp_'):
-            emp = Employee.query.get(int(uid_str.replace('emp_', '')))
-            emp_name    = emp.full_name if emp else ''
-            emp_username = emp.username if emp else ''
-
-        # Count submitted reports
         from sqlalchemy import or_
+        uid_str, emp, emp_name, emp_username = _resolve_employee(data)
+
+        reports_by_type = {'Hazard': 0, 'ASR': 0, 'Voluntary': 0, 'Confidential': 0}
         total_reports = 0
-        reports_by_type = {}
         if emp_name:
-            hz   = Hazard.query.filter(or_(Hazard.reporter_name == emp_name,
-                       Hazard.reporter_name == emp_username)).count()
-            asr  = ASR.query.filter(or_(ASR.reporter_name == emp_name,
-                       ASR.reporter_name == emp_username)).count()
-            vol  = VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name,
-                       VoluntaryReport.reporter_name == emp_username)).count()
-            conf = ConfidentialReport.query.filter(or_(ConfidentialReport.reporter_name == emp_name,
-                       ConfidentialReport.reporter_name == emp_username)).count()
-            total_reports = hz + asr + vol + conf
-            reports_by_type = {'Hazard': hz, 'ASR': asr, 'Voluntary': vol, 'Confidential': conf}
+            name_filter = or_(Hazard.reporter_name == emp_name, Hazard.reporter_name == emp_username)
+            reports_by_type['Hazard'] = Hazard.query.filter(name_filter).count()
+            asr_filter = or_(ASR.reporter_name == emp_name, ASR.reporter_name == emp_username)
+            reports_by_type['ASR'] = ASR.query.filter(asr_filter).count()
+            vol_filter = or_(VoluntaryReport.reporter_name == emp_name, VoluntaryReport.reporter_name == emp_username)
+            reports_by_type['Voluntary'] = VoluntaryReport.query.filter(vol_filter).count()
+            conf_filter = or_(ConfidentialReport.reporter_name == emp_name, ConfidentialReport.reporter_name == emp_username)
+            reports_by_type['Confidential'] = ConfidentialReport.query.filter(conf_filter).count()
+            total_reports = sum(reports_by_type.values())
 
-        # Open / overdue actions owned by this employee
-        open_actions  = 0
-        overdue_count = 0
+        open_actions = overdue_count = closed_actions = 0
         if emp_name:
-            open_actions  = Action.query.filter(Action.owner == emp_name,
-                Action.status.in_(['Open', 'In Progress', 'Overdue'])).count()
-            overdue_count = Action.query.filter(Action.owner == emp_name,
-                Action.status == 'Overdue').count()
+            open_actions  = Action.query.filter(Action.owner == emp_name, Action.status.in_(['Open', 'In Progress'])).count()
+            overdue_count = Action.query.filter(Action.owner == emp_name, Action.status == 'Overdue').count()
+            closed_actions = Action.query.filter(Action.owner == emp_name, Action.status == 'Closed').count()
 
-        safety_score = max(0, 100 - overdue_count * 10 - open_actions * 5)
+        training_count = 0
+        expired_training = 0
+        if emp_name:
+            training_count = Training.query.filter(Training.employee_name == emp_name).count()
+            expired_training = Training.query.filter(Training.employee_name == emp_name, Training.status == 'Expired').count()
+
+        reads_count = 0
+        acks_count = 0
+        if uid_str:
+            reads_count = SafetyPromoRead.query.filter_by(user_id=uid_str).count()
+            acks_count  = SafetyPromoAck.query.filter_by(user_id=uid_str).count()
+
+        dept_name = ''
+        if emp and emp.department:
+            dept_name = emp.department.name or ''
+
+        profile_image_url = None
+        if emp and emp.profile_image:
+            profile_image_url = f'/static/profile_images/{emp.profile_image}'
 
         return api_ok({
-            'total_reports':   total_reports,
-            'reports_by_type': reports_by_type,
-            'open_actions':    open_actions,
-            'safety_score':    safety_score,
-            'employee_id':     emp.employee_id if emp else '',
-            'email':           emp_obj.email or '' if emp_obj else '',
-            'phone':           emp_obj.mobile or '' if emp_obj else '',
-            'base':            'AMM',
+            'employee_id':       emp.employee_id if emp else '',
+            'full_name':         emp_name,
+            'email':             (emp.email or '') if emp else '',
+            'phone':             (emp.mobile or '') if emp else '',
+            'role':              (emp.role or 'Employee') if emp else '',
+            'department':        dept_name,
+            'base_station':      (emp.base_station or 'AMM') if emp else 'AMM',
+            'join_date':         (emp.join_date or '') if emp else '',
+            'employment_status': (emp.employment_status or 'Active') if emp else 'Active',
+            'position':          (emp.position or '') if emp else '',
+            'profile_image_url': profile_image_url,
+            'total_reports':     total_reports,
+            'reports_by_type':   reports_by_type,
+            'open_actions':      open_actions,
+            'overdue_actions':   overdue_count,
+            'closed_actions':    closed_actions,
+            'training_count':    training_count,
+            'expired_training':  expired_training,
+            'content_reads':     reads_count,
+            'content_acks':      acks_count,
         }, 'Profile loaded')
+    except Exception as e:
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/profile/safety-score', methods=['GET'])
+@csrf.exempt
+def api_mobile_profile_safety_score():
+    """Employee Portal: Compute safety participation score."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str, emp, emp_name, _ = _resolve_employee(data)
+
+        # Reporting activity (max 30 pts): 5 pts per report, cap 30
+        from sqlalchemy import or_
+        total_reports = 0
+        if emp_name:
+            hz  = Hazard.query.filter(or_(Hazard.reporter_name == emp_name)).count()
+            asr = ASR.query.filter(or_(ASR.reporter_name == emp_name)).count()
+            vol = VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name)).count()
+            total_reports = hz + asr + vol
+        reporting_score = min(30, total_reports * 5)
+
+        # Training compliance (max 30 pts)
+        training_score = 30
+        if emp_name:
+            expired = Training.query.filter(Training.employee_name == emp_name, Training.status == 'Expired').count()
+            training_score = max(0, 30 - expired * 10)
+
+        # Action compliance (max 25 pts): deduct for overdue
+        action_score = 25
+        if emp_name:
+            overdue = Action.query.filter(Action.owner == emp_name, Action.status == 'Overdue').count()
+            action_score = max(0, 25 - overdue * 8)
+
+        # Content engagement (max 15 pts): reads + acks
+        engagement_score = 0
+        if uid_str:
+            reads = SafetyPromoRead.query.filter_by(user_id=uid_str).count()
+            acks  = SafetyPromoAck.query.filter_by(user_id=uid_str).count()
+            engagement_score = min(15, reads * 2 + acks * 3)
+
+        total = reporting_score + training_score + action_score + engagement_score
+        level = 'Excellent' if total >= 90 else ('Good' if total >= 70 else ('Fair' if total >= 50 else 'Needs Improvement'))
+
+        return api_ok({
+            'score':             total,
+            'level':             level,
+            'reporting_score':   reporting_score,
+            'training_score':    training_score,
+            'action_score':      action_score,
+            'engagement_score':  engagement_score,
+        }, 'Safety score calculated')
     except Exception as e:
         return api_err(str(e)[:120], 500)
 
@@ -1885,14 +1982,7 @@ def api_mobile_profile_training():
     if not data:
         return api_err('Unauthorized', 401)
     try:
-        uid_str = str(data['user_id'])
-        emp_id = None
-        emp_name = ''
-        if uid_str.startswith('emp_'):
-            emp_id = int(uid_str.replace('emp_', ''))
-            emp = Employee.query.get(emp_id)
-            emp_name = emp.full_name if emp else ''
-
+        _, _, emp_name, _ = _resolve_employee(data)
         records = []
         if emp_name:
             trainings = Training.query.filter(
@@ -1904,8 +1994,9 @@ def api_mobile_profile_training():
                     'status':        t.status or 'Completed',
                     'training_date': t.training_date or '',
                     'expiry_date':   t.expiry_date or '',
-                    'score':         None,
+                    'scheduled_date': t.scheduled_date or '',
                     'provider':      t.instructor or '',
+                    'category':      t.training_category or '',
                 })
         return api_ok(records, 'Training records loaded')
     except Exception as e:
@@ -1915,31 +2006,27 @@ def api_mobile_profile_training():
 @app.route('/api/mobile/profile/actions', methods=['GET'])
 @csrf.exempt
 def api_mobile_profile_actions():
-    """Employee Portal: Corrective actions assigned to current employee."""
+    """Employee Portal: All corrective actions owned by current employee."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     data = _verify_token(token)
     if not data:
         return api_err('Unauthorized', 401)
     try:
-        uid_str = str(data['user_id'])
-        emp_name = ''
-        if uid_str.startswith('emp_'):
-            emp_id = int(uid_str.replace('emp_', ''))
-            emp = Employee.query.get(emp_id)
-            emp_name = emp.full_name if emp else ''
-
+        _, _, emp_name, _ = _resolve_employee(data)
         records = []
         if emp_name:
             actions = Action.query.filter(
                 Action.owner == emp_name
-            ).order_by(Action.due_date.asc()).limit(30).all()
+            ).order_by(Action.due_date.asc()).limit(50).all()
             for a in actions:
                 records.append({
-                    'ref':      a.id or '',
+                    'ref':      str(a.id),
                     'title':    (a.description or '')[:80],
                     'status':   a.status or 'Open',
                     'priority': a.priority or 'Medium',
                     'due_date': a.due_date or '',
+                    'source':   a.source or '',
+                    'linked_ref': a.linked_ref_id or a.hazard_id or '',
                 })
         return api_ok(records, 'Actions loaded')
     except Exception as e:
@@ -1949,82 +2036,55 @@ def api_mobile_profile_actions():
 @app.route('/api/mobile/profile/timeline', methods=['GET'])
 @csrf.exempt
 def api_mobile_profile_timeline():
-    """Employee Portal: Combined safety activity timeline for current employee."""
+    """Employee Portal: Combined safety activity timeline."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     data = _verify_token(token)
     if not data:
         return api_err('Unauthorized', 401)
     try:
-        uid_str = str(data['user_id'])
-        emp_id = None
-        emp_name = ''
-        emp_username = ''
-        if uid_str.startswith('emp_'):
-            emp_id = int(uid_str.replace('emp_', ''))
-            emp = Employee.query.get(emp_id)
-            emp_name = emp.full_name if emp else ''
-            emp_username = emp.username if emp else ''
-
-        events = []
         from sqlalchemy import or_
+        uid_str, emp, emp_name, emp_username = _resolve_employee(data)
+        events = []
 
-        # Hazard reports
-        hazards = Hazard.query.filter(
-            or_(Hazard.reporter_name == emp_name,
-                Hazard.reporter_name == emp_username)
-        ).order_by(Hazard.date_reported.desc()).limit(10).all()
-        for h in hazards:
-            events.append({
-                'type': 'Report', 'title': h.hazard_title or 'Hazard Report',
-                'detail': h.ref_number or '',
-                'date': h.date_reported.isoformat()[:10] if h.date_reported else '',
-                'ts': h.date_reported,
-            })
-
-        # ASR reports
-        asrs = ASR.query.filter(
-            or_(ASR.reporter_name == emp_name,
-                ASR.reporter_name == emp_username)
-        ).order_by(ASR.date.desc()).limit(10).all()
-        for a in asrs:
-            events.append({
-                'type': 'Report', 'title': a.event_category or 'ASR Report',
-                'detail': a.ref_number or '',
-                'date': a.date.isoformat()[:10] if a.date else '',
-                'ts': a.date,
-            })
-
-        # Assigned actions
         if emp_name:
-            actions = Action.query.filter(
-                Action.owner == emp_name
-            ).order_by(Action.created_at.desc()).limit(10).all()
-            for ac in actions:
-                events.append({
-                    'type': 'Action', 'title': (ac.description or 'Corrective Action')[:60],
-                    'detail': f'Status: {ac.status or "Open"}',
-                    'date': ac.created_at.isoformat()[:10] if ac.created_at else '',
-                    'ts': ac.created_at,
-                })
+            for h in Hazard.query.filter(or_(Hazard.reporter_name == emp_name, Hazard.reporter_name == emp_username)).order_by(Hazard.date_reported.desc()).limit(10).all():
+                events.append({'type': 'Report', 'subtype': 'Hazard', 'title': h.hazard_title or 'Hazard Report',
+                    'detail': h.ref_number or '', 'status': h.status or '',
+                    'date': h.date_reported.isoformat()[:10] if h.date_reported else '', 'ts': h.date_reported})
 
-        # Training
-        if emp_name:
-            trainings = Training.query.filter(
-                Training.employee_name == emp_name
-            ).order_by(Training.created_at.desc()).limit(5).all()
-            for t in trainings:
-                events.append({
-                    'type': 'Training', 'title': t.training_program or t.training_type or 'Training',
-                    'detail': t.status or 'Completed',
-                    'date': t.training_date or '',
-                    'ts': t.created_at,
-                })
+            for a in ASR.query.filter(or_(ASR.reporter_name == emp_name, ASR.reporter_name == emp_username)).order_by(ASR.date.desc()).limit(10).all():
+                events.append({'type': 'Report', 'subtype': 'ASR', 'title': a.event_category or 'ASR Report',
+                    'detail': a.ref_number or '', 'status': a.status or '',
+                    'date': a.date.isoformat()[:10] if a.date else '', 'ts': a.date})
 
-        # Sort all events by timestamp descending, take top 20
-        events.sort(key=lambda x: x.get('ts') or '', reverse=True)
-        result = [{'type': e['type'], 'title': e['title'],
-                   'detail': e['detail'], 'date': e['date']}
-                  for e in events[:20]]
+            for v in VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name, VoluntaryReport.reporter_name == emp_username)).order_by(VoluntaryReport.date_of_event.desc()).limit(5).all():
+                events.append({'type': 'Report', 'subtype': 'Voluntary', 'title': v.event_type or 'Voluntary Report',
+                    'detail': v.ref_number or '', 'status': v.status or '',
+                    'date': v.date_of_event or '', 'ts': v.date_of_event})
+
+            for ac in Action.query.filter(Action.owner == emp_name).order_by(Action.created_at.desc()).limit(10).all():
+                events.append({'type': 'Action', 'subtype': ac.status or 'Open',
+                    'title': (ac.description or 'Corrective Action')[:60],
+                    'detail': f'Due: {ac.due_date or "—"}', 'status': ac.status or 'Open',
+                    'date': ac.created_at.isoformat()[:10] if ac.created_at else '', 'ts': ac.created_at})
+
+            for t in Training.query.filter(Training.employee_name == emp_name).order_by(Training.created_at.desc()).limit(5).all():
+                events.append({'type': 'Training', 'subtype': t.status or 'Completed',
+                    'title': t.training_program or t.training_type or 'Training',
+                    'detail': f'Expires: {t.expiry_date or "—"}', 'status': t.status or 'Completed',
+                    'date': t.training_date or '', 'ts': t.created_at})
+
+        if uid_str:
+            for r in SafetyPromoRead.query.filter_by(user_id=uid_str).order_by(SafetyPromoRead.read_at.desc()).limit(5).all():
+                events.append({'type': 'Content', 'subtype': r.content_type,
+                    'title': f'Read {r.content_type.capitalize()}',
+                    'detail': r.content_id, 'status': 'Read',
+                    'date': r.read_at.isoformat()[:10] if r.read_at else '', 'ts': r.read_at})
+
+        events.sort(key=lambda x: (x.get('ts') or ''), reverse=True)
+        result = [{'type': e['type'], 'subtype': e.get('subtype', ''), 'title': e['title'],
+                   'detail': e['detail'], 'status': e['status'], 'date': e['date']}
+                  for e in events[:30]]
         return api_ok(result, 'Timeline loaded')
     except Exception as e:
         return api_err(str(e)[:120], 500)
@@ -2033,21 +2093,56 @@ def api_mobile_profile_timeline():
 @app.route('/api/mobile/profile/notifications', methods=['GET'])
 @csrf.exempt
 def api_mobile_profile_notifications():
-    """Employee Portal: In-app notifications for current user."""
+    """Employee Portal: In-app notifications from EmployeeNotificationLog."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str, _, _, _ = _resolve_employee(data)
+        records = []
+        logs = EmployeeNotificationLog.query.filter_by(
+            employee_user_id=uid_str
+        ).order_by(EmployeeNotificationLog.sent_at.desc()).limit(50).all()
+        for n in logs:
+            records.append({
+                'id':                n.id,
+                'title':             n.title,
+                'body':              n.body or '',
+                'notification_type': n.notification_type or '',
+                'content_type':      n.content_type or '',
+                'content_id':        n.content_id or '',
+                'is_read':           n.is_read,
+                'sent_at':           n.sent_at.isoformat()[:16] if n.sent_at else '',
+            })
+        return api_ok(records, 'Notifications loaded')
+    except Exception as e:
+        return api_ok([], 'No notifications')
+
+
+@app.route('/api/mobile/profile/notifications/mark-read', methods=['POST'])
+@csrf.exempt
+def api_mobile_profile_notifications_mark_read():
+    """Mark one or all notifications as read."""
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     data = _verify_token(token)
     if not data:
         return api_err('Unauthorized', 401)
     try:
         uid_str = str(data['user_id'])
-        emp_id = None
-        if uid_str.startswith('emp_'):
-            emp_id = int(uid_str.replace('emp_', ''))
-
-        # No per-employee notification log yet; returns empty for now
-        return api_ok([], 'Notifications loaded')
+        body = request.get_json(silent=True) or {}
+        notif_id = body.get('id')
+        if notif_id:
+            n = EmployeeNotificationLog.query.filter_by(id=notif_id, employee_user_id=uid_str).first()
+            if n:
+                n.is_read = True
+        else:
+            EmployeeNotificationLog.query.filter_by(employee_user_id=uid_str, is_read=False).update({'is_read': True})
+        db.session.commit()
+        return api_ok({}, 'Marked read')
     except Exception as e:
-        return api_ok([], 'No notifications')
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
 
 
 @app.route('/api/mobile/profile/feedback', methods=['GET'])
@@ -2059,33 +2154,81 @@ def api_mobile_profile_feedback():
     if not data:
         return api_err('Unauthorized', 401)
     try:
-        uid_str = str(data['user_id'])
-        emp_id = None
-        emp_name = ''
-        emp_username = ''
-        if uid_str.startswith('emp_'):
-            emp_id = int(uid_str.replace('emp_', ''))
-            emp = Employee.query.get(emp_id)
-            emp_name = emp.full_name if emp else ''
-            emp_username = emp.username if emp else ''
-
+        uid_str, _, _, _ = _resolve_employee(data)
         records = []
-        if uid_str:
-            feedbacks = ReportFeedback.query.filter_by(
-                reporter_user_id=uid_str
-            ).order_by(ReportFeedback.submitted_at.desc()).limit(20).all()
-            for f in feedbacks:
-                records.append({
-                    'ref':     f.report_ref or '—',
-                    'type':    f.report_type or 'Report',
-                    'status':  f.stage_label or 'Submitted',
-                    'message': f.outcome_summary or '',
-                    'outcome': f.outcome_actions_taken or '',
-                    'date':    f.submitted_at.isoformat()[:10] if f.submitted_at else '',
-                })
+        feedbacks = ReportFeedback.query.filter_by(
+            reporter_user_id=uid_str
+        ).order_by(ReportFeedback.submitted_at.desc()).limit(20).all()
+        for f in feedbacks:
+            records.append({
+                'ref':     f.report_ref or '—',
+                'type':    f.report_type or 'Report',
+                'stage':   f.stage_num or 1,
+                'status':  f.stage_label or 'Submitted',
+                'message': f.outcome_summary or '',
+                'outcome': f.outcome_actions_taken or '',
+                'date':    f.submitted_at.isoformat()[:10] if f.submitted_at else '',
+            })
         return api_ok(records, 'Feedback loaded')
     except Exception as e:
         return api_ok([], 'No feedback found')
+
+
+@app.route('/api/mobile/profile/update', methods=['PATCH'])
+@csrf.exempt
+def api_mobile_profile_update():
+    """Employee Portal: Update editable profile fields (phone, base_station, position)."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        uid_str, emp, _, _ = _resolve_employee(data)
+        if not emp:
+            return api_err('Employee record not found', 404)
+        body = request.get_json(silent=True) or {}
+        allowed = {'mobile', 'base_station', 'position', 'join_date'}
+        for field in allowed:
+            if field in body:
+                setattr(emp, field, (body[field] or '').strip())
+        db.session.commit()
+        return api_ok({}, 'Profile updated')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
+@app.route('/api/mobile/profile/upload_image', methods=['POST'])
+@csrf.exempt
+def api_mobile_profile_upload_image():
+    """Employee Portal: Upload profile photo. Saved to static/profile_images/."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    data = _verify_token(token)
+    if not data:
+        return api_err('Unauthorized', 401)
+    try:
+        import uuid, os
+        _, emp, _, _ = _resolve_employee(data)
+        if not emp:
+            return api_err('Employee record not found', 404)
+        if 'image' not in request.files:
+            return api_err('No image file provided', 400)
+        file = request.files['image']
+        if not file.filename:
+            return api_err('Empty filename', 400)
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+            return api_err('Unsupported image format', 400)
+        save_dir = os.path.join(app.static_folder, 'profile_images')
+        os.makedirs(save_dir, exist_ok=True)
+        filename = f'{emp.employee_id}_{uuid.uuid4().hex[:8]}{ext}'
+        file.save(os.path.join(save_dir, filename))
+        emp.profile_image = filename
+        db.session.commit()
+        return api_ok({'profile_image_url': f'/static/profile_images/{filename}'}, 'Image uploaded')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
 
 
 @app.route('/api/logout', methods=['POST', 'OPTIONS'])
@@ -13821,6 +13964,21 @@ with app.app_context():
             ('is_active', 'BOOLEAN DEFAULT FALSE'),
             ('created_at', 'TIMESTAMP'),
             ('last_login', 'TIMESTAMP'),
+            ('profile_image', 'VARCHAR(200)'),
+            ('base_station', "VARCHAR(10) DEFAULT 'AMM'"),
+            ('join_date', 'VARCHAR(20)'),
+            ('employment_status', "VARCHAR(30) DEFAULT 'Active'"),
+            ('position', 'VARCHAR(100)'),
+        ],
+        'employee_notification_log': [
+            ('employee_user_id', 'VARCHAR(30)'),
+            ('title', 'VARCHAR(200)'),
+            ('body', 'TEXT'),
+            ('notification_type', 'VARCHAR(50)'),
+            ('content_type', 'VARCHAR(30)'),
+            ('content_id', 'VARCHAR(50)'),
+            ('is_read', 'BOOLEAN DEFAULT FALSE'),
+            ('sent_at', 'TIMESTAMP'),
         ],
         'erp': [
             ('erp_ref', 'VARCHAR(30)'),

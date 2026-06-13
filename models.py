@@ -1331,10 +1331,15 @@ class Employee(db.Model):
     email         = db.Column(db.String(120))
     mobile        = db.Column(db.String(30))
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
-    role          = db.Column(db.String(50), default='employee')  # employee, captain, engineer, etc.
-    is_active     = db.Column(db.Boolean, default=True)
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    last_login    = db.Column(db.DateTime)
+    role              = db.Column(db.String(50), default='employee')  # employee, captain, engineer, etc.
+    is_active         = db.Column(db.Boolean, default=True)
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login        = db.Column(db.DateTime)
+    profile_image     = db.Column(db.String(200))
+    base_station      = db.Column(db.String(10), default='AMM')
+    join_date         = db.Column(db.String(20))
+    employment_status = db.Column(db.String(30), default='Active')
+    position          = db.Column(db.String(100))
 
     department = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("employee_set", lazy=True))
 
@@ -1416,6 +1421,24 @@ class DeviceToken(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (db.UniqueConstraint('user_id', 'fcm_token', name='uq_device_token'),)
+
+
+class EmployeeNotificationLog(db.Model):
+    """In-app notification log for mobile employees.
+
+    Written by backend processes (report status changes, action assignments,
+    safety promo publishes). Displayed in the Flutter notification centre tab.
+    """
+    __tablename__ = 'employee_notification_log'
+    id               = db.Column(db.Integer, primary_key=True)
+    employee_user_id = db.Column(db.String(30), nullable=False, index=True)  # 'emp_5'
+    title            = db.Column(db.String(200), nullable=False)
+    body             = db.Column(db.Text)
+    notification_type = db.Column(db.String(50))   # report_update / action_assigned / safety_promo / system
+    content_type     = db.Column(db.String(30))    # hazard / asr / action / bulletin / newsletter / survey
+    content_id       = db.Column(db.String(50))
+    is_read          = db.Column(db.Boolean, default=False)
+    sent_at          = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
