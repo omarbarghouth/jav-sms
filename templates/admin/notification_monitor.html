@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Notification Monitor — AviaS{% endblock %}
+{% block content %}
+<style>
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 22px;display:flex;flex-direction:column;gap:4px}
+.stat-num{font-size:28px;font-weight:900;color:var(--gold)}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+.ntag{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px}
+.ntag-promo{background:rgba(201,168,76,.15);color:#c9a84c}
+.ntag-action{background:rgba(239,68,68,.12);color:#ef4444}
+.ntag-system{background:rgba(99,102,241,.12);color:#818cf8}
+.ntag-unread{background:rgba(239,68,68,.12);color:#ef4444}
+.ntag-read{background:rgba(34,197,94,.1);color:#22c55e}
+.nrow td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12.5px;vertical-align:top}
+.nrow:last-child td{border-bottom:none}
+.nrow:hover td{background:rgba(255,255,255,.025)}
+</style>
+
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+  <div>
+    <div style="font-size:20px;font-weight:900">Notification Monitor</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:2px">Push notification delivery log — all employee notifications</div>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px">
+  <div class="stat-card">
+    <div class="stat-num">{{ total }}</div>
+    <div class="stat-label">Total Sent</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" style="color:#ef4444">{{ unread }}</div>
+    <div class="stat-label">Unread</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" style="color:#22c55e">{{ total - unread }}</div>
+    <div class="stat-label">Read</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" style="color:#818cf8">{{ by_type|length }}</div>
+    <div class="stat-label">Notification Types</div>
+  </div>
+</div>
+
+<!-- Type breakdown -->
+<div class="card" style="margin-bottom:20px;padding:18px 22px">
+  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:12px">By Type</div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px">
+    {% for ntype, count in by_type %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 16px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:13px;font-weight:800;color:var(--gold)">{{ count }}</span>
+      <span style="font-size:11px;color:var(--muted)">{{ ntype or 'system' }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Filter bar -->
+<div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+  <form method="get" style="display:flex;gap:8px">
+    <select name="ntype" onchange="this.form.submit()"
+      style="padding:8px 12px;border-radius:7px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12px;font-family:inherit">
+      <option value="">All Types</option>
+      <option value="safety_promo" {% if ntype_f=='safety_promo' %}selected{% endif %}>Safety Promo</option>
+      <option value="action_assigned" {% if ntype_f=='action_assigned' %}selected{% endif %}>Action Assigned</option>
+      <option value="system" {% if ntype_f=='system' %}selected{% endif %}>System</option>
+    </select>
+  </form>
+  <div style="font-size:12px;color:var(--muted)">Showing {{ logs|length }} of {{ total }} notifications</div>
+</div>
+
+<!-- Notification log table -->
+<div class="card" style="padding:0;overflow:hidden">
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:var(--surface)">
+        <th style="padding:10px 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left">Recipient</th>
+        <th style="padding:10px 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left">Notification</th>
+        <th style="padding:10px 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left">Type</th>
+        <th style="padding:10px 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left">Status</th>
+        <th style="padding:10px 12px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left">Sent</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for n in logs %}
+    {% set emp_id = n.employee_user_id.replace('emp_','') if n.employee_user_id else '' %}
+    <tr class="nrow">
+      <td>
+        <div style="font-weight:700;font-size:12px;color:var(--gold);font-family:monospace">{{ n.employee_user_id }}</div>
+      </td>
+      <td style="max-width:360px">
+        <div style="font-weight:700;font-size:12.5px;margin-bottom:2px">{{ n.title }}</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.4">{{ n.body[:120] }}{% if n.body|length > 120 %}…{% endif %}</div>
+        {% if n.content_type and n.content_id %}
+        <div style="margin-top:4px">
+          <span style="font-size:10px;color:var(--muted);font-family:monospace">{{ n.content_type }}:{{ n.content_id }}</span>
+        </div>
+        {% endif %}
+      </td>
+      <td>
+        <span class="ntag {% if n.notification_type == 'safety_promo' %}ntag-promo{% elif n.notification_type == 'action_assigned' %}ntag-action{% else %}ntag-system{% endif %}">
+          {{ n.notification_type or 'system' }}
+        </span>
+      </td>
+      <td>
+        <span class="ntag {% if n.is_read %}ntag-read{% else %}ntag-unread{% endif %}">
+          {{ '✓ Read' if n.is_read else '● Unread' }}
+        </span>
+      </td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap;font-family:monospace">
+        {{ n.sent_at.strftime('%d %b %Y %H:%M') if n.sent_at else '—' }}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted)">No notifications sent yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total > 50 %}
+<div style="display:flex;gap:8px;margin-top:16px;justify-content:center">
+  {% if page > 1 %}
+  <a href="?page={{ page-1 }}&ntype={{ ntype_f }}" class="btn btn-outline" style="font-size:12px">← Previous</a>
+  {% endif %}
+  <span style="padding:8px 14px;font-size:12px;color:var(--muted)">Page {{ page }} of {{ ((total-1)//50)+1 }}</span>
+  {% if page * 50 < total %}
+  <a href="?page={{ page+1 }}&ntype={{ ntype_f }}" class="btn btn-outline" style="font-size:12px">Next →</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
