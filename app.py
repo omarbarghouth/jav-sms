@@ -2312,19 +2312,37 @@ def employee_detail(emp_id):
     uid_str     = f'emp_{emp.id}'
     emp_name    = emp.full_name
 
-    training_records = Training.query.filter_by(employee_name=emp_name).order_by(Training.created_at.desc()).all()
-    actions          = Action.query.filter(Action.owner == emp_name).order_by(Action.due_date.asc()).limit(20).all()
-    total_reports    = (Hazard.query.filter(or_(Hazard.reporter_name == emp_name)).count() +
-                        ASR.query.filter(or_(ASR.reporter_name == emp_name)).count() +
-                        VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name)).count())
-    reads_count      = SafetyPromoRead.query.filter_by(user_id=uid_str).count()
+    training_records     = Training.query.filter_by(employee_name=emp_name).order_by(Training.created_at.desc()).all()
+    all_actions          = Action.query.filter(Action.owner == emp_name).all()
+    total_reports        = (Hazard.query.filter(or_(Hazard.reporter_name == emp_name)).count() +
+                            ASR.query.filter(or_(ASR.reporter_name == emp_name)).count() +
+                            VoluntaryReport.query.filter(or_(VoluntaryReport.reporter_name == emp_name)).count())
+    reads_count          = SafetyPromoRead.query.filter_by(user_id=uid_str).count()
+    completed_trainings  = sum(1 for t in training_records if (t.status or '') == 'Completed')
+    closed_actions       = sum(1 for a in all_actions if (a.status or '') == 'Closed')
+
+    report_score    = min(30, total_reports * 5)
+    training_score  = min(30, completed_trainings * 10)
+    action_score    = min(25, closed_actions * 8)
+    engagement_score = min(15, reads_count * 3)
+    total_score     = report_score + training_score + action_score + engagement_score
+
+    stats = {
+        'total_reports':       total_reports,
+        'completed_trainings': completed_trainings,
+        'closed_actions':      closed_actions,
+        'promos_read':         reads_count,
+        'report_score':        report_score,
+        'training_score':      training_score,
+        'action_score':        action_score,
+        'engagement_score':    engagement_score,
+        'total_score':         total_score,
+    }
 
     return render_template('employee_detail.html',
                            emp=emp, departments=departments,
                            training_records=training_records,
-                           actions=actions,
-                           total_reports=total_reports,
-                           reads_count=reads_count,
+                           stats=stats,
                            page_title=f'Employee — {emp.full_name}')
 
 
@@ -2374,6 +2392,7 @@ def api_admin_employees_list():
 
 @app.route('/api/admin/employees', methods=['POST'])
 @require_login
+@csrf.exempt
 def api_admin_employees_create():
     """Web Admin API: Create a new employee account."""
     from werkzeug.security import generate_password_hash
@@ -2450,8 +2469,24 @@ def api_admin_employees_get(emp_id):
     }, 'Employee loaded')
 
 
+@app.route('/api/admin/employees/<int:emp_id>', methods=['DELETE'])
+@require_login
+@csrf.exempt
+def api_admin_employees_delete(emp_id):
+    """Web Admin API: Delete an employee account."""
+    emp = Employee.query.get_or_404(emp_id)
+    try:
+        db.session.delete(emp)
+        db.session.commit()
+        return api_ok({}, 'Employee deleted')
+    except Exception as e:
+        db.session.rollback()
+        return api_err(str(e)[:120], 500)
+
+
 @app.route('/api/admin/employees/<int:emp_id>', methods=['PUT'])
 @require_login
+@csrf.exempt
 def api_admin_employees_update(emp_id):
     """Web Admin API: Update admin-managed employee fields."""
     emp  = Employee.query.get_or_404(emp_id)
@@ -2483,6 +2518,7 @@ def api_admin_employees_update(emp_id):
 
 @app.route('/api/admin/employees/<int:emp_id>/status', methods=['PATCH'])
 @require_login
+@csrf.exempt
 def api_admin_employees_status(emp_id):
     """Web Admin API: Activate or deactivate an employee account."""
     emp  = Employee.query.get_or_404(emp_id)
@@ -2501,12 +2537,13 @@ def api_admin_employees_status(emp_id):
 
 @app.route('/api/admin/employees/<int:emp_id>/reset-password', methods=['POST'])
 @require_login
+@csrf.exempt
 def api_admin_employees_reset_password(emp_id):
     """Web Admin API: Reset employee password (no current password needed)."""
     from werkzeug.security import generate_password_hash
     emp  = Employee.query.get_or_404(emp_id)
     body = request.get_json(silent=True) or {}
-    new_pw = body.get('new_password', '').strip()
+    new_pw = (body.get('password') or body.get('new_password') or '').strip()
     if len(new_pw) < 8:
         return api_err('Password must be at least 8 characters', 400)
     try:
@@ -2521,6 +2558,7 @@ def api_admin_employees_reset_password(emp_id):
 
 @app.route('/api/admin/employees/<int:emp_id>/training', methods=['GET'])
 @require_login
+@csrf.exempt
 def api_admin_employees_training_list(emp_id):
     """Web Admin API: Get training records for an employee."""
     emp      = Employee.query.get_or_404(emp_id)
@@ -2539,6 +2577,7 @@ def api_admin_employees_training_list(emp_id):
 
 @app.route('/api/admin/employees/<int:emp_id>/training', methods=['POST'])
 @require_login
+@csrf.exempt
 def api_admin_employees_training_create(emp_id):
     """Web Admin API: Add a training record for an employee."""
     emp  = Employee.query.get_or_404(emp_id)
@@ -2567,6 +2606,7 @@ def api_admin_employees_training_create(emp_id):
 
 @app.route('/api/admin/employees/training/<int:tid>', methods=['PUT'])
 @require_login
+@csrf.exempt
 def api_admin_employees_training_update(tid):
     """Web Admin API: Update a training record."""
     t    = Training.query.get_or_404(tid)
@@ -2593,6 +2633,7 @@ def api_admin_employees_training_update(tid):
 
 @app.route('/api/admin/employees/training/<int:tid>', methods=['DELETE'])
 @require_login
+@csrf.exempt
 def api_admin_employees_training_delete(tid):
     """Web Admin API: Delete a training record."""
     t = Training.query.get_or_404(tid)
