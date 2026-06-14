@@ -2349,10 +2349,12 @@ def _cloudinary_delete(secure_url):
 
 def _profile_image_url(emp):
     """Return the correct profile image URL regardless of storage backend."""
+    # Prefer the dedicated Cloudinary column (persistent across deploys)
+    if getattr(emp, 'profile_photo_url', None):
+        return emp.profile_photo_url
     if not emp.profile_image:
         return None
     v = emp.profile_image
-    # Cloudinary URLs are stored directly (start with https://)
     if v.startswith('https://') or v.startswith('http://'):
         return v
     # Legacy: filename saved on local disk
@@ -2380,16 +2382,19 @@ def api_admin_employee_photo_upload(emp_id):
         return api_err('Unsupported format. Use JPG, PNG or WEBP.', 400)
 
     if _cloudinary_configured():
-        # Delete old Cloudinary image if it was already a Cloudinary URL
-        if emp.profile_image and emp.profile_image.startswith('https://'):
-            _cloudinary_delete(emp.profile_image)
+        # Delete old Cloudinary image
+        old_url = getattr(emp, 'profile_photo_url', None) or (
+            emp.profile_image if emp.profile_image and emp.profile_image.startswith('https://') else None
+        )
+        if old_url:
+            _cloudinary_delete(old_url)
         public_id = f'{emp.employee_id}_{uuid.uuid4().hex[:8]}'
         try:
             url = _cloudinary_upload(file.stream, public_id)
         except Exception as e:
             app.logger.error(f'Cloudinary upload error: {e}')
             return api_err('Image upload failed. Try again.', 500)
-        emp.profile_image = url  # store full URL
+        emp.profile_photo_url = url  # store in dedicated column
         db.session.commit()
         return api_ok({'profile_image_url': url}, 'Photo updated')
     else:
@@ -2416,15 +2421,19 @@ def api_admin_employee_photo_delete(emp_id):
     """Remove employee profile photo from Cloudinary or local storage."""
     import os
     emp = Employee.query.get_or_404(emp_id)
-    if not emp.profile_image:
+    cloudinary_url = getattr(emp, 'profile_photo_url', None) or (
+        emp.profile_image if emp.profile_image and emp.profile_image.startswith('https://') else None
+    )
+    if not cloudinary_url and not emp.profile_image:
         return api_err('No photo to delete', 400)
-    if emp.profile_image.startswith('https://'):
-        _cloudinary_delete(emp.profile_image)
-    else:
+    if cloudinary_url:
+        _cloudinary_delete(cloudinary_url)
+    elif emp.profile_image:
         save_dir = os.path.join(app.static_folder, 'profile_images')
         old_path = os.path.join(save_dir, emp.profile_image)
         if os.path.exists(old_path):
             os.remove(old_path)
+    emp.profile_photo_url = None
     emp.profile_image = None
     db.session.commit()
     return api_ok({}, 'Photo removed')
@@ -15974,7 +15983,14 @@ with app.app_context():
                 "ALTER TABLE employees ALTER COLUMN profile_image TYPE VARCHAR(500)"
             )
         except Exception:
-            pass  # already wide enough or column doesn't exist yet
+            pass
+        # Add dedicated Cloudinary URL column
+        try:
+            _cur.execute(
+                "ALTER TABLE employees ADD COLUMN IF NOT EXISTS profile_photo_url VARCHAR(500)"
+            )
+        except Exception:
+            pass
         _cur.close()
         _raw.close()
         print("[MIGRATION] Column migrations complete", flush=True)
