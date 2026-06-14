@@ -2493,6 +2493,7 @@ def employee_detail(emp_id):
                            emp=emp, departments=departments,
                            training_records=training_records,
                            stats=stats,
+                           emp_photo_url=_profile_image_url(emp),
                            page_title=f'Employee — {emp.full_name}')
 
 
@@ -2608,7 +2609,7 @@ def api_admin_employees_get(emp_id):
         'join_date':          emp.join_date or '',
         'employment_status':  emp.employment_status or 'Active',
         'is_active':          emp.is_active,
-        'profile_image_url':  f'/static/profile_images/{emp.profile_image}' if emp.profile_image else None,
+        'profile_image_url':  _profile_image_url(emp),
         'created_at':         emp.created_at.isoformat() if emp.created_at else '',
         'last_login':         emp.last_login.isoformat() if emp.last_login else '',
         'language_preference': emp.language_preference or 'en',
