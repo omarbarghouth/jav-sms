@@ -12556,6 +12556,30 @@ def erp_list():
     archived = ERPlan.query.filter_by(status='Archived').all()
     return render_template('safety_policy/erp.html', plans=plans, archived=archived)
 
+@app.route('/erp-dashboard')
+@require_login
+def erp_dashboard():
+    from datetime import date as _date, timedelta
+    plans     = ERPlan.query.filter_by(status='Active').order_by(ERPlan.scenario_type).all()
+    all_drills= ERPDrill.query.order_by(ERPDrill.drill_date.desc()).all()
+    all_acts  = ERPActivation.query.order_by(ERPActivation.activated_at.desc()).all()
+    today     = _date.today().isoformat()
+    cutoff    = (_date.today() - timedelta(days=365)).isoformat()
+    # ERPs with no drill in the last 12 months
+    def _last_drill_date(p):
+        return p.drills[0].drill_date if p.drills else None
+    overdue_erps = [p for p in plans if (_last_drill_date(p) or '0000') < cutoff]
+    active_acts  = sum(1 for a in all_acts if a.status == 'Active')
+    return render_template('safety_policy/erp_dashboard.html',
+                           plans=plans,
+                           total_plans=len(plans),
+                           total_drills=len(all_drills),
+                           active_acts=active_acts,
+                           overdue_count=len(overdue_erps),
+                           overdue_erps=overdue_erps,
+                           all_drills=all_drills,
+                           all_acts=all_acts)
+
 @app.route('/erp/new', methods=['GET','POST'])
 @require_login
 def new_erp():
