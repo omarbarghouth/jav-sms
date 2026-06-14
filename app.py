@@ -3000,7 +3000,8 @@ def _sp_user_ack_set(user_id):
 
 def _sp_item(obj, ctype, cid_attr, title_attr, date_attr, dept_attr=None,
              summary_attr=None, severity_attr=None, priority_attr=None,
-             mandatory_attr='is_mandatory', read_set=None, ack_set=None):
+             mandatory_attr='is_mandatory', read_set=None, ack_set=None,
+             content_attr=None, author_attr=None, ref_attr=None):
     """Serialize a safety-promo model instance into a feed dict."""
     cid = str(getattr(obj, cid_attr, ''))
     is_read = (ctype, cid) in read_set if read_set is not None else False
@@ -3010,6 +3011,9 @@ def _sp_item(obj, ctype, cid_attr, title_attr, date_attr, dept_attr=None,
         'id':          cid,
         'title':       getattr(obj, title_attr, '') or '',
         'summary':     getattr(obj, summary_attr, '') or '' if summary_attr else '',
+        'content':     getattr(obj, content_attr, '') or '' if content_attr else '',
+        'author':      getattr(obj, author_attr, '') or '' if author_attr else '',
+        'ref_number':  getattr(obj, ref_attr, '') or '' if ref_attr else '',
         'date':        str(getattr(obj, date_attr, '') or ''),
         'dept_id':     getattr(obj, dept_attr, None) if dept_attr else None,
         'severity':    getattr(obj, severity_attr, '') or '' if severity_attr else '',
@@ -3120,6 +3124,9 @@ def api_mobile_safety_feed():
                 items.append(_sp_item(n, 'newsletter', 'id', 'title', 'issue_date',
                                       dept_attr='department_id',
                                       summary_attr='summary',
+                                      content_attr='content',
+                                      author_attr='author',
+                                      ref_attr='ref_number',
                                       priority_attr='priority_level',
                                       read_set=read_set, ack_set=ack_set))
 
@@ -3339,7 +3346,11 @@ def api_mobile_safety_search():
             ).all()
             for n in rows:
                 items.append(_sp_item(n, 'newsletter', 'id', 'title', 'issue_date',
-                                      summary_attr='summary', read_set=read_set, ack_set=ack_set))
+                                      summary_attr='summary',
+                                      content_attr='content',
+                                      author_attr='author',
+                                      ref_attr='ref_number',
+                                      read_set=read_set, ack_set=ack_set))
 
         if not ftype or ftype == 'survey':
             rows = SafetySurvey.query.filter(
