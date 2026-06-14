@@ -1784,7 +1784,7 @@ def api_me():
                 dept = Department.query.get(emp.department_id)
                 dept_name = dept.name if dept else ''
             import json as _json
-            profile_image_url = f'/static/profile_images/{emp.profile_image}' if emp.profile_image else None
+            profile_image_url = _profile_image_url(emp)
             try:
                 notif_prefs    = _json.loads(emp.notification_prefs or '{}')
                 privacy_prefs  = _json.loads(emp.privacy_settings or '{}')
@@ -1901,9 +1901,7 @@ def api_mobile_profile_full():
         if emp and emp.department:
             dept_name = emp.department.name or ''
 
-        profile_image_url = None
-        if emp and emp.profile_image:
-            profile_image_url = f'/static/profile_images/{emp.profile_image}'
+        profile_image_url = _profile_image_url(emp) if emp else None
 
         return api_ok({
             'employee_id':       emp.employee_id if emp else '',
@@ -1966,12 +1964,16 @@ def api_mobile_profile_safety_score():
             overdue = Action.query.filter(Action.owner == emp_name, Action.status == 'Overdue').count()
             action_score = max(0, 25 - overdue * 8)
 
-        # Content engagement (max 15 pts): reads + acks
+        # Content engagement (max 15 pts): reads + acks for EXISTING content only
         engagement_score = 0
         if uid_str:
-            reads = SafetyPromoRead.query.filter_by(user_id=uid_str).count()
-            acks  = SafetyPromoAck.query.filter_by(user_id=uid_str).count()
-            engagement_score = min(15, reads * 2 + acks * 3)
+            read_rows = SafetyPromoRead.query.filter_by(user_id=uid_str).all()
+            valid_reads = sum(
+                1 for r in read_rows if _content_exists(r.content_type, r.content_id))
+            ack_rows = SafetyPromoAck.query.filter_by(user_id=uid_str).all()
+            valid_acks = sum(
+                1 for r in ack_rows if _content_exists(r.content_type, r.content_id))
+            engagement_score = min(15, valid_reads * 2 + valid_acks * 3)
 
         total = reporting_score + training_score + action_score + engagement_score
         level = 'Excellent' if total >= 90 else ('Good' if total >= 70 else ('Fair' if total >= 50 else 'Needs Improvement'))
@@ -2101,7 +2103,12 @@ def api_mobile_profile_timeline():
                     'date': t.training_date or '', 'ts': t.created_at})
 
         if uid_str:
-            for r in SafetyPromoRead.query.filter_by(user_id=uid_str).order_by(SafetyPromoRead.read_at.desc()).limit(5).all():
+            # Fetch more than needed so we can filter stale rows and still get 5 valid ones
+            read_rows = SafetyPromoRead.query.filter_by(user_id=uid_str).order_by(
+                SafetyPromoRead.read_at.desc()).limit(30).all()
+            for r in read_rows:
+                if not _content_exists(r.content_type, r.content_id):
+                    continue  # source deleted — skip silently
                 events.append({'type': 'Content', 'subtype': r.content_type,
                     'title': f'Read {r.content_type.capitalize()}',
                     'detail': r.content_id, 'status': 'Read',
@@ -2272,12 +2279,72 @@ def api_mobile_profile_upload_image():
     return api_err('Profile photo changes must be made by an administrator via the web portal.', 403)
 
 
+# ── Cloudinary helper ────────────────────────────────────────────────────────
+
+def _cloudinary_configured():
+    return all([
+        os.environ.get('CLOUDINARY_CLOUD_NAME'),
+        os.environ.get('CLOUDINARY_API_KEY'),
+        os.environ.get('CLOUDINARY_API_SECRET'),
+    ])
+
+def _cloudinary_upload(file_stream, public_id):
+    """Upload file to Cloudinary. Returns secure_url or raises."""
+    import cloudinary
+    import cloudinary.uploader
+    cloudinary.config(
+        cloud_name=os.environ['CLOUDINARY_CLOUD_NAME'],
+        api_key=os.environ['CLOUDINARY_API_KEY'],
+        api_secret=os.environ['CLOUDINARY_API_SECRET'],
+    )
+    result = cloudinary.uploader.upload(
+        file_stream,
+        public_id=public_id,
+        overwrite=True,
+        folder='avias/profile_images',
+        transformation=[{'width': 400, 'height': 400, 'crop': 'fill', 'gravity': 'face'}],
+    )
+    return result['secure_url']
+
+def _cloudinary_delete(secure_url):
+    """Delete image from Cloudinary by its secure_url."""
+    try:
+        import cloudinary
+        import cloudinary.uploader
+        cloudinary.config(
+            cloud_name=os.environ['CLOUDINARY_CLOUD_NAME'],
+            api_key=os.environ['CLOUDINARY_API_KEY'],
+            api_secret=os.environ['CLOUDINARY_API_SECRET'],
+        )
+        # Extract public_id: everything between /upload/v{ver}/ and the extension
+        import re
+        m = re.search(r'/upload/(?:v\d+/)?(.+)\.[a-z]+$', secure_url)
+        if m:
+            cloudinary.uploader.destroy(m.group(1))
+    except Exception as e:
+        app.logger.warning(f'Cloudinary delete failed: {e}')
+
+def _profile_image_url(emp):
+    """Return the correct profile image URL regardless of storage backend."""
+    if not emp.profile_image:
+        return None
+    v = emp.profile_image
+    # Cloudinary URLs are stored directly (start with https://)
+    if v.startswith('https://') or v.startswith('http://'):
+        return v
+    # Legacy: filename saved on local disk
+    return f'/static/profile_images/{v}'
+
+
 # ── Admin: upload employee profile photo ────────────────────────────────────
 @app.route('/api/admin/employees/<int:emp_id>/photo', methods=['POST'])
 @csrf.exempt
 @require_login
 def api_admin_employee_photo_upload(emp_id):
-    """Web Admin: Upload or replace employee profile photo."""
+    """Upload or replace employee profile photo.
+    Uses Cloudinary when configured (persistent across deploys).
+    Falls back to local static/ when env vars are absent (dev only).
+    """
     import uuid, os
     emp = Employee.query.get_or_404(emp_id)
     if 'photo' not in request.files:
@@ -2288,18 +2355,34 @@ def api_admin_employee_photo_upload(emp_id):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
         return api_err('Unsupported format. Use JPG, PNG or WEBP.', 400)
-    save_dir = os.path.join(app.static_folder, 'profile_images')
-    os.makedirs(save_dir, exist_ok=True)
-    # Delete old file if present
-    if emp.profile_image:
-        old_path = os.path.join(save_dir, emp.profile_image)
-        if os.path.exists(old_path):
-            os.remove(old_path)
-    filename = f'{emp.employee_id}_{uuid.uuid4().hex[:8]}{ext}'
-    file.save(os.path.join(save_dir, filename))
-    emp.profile_image = filename
-    db.session.commit()
-    return api_ok({'profile_image_url': f'/static/profile_images/{filename}'}, 'Photo updated')
+
+    if _cloudinary_configured():
+        # Delete old Cloudinary image if it was already a Cloudinary URL
+        if emp.profile_image and emp.profile_image.startswith('https://'):
+            _cloudinary_delete(emp.profile_image)
+        public_id = f'{emp.employee_id}_{uuid.uuid4().hex[:8]}'
+        try:
+            url = _cloudinary_upload(file.stream, public_id)
+        except Exception as e:
+            app.logger.error(f'Cloudinary upload error: {e}')
+            return api_err('Image upload failed. Try again.', 500)
+        emp.profile_image = url  # store full URL
+        db.session.commit()
+        return api_ok({'profile_image_url': url}, 'Photo updated')
+    else:
+        # Local fallback (dev / no Cloudinary configured)
+        save_dir = os.path.join(app.static_folder, 'profile_images')
+        os.makedirs(save_dir, exist_ok=True)
+        if emp.profile_image and not emp.profile_image.startswith('http'):
+            old_path = os.path.join(save_dir, emp.profile_image)
+            if os.path.exists(old_path):
+                os.remove(old_path)
+        filename = f'{emp.employee_id}_{uuid.uuid4().hex[:8]}{ext}'
+        file.save(os.path.join(save_dir, filename))
+        emp.profile_image = filename
+        db.session.commit()
+        url = f'/static/profile_images/{filename}'
+        return api_ok({'profile_image_url': url}, 'Photo updated')
 
 
 # ── Admin: delete employee profile photo ────────────────────────────────────
@@ -2307,15 +2390,18 @@ def api_admin_employee_photo_upload(emp_id):
 @csrf.exempt
 @require_login
 def api_admin_employee_photo_delete(emp_id):
-    """Web Admin: Remove employee profile photo."""
+    """Remove employee profile photo from Cloudinary or local storage."""
     import os
     emp = Employee.query.get_or_404(emp_id)
     if not emp.profile_image:
         return api_err('No photo to delete', 400)
-    save_dir = os.path.join(app.static_folder, 'profile_images')
-    old_path = os.path.join(save_dir, emp.profile_image)
-    if os.path.exists(old_path):
-        os.remove(old_path)
+    if emp.profile_image.startswith('https://'):
+        _cloudinary_delete(emp.profile_image)
+    else:
+        save_dir = os.path.join(app.static_folder, 'profile_images')
+        old_path = os.path.join(save_dir, emp.profile_image)
+        if os.path.exists(old_path):
+            os.remove(old_path)
     emp.profile_image = None
     db.session.commit()
     return api_ok({}, 'Photo removed')
@@ -15858,6 +15944,13 @@ with app.app_context():
                     )
                 except Exception as _ce:
                     print(f"[MIGRATION] {_tbl}.{_col}: {_ce}", flush=True)
+        # Widen profile_image to VARCHAR(500) for Cloudinary URLs
+        try:
+            _cur.execute(
+                "ALTER TABLE employees ALTER COLUMN profile_image TYPE VARCHAR(500)"
+            )
+        except Exception:
+            pass  # already wide enough or column doesn't exist yet
         _cur.close()
         _raw.close()
         print("[MIGRATION] Column migrations complete", flush=True)

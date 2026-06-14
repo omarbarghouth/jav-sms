@@ -1335,7 +1335,7 @@ class Employee(db.Model):
     is_active         = db.Column(db.Boolean, default=True)
     created_at        = db.Column(db.DateTime, default=datetime.utcnow)
     last_login        = db.Column(db.DateTime)
-    profile_image        = db.Column(db.String(200))
+    profile_image        = db.Column(db.String(500))
     base_station         = db.Column(db.String(10), default='AMM')
     join_date            = db.Column(db.String(20))
     employment_status    = db.Column(db.String(30), default='Active')
