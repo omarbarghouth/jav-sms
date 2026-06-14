@@ -50,8 +50,8 @@
     <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex-shrink:0">
       <div id="avatar-wrap" style="width:72px;height:72px;border-radius:50%;border:2px solid var(--gold);
         background:#1a2846;overflow:hidden;position:relative">
-        {% if emp.profile_image %}
-        <img id="avatar-img" src="/static/profile_images/{{ emp.profile_image }}"
+        {% if emp_photo_url %}
+        <img id="avatar-img" src="{{ emp_photo_url }}"
           style="width:100%;height:100%;object-fit:cover"/>
         {% else %}
         <div id="avatar-initials" style="width:100%;height:100%;display:flex;align-items:center;
@@ -69,7 +69,7 @@
           <input id="photo-input" type="file" accept=".jpg,.jpeg,.png,.webp"
             style="display:none" onchange="uploadPhoto({{ emp.id }}, this)"/>
         </label>
-        {% if emp.profile_image %}
+        {% if emp_photo_url %}
         <button id="del-photo-btn" onclick="deletePhoto({{ emp.id }})"
           style="padding:4px 9px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer;
             font-family:inherit;background:rgba(220,38,38,.1);color:#ef4444;
