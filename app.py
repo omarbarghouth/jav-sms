@@ -1892,10 +1892,12 @@ def api_mobile_profile_full():
             expired_training = Training.query.filter(Training.employee_name == emp_name, Training.status == 'Expired').count()
 
         reads_count = 0
-        acks_count = 0
+        acks_count  = 0
         if uid_str:
-            reads_count = SafetyPromoRead.query.filter_by(user_id=uid_str).count()
-            acks_count  = SafetyPromoAck.query.filter_by(user_id=uid_str).count()
+            all_reads   = SafetyPromoRead.query.filter_by(user_id=uid_str).all()
+            reads_count = sum(1 for r in all_reads if _content_exists(r.content_type, r.content_id))
+            all_acks    = SafetyPromoAck.query.filter_by(user_id=uid_str).all()
+            acks_count  = sum(1 for r in all_acks  if _content_exists(r.content_type, r.content_id))
 
         dept_name = ''
         if emp and emp.department:
@@ -1965,11 +1967,21 @@ def api_mobile_profile_safety_score():
             action_score = max(0, 25 - overdue * 8)
 
         # Content engagement (max 15 pts): reads + acks for EXISTING content only
-        engagement_score = 0
+        # Per-type breakdown for transparency
+        engagement_score   = 0
+        reads_by_type      = {'newsletter': 0, 'bulletin': 0, 'survey': 0, 'lesson': 0, 'other': 0}
+        stale_reads        = 0
+        valid_reads        = 0
+        valid_acks         = 0
         if uid_str:
             read_rows = SafetyPromoRead.query.filter_by(user_id=uid_str).all()
-            valid_reads = sum(
-                1 for r in read_rows if _content_exists(r.content_type, r.content_id))
+            for r in read_rows:
+                if _content_exists(r.content_type, r.content_id):
+                    valid_reads += 1
+                    key = r.content_type if r.content_type in reads_by_type else 'other'
+                    reads_by_type[key] += 1
+                else:
+                    stale_reads += 1
             ack_rows = SafetyPromoAck.query.filter_by(user_id=uid_str).all()
             valid_acks = sum(
                 1 for r in ack_rows if _content_exists(r.content_type, r.content_id))
@@ -1985,6 +1997,17 @@ def api_mobile_profile_safety_score():
             'training_score':    training_score,
             'action_score':      action_score,
             'engagement_score':  engagement_score,
+            # Engagement breakdown — visible in Flutter profile
+            'engagement_detail': {
+                'newsletter_reads':  reads_by_type['newsletter'],
+                'bulletin_reads':    reads_by_type['bulletin'],
+                'survey_reads':      reads_by_type['survey'],
+                'lesson_reads':      reads_by_type['lesson'],
+                'acknowledgements':  valid_acks,
+                'stale_reads':       stale_reads,   # reads for deleted content (not counted)
+                'points_from_reads': valid_reads * 2,
+                'points_from_acks':  valid_acks * 3,
+            },
         }, 'Safety score calculated')
     except Exception as e:
         return api_err(str(e)[:120], 500)
