@@ -1522,8 +1522,8 @@ def pdf_confidential(report, generated_by='Safety Department'):
     E.append(Spacer(1, 6))
 
     E.append(Paragraph(
-        '⚠  CONFIDENTIALITY NOTICE: This report was submitted under the Jordan '
-        'Aviation Confidential Reporting Programme. The identity of the reporter '
+        '⚠  CONFIDENTIALITY NOTICE: This report was submitted under the AviaS '
+        'Confidential Reporting Programme. The identity of the reporter '
         'is known only to the Safety Manager and is protected by company policy '
         'and applicable aviation regulations. This document must not be shared '
         'beyond the Safety Management System team.',

@@ -1222,7 +1222,8 @@ def just_culture_new():
         flash(f'✓ Just Culture Policy {policy.version} activated.', 'success')
         return redirect(url_for('enforcement.just_culture_list'))
 
-    return render_template('enforcement/just_culture_new.html', users=users)
+    latest_jc = JustCulturePolicy.query.order_by(JustCulturePolicy.version_num.desc()).first()
+    return render_template('enforcement/just_culture_new.html', users=users, latest_jc=latest_jc)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
