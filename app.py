@@ -14204,6 +14204,27 @@ def asr_print(asr_id):
     asr = ASRReport.query.get_or_404(asr_id)
     return render_template('reporting/asr_print.html', asr=asr)
 
+# ─── 5. VOLUNTARY REPORT PRINT ────────────────────────────────────────────────
+@app.route('/admin/reports/voluntary/<int:rid>/print')
+@require_login
+def voluntary_report_print(rid):
+    rpt = VoluntaryReport.query.get_or_404(rid)
+    return render_template('reporting/voluntary_print.html', rpt=rpt)
+
+# ─── 6. CONFIDENTIAL REPORT PRINT ─────────────────────────────────────────────
+@app.route('/admin/reports/confidential/<int:rid>/print')
+@require_login
+def confidential_report_print(rid):
+    rpt = ConfidentialReport.query.get_or_404(rid)
+    return render_template('reporting/confidential_print.html', rpt=rpt)
+
+# ─── 7. INVESTIGATION PRINT ───────────────────────────────────────────────────
+@app.route('/investigations/<iid>/print')
+@require_login
+def investigation_print(iid):
+    inv = Investigation.query.get_or_404(iid)
+    return render_template('investigation/investigation_print.html', inv=inv)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  RISK ASSESSMENT LIFECYCLE — STATUS ENGINE
