@@ -4,62 +4,292 @@
 <meta charset="UTF-8"/>
 <title>ASR — {{ asr.id }}</title>
 <style>
-  @page{size:A4 portrait;margin:18mm 15mm}
-  @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  @page{size:A4 portrait;margin:16mm 14mm}
+  @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pgbrk{page-break-before:always}}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#111;background:#fff}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111;background:#fff;line-height:1.45}
   .print-btn{position:fixed;top:12px;right:12px;z-index:999;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
-  .doc-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:14px}
-  .doc-logo{font-size:24px;font-weight:900;color:#0f1c3f}
+  /* Header */
+  .doc-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:12px}
+  .doc-logo{font-size:26px;font-weight:900;color:#0f1c3f;letter-spacing:-1px}
   .doc-logo span{color:#c9a84c}
-  .doc-title h1{font-size:16pt;font-weight:900;color:#0f1c3f;text-align:center}
-  .doc-title p{font-size:9pt;color:#555;text-align:center;margin-top:3px}
-  .doc-ref{text-align:right;font-size:8.5pt;color:#555;line-height:1.7}
-  .section-title{background:#0f1c3f;color:#fff;font-weight:700;font-size:10pt;padding:6px 12px;margin:14px 0 6px;border-radius:4px}
-  .info-table{width:100%;border-collapse:collapse;margin-bottom:10px}
-  .info-table td{border:1px solid #d1d5db;padding:7px 10px;font-size:9.5pt}
-  .info-table .lbl{background:#f4f6fb;font-weight:700;color:#374151;width:180px}
-  .text-box{border:1px solid #d1d5db;padding:10px 12px;min-height:50px;font-size:10pt;line-height:1.7;margin-bottom:10px}
-  .sig-table{width:100%;border-collapse:collapse;margin-top:16px}
-  .sig-table th{background:#0f1c3f;color:#fff;padding:7px 10px;text-align:left;border:1px solid #1a2d5a}
-  .sig-table td{border:1px solid #d1d5db;padding:14px 10px}
-  .sig-table .role-cell{background:#f4f6fb;font-weight:700;width:130px}
-  .sig-line{border-bottom:1px solid #9ca3af;height:28px}
-  .footer{border-top:1px solid #d1d5db;margin-top:14px;padding-top:6px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between}
+  .doc-title h1{font-size:15pt;font-weight:900;color:#0f1c3f;text-align:center}
+  .doc-title p{font-size:8.5pt;color:#555;text-align:center;margin-top:3px}
+  .doc-ref{text-align:right;font-size:8pt;color:#555;line-height:1.8}
+  /* Ref box */
+  .ref-box{background:#0f1c3f;color:#c9a84c;font-family:monospace;font-size:13pt;font-weight:900;padding:4px 12px;border-radius:4px;letter-spacing:1px;display:inline-block;margin-bottom:10px}
+  /* Section title */
+  .sec{background:#0f1c3f;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-blue{background:#1d4ed8;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-red{background:#dc2626;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-green{background:#15803d;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  /* Info table */
+  .it{width:100%;border-collapse:collapse;margin-bottom:8px}
+  .it td{border:1px solid #d1d5db;padding:6px 9px;font-size:9pt}
+  .lbl{background:#f4f6fb;font-weight:700;color:#374151;white-space:nowrap;width:38mm}
+  .lbl2{background:#f4f6fb;font-weight:700;color:#374151;white-space:nowrap;width:34mm}
+  /* Text box */
+  .tb{border:1px solid #d1d5db;padding:9px 11px;min-height:45px;font-size:9.5pt;line-height:1.7;margin-bottom:8px;background:#fafbfe}
+  /* Risk matrix badge */
+  .badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:9pt;font-weight:700;border:1px solid}
+  .badge-red{background:#fee2e2;color:#dc2626;border-color:#fca5a5}
+  .badge-amber{background:#fef9c3;color:#b45309;border-color:#fde68a}
+  .badge-green{background:#dcfce7;color:#15803d;border-color:#bbf7d0}
+  .badge-blue{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
+  /* Risk cells */
+  .risk-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+  .risk-cell{border:1px solid #d1d5db;padding:8px 10px;border-radius:4px;text-align:center;background:#f9fafb}
+  .risk-val{font-size:18pt;font-weight:900;line-height:1}
+  .risk-lbl{font-size:7.5pt;color:#6b7280;text-transform:uppercase;font-weight:700;margin-top:3px}
+  /* Sig */
+  .sig-table{width:100%;border-collapse:collapse;margin-top:12px}
+  .sig-table th{background:#0f1c3f;color:#fff;padding:6px 9px;text-align:left;border:1px solid #1a2d5a;font-size:9pt}
+  .sig-table td{border:1px solid #d1d5db;padding:13px 9px}
+  .sig-table .role{background:#f4f6fb;font-weight:700;width:130px}
+  .sig-line{border-bottom:1px solid #9ca3af;height:24px}
+  /* Footer */
+  .footer{border-top:1.5px solid #0f1c3f;margin-top:12px;padding-top:5px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between}
 </style>
 </head>
 <body>
 <button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+
+<!-- DOCUMENT HEADER -->
 <div class="doc-header">
-  <div class="doc-logo">JORDAN<span>AVIATION</span></div>
+  <div class="doc-logo">Avia<span>S</span></div>
   <div class="doc-title">
     <h1>Air Safety Report (ASR)</h1>
-    <p>Flight Operations — Safety Management System</p>
+    <p>Safety Management System · Flight Operations · ICAO Annex 13</p>
   </div>
-  <div class="doc-ref">Report: <strong>{{ asr.id }}</strong><br>Date: {{ asr.date or '—' }}</div>
+  <div class="doc-ref">
+    Report: <strong>{{ asr.id }}</strong><br>
+    Date: {{ asr.date or '—' }}<br>
+    Submitted: {{ asr.created_at.strftime('%d %b %Y') if asr.created_at else '—' }}<br>
+    Type: <strong>{{ asr.report_type or 'Voluntary' }}</strong>
+  </div>
 </div>
-<div class="section-title">REPORT INFORMATION</div>
-<table class="info-table">
-  <tr><td class="lbl">Report ID</td><td><strong>{{ asr.id }}</strong></td><td class="lbl">Date</td><td>{{ asr.date or '—' }}</td></tr>
-  <tr><td class="lbl">Flight Number</td><td>{{ asr.flight_number or '—' }}</td><td class="lbl">Aircraft</td><td>{{ asr.aircraft_registration or '—' }}</td></tr>
-  <tr><td class="lbl">Route</td><td>{{ asr.route or '—' }}</td><td class="lbl">Phase</td><td>{{ asr.flight_phase or '—' }}</td></tr>
-  <tr><td class="lbl">Reporter</td><td colspan="3">{{ asr.reporter or 'Anonymous' }}</td></tr>
+
+<div class="ref-box">{{ asr.id }}</div>
+
+<!-- SECTION 1: CREW INFORMATION -->
+<div class="sec">SECTION 1 — CREW INFORMATION</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Captain / PIC</td>
+    <td>{{ asr.captain or '—' }}</td>
+    <td class="lbl2">Staff No.</td>
+    <td>{{ asr.captain_staff_no or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Co-Pilot / SIC</td>
+    <td>{{ asr.copilot or '—' }}</td>
+    <td class="lbl2">Staff No.</td>
+    <td>{{ asr.copilot_staff_no or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Total Crew on Board</td>
+    <td>{{ asr.crew or '—' }}</td>
+    <td class="lbl2">Passengers on Board</td>
+    <td>{{ asr.pax or '—' }}</td>
+  </tr>
 </table>
-<div class="section-title">OCCURRENCE DESCRIPTION</div>
-<div class="text-box">{{ asr.description or '—' }}</div>
-<div class="section-title">IMMEDIATE ACTION TAKEN</div>
-<div class="text-box">{{ asr.immediate_action or 'No immediate action recorded.' }}</div>
+
+<!-- SECTION 2: AIRCRAFT INFORMATION -->
+<div class="sec">SECTION 2 — AIRCRAFT INFORMATION</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Aircraft Type</td>
+    <td>{{ asr.aircraft_type or '—' }}</td>
+    <td class="lbl2">Registration</td>
+    <td><strong>{{ asr.registration or '—' }}</strong></td>
+  </tr>
+</table>
+
+<!-- SECTION 3: FLIGHT DETAILS -->
+<div class="sec">SECTION 3 — FLIGHT DETAILS</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Flight Number</td>
+    <td><strong>{{ asr.flight_no or '—' }}</strong></td>
+    <td class="lbl2">Date</td>
+    <td>{{ asr.date or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Time (Local)</td>
+    <td>{{ asr.time_local or '—' }}</td>
+    <td class="lbl2">Time (UTC)</td>
+    <td>{{ asr.time_utc or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Route From</td>
+    <td><strong>{{ asr.route_from or '—' }}</strong></td>
+    <td class="lbl2">Route To</td>
+    <td><strong>{{ asr.route_to or '—' }}</strong></td>
+  </tr>
+  {% if asr.diverted_to %}
+  <tr>
+    <td class="lbl">Diverted To</td>
+    <td colspan="3"><strong style="color:#dc2626">{{ asr.diverted_to }}</strong></td>
+  </tr>
+  {% endif %}
+  <tr>
+    <td class="lbl">Flight Phase</td>
+    <td>{{ asr.flight_phase or '—' }}</td>
+    <td class="lbl2">Altitude (ft)</td>
+    <td>{{ asr.altitude_ft or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Squawk Code</td>
+    <td>{{ asr.squawk or '—' }}</td>
+    <td class="lbl2">Occurrence Type</td>
+    <td>{{ asr.occurrence_type or '—' }}</td>
+  </tr>
+</table>
+
+<!-- SECTION 4: AIRPORT & RUNWAY -->
+<div class="sec">SECTION 4 — AIRPORT & RUNWAY INFORMATION</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Runway</td>
+    <td>{{ asr.runway or '—' }}</td>
+    <td class="lbl2">Runway State</td>
+    <td>{{ asr.runway_state or '—' }}</td>
+  </tr>
+</table>
+
+<!-- SECTION 5: METEOROLOGICAL CONDITIONS -->
+<div class="sec">SECTION 5 — METEOROLOGICAL CONDITIONS</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Wind</td>
+    <td>{{ asr.weather_wind or '—' }}</td>
+    <td class="lbl2">Visibility / RVR</td>
+    <td>{{ asr.weather_vis_rvr or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Cloud Cover</td>
+    <td>{{ asr.weather_clouds or '—' }}</td>
+    <td class="lbl2">Temperature (°C)</td>
+    <td>{{ asr.weather_temp_c if asr.weather_temp_c is not none else '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">QNH (hPa)</td>
+    <td>{{ asr.weather_qnh or '—' }}</td>
+    <td class="lbl2"></td>
+    <td></td>
+  </tr>
+</table>
+
+<!-- SECTION 6: OCCURRENCE DESCRIPTION -->
+<div class="sec-red">SECTION 6 — OCCURRENCE DESCRIPTION / NARRATIVE</div>
+<div class="tb" style="min-height:80px">{{ asr.event_description or '—' }}</div>
+
+<!-- SECTION 7: IMMEDIATE ACTION TAKEN -->
+<div class="sec">SECTION 7 — IMMEDIATE ACTION TAKEN</div>
+<div class="tb">{{ asr.action_taken or 'No immediate action recorded.' }}</div>
+
+<!-- SECTION 8: RISK ASSESSMENT -->
+<div class="sec-blue">SECTION 8 — RISK ASSESSMENT (REPORTER'S ASSESSMENT)</div>
+<div class="risk-grid">
+  <div class="risk-cell">
+    <div class="risk-val" style="color:#0f1c3f">{{ asr.severity or '—' }}</div>
+    <div class="risk-lbl">Severity</div>
+  </div>
+  <div class="risk-cell">
+    <div class="risk-val" style="color:#0f1c3f">{{ asr.likelihood or '—' }}</div>
+    <div class="risk-lbl">Likelihood</div>
+  </div>
+  <div class="risk-cell">
+    {% set ri = asr.risk_index or '—' %}
+    <div class="risk-val" style="color:
+      {%- if ri in ['5A','5B','5C','4A','4B','4C','3A','3B','2A'] %}#dc2626
+      {%- elif ri in ['5D','5E','4D','3C','3D','2B','2C','1A'] %}#b45309
+      {%- else %}#15803d{%- endif %}">{{ ri }}</div>
+    <div class="risk-lbl">Risk Index</div>
+  </div>
+</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Risk Tolerance</td>
+    <td>
+      {% set ri = asr.risk_index or '' %}
+      {% if ri in ['5A','5B','5C','4A','4B','4C','3A','3B','2A'] %}
+        <span class="badge badge-red">INTOLERABLE — Immediate Action Required</span>
+      {% elif ri in ['5D','5E','4D','3C','3D','2B','2C','1A'] %}
+        <span class="badge badge-amber">TOLERABLE — Management Decision Required</span>
+      {% elif ri %}
+        <span class="badge badge-green">ACCEPTABLE — Monitor &amp; Review</span>
+      {% else %}—{% endif %}
+    </td>
+  </tr>
+</table>
+<p style="font-size:8pt;color:#6b7280;margin-top:4px">* Reporter's initial assessment only. Formal risk assessment conducted by Safety Department.</p>
+
+<!-- SECTION 9: SAFETY DEPARTMENT USE -->
+<div class="sec-green">SECTION 9 — SAFETY DEPARTMENT USE ONLY</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Date Received</td>
+    <td>{{ asr.created_at.strftime('%d %b %Y') if asr.created_at else '—' }}</td>
+    <td class="lbl2">Linked Hazard Record</td>
+    <td>
+      {% if asr.hazard_id %}
+        <strong style="font-family:monospace">{{ asr.hazard_id }}</strong>
+      {% else %}Pending{% endif %}
+    </td>
+  </tr>
+  <tr>
+    <td class="lbl">Safety Department Assessment</td>
+    <td colspan="3"><div style="min-height:30px">&nbsp;</div></td>
+  </tr>
+  <tr>
+    <td class="lbl">Corrective Action Required</td>
+    <td colspan="3"><div style="min-height:30px">&nbsp;</div></td>
+  </tr>
+  <tr>
+    <td class="lbl">Action Reference</td>
+    <td></td>
+    <td class="lbl2">Due Date</td>
+    <td></td>
+  </tr>
+</table>
+
+<!-- SIGNATORIES -->
+<div class="sec">SIGNATORIES</div>
 <table class="sig-table">
-  <thead><tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:100px">Date</th></tr></thead>
+  <thead>
+    <tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:90px">Date</th></tr>
+  </thead>
   <tbody>
-    <tr><td class="role-cell">Reported By</td><td>{{ asr.reporter or '—' }}</td><td>Flight Crew</td><td><div class="sig-line"></div></td><td></td></tr>
-    <tr><td class="role-cell">Reviewed By</td><td></td><td>Safety Manager</td><td><div class="sig-line"></div></td><td></td></tr>
+    <tr>
+      <td class="role">Captain / PIC</td>
+      <td>{{ asr.captain or '—' }}</td>
+      <td>Pilot in Command</td>
+      <td><div class="sig-line"></div></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td class="role">Reviewed By</td>
+      <td></td>
+      <td>Safety Manager</td>
+      <td><div class="sig-line"></div></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td class="role">Approved By</td>
+      <td></td>
+      <td>Accountable Executive</td>
+      <td><div class="sig-line"></div></td>
+      <td></td>
+    </tr>
   </tbody>
 </table>
+
 <div class="footer">
-  <span>Jav/SMS/001 · {{ asr.date or '' }}</span>
-  <span>Jordan Aviation — Safety Department</span>
-  <span>{{ asr.id }}</span>
+  <span>AviaS · Safety Management System · ICAO Annex 13</span>
+  <span>Air Safety Report — Flight Operations</span>
+  <span>{{ asr.id }} · {{ asr.created_at.strftime('%d/%m/%Y') if asr.created_at else '' }}</span>
 </div>
+
 </body>
 </html>

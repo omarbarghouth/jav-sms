@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Confidential Safety Report — {{ rpt.ref_number }}</title>
+<style>
+  @page{size:A4 portrait;margin:16mm 14mm}
+  @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111;background:#fff;line-height:1.45}
+  .print-btn{position:fixed;top:12px;right:12px;z-index:999;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
+  .doc-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:12px}
+  .doc-logo{font-size:26px;font-weight:900;color:#0f1c3f;letter-spacing:-1px}.doc-logo span{color:#c9a84c}
+  .doc-title h1{font-size:14pt;font-weight:900;color:#0f1c3f;text-align:center}
+  .doc-title p{font-size:8.5pt;color:#555;text-align:center;margin-top:3px}
+  .doc-ref{text-align:right;font-size:8pt;color:#555;line-height:1.8}
+  .ref-box{background:#0f1c3f;color:#c9a84c;font-family:monospace;font-size:13pt;font-weight:900;padding:4px 12px;border-radius:4px;letter-spacing:1px;display:inline-block;margin-bottom:10px}
+  .notice{background:#fee2e2;border:2px solid #dc2626;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:9pt}
+  .notice strong{color:#dc2626}
+  .sec{background:#0f1c3f;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-red{background:#dc2626;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-green{background:#15803d;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .it{width:100%;border-collapse:collapse;margin-bottom:8px}
+  .it td{border:1px solid #d1d5db;padding:6px 9px;font-size:9pt}
+  .lbl{background:#f4f6fb;font-weight:700;color:#374151;white-space:nowrap;width:38mm}
+  .tb{border:1px solid #d1d5db;padding:9px 11px;min-height:55px;font-size:9.5pt;line-height:1.7;margin-bottom:8px;background:#fafbfe;white-space:pre-wrap}
+  .status-badge{display:inline-block;padding:3px 12px;border-radius:4px;font-size:9pt;font-weight:700}
+  .sig-table{width:100%;border-collapse:collapse;margin-top:12px}
+  .sig-table th{background:#0f1c3f;color:#fff;padding:6px 9px;text-align:left;border:1px solid #1a2d5a;font-size:9pt}
+  .sig-table td{border:1px solid #d1d5db;padding:13px 9px}
+  .sig-table .role{background:#f4f6fb;font-weight:700;width:130px}
+  .sig-line{border-bottom:1px solid #9ca3af;height:24px}
+  .footer{border-top:1.5px solid #0f1c3f;margin-top:12px;padding-top:5px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+
+<div class="doc-header">
+  <div class="doc-logo">Avia<span>S</span></div>
+  <div class="doc-title">
+    <h1>Confidential Safety Report</h1>
+    <p>Safety Management System · Confidential Reporting Channel · ICAO Annex 19</p>
+  </div>
+  <div class="doc-ref">
+    Report: <strong>{{ rpt.ref_number }}</strong><br>
+    Date: {{ rpt.date or '—' }}<br>
+    Submitted: {{ rpt.created_at.strftime('%d %b %Y') if rpt.created_at else '—' }}<br>
+    Status: <strong>{{ rpt.status }}</strong>
+  </div>
+</div>
+
+<div class="ref-box">{{ rpt.ref_number }}</div>
+
+<div class="notice">
+  🔒 <strong>CONFIDENTIAL — RESTRICTED ACCESS:</strong> This report was submitted through the confidential safety reporting channel. Reporter identity is strictly protected. Access is limited to authorised Safety Department personnel only. This document must not be copied or distributed without Safety Manager approval.
+</div>
+
+<!-- SECTION 1: REPORTER INFORMATION (minimal — identity protected) -->
+<div class="sec">SECTION 1 — REPORTER INFORMATION (Identity Protected)</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Position / Role</td>
+    <td>{{ rpt.position or '—' }}</td>
+    <td class="lbl" style="width:32mm">Department</td>
+    <td>{{ rpt.department.name if rpt.department else '—' }}</td>
+  </tr>
+</table>
+
+<!-- SECTION 2: OCCURRENCE DETAILS -->
+<div class="sec">SECTION 2 — OCCURRENCE DETAILS</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Date of Occurrence</td>
+    <td>{{ rpt.date or '—' }}</td>
+    <td class="lbl" style="width:32mm">Report Type</td>
+    <td>{{ rpt.report_type or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Location</td>
+    <td colspan="3">{{ rpt.location or '—' }}</td>
+  </tr>
+</table>
+
+<!-- SECTION 3: DESCRIPTION -->
+<div class="sec-red">SECTION 3 — DESCRIPTION OF OCCURRENCE</div>
+<div class="tb">{{ rpt.description or '—' }}</div>
+
+<!-- SECTION 4: CONSEQUENCES -->
+<div class="sec">SECTION 4 — POTENTIAL CONSEQUENCES</div>
+<div class="tb">{{ rpt.consequences or 'No consequences reported.' }}</div>
+
+<!-- SECTION 5: SUGGESTION -->
+<div class="sec">SECTION 5 — SUGGESTED CORRECTIVE ACTION</div>
+<div class="tb">{{ rpt.suggestion or 'No suggestion provided.' }}</div>
+
+<!-- SECTION 6: ADMIN USE ONLY -->
+<div class="sec-green">SECTION 6 — SAFETY DEPARTMENT USE ONLY (RESTRICTED)</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Date Received</td>
+    <td>{{ rpt.created_at.strftime('%d %b %Y') if rpt.created_at else '—' }}</td>
+    <td class="lbl" style="width:32mm">Current Status</td>
+    <td>
+      {% if rpt.status == 'Submitted' %}<span class="status-badge" style="background:#dbeafe;color:#1d4ed8">{{ rpt.status }}</span>
+      {% elif rpt.status == 'Under Review' %}<span class="status-badge" style="background:#fef9c3;color:#b45309">{{ rpt.status }}</span>
+      {% elif rpt.status == 'Closed' %}<span class="status-badge" style="background:#dcfce7;color:#15803d">{{ rpt.status }}</span>
+      {% else %}<span class="status-badge" style="background:#f3f4f6;color:#374151">{{ rpt.status }}</span>{% endif %}
+    </td>
+  </tr>
+  <tr>
+    <td class="lbl">Safety Assessment</td>
+    <td colspan="3"><div style="min-height:30px">&nbsp;</div></td>
+  </tr>
+  <tr>
+    <td class="lbl">Action Required</td>
+    <td colspan="3"><div style="min-height:30px">&nbsp;</div></td>
+  </tr>
+  <tr>
+    <td class="lbl">Action Reference</td>
+    <td></td>
+    <td class="lbl" style="width:32mm">Due Date</td>
+    <td></td>
+  </tr>
+</table>
+
+<div class="sec">SIGNATORIES</div>
+<table class="sig-table">
+  <thead>
+    <tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:90px">Date</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="role">Reviewed By</td>
+      <td></td>
+      <td>Safety Officer</td>
+      <td><div class="sig-line"></div></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td class="role">Approved By</td>
+      <td></td>
+      <td>Safety Manager</td>
+      <td><div class="sig-line"></div></td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="footer">
+  <span>AviaS · Safety Management System · ICAO Annex 19 — CONFIDENTIAL</span>
+  <span>Confidential Safety Report</span>
+  <span>{{ rpt.ref_number }} · {{ rpt.created_at.strftime('%d/%m/%Y') if rpt.created_at else '' }}</span>
+</div>
+
+</body>
+</html>

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-title">Hazard Identification Risk Assessment</div>
 <div class="page-sub">
-  Jordan Aviation · Safety Department · Jav/SMS/001 Rev 01
+  AviaS · Safety Department · AviaS/SMS/001 Rev 01
   {% if hazard %}— linked to <a href="/hazard-log/{{ hazard.id }}" style="color:#1d4ed8">{{ hazard.id }}</a>{% endif %}
 </div>
 
@@ -30,7 +30,7 @@
         <input type="text" name="assessors_names"
           placeholder="Names separated by commas"/></div>
       <div class="fg"><label>Control Number <span style="font-weight:400;color:var(--muted)">(auto-generated if blank)</span></label>
-        <input type="text" name="control_number" placeholder="JAV/RA/FO/2026/001"/></div>
+        <input type="text" name="control_number" placeholder="SMS/RA/FO/2026/001"/></div>
       <div class="fg"><label>Assessment Date *</label>
         <input type="date" name="assessment_date" required value="{{ today }}"/></div>
       <div class="fg"><label>Next Review Date</label>
