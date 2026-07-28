@@ -2,7 +2,7 @@
 {% block title %}Issue Safety Recommendation{% endblock %}
 {% block content %}
 <div class="page-title">Issue Safety Recommendation</div>
-<div class="page-sub">ICAO Annex 13 §6.8 — Formal SR with auto-assigned reference number (JAV/SR/YYYY/NNN)</div>
+<div class="page-sub">ICAO Annex 13 §6.8 — Formal SR with auto-assigned reference number (SMS/SR/YYYY/NNN)</div>
 
 <form method="POST" style="max-width:800px">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -72,7 +72,7 @@
       <div class="form-group">
         <label>Addressee Type *</label>
         <select name="addressee_type" class="form-control" required>
-          <option value="Internal">Internal (Jordan Aviation dept.)</option>
+          <option value="Internal">Internal (AviaS dept.)</option>
           <option value="External">External (Authority / Manufacturer)</option>
           <option value="CARC">CARC (Civil Aviation)</option>
         </select>

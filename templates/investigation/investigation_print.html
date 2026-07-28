@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Investigation Report — {{ inv.id }}</title>
+<style>
+  @page{size:A4 portrait;margin:16mm 14mm}
+  @media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pgbrk{page-break-before:always}}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111;background:#fff;line-height:1.45}
+  .print-btn{position:fixed;top:12px;right:12px;z-index:999;background:#0f1c3f;color:#fff;border:none;padding:10px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer}
+  .doc-header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f1c3f;padding-bottom:10px;margin-bottom:12px}
+  .doc-logo{font-size:26px;font-weight:900;color:#0f1c3f;letter-spacing:-1px}.doc-logo span{color:#c9a84c}
+  .doc-title h1{font-size:14pt;font-weight:900;color:#0f1c3f;text-align:center}
+  .doc-title p{font-size:8.5pt;color:#555;text-align:center;margin-top:3px}
+  .doc-ref{text-align:right;font-size:8pt;color:#555;line-height:1.8}
+  .ref-box{background:#0f1c3f;color:#c9a84c;font-family:monospace;font-size:13pt;font-weight:900;padding:4px 12px;border-radius:4px;letter-spacing:1px;display:inline-block;margin-bottom:10px}
+  .class-banner{padding:8px 14px;margin-bottom:12px;border-radius:5px;font-size:11pt;font-weight:800;border:2px solid}
+  .sec{background:#0f1c3f;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-red{background:#dc2626;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-blue{background:#1d4ed8;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-green{background:#15803d;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .sec-amber{background:#d97706;color:#fff;font-weight:700;font-size:9.5pt;padding:5px 12px;margin:12px 0 5px;border-radius:3px}
+  .it{width:100%;border-collapse:collapse;margin-bottom:8px}
+  .it td{border:1px solid #d1d5db;padding:6px 9px;font-size:9pt}
+  .lbl{background:#f4f6fb;font-weight:700;color:#374151;white-space:nowrap;width:38mm}
+  .lbl2{background:#f4f6fb;font-weight:700;color:#374151;white-space:nowrap;width:34mm}
+  .tb{border:1px solid #d1d5db;padding:9px 11px;min-height:45px;font-size:9.5pt;line-height:1.7;margin-bottom:8px;background:#fafbfe;white-space:pre-wrap}
+  .why-grid{display:grid;grid-template-columns:1fr;gap:0;margin-bottom:8px;border:1px solid #d1d5db}
+  .why-row{display:flex;border-bottom:1px solid #d1d5db}
+  .why-row:last-child{border-bottom:none}
+  .why-num{background:#0f1c3f;color:#c9a84c;font-weight:900;font-size:11pt;width:36px;min-width:36px;display:flex;align-items:center;justify-content:center}
+  .why-lbl{background:#f4f6fb;font-weight:700;color:#374151;width:35mm;min-width:35mm;padding:7px 9px;font-size:9pt;border-right:1px solid #d1d5db}
+  .why-val{padding:7px 9px;font-size:9.5pt;line-height:1.6;flex:1}
+  .factors-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+  .factor-box{border:1px solid #d1d5db;border-radius:4px;overflow:hidden}
+  .factor-hdr{background:#374151;color:#fff;font-weight:700;font-size:8.5pt;padding:5px 9px}
+  .factor-body{padding:8px 9px;font-size:9pt;min-height:40px;line-height:1.6}
+  .sig-table{width:100%;border-collapse:collapse;margin-top:12px}
+  .sig-table th{background:#0f1c3f;color:#fff;padding:6px 9px;text-align:left;border:1px solid #1a2d5a;font-size:9pt}
+  .sig-table td{border:1px solid #d1d5db;padding:13px 9px}
+  .sig-table .role{background:#f4f6fb;font-weight:700;width:130px}
+  .sig-line{border-bottom:1px solid #9ca3af;height:24px}
+  .footer{border-top:1.5px solid #0f1c3f;margin-top:12px;padding-top:5px;font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+
+<div class="doc-header">
+  <div class="doc-logo">Avia<span>S</span></div>
+  <div class="doc-title">
+    <h1>Safety Investigation Report</h1>
+    <p>Safety Management System · Investigations · ICAO Annex 13 / Doc 9859</p>
+  </div>
+  <div class="doc-ref">
+    Investigation: <strong>{{ inv.id }}</strong><br>
+    Occurrence: {{ inv.date_of_occurrence or '—' }}<br>
+    Opened: {{ inv.created_at.strftime('%d %b %Y') if inv.created_at else '—' }}<br>
+    Status: <strong>{{ inv.status }}</strong>
+  </div>
+</div>
+
+<div class="ref-box">{{ inv.id }}</div>
+
+{% set cls = inv.classification or 'Incident' %}
+{% if cls == 'Accident' %}
+  <div class="class-banner" style="background:#fee2e2;color:#dc2626;border-color:#fca5a5">🔴 ACCIDENT — {{ inv.title }}</div>
+{% elif cls == 'Serious Incident' %}
+  <div class="class-banner" style="background:#ffedd5;color:#ea580c;border-color:#fdba74">🟠 SERIOUS INCIDENT — {{ inv.title }}</div>
+{% elif cls == 'Incident' %}
+  <div class="class-banner" style="background:#fef9c3;color:#b45309;border-color:#fde68a">🟡 INCIDENT — {{ inv.title }}</div>
+{% else %}
+  <div class="class-banner" style="background:#dbeafe;color:#1d4ed8;border-color:#93c5fd">🔵 {{ cls|upper }} — {{ inv.title }}</div>
+{% endif %}
+
+<!-- SECTION 1: GENERAL INFORMATION -->
+<div class="sec">SECTION 1 — GENERAL INFORMATION</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Investigation ID</td>
+    <td><strong>{{ inv.id }}</strong></td>
+    <td class="lbl2">Classification</td>
+    <td><strong>{{ inv.classification or '—' }}</strong></td>
+  </tr>
+  <tr>
+    <td class="lbl">Title</td>
+    <td colspan="3"><strong>{{ inv.title or '—' }}</strong></td>
+  </tr>
+  <tr>
+    <td class="lbl">Date of Occurrence</td>
+    <td>{{ inv.date_of_occurrence or '—' }}</td>
+    <td class="lbl2">Phase of Flight</td>
+    <td>{{ inv.phase_of_flight or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Location</td>
+    <td>{{ inv.location or '—' }}</td>
+    <td class="lbl2">Occurrence Category</td>
+    <td>{{ inv.occurrence_category or inv.icao_occurrence_category or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Aircraft Type</td>
+    <td>{{ inv.aircraft_type or '—' }}</td>
+    <td class="lbl2">Registration</td>
+    <td><strong>{{ inv.aircraft_reg or '—' }}</strong></td>
+  </tr>
+  <tr>
+    <td class="lbl">Lead Investigator</td>
+    <td>{{ inv.investigator or '—' }}</td>
+    <td class="lbl2">Department</td>
+    <td>{{ inv.department.name if inv.department else '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Severity Index</td>
+    <td>{{ inv.severity_index or '—' }}</td>
+    <td class="lbl2">Lifecycle Stage</td>
+    <td>{{ inv.lifecycle_stage or '—' }}</td>
+  </tr>
+  {% if inv.linked_report_id %}
+  <tr>
+    <td class="lbl">Linked Report</td>
+    <td>{{ inv.linked_report_id }}</td>
+    <td class="lbl2">Hazard Record</td>
+    <td>{{ inv.hazard_id or '—' }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+<!-- SECTION 2: DESCRIPTION OF OCCURRENCE -->
+<div class="sec-red">SECTION 2 — DESCRIPTION OF OCCURRENCE</div>
+<div class="tb">{{ inv.description or '—' }}</div>
+
+<!-- SECTION 3: 5-WHY ROOT CAUSE ANALYSIS -->
+<div class="sec-blue">SECTION 3 — 5-WHY ROOT CAUSE ANALYSIS</div>
+<div class="why-grid">
+  <div class="why-row">
+    <div class="why-num">1</div>
+    <div class="why-lbl">Why did it happen?</div>
+    <div class="why-val">{{ inv.why1 or '—' }}</div>
+  </div>
+  <div class="why-row">
+    <div class="why-num">2</div>
+    <div class="why-lbl">Why (2)?</div>
+    <div class="why-val">{{ inv.why2 or '—' }}</div>
+  </div>
+  <div class="why-row">
+    <div class="why-num">3</div>
+    <div class="why-lbl">Why (3)?</div>
+    <div class="why-val">{{ inv.why3 or '—' }}</div>
+  </div>
+  <div class="why-row">
+    <div class="why-num">4</div>
+    <div class="why-lbl">Why (4)?</div>
+    <div class="why-val">{{ inv.why4 or '—' }}</div>
+  </div>
+  <div class="why-row">
+    <div class="why-num">5</div>
+    <div class="why-lbl">Root Cause</div>
+    <div class="why-val" style="font-weight:700">{{ inv.why5 or '—' }}</div>
+  </div>
+</div>
+
+<!-- SECTION 4: ROOT CAUSE STATEMENT -->
+<div class="sec">SECTION 4 — ROOT CAUSE STATEMENT</div>
+<div class="tb" style="background:#fff8f0;border-color:#f59e0b;min-height:55px">{{ inv.root_cause or '—' }}</div>
+
+<!-- SECTION 5: CONTRIBUTING FACTORS -->
+<div class="sec-amber">SECTION 5 — CONTRIBUTING FACTORS</div>
+<div class="factors-grid">
+  <div class="factor-box">
+    <div class="factor-hdr">👤 Human Factors</div>
+    <div class="factor-body">{{ inv.human_factors or '—' }}</div>
+  </div>
+  <div class="factor-box">
+    <div class="factor-hdr">⚙ Technical Factors</div>
+    <div class="factor-body">{{ inv.technical_factors or '—' }}</div>
+  </div>
+  <div class="factor-box">
+    <div class="factor-hdr">🏢 Organisational Factors</div>
+    <div class="factor-body">{{ inv.organizational_factors or '—' }}</div>
+  </div>
+  <div class="factor-box">
+    <div class="factor-hdr">🌤 Environmental Factors</div>
+    <div class="factor-body">{{ inv.environmental_factors or '—' }}</div>
+  </div>
+</div>
+{% if inv.contributing_factors %}
+<div class="tb" style="margin-top:-4px">{{ inv.contributing_factors }}</div>
+{% endif %}
+
+<!-- SECTION 6: FINDINGS -->
+{% if inv.findings %}
+<div class="sec">SECTION 6 — INVESTIGATION FINDINGS</div>
+<div class="tb">{{ inv.findings }}</div>
+{% endif %}
+
+<!-- SECTION 7: RECOMMENDATIONS -->
+<div class="sec-green">SECTION 7 — SAFETY RECOMMENDATIONS</div>
+<div class="tb" style="min-height:60px">{{ inv.recommendations or '—' }}</div>
+
+<!-- SECTION 8: REGULATORY NOTIFICATION -->
+<div class="sec">SECTION 8 — REGULATORY NOTIFICATION (ICAO Annex 13 §6.1)</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Authority Notified</td>
+    <td>{% if inv.authority_notified %}<strong style="color:#15803d">Yes</strong>{% else %}<strong style="color:#dc2626">No</strong>{% endif %}</td>
+    <td class="lbl2">Notification Date</td>
+    <td>{{ inv.notification_date or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Authority / Regulator</td>
+    <td>{{ inv.notified_authority or '—' }}</td>
+    <td class="lbl2">Notification Ref</td>
+    <td>{{ inv.notification_ref or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Regulatory Reference</td>
+    <td colspan="3">{{ inv.regulatory_ref or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">ERP Activated</td>
+    <td colspan="3">{% if inv.erp_activated %}<strong style="color:#dc2626">Yes — Emergency Response Plan was activated</strong>{% else %}No{% endif %}</td>
+  </tr>
+</table>
+
+<!-- SECTION 9: TIMELINE & CLOSURE -->
+<div class="sec">SECTION 9 — INVESTIGATION TIMELINE & CLOSURE</div>
+<table class="it">
+  <tr>
+    <td class="lbl">Date Opened</td>
+    <td>{{ inv.assigned_date or inv.created_at.strftime('%d %b %Y') if inv.created_at else '—' }}</td>
+    <td class="lbl2">Target Close Date</td>
+    <td>{{ inv.target_close_date or '—' }}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Preliminary Report Due</td>
+    <td>{{ inv.preliminary_report_due or '—' }}</td>
+    <td class="lbl2">Preliminary Submitted</td>
+    <td>{% if inv.preliminary_report_submitted %}<strong style="color:#15803d">Yes</strong>{% else %}No{% endif %}</td>
+  </tr>
+  <tr>
+    <td class="lbl">Final Report Due</td>
+    <td>{{ inv.final_report_due or '—' }}</td>
+    <td class="lbl2">Final Report Submitted</td>
+    <td>{% if inv.final_report_submitted %}<strong style="color:#15803d">Yes</strong>{% else %}No{% endif %}</td>
+  </tr>
+  {% if inv.status == 'Closed' %}
+  <tr>
+    <td class="lbl">Date Closed</td>
+    <td>{{ inv.closed_date or (inv.closed_at.strftime('%d %b %Y') if inv.closed_at else '—') }}</td>
+    <td class="lbl2">Closed By</td>
+    <td>{{ inv.closed_by or '—' }}</td>
+  </tr>
+  {% endif %}
+</table>
+{% if inv.final_findings %}
+<div class="sec">FINAL FINDINGS</div>
+<div class="tb">{{ inv.final_findings }}</div>
+{% endif %}
+
+<div class="pgbrk"></div>
+
+<div class="sec">SIGNATORIES</div>
+<table class="sig-table">
+  <thead>
+    <tr><th></th><th>Name</th><th>Position</th><th>Signature</th><th style="width:90px">Date</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="role">Lead Investigator</td>
+      <td>{{ inv.investigator or '' }}</td>
+      <td>Safety Investigator</td>
+      <td><div class="sig-line"></div></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td class="role">Reviewed By</td>
+      <td></td>
+      <td>Safety Manager</td>
+      <td><div class="sig-line"></div></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td class="role">Approved By</td>
+      <td></td>
+      <td>Accountable Executive</td>
+      <td><div class="sig-line"></div></td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="footer">
+  <span>AviaS · Safety Management System · ICAO Annex 13 / Doc 9859</span>
+  <span>Safety Investigation Report</span>
+  <span>{{ inv.id }} · {{ inv.created_at.strftime('%d/%m/%Y') if inv.created_at else '' }}</span>
+</div>
+
+</body>
+</html>

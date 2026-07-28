@@ -99,6 +99,11 @@
             </button>
           </form>
           {% endif %}
+          <a href="/admin/reports/voluntary/{{ r.id }}/print" target="_blank" onclick="event.stopPropagation()"
+            style="padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;
+            background:rgba(21,128,61,.1);color:#15803d;border:1.5px solid rgba(21,128,61,.3)">
+            🖨 Print
+          </a>
           <a href="/pdf/voluntary/{{ r.id }}" target="_blank" onclick="event.stopPropagation()"
             style="padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;
             background:rgba(201,168,76,.1);color:var(--gold);border:1.5px solid rgba(201,168,76,.3)">
@@ -179,6 +184,11 @@
             </button>
           </form>
           {% endif %}
+          <a href="/admin/reports/confidential/{{ r.id }}/print" target="_blank"
+            style="padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;
+            background:rgba(21,128,61,.1);color:#15803d;border:1.5px solid rgba(21,128,61,.3)">
+            🖨 Print
+          </a>
           <a href="/pdf/confidential/{{ r.id }}" target="_blank"
             style="padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;
             background:rgba(201,168,76,.1);color:var(--gold);border:1.5px solid rgba(201,168,76,.3)">

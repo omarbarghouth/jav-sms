@@ -11,17 +11,17 @@
     <div style="font-weight:700;margin-bottom:14px;color:var(--navy)">Policy Details</div>
     <div class="form-group" style="margin-bottom:12px">
       <label>Policy Title *</label>
-      <input name="title" class="form-control" required value="Just Culture Policy Statement — Jordan Aviation">
+      <input name="title" class="form-control" required value="Just Culture Policy Statement — AviaS">
     </div>
     <div class="form-group" style="margin-bottom:12px">
-      <label>Policy Content *</label>
-      <textarea name="content" class="form-control" rows="10" required placeholder="Jordan Aviation is committed to maintaining a Just Culture environment in which employees are encouraged and protected when reporting safety concerns, hazards, incidents, and occurrences...
+      <label>Policy Content *{% if latest_jc %} <span style="font-weight:400;color:#6b7280">(based on {{ latest_jc.version }})</span>{% endif %}</label>
+      <textarea name="content" class="form-control" rows="10" required placeholder="AviaS is committed to maintaining a Just Culture environment in which employees are encouraged and protected when reporting safety concerns, hazards, incidents, and occurrences...
 
 The organisation distinguishes between:
 • Acceptable behaviour: honest mistakes, errors of judgement made in good faith — protected from disciplinary action
 • Unacceptable behaviour: wilful violations, gross negligence, sabotage — subject to normal disciplinary procedures
 
-Reporters will not face disciplinary action solely on the basis of their safety report, provided the report was made honestly and in good faith..."></textarea>
+Reporters will not face disciplinary action solely on the basis of their safety report, provided the report was made honestly and in good faith...">{% if latest_jc %}{{ latest_jc.content | replace("Jordan Aviation", "AviaS") | replace("JORDAN AVIATION", "AviaS") }}{% endif %}</textarea>
     </div>
     <div class="form-group" style="margin-bottom:12px">
       <label>Change Summary (what is new in this version)</label>

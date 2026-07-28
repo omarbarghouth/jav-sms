@@ -6,7 +6,7 @@
 <form class="form-card" method="POST" style="max-width:860px">
   <div class="sec">Policy Header</div>
   <div class="fg"><label>Policy Title *</label>
-    <input type="text" name="title" required value="Jordan Aviation Safety Policy Statement"/></div>
+    <input type="text" name="title" required value="AviaS Safety Policy Statement"/></div>
   <div class="g3">
     <div class="fg"><label>Approved By *</label>
       <input type="text" name="approved_by" required placeholder="Accountable Manager name"/></div>
@@ -27,11 +27,11 @@
   {% if latest %}
   <div class="fg">
     <label>Policy Content * <span style="font-weight:400;color:var(--muted)">(based on {{ latest.version }})</span></label>
-    <textarea name="content" required rows="16" style="font-family:inherit;line-height:1.7">{{ latest.content }}</textarea>
+    <textarea name="content" required rows="16" style="font-family:inherit;line-height:1.7">{{ latest.content | replace("Jordan Aviation", "AviaS") | replace("JORDAN AVIATION", "AviaS") }}</textarea>
   </div>
   {% else %}
   <div class="fg"><label>Policy Content *</label>
-    <textarea name="content" required rows="16" style="font-family:inherit;line-height:1.7">Jordan Aviation is committed to developing and maintaining the highest standards of aviation safety in all its operations.
+    <textarea name="content" required rows="16" style="font-family:inherit;line-height:1.7">AviaS is committed to developing and maintaining the highest standards of aviation safety in all its operations.
 
 Management commits to:
 1. Provide the necessary resources for the effective implementation of the Safety Management System (SMS).
