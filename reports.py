@@ -1381,25 +1381,30 @@ def pdf_moc(moc, generated_by='Safety Department',
             E.append(Spacer(1, 4))
             ra_rows_data = [[
                 Paragraph('SEQ', S['field_label']),
-                Paragraph('HAZARD / SCENARIO', S['field_label']),
+                Paragraph('HAZARD / ACTIVITY', S['field_label']),
+                Paragraph('CONSEQUENCES', S['field_label']),
                 Paragraph('INITIAL RISK', S['field_label']),
                 Paragraph('RESIDUAL RISK', S['field_label']),
-                Paragraph('MITIGATION', S['field_label']),
+                Paragraph('FURTHER MITIGATIONS', S['field_label']),
             ]]
             for row in linked_ra.rows:
+                init_ri = row.risk_index_initial or '—'
+                res_ri  = row.risk_index_residual or '—'
+                INTOLER = {'5A','5B','5C','4A','4B','3A'}
                 ra_rows_data.append([
                     Paragraph(str(row.seq_num or '—'), S['small']),
-                    Paragraph((row.hazard_scenario or '—')[:100], S['small']),
-                    Paragraph(row.risk_index or '—',
+                    Paragraph((row.generic_hazard or row.type_of_activity or '—')[:80], S['small']),
+                    Paragraph((row.consequences or '—')[:80], S['small']),
+                    Paragraph(init_ri,
                               ParagraphStyle('ri', fontName='Helvetica-Bold',
                                              fontSize=8,
-                                             textColor=C_RED if (row.risk_index or '') in ('5A','5B','5C','4A','4B','3A') else C_ORANGE)),
-                    Paragraph(row.residual_risk or '—',
+                                             textColor=C_RED if init_ri in INTOLER else C_ORANGE)),
+                    Paragraph(res_ri,
                               ParagraphStyle('rr', fontName='Helvetica-Bold',
                                              fontSize=8, textColor=C_GREEN)),
-                    Paragraph((row.mitigation or '—')[:80], S['small']),
+                    Paragraph((row.further_mitigations or row.current_defenses or '—')[:80], S['small']),
                 ])
-            ra_col = [12*mm, CONTENT_W - 12*mm - 20*mm - 20*mm - 50*mm, 20*mm, 20*mm, 50*mm]
+            ra_col = [10*mm, 38*mm, 38*mm, 16*mm, 16*mm, CONTENT_W - 10*mm - 38*mm - 38*mm - 16*mm - 16*mm]
             ra_t = Table(ra_rows_data, colWidths=ra_col, repeatRows=1)
             ra_t.setStyle(TableStyle([
                 ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
@@ -1603,18 +1608,18 @@ def pdf_moc(moc, generated_by='Safety Department',
         inv_rows = [[
             Paragraph('REFERENCE', S['field_label']),
             Paragraph('TITLE', S['field_label']),
-            Paragraph('TYPE', S['field_label']),
+            Paragraph('CLASSIFICATION', S['field_label']),
             Paragraph('STATUS', S['field_label']),
-            Paragraph('LEAD INVESTIGATOR', S['field_label']),
+            Paragraph('INVESTIGATOR', S['field_label']),
             Paragraph('CLOSED DATE', S['field_label']),
         ]]
         for inv in investigations:
             inv_rows.append([
-                Paragraph(inv.ref_number or inv.id, S['mono']),
+                Paragraph(str(inv.id), S['mono']),
                 Paragraph((inv.title or '—')[:60], S['small']),
-                Paragraph(inv.investigation_type or '—', S['small']),
+                Paragraph(getattr(inv, 'classification', None) or getattr(inv, 'investigation_type', None) or '—', S['small']),
                 Paragraph(inv.status or '—', S['small']),
-                Paragraph(inv.lead_investigator or '—', S['small']),
+                Paragraph(getattr(inv, 'investigator', None) or getattr(inv, 'lead_investigator', None) or '—', S['small']),
                 Paragraph(inv.closed_date or '—', S['small']),
             ])
         inv_col = [22*mm, 60*mm, 25*mm, 20*mm, 38*mm,
