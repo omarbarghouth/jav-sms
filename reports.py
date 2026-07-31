@@ -960,7 +960,8 @@ def pdf_risk_assessment(ra, hazard, rows, mitigations, reviews,
                 Paragraph(row.risk_index_residual or '—', S['small']),
                 Paragraph(row.risk_tolerance_residual or '—', S['small']),
             ])
-        col_w = [8*mm, 28*mm, 28*mm, 35*mm, 16*mm, 38*mm, 16*mm, 24*mm]
+        col_w = [8*mm, 24*mm, 24*mm, 32*mm, 14*mm, 34*mm, 14*mm,
+                 CONTENT_W - 8*mm - 24*mm - 24*mm - 32*mm - 14*mm - 34*mm - 14*mm]
         rt = Table(risk_rows, colWidths=col_w, repeatRows=1)
         rt.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
@@ -1557,11 +1558,9 @@ def pdf_moc(moc, generated_by='Safety Department',
             Paragraph('ACTION ID', S['field_label']),
             Paragraph('DESCRIPTION', S['field_label']),
             Paragraph('STATUS', S['field_label']),
-            Paragraph('PRIORITY', S['field_label']),
             Paragraph('ASSIGNED TO', S['field_label']),
             Paragraph('DUE DATE', S['field_label']),
             Paragraph('CLOSED DATE', S['field_label']),
-            Paragraph('EFFECTIVENESS', S['field_label']),
         ]]
         for a in actions:
             st_clr = C_GREEN if a.status == 'Closed' else (
@@ -1573,14 +1572,12 @@ def pdf_moc(moc, generated_by='Safety Department',
                 Paragraph(a.status or '—',
                           ParagraphStyle('ast', fontName='Helvetica-Bold',
                                          fontSize=8, textColor=st_clr)),
-                Paragraph(a.priority or '—', S['small']),
                 Paragraph(a.sag_member or a.owner or '—', S['small']),
                 Paragraph(a.due_date or '—', S['small']),
                 Paragraph(a.closed_date or '—', S['small']),
-                Paragraph(a.effectiveness or '—', S['small']),
             ])
-        a_col = [20*mm, 55*mm, 20*mm, 16*mm, 28*mm, 18*mm, 18*mm,
-                 CONTENT_W - 20*mm - 55*mm - 20*mm - 16*mm - 28*mm - 18*mm - 18*mm]
+        a_col = [20*mm, 74*mm, 22*mm, 30*mm, 18*mm,
+                 CONTENT_W - 20*mm - 74*mm - 22*mm - 30*mm - 18*mm]
         a_t = Table(act_rows, colWidths=a_col, repeatRows=1)
         a_t.setStyle(TableStyle([
             ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),

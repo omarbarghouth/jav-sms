@@ -14666,14 +14666,20 @@ def pdf_route_moc(mid):
             for a in Action.query.filter_by(hazard_id=linked_ra.hazard_id).all():
                 if a.id not in seen_ids:
                     actions.append(a); seen_ids.add(a.id)
-        # Sync stale RAMitigation statuses from their linked action (fixes actions closed before auto-sync was deployed)
+        # Sync stale RAMitigation statuses from their linked action
         try:
+            changed = False
             for mit in (linked_ra.mitigations or []):
-                if mit.action_id and mit.status != 'Closed':
-                    linked_act = Action.query.get(mit.action_id)
+                if mit.status != 'Closed':
+                    linked_act = None
+                    if mit.action_id:
+                        linked_act = (Action.query.filter_by(id=mit.action_id).first()
+                                      or Action.query.get(mit.action_id))
                     if linked_act and linked_act.status == 'Closed':
                         mit.status = 'Closed'
-            db.session.commit()
+                        changed = True
+            if changed:
+                db.session.commit()
         except Exception:
             db.session.rollback()
     # Investigations linked to this MOC (via linked_report_id or moc_id)
