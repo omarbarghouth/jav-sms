@@ -14649,8 +14649,42 @@ def pdf_route_action(aid):
 def pdf_route_moc(mid):
     if not _PDF_ENGINE:
         return _pdf_unavailable()
-    moc       = MOC.query.get_or_404(mid)
-    pdf_bytes = pdf_moc(moc, generated_by=_gen_by())
+    from models import AuditVerificationItem
+    moc          = MOC.query.get_or_404(mid)
+    milestones   = MOCMilestone.query.filter_by(moc_id=mid).order_by(MOCMilestone.target_date).all()
+    stakeholders = MOCStakeholder.query.filter_by(moc_id=mid).all()
+    updates      = MOCUpdate.query.filter_by(moc_id=mid).order_by(MOCUpdate.created_at.desc()).all()
+    actions      = Action.query.filter_by(linked_ref_id=mid).all()
+    linked_ra    = RiskAssessment.query.get(moc.linked_ra_id) if moc.linked_ra_id else None
+    # Investigations linked to this MOC (via moc_id field if present, else none)
+    investigations = []
+    try:
+        investigations = Investigation.query.filter_by(moc_id=mid).all()
+    except Exception:
+        pass
+    # AVI items linked to this MOC
+    raw_avis = AuditVerificationItem.query.filter_by(
+        source_module='moc', source_record_id=mid).all()
+    # Adapt AVI objects to have verified_date / verified_by attributes the PDF uses
+    class _AVIProxy:
+        def __init__(self, a):
+            self.id = str(a.id)
+            self.verification_objective = a.verification_objective
+            self.status = a.status
+            self.verified_date = a.completed_at.strftime('%Y-%m-%d') if a.completed_at else None
+            self.verified_by   = a.completed_by
+    avis = [_AVIProxy(a) for a in raw_avis]
+    pdf_bytes = pdf_moc(
+        moc,
+        generated_by=_gen_by(),
+        milestones=milestones,
+        stakeholders=stakeholders,
+        updates=updates,
+        actions=actions,
+        linked_ra=linked_ra,
+        investigations=investigations,
+        avis=avis,
+    )
     return _pdf_response(pdf_bytes, f'MOC-{mid}.pdf')
 
 

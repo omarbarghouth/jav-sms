@@ -1154,62 +1154,591 @@ def pdf_action(action, history, generated_by='Safety Department'):
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-def pdf_moc(moc, generated_by='Safety Department'):
-    """Management of Change (MOC) Record PDF."""
+def pdf_moc(moc, generated_by='Safety Department',
+            milestones=None, stakeholders=None, updates=None,
+            actions=None, linked_ra=None, investigations=None, avis=None):
+    """
+    Full Management of Change Record PDF — all related modules included.
+    Sections:
+      1  Change Identification
+      2  Change Description
+      3  Impact Assessment
+      4  Regulatory Compliance
+      5  Approval Chain
+      6  Safety Risk Assessment (linked RA summary)
+      7  Stakeholder Consultation
+      8  Implementation Planning & Milestones
+      9  Actions Taken
+     10  Investigations
+     11  Post-Implementation Review (PIR)
+     12  Audit Verification Items (AVI)
+     13  Activity Log
+     14  Signatures
+    """
     S = _styles()
-    ref = moc.id if moc else '—'
-    status = (moc.implementation_status or moc.approval_status) if moc else '—'
-    title = moc.title or 'Management of Change'
-    dept = moc.department.name if moc and moc.department else '—'
+    ref    = (moc.moc_number or moc.id) if moc else '—'
+    status = moc.status or moc.approval_status or '—'
+    title  = moc.title or 'Management of Change'
+    dept   = moc.department.name if moc and moc.department else '—'
+
+    milestones    = milestones    or []
+    stakeholders  = stakeholders  or []
+    updates       = updates       or []
+    actions       = actions       or []
+    investigations= investigations or []
+    avis          = avis          or []
 
     E = []
+
+    # ── Cover banner ─────────────────────────────────────────────────────────
     E.append(_cover_banner(
         title=title, ref=ref, doc_type='Management of Change Record',
         status=status, dept=dept,
-        date_str=moc.planned_date if moc else '—',
+        date_str=moc.date_raised or moc.planned_date or '—',
         classification='INTERNAL — CONTROLLED CHANGE', S=S
     ))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
+    # ── 1. Change Identification ─────────────────────────────────────────────
     E.append(_section_header('1. Change Identification', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('MOC Reference',     ref),
-        ('Change Type',       moc.change_type or '—'),
-        ('Title',             moc.title or '—'),
-        ('Department',        dept),
-        ('Initiator',         moc.initiator or '—'),
-        ('Planned Date',      moc.planned_date or '—'),
-        ('Approval Status',   moc.approval_status or '—'),
-        ('Approved By',       moc.approved_by or '—'),
-        ('Implementation',    moc.implementation_status or '—'),
-        ('Linked Hazard',     moc.hazard_id or '—'),
+        ('MOC Reference',      ref),
+        ('MOC Number',         moc.moc_number or moc.id),
+        ('Change Category',    moc.change_category or moc.change_type or '—'),
+        ('Department',         dept),
+        ('Initiator',          moc.initiator or '—'),
+        ('Date Raised',        moc.date_raised or '—'),
+        ('Target Completion',  moc.target_completion_date or '—'),
+        ('Lifecycle Status',   status),
+        ('Approval Status',    moc.approval_status or '—'),
+        ('Approved By',        moc.approved_by or '—'),
+        ('Approved Date',      moc.approved_date or '—'),
+        ('Implemented Date',   moc.implemented_date or '—'),
+        ('Closed Date',        moc.closed_date or '—'),
+        ('Linked Hazard',      moc.hazard_id or '—'),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
+    # ── 2. Change Description ────────────────────────────────────────────────
     E.append(_section_header('2. Change Description', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Description of Change', moc.description, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('3. Pre-Change Risk Assessment', S))
+    E.append(_text_block('Current Situation', moc.current_situation or moc.pre_change_risk, S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Pre-Change Risk Assessment', moc.pre_change_risk, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('4. Post-Change Review', S))
+    E.append(_text_block('Proposed Change / Description', moc.proposed_change or moc.description, S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Post-Change Verification & Effectiveness Assessment',
-                         moc.post_change_review, S))
-    E.append(Spacer(1, 6))
+    E.append(_text_block('Reason for Change', moc.reason_for_change, S))
+    E.append(Spacer(1, 4))
+    E.append(_text_block('Expected Benefits', moc.expected_benefits, S))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('5. Signatures', S))
+    # ── 3. Impact Assessment ─────────────────────────────────────────────────
+    E.append(_section_header('3. Impact Assessment', S))
+    E.append(Spacer(1, 4))
+    impact_fields = [
+        ('Aircraft Operations',  moc.impact_aircraft_ops),
+        ('Flight Crew',          moc.impact_flight_crew),
+        ('Cabin Crew',           moc.impact_cabin_crew),
+        ('Ground Operations',    moc.impact_ground_ops),
+        ('Maintenance',          moc.impact_maintenance),
+        ('Operations Control',   moc.impact_occ),
+        ('Training',             moc.impact_training),
+        ('Safety Reporting',     moc.impact_safety_reporting),
+        ('Emergency Response',   moc.impact_erp),
+        ('Security',             moc.impact_security),
+        ('Regulatory',           moc.impact_regulatory),
+        ('Contractors',          moc.impact_contractor),
+    ]
+    impact_rows = [[
+        Paragraph('AREA', S['field_label']),
+        Paragraph('IMPACTED', S['field_label']),
+        Paragraph('AREA', S['field_label']),
+        Paragraph('IMPACTED', S['field_label']),
+    ]]
+    for i in range(0, len(impact_fields), 2):
+        row = []
+        for k in range(2):
+            if i + k < len(impact_fields):
+                area, val = impact_fields[i + k]
+                hit = bool(val)
+                row.append(Paragraph(area, S['field_value']))
+                clr = C_GREEN if hit else C_GRAY
+                row.append(Paragraph('YES' if hit else 'No',
+                    ParagraphStyle('imp', fontName='Helvetica-Bold',
+                                   fontSize=8, textColor=clr)))
+            else:
+                row += [Paragraph('', S['field_value']), Paragraph('', S['field_value'])]
+        impact_rows.append(row)
+    hw = CONTENT_W / 2
+    imp_t = Table(impact_rows, colWidths=[hw * 0.65, hw * 0.35, hw * 0.65, hw * 0.35],
+                  repeatRows=1)
+    imp_t.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, 0), C_NAVY),
+        ('TEXTCOLOR',     (0, 0), (-1, 0), C_WHITE),
+        ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+        ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 6),
+    ]))
+    E.append(imp_t)
+    E.append(Spacer(1, 4))
+    E.append(_info_grid([
+        ('Safety Impact Level',        moc.safety_impact_level or '—'),
+        ('Risk Assessment Required',   'Yes' if moc.risk_assessment_required else 'No'),
+        ('Training Required',          'Yes' if moc.training_required else 'No'),
+        ('Documentation Update',       'Yes' if moc.documentation_update_required else 'No'),
+        ('SOP Revision Required',      'Yes' if moc.sop_revision_required else 'No'),
+        ('ERP Update Required',        'Yes' if moc.erp_update_required else 'No'),
+    ], S, cols=2))
+    E.append(Spacer(1, 8))
+
+    # ── 4. Regulatory Compliance ─────────────────────────────────────────────
+    E.append(_section_header('4. Regulatory Compliance', S))
+    E.append(Spacer(1, 4))
+    E.append(_info_grid([
+        ('ICAO Impact',              'Yes' if moc.icao_impact else 'No'),
+        ('IOSA Impact',              'Yes' if moc.iosa_impact else 'No'),
+        ('EASA Impact',              'Yes' if moc.easa_impact else 'No'),
+        ('National Authority Impact','Yes' if moc.national_authority_impact else 'No'),
+        ('Company Manual Impact',    'Yes' if moc.company_manual_impact else 'No'),
+        ('Regulatory Approval Req.', 'Yes' if moc.regulatory_approval_required else 'No'),
+        ('Regulatory Approval Ref',  moc.regulatory_approval_ref or '—'),
+        ('Regulatory Approval Date', moc.regulatory_approval_date or '—'),
+    ], S, cols=2))
+    if moc.regulatory_evidence:
+        E.append(Spacer(1, 4))
+        E.append(_text_block('Regulatory Evidence / Notes', moc.regulatory_evidence, S))
+    E.append(Spacer(1, 8))
+
+    # ── 5. Approval Chain ───────────────────────────────────────────────────
+    E.append(_section_header('5. Approval Chain', S))
+    E.append(Spacer(1, 4))
+    approval_rows = [[
+        Paragraph('STEP', S['field_label']),
+        Paragraph('APPROVER', S['field_label']),
+        Paragraph('DECISION', S['field_label']),
+        Paragraph('DATE', S['field_label']),
+        Paragraph('COMMENTS', S['field_label']),
+    ]]
+    approval_steps = [
+        ('1. Department Manager', moc.dept_manager_name,   moc.dept_manager_status,  moc.dept_manager_date,  moc.dept_manager_comments),
+        ('2. Safety Review',      moc.safety_reviewer_name,moc.safety_review_status, moc.safety_review_date, moc.safety_review_comments),
+        ('3. Safety Manager',     moc.sm_name,             moc.sm_approval_status,   moc.sm_date,            moc.sm_comments),
+    ]
+    if moc.ae_approval_required:
+        approval_steps.append(
+            ('4. Accountable Executive', moc.ae_name, moc.ae_approval_status, moc.ae_date, moc.ae_comments)
+        )
+    for step, name, decision, date, comments in approval_steps:
+        dec = (decision or 'Pending').upper()
+        dec_clr = C_GREEN if 'APPROVED' in dec else (C_RED if 'REJECT' in dec else C_GRAY)
+        approval_rows.append([
+            Paragraph(step, S['field_value']),
+            Paragraph(name or '—', S['field_value']),
+            Paragraph(decision or 'Pending',
+                      ParagraphStyle('apdec', fontName='Helvetica-Bold',
+                                     fontSize=8, textColor=dec_clr)),
+            Paragraph(date or '—', S['small']),
+            Paragraph((comments or '—')[:120], S['small']),
+        ])
+    ap_col = [38*mm, 38*mm, 28*mm, 22*mm, CONTENT_W - 38*mm - 38*mm - 28*mm - 22*mm]
+    ap_t = Table(approval_rows, colWidths=ap_col, repeatRows=1)
+    ap_t.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+        ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+        ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+        ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 5),
+    ]))
+    E.append(ap_t)
+    E.append(Spacer(1, 8))
+
+    # ── 6. Safety Risk Assessment ────────────────────────────────────────────
+    E.append(_section_header('6. Safety Risk Assessment', S))
+    E.append(Spacer(1, 4))
+    E.append(_info_grid([
+        ('RA Required',   'Yes' if moc.risk_assessment_required else 'No'),
+        ('RA Status',     moc.ra_status or '—'),
+        ('Linked RA Ref', moc.linked_ra_id or '—'),
+    ], S, cols=2))
+    if linked_ra:
+        E.append(Spacer(1, 4))
+        E.append(_info_grid([
+            ('RA Control Number', linked_ra.control_number or linked_ra.id),
+            ('RA Title',          linked_ra.title or '—'),
+            ('RA Status',         linked_ra.status or '—'),
+            ('Responsible',       linked_ra.responsible_name or '—'),
+            ('Assessment Date',   linked_ra.assessment_date or '—'),
+            ('Next Review Date',  linked_ra.next_review_date or '—'),
+        ], S, cols=2))
+        # RA Rows (risk table)
+        if hasattr(linked_ra, 'rows') and linked_ra.rows:
+            E.append(Spacer(1, 4))
+            ra_rows_data = [[
+                Paragraph('SEQ', S['field_label']),
+                Paragraph('HAZARD / SCENARIO', S['field_label']),
+                Paragraph('INITIAL RISK', S['field_label']),
+                Paragraph('RESIDUAL RISK', S['field_label']),
+                Paragraph('MITIGATION', S['field_label']),
+            ]]
+            for row in linked_ra.rows:
+                ra_rows_data.append([
+                    Paragraph(str(row.seq_num or '—'), S['small']),
+                    Paragraph((row.hazard_scenario or '—')[:100], S['small']),
+                    Paragraph(row.risk_index or '—',
+                              ParagraphStyle('ri', fontName='Helvetica-Bold',
+                                             fontSize=8,
+                                             textColor=C_RED if (row.risk_index or '') in ('5A','5B','5C','4A','4B','3A') else C_ORANGE)),
+                    Paragraph(row.residual_risk or '—',
+                              ParagraphStyle('rr', fontName='Helvetica-Bold',
+                                             fontSize=8, textColor=C_GREEN)),
+                    Paragraph((row.mitigation or '—')[:80], S['small']),
+                ])
+            ra_col = [12*mm, CONTENT_W - 12*mm - 20*mm - 20*mm - 50*mm, 20*mm, 20*mm, 50*mm]
+            ra_t = Table(ra_rows_data, colWidths=ra_col, repeatRows=1)
+            ra_t.setStyle(TableStyle([
+                ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+                ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+                ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+                ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+                ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING',    (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+            ]))
+            E.append(ra_t)
+        # RA Mitigations
+        if hasattr(linked_ra, 'mitigations') and linked_ra.mitigations:
+            E.append(Spacer(1, 4))
+            mit_rows = [[
+                Paragraph('HAZARD REF', S['field_label']),
+                Paragraph('MITIGATION', S['field_label']),
+                Paragraph('RESPONSIBLE', S['field_label']),
+                Paragraph('DUE DATE', S['field_label']),
+                Paragraph('STATUS', S['field_label']),
+            ]]
+            for mit in linked_ra.mitigations:
+                mit_rows.append([
+                    Paragraph(mit.hazard_seq or '—', S['small']),
+                    Paragraph((mit.mitigation or '—')[:100], S['small']),
+                    Paragraph(mit.responsible_manager or '—', S['small']),
+                    Paragraph(mit.due_date or '—', S['small']),
+                    Paragraph(mit.status or '—',
+                              ParagraphStyle('ms', fontName='Helvetica-Bold',
+                                             fontSize=8,
+                                             textColor=C_GREEN if mit.status == 'Closed' else C_ORANGE)),
+                ])
+            mc = [18*mm, CONTENT_W - 18*mm - 38*mm - 22*mm - 20*mm, 38*mm, 22*mm, 20*mm]
+            mt = Table(mit_rows, colWidths=mc, repeatRows=1)
+            mt.setStyle(TableStyle([
+                ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+                ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+                ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+                ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+                ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING',    (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+            ]))
+            E.append(mt)
+    else:
+        E.append(Spacer(1, 4))
+        E.append(Paragraph('No linked Risk Assessment found.', S['small']))
+    E.append(Spacer(1, 8))
+
+    # ── 7. Stakeholder Consultation ──────────────────────────────────────────
+    E.append(_section_header('7. Stakeholder Consultation', S))
+    E.append(Spacer(1, 4))
+    if moc.stakeholder_summary:
+        E.append(_text_block('Consultation Summary', moc.stakeholder_summary, S))
+        E.append(Spacer(1, 4))
+    if stakeholders:
+        sk_rows = [[
+            Paragraph('CONTACT NAME', S['field_label']),
+            Paragraph('DEPARTMENT', S['field_label']),
+            Paragraph('DATE', S['field_label']),
+            Paragraph('COMMENTS', S['field_label']),
+        ]]
+        for sk in stakeholders:
+            sk_rows.append([
+                Paragraph(getattr(sk, 'contact_name', None) or getattr(sk, 'name', None) or '—', S['field_value']),
+                Paragraph(getattr(sk, 'department_name', None) or getattr(sk, 'department', None) or '—', S['small']),
+                Paragraph(getattr(sk, 'consultation_date', None) or getattr(sk, 'consulted_date', None) or '—', S['small']),
+                Paragraph((getattr(sk, 'comments', None) or getattr(sk, 'feedback', None) or '—')[:100], S['small']),
+            ])
+        sk_col = [45*mm, 40*mm, 22*mm, CONTENT_W - 45*mm - 40*mm - 22*mm]
+        sk_t = Table(sk_rows, colWidths=sk_col, repeatRows=1)
+        sk_t.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING',    (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+        ]))
+        E.append(sk_t)
+    else:
+        E.append(Paragraph('No individual stakeholder records. See summary above.', S['small']))
+    E.append(Spacer(1, 8))
+
+    # ── 8. Implementation Planning & Milestones ──────────────────────────────
+    E.append(PageBreak())
+    E.append(_section_header('8. Implementation Planning & Milestones', S))
+    E.append(Spacer(1, 4))
+    E.append(_info_grid([
+        ('Implementation Start',   moc.implementation_start_date or '—'),
+        ('Target Completion',      moc.target_completion_date or '—'),
+        ('Implementation Status',  moc.implementation_status or '—'),
+        ('Implemented Date',       moc.implemented_date or '—'),
+    ], S, cols=2))
+    E.append(Spacer(1, 4))
+    if milestones:
+        ms_rows = [[
+            Paragraph('MILESTONE', S['field_label']),
+            Paragraph('RESPONSIBLE', S['field_label']),
+            Paragraph('TARGET DATE', S['field_label']),
+            Paragraph('STATUS', S['field_label']),
+            Paragraph('COMPLETED', S['field_label']),
+            Paragraph('NOTES', S['field_label']),
+        ]]
+        for ms in milestones:
+            st_clr = C_GREEN if ms.status == 'Complete' else (
+                     C_RED if ms.status == 'Overdue' else
+                     C_BLUE if ms.status == 'In Progress' else C_GRAY)
+            ms_rows.append([
+                Paragraph((ms.description or '—')[:80], S['field_value']),
+                Paragraph(ms.responsible_person or '—', S['small']),
+                Paragraph(ms.target_date or '—', S['small']),
+                Paragraph(ms.status or '—',
+                          ParagraphStyle('mst', fontName='Helvetica-Bold',
+                                         fontSize=8, textColor=st_clr)),
+                Paragraph(ms.completed_date or '—', S['small']),
+                Paragraph((ms.notes or '—')[:60], S['small']),
+            ])
+        ms_col = [50*mm, 30*mm, 20*mm, 18*mm, 18*mm,
+                  CONTENT_W - 50*mm - 30*mm - 20*mm - 18*mm - 18*mm]
+        ms_t = Table(ms_rows, colWidths=ms_col, repeatRows=1)
+        ms_t.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING',    (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+        ]))
+        E.append(ms_t)
+        done = sum(1 for m in milestones if m.status == 'Complete')
+        E.append(Spacer(1, 4))
+        E.append(Paragraph(f'Milestones: {done}/{len(milestones)} complete',
+                           S['field_label']))
+    else:
+        E.append(Paragraph('No milestones recorded.', S['small']))
+    E.append(Spacer(1, 8))
+
+    # ── 9. Actions Taken ────────────────────────────────────────────────────
+    E.append(_section_header('9. Actions Taken (Corrective & Preventive)', S))
+    E.append(Spacer(1, 4))
+    if actions:
+        act_rows = [[
+            Paragraph('ACTION ID', S['field_label']),
+            Paragraph('DESCRIPTION', S['field_label']),
+            Paragraph('STATUS', S['field_label']),
+            Paragraph('PRIORITY', S['field_label']),
+            Paragraph('ASSIGNED TO', S['field_label']),
+            Paragraph('DUE DATE', S['field_label']),
+            Paragraph('CLOSED DATE', S['field_label']),
+            Paragraph('EFFECTIVENESS', S['field_label']),
+        ]]
+        for a in actions:
+            st_clr = C_GREEN if a.status == 'Closed' else (
+                     C_RED if a.status == 'Overdue' else
+                     C_ORANGE if a.status in ('Assigned', 'In Progress') else C_GRAY)
+            act_rows.append([
+                Paragraph(str(a.id), S['mono']),
+                Paragraph((a.description or '—')[:80], S['small']),
+                Paragraph(a.status or '—',
+                          ParagraphStyle('ast', fontName='Helvetica-Bold',
+                                         fontSize=8, textColor=st_clr)),
+                Paragraph(a.priority or '—', S['small']),
+                Paragraph(a.sag_member or a.owner or '—', S['small']),
+                Paragraph(a.due_date or '—', S['small']),
+                Paragraph(a.closed_date or '—', S['small']),
+                Paragraph(a.effectiveness or '—', S['small']),
+            ])
+        a_col = [20*mm, 55*mm, 20*mm, 16*mm, 28*mm, 18*mm, 18*mm,
+                 CONTENT_W - 20*mm - 55*mm - 20*mm - 16*mm - 28*mm - 18*mm - 18*mm]
+        a_t = Table(act_rows, colWidths=a_col, repeatRows=1)
+        a_t.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING',    (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 3),
+        ]))
+        E.append(a_t)
+        closed = sum(1 for a in actions if a.status == 'Closed')
+        E.append(Spacer(1, 4))
+        E.append(Paragraph(f'Actions: {closed}/{len(actions)} closed',
+                           S['field_label']))
+    else:
+        E.append(Paragraph('No actions recorded for this MOC.', S['small']))
+    E.append(Spacer(1, 8))
+
+    # ── 10. Linked Investigations ────────────────────────────────────────────
+    E.append(_section_header('10. Linked Investigations', S))
+    E.append(Spacer(1, 4))
+    if investigations:
+        inv_rows = [[
+            Paragraph('REFERENCE', S['field_label']),
+            Paragraph('TITLE', S['field_label']),
+            Paragraph('TYPE', S['field_label']),
+            Paragraph('STATUS', S['field_label']),
+            Paragraph('LEAD INVESTIGATOR', S['field_label']),
+            Paragraph('CLOSED DATE', S['field_label']),
+        ]]
+        for inv in investigations:
+            inv_rows.append([
+                Paragraph(inv.ref_number or inv.id, S['mono']),
+                Paragraph((inv.title or '—')[:60], S['small']),
+                Paragraph(inv.investigation_type or '—', S['small']),
+                Paragraph(inv.status or '—', S['small']),
+                Paragraph(inv.lead_investigator or '—', S['small']),
+                Paragraph(inv.closed_date or '—', S['small']),
+            ])
+        inv_col = [22*mm, 60*mm, 25*mm, 20*mm, 38*mm,
+                   CONTENT_W - 22*mm - 60*mm - 25*mm - 20*mm - 38*mm]
+        inv_t = Table(inv_rows, colWidths=inv_col, repeatRows=1)
+        inv_t.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING',    (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+        ]))
+        E.append(inv_t)
+    else:
+        E.append(Paragraph('No linked investigations.', S['small']))
+    E.append(Spacer(1, 8))
+
+    # ── 11. Post-Implementation Review (PIR) ─────────────────────────────────
+    E.append(_section_header('11. Post-Implementation Review (PIR)', S))
+    E.append(Spacer(1, 4))
+    if moc.pir_actual_outcome:
+        E.append(_info_grid([
+            ('PIR Date',          moc.pir_date or '—'),
+            ('Reviewer',          moc.pir_reviewer or '—'),
+            ('Effectiveness',     moc.pir_effectiveness or '—'),
+            ('Additional Actions', moc.pir_additional_actions or '—'),
+        ], S, cols=2))
+        E.append(Spacer(1, 4))
+        E.append(_text_block('Actual Outcome', moc.pir_actual_outcome, S))
+        if moc.pir_new_hazards:
+            E.append(Spacer(1, 4))
+            E.append(_text_block('New Hazards Identified', moc.pir_new_hazards, S))
+        if moc.pir_lessons_learned:
+            E.append(Spacer(1, 4))
+            E.append(_text_block('Lessons Learned', moc.pir_lessons_learned, S))
+    else:
+        E.append(Paragraph('Post-Implementation Review not yet completed.', S['small']))
+    E.append(Spacer(1, 8))
+
+    # ── 12. Audit Verification Items (AVI) ──────────────────────────────────
+    E.append(_section_header('12. Audit Verification Items (AVI)', S))
+    E.append(Spacer(1, 4))
+    if avis:
+        avi_rows = [[
+            Paragraph('AVI ID', S['field_label']),
+            Paragraph('OBJECTIVE', S['field_label']),
+            Paragraph('STATUS', S['field_label']),
+            Paragraph('VERIFIED DATE', S['field_label']),
+            Paragraph('VERIFIED BY', S['field_label']),
+        ]]
+        for avi in avis:
+            st_clr = C_GREEN if avi.status == 'Verified' else (
+                     C_RED if avi.status in ('Ineffective', 'Escalated') else C_ORANGE)
+            avi_rows.append([
+                Paragraph(avi.id, S['mono']),
+                Paragraph((avi.verification_objective or '—')[:100], S['small']),
+                Paragraph(avi.status or '—',
+                          ParagraphStyle('avst', fontName='Helvetica-Bold',
+                                         fontSize=8, textColor=st_clr)),
+                Paragraph(avi.verified_date or '—', S['small']),
+                Paragraph(avi.verified_by or '—', S['small']),
+            ])
+        av_col = [22*mm, CONTENT_W - 22*mm - 25*mm - 25*mm - 30*mm, 25*mm, 25*mm, 30*mm]
+        av_t = Table(avi_rows, colWidths=av_col, repeatRows=1)
+        av_t.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING',    (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+        ]))
+        E.append(av_t)
+    else:
+        E.append(Paragraph('AVIs are auto-generated when the change is marked Implemented.', S['small']))
+    E.append(Spacer(1, 8))
+
+    # ── 13. Activity Log ────────────────────────────────────────────────────
+    if updates:
+        E.append(PageBreak())
+        E.append(_section_header('13. Activity Log', S))
+        E.append(Spacer(1, 4))
+        upd_rows = [[
+            Paragraph('DATE', S['field_label']),
+            Paragraph('TYPE', S['field_label']),
+            Paragraph('BY', S['field_label']),
+            Paragraph('UPDATE', S['field_label']),
+        ]]
+        for upd in updates[:50]:
+            upd_rows.append([
+                Paragraph(upd.created_at.strftime('%Y-%m-%d %H:%M') if upd.created_at else '—', S['small']),
+                Paragraph(upd.update_type or '—', S['small']),
+                Paragraph(upd.update_by or '—', S['small']),
+                Paragraph((upd.update_text or '—')[:120], S['small']),
+            ])
+        upd_col = [24*mm, 22*mm, 30*mm, CONTENT_W - 24*mm - 22*mm - 30*mm]
+        upd_t = Table(upd_rows, colWidths=upd_col, repeatRows=1)
+        upd_t.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
+            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING',    (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
+        ]))
+        E.append(upd_t)
+        E.append(Spacer(1, 8))
+
+    # ── 14. Signatures ───────────────────────────────────────────────────────
+    E.append(PageBreak())
+    E.append(_section_header('14. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
-        {'role': 'Initiator',      'name': moc.initiator or '', 'date': moc.planned_date or ''},
-        {'role': 'Approved By',    'name': moc.approved_by or '', 'date': ''},
-        {'role': 'Safety Manager', 'name': '', 'date': ''},
-        {'role': 'Accountable Mgr','name': '', 'date': ''},
+        {'role': 'Initiator',          'name': moc.initiator or '',       'date': moc.date_raised or ''},
+        {'role': 'Department Manager', 'name': moc.dept_manager_name or '','date': moc.dept_manager_date or ''},
+        {'role': 'Safety Manager',     'name': moc.sm_name or '',          'date': moc.sm_date or ''},
+        {'role': 'Accountable Mgr',    'name': moc.ae_name or moc.approved_by or '', 'date': moc.ae_date or moc.approved_date or ''},
     ], S))
 
     return _build_doc(E, 'Management of Change', ref,
