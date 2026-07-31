@@ -4100,6 +4100,37 @@ def admin_user_new():
     return redirect(url_for('admin_users'))
 
 
+@app.route('/admin/users/<int:uid>/edit', methods=['GET', 'POST'])
+@require_login
+def admin_user_edit(uid):
+    if session.get('admin_role') != 'admin':
+        flash('⚠ Admin access required.', 'error')
+        return redirect(url_for('dashboard'))
+    u = User.query.get_or_404(uid)
+    if request.method == 'POST':
+        f = request.form
+        new_username = f.get('username', '').strip()
+        if new_username and new_username != u.username:
+            if User.query.filter_by(username=new_username).first():
+                flash('⚠ Username already taken.', 'error')
+                return redirect(url_for('admin_users'))
+            u.username = new_username
+        if f.get('full_name') is not None:
+            u.full_name = f['full_name'].strip()
+        new_pw = f.get('password', '').strip()
+        if new_pw:
+            u.password_hash = hash_pw(new_pw)
+        u.role = f.get('role', u.role)
+        u.sag_role = f.get('sag_role', u.sag_role)
+        u.department_id = int(f['department_id']) if f.get('department_id') else None
+        u.is_active = f.get('is_active') == '1'
+        db.session.commit()
+        flash(f'✓ User {u.username} updated.', 'success')
+        return redirect(url_for('admin_users'))
+    users = User.query.order_by(User.created_at).all()
+    return render_template('portal/admin_users.html', users=users, edit_user=u)
+
+
 @app.route('/admin/users/<int:uid>/toggle', methods=['POST'])
 @require_login
 def admin_user_toggle(uid):
@@ -5362,6 +5393,23 @@ def update_action(aid):
                 pass
         sync_report_status(a.hazard_id)
         db.session.commit()
+        # ── Issue 5: Auto-close RAMitigation when its linked action closes ─────
+        if new_status == 'Closed' and a.source == 'Risk Assessment':
+            try:
+                mit = RAMitigation.query.filter_by(action_id=a.id).first()
+                if mit and mit.status != 'Closed':
+                    mit.status = 'Closed'
+                    db.session.commit()
+                    # Auto-close RA if ALL its mitigations are closed
+                    ra = RiskAssessment.query.get(mit.assessment_id)
+                    if ra:
+                        all_mits = RAMitigation.query.filter_by(assessment_id=ra.id).all()
+                        if all_mits and all(m.status == 'Closed' for m in all_mits):
+                            ra.status = 'Closed'
+                            db.session.commit()
+            except Exception:
+                pass
+
         # ── AVI Hook: Action closure → verify corrective action effectiveness ─
         if new_status == 'Closed':
             try:
@@ -6513,6 +6561,8 @@ def moc_add_hazard(mid):
     db.session.flush()
 
     # ── 3. Create Controls (existing + proposed) ─────────────────────────────
+    existing_ctrl = f.get('existing_controls', '').strip()
+    proposed_ctrl = f.get('proposed_controls', '').strip()
     if existing_ctrl:
         db.session.add(Control(
             id           = new_id('CTL'),
@@ -6623,10 +6673,13 @@ def moc_add_milestone(mid):
 def moc_update_milestone(msid):
     ms = MOCMilestone.query.get_or_404(msid)
     mid = ms.moc_id
-    ms.status = request.form.get('status', ms.status)
-    if ms.status == 'Complete':
+    ms.status             = request.form.get('status', ms.status)
+    ms.description        = request.form.get('description', ms.description or '')
+    ms.responsible_person = request.form.get('responsible_person', ms.responsible_person or '')
+    ms.target_date        = request.form.get('target_date', ms.target_date or '')
+    ms.notes              = request.form.get('notes', ms.notes or '')
+    if ms.status == 'Complete' and not ms.completed_date:
         ms.completed_date = datetime.utcnow().strftime('%Y-%m-%d')
-    ms.notes = request.form.get('notes', ms.notes or '')
     db.session.commit()
     flash('Milestone updated.', 'success')
     return redirect(url_for('moc_detail', mid=mid) + '#milestones')
@@ -10461,6 +10514,11 @@ def sag_assign(aid):
     db.session.commit()
     sync_report_status(a.hazard_id)
     db.session.commit()
+    if a.sag_member:
+        push_notify_by_name(a.sag_member,
+            f'Action Assigned — {aid}',
+            f'You have been assigned a corrective action: {a.description[:80] if a.description else aid}.',
+            'action_assigned', 'action', aid)
     flash(f'✓ Action {aid} assigned to {a.sag_member}.', 'success')
     return redirect(request.form.get('return_url', url_for('sag_governance')))
 
@@ -13464,8 +13522,8 @@ def new_ra():
             auto_link_document(None, 'hazard', ra.hazard_id, f'Risk Assessment {ra.control_number}')
 
         db.session.commit()
-        flash(f'✓ Risk Assessment {ra.control_number} created. {seq-1} risk row(s) added.', 'success')
-        return redirect(url_for('ra_detail', ra_id=ra_id))
+        flash(f'✓ Risk Assessment {ra.control_number} created. {seq-1} risk row(s) added. Assign it to the Safety Action Group below.', 'success')
+        return redirect(url_for('ra_assign_sag', ra_id=ra_id))
 
     # GET — pre-populate from hazard if provided
     return render_template('risk/ra_form.html', hazard=hazard,
@@ -13480,6 +13538,50 @@ def ra_detail(ra_id):
     return render_template('risk/ra_detail.html', ra=ra,
                            worst_initial=worst_i, worst_residual=worst_r,
                            get_tolerance=get_tolerance)
+
+# ─── RA ASSIGN SAG REVIEW ─────────────────────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/assign-sag', methods=['GET', 'POST'])
+@require_login
+def ra_assign_sag(ra_id):
+    """Step after RA creation: assign actions to SAG members for review."""
+    ra = RiskAssessment.query.get_or_404(ra_id)
+    actions = Action.query.filter_by(linked_ref_id=ra_id, source='Risk Assessment').all()
+    sag_members = User.query.filter_by(is_active=True).order_by(User.full_name).all()
+    departments = Department.query.order_by(Department.name).all()
+
+    if request.method == 'POST':
+        f = request.form
+        assigned_count = 0
+        for action in actions:
+            sag_key  = f'sag_{action.id}'
+            dept_key = f'dept_{action.id}'
+            due_key  = f'due_{action.id}'
+            if f.get(sag_key):
+                old = action.sag_member or 'Unassigned'
+                action.sag_member    = f[sag_key]
+                action.department_id = int(f[dept_key]) if f.get(dept_key) else action.department_id
+                action.due_date      = f.get(due_key) or action.due_date
+                if action.status == 'Open':
+                    action.status = 'Assigned'
+                log_action_history(action.id, session.get('admin_name', 'Admin'),
+                                   old, action.sag_member,
+                                   f'SAG assigned via RA {ra.control_number}', 'assignment')
+                push_notify_by_name(action.sag_member,
+                    f'Action Assigned — {ra.control_number}',
+                    f'You have been assigned a corrective action for Risk Assessment {ra.control_number}.',
+                    'action_assigned', 'action', action.id)
+                assigned_count += 1
+        # Advance RA to Submitted
+        if assigned_count and ra.status == 'Draft':
+            ra.status = 'Submitted'
+            ra.submitted_date = datetime.utcnow().strftime('%Y-%m-%d')
+        db.session.commit()
+        flash(f'✓ {assigned_count} action(s) assigned to SAG. Risk Assessment submitted for review.', 'success')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
+
+    return render_template('risk/ra_assign_sag.html',
+                           ra=ra, actions=actions,
+                           sag_members=sag_members, departments=departments)
 
 # ─── ADD ROW to existing RA ──────────────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/add-row', methods=['POST'])
@@ -13993,7 +14095,8 @@ def tol_color(tol):
 def ra_print(ra_id):
     """Returns a print-ready HTML page that users print as PDF from the browser."""
     ra = RiskAssessment.query.get_or_404(ra_id)
-    return render_template('risk/ra_print.html', ra=ra, get_tolerance=get_tolerance)
+    return render_template('risk/ra_print.html', ra=ra, get_tolerance=get_tolerance,
+                           now=datetime.utcnow())
 
 # ─── 2. HAZARD LOG → EXCEL ────────────────────────────────────────────────────
 @app.route('/hazard-log/export-excel')
@@ -16114,6 +16217,109 @@ def seed():
 
 with app.app_context():
     seed()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  EXCEL REGISTER EXPORTS
+# ═══════════════════════════════════════════════════════════════════════════════
+from excel_exports import (
+    export_moc_register, export_investigation_register, export_hazard_register,
+    export_risk_register, export_action_register, export_audit_register,
+    export_finding_register, export_training_register, export_employee_register,
+    export_survey_register, export_bulletin_register, export_newsletter_register,
+    export_spi_register, export_document_register, export_ra_register,
+)
+
+@app.route('/moc/export-excel')
+@require_login
+def moc_export_excel():
+    mocs = MOC.query.order_by(MOC.created_at.desc()).all()
+    return export_moc_register(mocs)
+
+@app.route('/investigations/export-excel')
+@require_login
+def investigation_export_excel():
+    invs = Investigation.query.order_by(Investigation.created_at.desc()).all()
+    return export_investigation_register(invs)
+
+@app.route('/hazards/export-excel')
+@require_login
+def hazard_export_excel():
+    hazards = Hazard.query.order_by(Hazard.created_at.desc()).all()
+    return export_hazard_register(hazards)
+
+@app.route('/risks/export-excel')
+@require_login
+def risk_export_excel():
+    risks = Risk.query.order_by(Risk.id.desc()).all()
+    return export_risk_register(risks)
+
+@app.route('/actions/export-excel')
+@require_login
+def action_export_excel():
+    actions = Action.query.order_by(Action.created_at.desc()).all()
+    return export_action_register(actions)
+
+@app.route('/audits/export-excel')
+@require_login
+def audit_export_excel():
+    audits = Audit.query.order_by(Audit.id.desc()).all()
+    return export_audit_register(audits)
+
+@app.route('/findings/export-excel')
+@require_login
+def finding_export_excel():
+    findings = AuditFinding.query.order_by(AuditFinding.id.desc()).all()
+    return export_finding_register(findings)
+
+@app.route('/training/export-excel')
+@require_login
+def training_export_excel():
+    trainings = Training.query.order_by(Training.id.desc()).all()
+    return export_training_register(trainings)
+
+@app.route('/employees/export-excel')
+@require_login
+def employee_export_excel():
+    employees = Employee.query.order_by(Employee.id.desc()).all()
+    return export_employee_register(employees)
+
+@app.route('/surveys/export-excel')
+@require_login
+def survey_export_excel():
+    surveys = SafetySurvey.query.order_by(SafetySurvey.id.desc()).all()
+    return export_survey_register(surveys)
+
+@app.route('/bulletins/export-excel')
+@require_login
+def bulletin_export_excel():
+    bulletins = SafetyBulletin.query.order_by(SafetyBulletin.id.desc()).all()
+    return export_bulletin_register(bulletins)
+
+@app.route('/newsletters/export-excel')
+@require_login
+def newsletter_export_excel():
+    newsletters = SafetyNewsletter.query.order_by(SafetyNewsletter.id.desc()).all()
+    return export_newsletter_register(newsletters)
+
+@app.route('/spi/export-excel')
+@require_login
+def spi_export_excel():
+    spis = SPIIndicator.query.order_by(SPIIndicator.id.desc()).all()
+    return export_spi_register(spis)
+
+@app.route('/documents/export-excel')
+@require_login
+def document_export_excel():
+    docs = SMSDocument.query.order_by(SMSDocument.id.desc()).all()
+    return export_document_register(docs)
+
+@app.route('/risk-assessments/export-excel')
+@require_login
+def ra_export_excel():
+    ras = RiskAssessment.query.order_by(RiskAssessment.id.desc()).all()
+    return export_ra_register(ras)
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
