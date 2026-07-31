@@ -14625,7 +14625,7 @@ def pdf_route_risk_assessment(ra_id):
         hazard     = Hazard.query.get(ra.hazard_id) if ra.hazard_id else None
         rows       = RARow.query.filter_by(assessment_id=ra_id).order_by(RARow.seq_num).all()
         mitigations= RAMitigation.query.filter_by(assessment_id=ra_id).all()
-        reviews    = RAReview.query.filter_by(assessment_id=ra_id).order_by(RAReview.review_date).all()
+        reviews    = RAReview.query.filter_by(assessment_id=ra_id).order_by(RAReview.date_completed).all()
         pdf_bytes  = pdf_risk_assessment(ra, hazard, rows, mitigations, reviews, generated_by=_gen_by())
         ctrl = getattr(ra, 'control_number', ra_id) or ra_id
         return _pdf_response(pdf_bytes, f'RA-{ctrl}.pdf')
