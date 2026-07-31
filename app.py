@@ -14620,14 +14620,20 @@ def pdf_route_investigation(inv_id):
 def pdf_route_risk_assessment(ra_id):
     if not _PDF_ENGINE:
         return _pdf_unavailable()
-    ra         = RiskAssessment.query.get_or_404(ra_id)
-    hazard     = Hazard.query.get(ra.hazard_id) if ra.hazard_id else None
-    rows       = RARow.query.filter_by(assessment_id=ra_id).order_by(RARow.seq_num).all()
-    mitigations= RAMitigation.query.filter_by(assessment_id=ra_id).all()
-    reviews    = RAReview.query.filter_by(assessment_id=ra_id).order_by(RAReview.review_date).all()
-    pdf_bytes  = pdf_risk_assessment(ra, hazard, rows, mitigations, reviews, generated_by=_gen_by())
-    ctrl = getattr(ra, 'control_number', ra_id) or ra_id
-    return _pdf_response(pdf_bytes, f'RA-{ctrl}.pdf')
+    try:
+        ra         = RiskAssessment.query.get_or_404(ra_id)
+        hazard     = Hazard.query.get(ra.hazard_id) if ra.hazard_id else None
+        rows       = RARow.query.filter_by(assessment_id=ra_id).order_by(RARow.seq_num).all()
+        mitigations= RAMitigation.query.filter_by(assessment_id=ra_id).all()
+        reviews    = RAReview.query.filter_by(assessment_id=ra_id).order_by(RAReview.review_date).all()
+        pdf_bytes  = pdf_risk_assessment(ra, hazard, rows, mitigations, reviews, generated_by=_gen_by())
+        ctrl = getattr(ra, 'control_number', ra_id) or ra_id
+        return _pdf_response(pdf_bytes, f'RA-{ctrl}.pdf')
+    except Exception as e:
+        import traceback
+        app.logger.error(f'RA PDF error for {ra_id}: {traceback.format_exc()}')
+        flash(f'⚠ PDF generation error: {str(e)[:200]}', 'error')
+        return redirect(url_for('ra_detail', ra_id=ra_id))
 
 
 # ── 5. ACTION / CORRECTIVE ACTION PDF ───────────────────────────────────────
