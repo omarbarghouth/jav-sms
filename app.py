@@ -14654,8 +14654,28 @@ def pdf_route_moc(mid):
     milestones   = MOCMilestone.query.filter_by(moc_id=mid).order_by(MOCMilestone.target_date).all()
     stakeholders = MOCStakeholder.query.filter_by(moc_id=mid).all()
     updates      = MOCUpdate.query.filter_by(moc_id=mid).order_by(MOCUpdate.created_at.desc()).all()
-    actions      = Action.query.filter_by(linked_ref_id=mid).all()
     linked_ra    = RiskAssessment.query.get(moc.linked_ra_id) if moc.linked_ra_id else None
+    # Collect all actions: directly linked to MOC + linked to the RA + linked via hazard
+    actions = Action.query.filter_by(linked_ref_id=mid).all()
+    seen_ids = {a.id for a in actions}
+    if linked_ra:
+        for a in Action.query.filter_by(linked_ref_id=linked_ra.id).all():
+            if a.id not in seen_ids:
+                actions.append(a); seen_ids.add(a.id)
+        if linked_ra.hazard_id:
+            for a in Action.query.filter_by(hazard_id=linked_ra.hazard_id).all():
+                if a.id not in seen_ids:
+                    actions.append(a); seen_ids.add(a.id)
+        # Sync stale RAMitigation statuses from their linked action (fixes actions closed before auto-sync was deployed)
+        try:
+            for mit in (linked_ra.mitigations or []):
+                if mit.action_id and mit.status != 'Closed':
+                    linked_act = Action.query.get(mit.action_id)
+                    if linked_act and linked_act.status == 'Closed':
+                        mit.status = 'Closed'
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
     # Investigations linked to this MOC (via linked_report_id or moc_id)
     investigations = []
     try:

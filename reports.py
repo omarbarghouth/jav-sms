@@ -1393,8 +1393,8 @@ def pdf_moc(moc, generated_by='Safety Department',
                 INTOLER = {'5A','5B','5C','4A','4B','3A'}
                 ra_rows_data.append([
                     Paragraph(str(row.seq_num or '—'), S['small']),
-                    Paragraph((row.generic_hazard or row.type_of_activity or '—')[:80], S['small']),
-                    Paragraph((row.consequences or '—')[:80], S['small']),
+                    Paragraph(row.generic_hazard or row.type_of_activity or '—', S['small']),
+                    Paragraph(row.consequences or '—', S['small']),
                     Paragraph(init_ri,
                               ParagraphStyle('ri', fontName='Helvetica-Bold',
                                              fontSize=8,
@@ -1402,7 +1402,7 @@ def pdf_moc(moc, generated_by='Safety Department',
                     Paragraph(res_ri,
                               ParagraphStyle('rr', fontName='Helvetica-Bold',
                                              fontSize=8, textColor=C_GREEN)),
-                    Paragraph((row.further_mitigations or row.current_defenses or '—')[:80], S['small']),
+                    Paragraph(row.further_mitigations or row.current_defenses or '—', S['small']),
                 ])
             ra_col = [10*mm, 38*mm, 38*mm, 16*mm, 16*mm, CONTENT_W - 10*mm - 38*mm - 38*mm - 16*mm - 16*mm]
             ra_t = Table(ra_rows_data, colWidths=ra_col, repeatRows=1)
@@ -1430,7 +1430,7 @@ def pdf_moc(moc, generated_by='Safety Department',
             for mit in linked_ra.mitigations:
                 mit_rows.append([
                     Paragraph(mit.hazard_seq or '—', S['small']),
-                    Paragraph((mit.mitigation or '—')[:100], S['small']),
+                    Paragraph(mit.mitigation or '—', S['small']),
                     Paragraph(mit.responsible_manager or '—', S['small']),
                     Paragraph(mit.due_date or '—', S['small']),
                     Paragraph(mit.status or '—',
@@ -1474,7 +1474,7 @@ def pdf_moc(moc, generated_by='Safety Department',
                 Paragraph(getattr(sk, 'contact_name', None) or getattr(sk, 'name', None) or '—', S['field_value']),
                 Paragraph(getattr(sk, 'department_name', None) or getattr(sk, 'department', None) or '—', S['small']),
                 Paragraph(getattr(sk, 'consultation_date', None) or getattr(sk, 'consulted_date', None) or '—', S['small']),
-                Paragraph((getattr(sk, 'comments', None) or getattr(sk, 'feedback', None) or '—')[:100], S['small']),
+                Paragraph(getattr(sk, 'comments', None) or getattr(sk, 'feedback', None) or '—', S['small']),
             ])
         sk_col = [45*mm, 40*mm, 22*mm, CONTENT_W - 45*mm - 40*mm - 22*mm]
         sk_t = Table(sk_rows, colWidths=sk_col, repeatRows=1)
@@ -1518,14 +1518,14 @@ def pdf_moc(moc, generated_by='Safety Department',
                      C_RED if ms.status == 'Overdue' else
                      C_BLUE if ms.status == 'In Progress' else C_GRAY)
             ms_rows.append([
-                Paragraph((ms.description or '—')[:80], S['field_value']),
+                Paragraph(ms.description or '—', S['field_value']),
                 Paragraph(ms.responsible_person or '—', S['small']),
                 Paragraph(ms.target_date or '—', S['small']),
                 Paragraph(ms.status or '—',
                           ParagraphStyle('mst', fontName='Helvetica-Bold',
                                          fontSize=8, textColor=st_clr)),
                 Paragraph(ms.completed_date or '—', S['small']),
-                Paragraph((ms.notes or '—')[:60], S['small']),
+                Paragraph(ms.notes or '—', S['small']),
             ])
         ms_col = [50*mm, 30*mm, 20*mm, 18*mm, 18*mm,
                   CONTENT_W - 50*mm - 30*mm - 20*mm - 18*mm - 18*mm]
@@ -1569,7 +1569,7 @@ def pdf_moc(moc, generated_by='Safety Department',
                      C_ORANGE if a.status in ('Assigned', 'In Progress') else C_GRAY)
             act_rows.append([
                 Paragraph(str(a.id), S['mono']),
-                Paragraph((a.description or '—')[:80], S['small']),
+                Paragraph(a.description or '—', S['small']),
                 Paragraph(a.status or '—',
                           ParagraphStyle('ast', fontName='Helvetica-Bold',
                                          fontSize=8, textColor=st_clr)),
@@ -1616,7 +1616,7 @@ def pdf_moc(moc, generated_by='Safety Department',
         for inv in investigations:
             inv_rows.append([
                 Paragraph(str(inv.id), S['mono']),
-                Paragraph((inv.title or '—')[:60], S['small']),
+                Paragraph(inv.title or '—', S['small']),
                 Paragraph(getattr(inv, 'classification', None) or getattr(inv, 'investigation_type', None) or '—', S['small']),
                 Paragraph(inv.status or '—', S['small']),
                 Paragraph(getattr(inv, 'investigator', None) or getattr(inv, 'lead_investigator', None) or '—', S['small']),
@@ -1678,7 +1678,7 @@ def pdf_moc(moc, generated_by='Safety Department',
                      C_RED if avi.status in ('Ineffective', 'Escalated') else C_ORANGE)
             avi_rows.append([
                 Paragraph(avi.id, S['mono']),
-                Paragraph((avi.verification_objective or '—')[:100], S['small']),
+                Paragraph(avi.verification_objective or '—', S['small']),
                 Paragraph(avi.status or '—',
                           ParagraphStyle('avst', fontName='Helvetica-Bold',
                                          fontSize=8, textColor=st_clr)),
