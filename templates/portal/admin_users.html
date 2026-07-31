@@ -83,7 +83,10 @@
               {{ 'Active' if u.is_active else 'Disabled' }}
             </span>
           </td>
-          <td style="padding:11px 14px">
+          <td style="padding:11px 14px;display:flex;gap:6px;align-items:center">
+            <a href="/admin/users/{{ u.id }}/edit" style="padding:4px 10px;border-radius:5px;font-size:10px;
+              font-weight:800;cursor:pointer;font-family:inherit;border:1.5px solid var(--border);
+              background:var(--surface);color:var(--text);text-decoration:none">Edit</a>
             {% if u.username != session.admin_user %}
             <form method="POST" action="/admin/users/{{ u.id }}/toggle" style="display:inline">
               <button type="submit" style="padding:4px 10px;border-radius:5px;font-size:10px;
@@ -104,8 +107,70 @@
     </div>
   </div>
 
-  <!-- RIGHT: Add New User -->
+  <!-- RIGHT: Add / Edit User -->
   <div class="card" style="padding:0;overflow:hidden;position:sticky;top:16px">
+    {% if edit_user %}
+    <div style="background:var(--navy);border-bottom:2px solid var(--gold);padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#fff">Edit User</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">{{ edit_user.username }}</div>
+      </div>
+      <a href="/admin/users" style="font-size:11px;color:rgba(255,255,255,.6);text-decoration:none">✕ Cancel</a>
+    </div>
+    <div style="padding:20px">
+      <form method="POST" action="/admin/users/{{ edit_user.id }}/edit">
+        <div class="fg">
+          <label>Username *</label>
+          <input type="text" name="username" required value="{{ edit_user.username }}"/>
+        </div>
+        <div class="fg">
+          <label>Full Name</label>
+          <input type="text" name="full_name" value="{{ edit_user.full_name or '' }}"/>
+        </div>
+        <div class="fg">
+          <label>New Password <span style="font-weight:400;color:var(--muted);font-size:10px">(leave blank to keep current)</span></label>
+          <input type="password" name="password" placeholder="Enter new password to change"/>
+        </div>
+        <div class="fg">
+          <label>Role *</label>
+          <select name="role">
+            {% for r in ['safety_officer','safety_manager','auditor','admin'] %}
+            <option {% if edit_user.role == r %}selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>SAG Role <span style="font-weight:400;color:var(--muted);font-size:10px">(optional)</span></label>
+          <select name="sag_role">
+            <option value="" {% if not edit_user.sag_role %}selected{% endif %}>— Not a SAG Member —</option>
+            {% for sr in ['Flight Operations SAG Member','Ground Operations SAG Member','Maintenance SAG Member','OCC SAG Member','Cabin Crew SAG Member','Quality/Audit SAG Member','Engineering SAG Member'] %}
+            <option {% if edit_user.sag_role == sr %}selected{% endif %}>{{ sr }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Department</label>
+          <select name="department_id">
+            <option value="">— Select Department —</option>
+            {% for d in all_departments %}
+            <option value="{{ d.id }}" {% if edit_user.department_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Status</label>
+          <select name="is_active">
+            <option value="1" {% if edit_user.is_active %}selected{% endif %}>Active</option>
+            <option value="0" {% if not edit_user.is_active %}selected{% endif %}>Disabled</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="submit" class="btn btn-nav" style="flex:1;justify-content:center">Save Changes</button>
+          <a href="/admin/users" class="btn btn-outline">Cancel</a>
+        </div>
+      </form>
+    </div>
+    {% else %}
     <div style="background:var(--navy);border-bottom:2px solid var(--gold);padding:14px 18px">
       <div style="font-size:13px;font-weight:800;color:#fff">Add New User</div>
       <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">Web dashboard access only</div>
@@ -167,6 +232,7 @@
         <button type="submit" class="btn btn-nav" style="width:100%;justify-content:center">+ Add User</button>
       </form>
     </div>
+    {% endif %}
   </div>
 
 </div>

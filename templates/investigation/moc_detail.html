@@ -502,6 +502,10 @@
         </div>
         <form method="POST" action="/moc/milestone/{{ ms.id }}/update">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <input type="hidden" name="description" value="{{ ms.description or '' }}"/>
+          <input type="hidden" name="responsible_person" value="{{ ms.responsible_person or '' }}"/>
+          <input type="hidden" name="target_date" value="{{ ms.target_date or '' }}"/>
+          <input type="hidden" name="notes" value="{{ ms.notes or '' }}"/>
           <select name="status" onchange="this.form.submit()" style="font-size:10px;padding:2px 6px;border:1px solid var(--border);border-radius:4px">
             {% for s in ['Pending','In Progress','Complete','Overdue'] %}
             <option {% if ms.status==s %}selected{% endif %}>{{ s }}</option>

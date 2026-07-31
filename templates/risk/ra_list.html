@@ -14,7 +14,8 @@
     {% for s in ['Draft','Under Review','Approved','Archived'] %}<option {% if stat_f==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
   </select>
   <a href="/risk-assessments" class="btn btn-outline btn-sm">Clear</a>
-  <a href="/risk-assessments/new" class="btn btn-nav btn-sm" style="margin-left:auto">+ New Risk Assessment</a>
+  <a href="/risk-assessments/export-excel" class="btn btn-sm" style="background:#065f46;color:#fff;margin-left:auto">⬇ Export Excel</a>
+  <a href="/risk-assessments/new" class="btn btn-nav btn-sm">+ New Risk Assessment</a>
 </form>
 
 <div class="card" style="padding:0">
