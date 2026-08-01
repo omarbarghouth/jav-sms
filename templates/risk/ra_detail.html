@@ -344,9 +344,12 @@
             {% set ctrl_count = row.controls|length %}
             {% if ctrl_count > 0 %}
               <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px">
-                {% set cats = row.controls|map(attribute='category')|unique|list %}
-                {% for cat in cats %}
-                  <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:#dbeafe;color:#1e40af">{{ cat }}</span>
+                {% set ns = namespace(seen=[]) %}
+                {% for c in row.controls %}
+                  {% if c.category and c.category not in ns.seen %}
+                    {% set ns.seen = ns.seen + [c.category] %}
+                    <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:#dbeafe;color:#1e40af">{{ c.category }}</span>
+                  {% endif %}
                 {% endfor %}
               </div>
               <a href="#controls-{{ row.id }}" style="font-size:11px;color:#1d4ed8;font-weight:600">{{ ctrl_count }} control{{ 's' if ctrl_count != 1 }} ↓</a>
