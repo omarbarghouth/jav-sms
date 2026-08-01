@@ -422,7 +422,6 @@
       <div class="card-title" style="margin:0">Existing Controls / Current Defences</div>
     </div>
     <div style="font-size:12px;color:var(--muted)">
-      {% set total_ctrl = ra.rows|sum(attribute='controls')|list|length %}
       {% set tc = namespace(n=0) %}{% for r in ra.rows %}{% set tc.n = tc.n + (r.controls|length) %}{% endfor %}
       {{ tc.n }} control{{ 's' if tc.n != 1 }} across {{ (ra.rows|length) }} row{{ 's' if (ra.rows|length) != 1 }}
     </div>
