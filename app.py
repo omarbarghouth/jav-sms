@@ -13689,7 +13689,8 @@ def ra_add_control(ra_id, row_id):
     db.session.add(ctrl)
     db.session.commit()
     flash(f'✓ Existing control added to Row {row.seq_num}.', 'success')
-    return redirect(url_for('ra_detail', ra_id=ra_id) + f'#controls-{row_id}')
+    next_url = request.form.get('_next') or (url_for('ra_detail', ra_id=ra_id) + f'#controls-{row_id}')
+    return redirect(next_url)
 
 
 @app.route('/risk-assessments/<ra_id>/controls/<int:ctrl_id>/delete', methods=['POST'])
@@ -13698,10 +13699,13 @@ def ra_delete_control(ra_id, ctrl_id):
     ctrl = RAControl.query.get_or_404(ctrl_id)
     row_id = ctrl.row_id
     seq    = ctrl.row.seq_num
+    ra     = RiskAssessment.query.get(ra_id)
+    haz_id = ra.hazard_id if ra else None
     db.session.delete(ctrl)
     db.session.commit()
     flash(f'✓ Control removed from Row {seq}.', 'success')
-    return redirect(url_for('ra_detail', ra_id=ra_id) + f'#controls-{row_id}')
+    next_url = request.form.get('_next') or (url_for('ra_detail', ra_id=ra_id) + f'#controls-{row_id}')
+    return redirect(next_url)
 
 
 # ─── ADD REVIEW (Page 5) ─────────────────────────────────────────────────────
@@ -13958,35 +13962,9 @@ def ra_wizard_step(hid, step):
             db.session.commit()
 
         elif step == 4:
-            # Save checklist responses + compile into current_defenses text
-            for row in ra.rows:
-                # Delete existing checklist for this row
-                RAChecklistItem.query.filter_by(
-                    assessment_id=ra.id, row_seq=row.seq_num).delete()
-                checked_labels = []
-                for idx, (cat, desc) in enumerate(CONTROL_CHECKLIST):
-                    key        = f'ctrl_{row.seq_num}_{idx}'
-                    notes_k    = f'notes_{row.seq_num}_{idx}'
-                    is_checked = key in f
-                    notes_val  = f.get(notes_k, '')
-                    item = RAChecklistItem(
-                        assessment_id=ra.id,
-                        row_seq=row.seq_num,
-                        category=cat,
-                        description=desc,
-                        checked=is_checked,
-                        notes=notes_val
-                    )
-                    db.session.add(item)
-                    if is_checked:
-                        label = desc
-                        if notes_val:
-                            label += f' ({notes_val})'
-                        checked_labels.append(f'[{cat}] {label}')
-                # Write compiled controls back to the RARow.current_defenses column
-                row.current_defenses = '; '.join(checked_labels) if checked_labels else ''
-                db.session.add(row)
-            db.session.commit()
+            # Step 4 controls are saved individually via ra_add_control/ra_delete_control.
+            # Nothing to process here — just advance to step 5.
+            pass
 
         elif step == 5:
             # Save further mitigations + auto-create actions
