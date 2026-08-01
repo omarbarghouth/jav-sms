@@ -1,4 +1,4 @@
-import json
+﻿import json
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from sqlalchemy import text as _sa_text
 from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, InvestigationEvent, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, ERPDrill, ERPActivation, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, RAControl, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, ComplianceObligation, DocCategory, ControlledDoc, DocVersion, DocDistribution, DocReadRecord, DocAcknowledgement
@@ -16810,7 +16810,7 @@ def dms_categories():
 @app.route('/api/docs/library')
 def api_docs_library():
     """List all published documents accessible to the authenticated employee."""
-    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    token = request.headers.get('Authorization','').replace('Bearer ','').strip() or request.args.get('token','')
     api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
     if not api_token:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -16859,7 +16859,7 @@ def api_docs_library():
 @app.route('/api/docs/<doc_id>')
 def api_doc_detail(doc_id):
     """Get full document metadata + download URL."""
-    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    token = request.headers.get('Authorization','').replace('Bearer ','').strip() or request.args.get('token','')
     api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
     if not api_token:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -16895,7 +16895,7 @@ def api_doc_detail(doc_id):
 @app.route('/api/docs/<doc_id>/read-start', methods=['POST'])
 def api_doc_read_start(doc_id):
     """Called when employee opens a document. Creates DocReadRecord."""
-    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    token = request.headers.get('Authorization','').replace('Bearer ','').strip() or request.args.get('token','')
     api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
     if not api_token:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -16920,7 +16920,7 @@ def api_doc_read_start(doc_id):
 @app.route('/api/docs/<doc_id>/read-complete', methods=['POST'])
 def api_doc_read_complete(doc_id):
     """Called when employee finishes reading. Updates DocReadRecord."""
-    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    token = request.headers.get('Authorization','').replace('Bearer ','').strip() or request.args.get('token','')
     api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
     if not api_token:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -16939,7 +16939,7 @@ def api_doc_read_complete(doc_id):
 @app.route('/api/docs/<doc_id>/acknowledge', methods=['POST'])
 def api_doc_acknowledge(doc_id):
     """Employee mandatory reading sign-off: 'I have read and understood'."""
-    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    token = request.headers.get('Authorization','').replace('Bearer ','').strip() or request.args.get('token','')
     api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
     if not api_token:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -16964,7 +16964,7 @@ def api_doc_acknowledge(doc_id):
 
 @app.route('/api/docs/categories')
 def api_docs_categories():
-    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    token = request.headers.get('Authorization','').replace('Bearer ','').strip() or request.args.get('token','')
     if not ApiToken.query.filter_by(token=token, is_active=True).first():
         return jsonify({'error': 'Unauthorized'}), 401
     cats = DocCategory.query.filter_by(is_active=True).order_by(DocCategory.sort_order).all()
@@ -16973,7 +16973,7 @@ def api_docs_categories():
 
 @app.route('/api/docs/search')
 def api_docs_search():
-    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    token = request.headers.get('Authorization','').replace('Bearer ','').strip() or request.args.get('token','')
     if not ApiToken.query.filter_by(token=token, is_active=True).first():
         return jsonify({'error': 'Unauthorized'}), 401
     q = request.args.get('q', '').strip()
