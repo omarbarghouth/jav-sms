@@ -16593,24 +16593,46 @@ def dms_upload_version(doc_id):
     if not file or file.filename == '':
         flash('✗ No file selected.', 'error')
         return redirect(url_for('dms_detail', doc_id=doc_id))
-    if not _dms_cloudinary_ready():
-        flash('✗ Cloudinary is not configured. Set CLOUDINARY_URL (or CLOUDINARY_CLOUD_NAME + API_KEY + API_SECRET) in environment variables.', 'error')
-        return redirect(url_for('dms_detail', doc_id=doc_id))
     ver_num = request.form.get('version_number','1.0').strip()
-    try:
-        secure_url, public_id, file_size = _dms_cloudinary_upload(file, doc_id, ver_num)
-    except Exception as e:
-        flash(f'✗ Upload failed: {e}', 'error')
+    # Support two upload modes:
+    # 1. Cloudinary file upload (if configured + file provided)
+    # 2. Direct URL link (Google Drive, SharePoint, etc.) — no Cloudinary needed
+    direct_url  = request.form.get('direct_file_url','').strip()
+    secure_url  = ''
+    public_id   = ''
+    file_size   = 0
+    file_name   = ''
+    ext         = 'pdf'
+
+    if direct_url:
+        # Mode 2: user pasted a URL — no upload needed
+        secure_url = direct_url
+        file_name  = request.form.get('file_display_name', direct_url.split('/')[-1][:200]).strip() or direct_url
+        ext        = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'link'
+    elif file and file.filename:
+        if not _dms_cloudinary_ready():
+            flash('✗ No Cloudinary configured. Either set CLOUDINARY_URL in Render environment variables, '
+                  'or paste a direct file URL (Google Drive / SharePoint) in the "Direct File URL" field below.', 'error')
+            return redirect(url_for('dms_detail', doc_id=doc_id))
+        try:
+            secure_url, public_id, file_size = _dms_cloudinary_upload(file, doc_id, ver_num)
+        except Exception as e:
+            flash(f'✗ Upload failed: {e}', 'error')
+            return redirect(url_for('dms_detail', doc_id=doc_id))
+        ext       = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'bin'
+        file_name = file.filename
+    else:
+        flash('✗ Please either upload a file or provide a direct file URL.', 'error')
         return redirect(url_for('dms_detail', doc_id=doc_id))
-    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'bin'
+
     ver = DocVersion(
         doc_id=doc_id,
         version_number=ver_num,
         revision=request.form.get('revision','REV0').strip(),
         file_url=secure_url,
         file_public_id=public_id,
-        file_name=file.filename,
-        file_size=file_size,
+        file_name=file_name,
+        file_size=file_size or None,
         file_type=ext,
         status='Draft',
         prepared_by=request.form.get('prepared_by','').strip(),
