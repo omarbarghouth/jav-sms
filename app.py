@@ -1,7 +1,7 @@
 import json
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from sqlalchemy import text as _sa_text
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, InvestigationEvent, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, ERPDrill, ERPActivation, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, ComplianceObligation
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, InvestigationEvent, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, ERPDrill, ERPActivation, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, RAControl, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, ComplianceObligation
 try:
     from models import SPIEventLink
 except ImportError:
@@ -13662,6 +13662,41 @@ def ra_add_row(ra_id):
     db.session.commit()
     flash(f'✓ Risk row {seq} added. Risk index: {ri_i} ({tol_i}).', 'success')
     return redirect(url_for('ra_detail', ra_id=ra_id))
+
+# ─── ADD EXISTING CONTROL (structured control per RARow) ─────────────────────
+@app.route('/risk-assessments/<ra_id>/rows/<int:row_id>/add-control', methods=['POST'])
+@require_login
+def ra_add_control(ra_id, row_id):
+    row = RARow.query.get_or_404(row_id)
+    if row.assessment_id != ra_id:
+        return 'Not found', 404
+    f = request.form
+    ctrl = RAControl(
+        row_id      = row_id,
+        category    = f.get('category', 'Other'),
+        description = f.get('description', ''),
+        effectiveness = f.get('effectiveness', ''),
+        evidence    = f.get('evidence', ''),
+        owner       = f.get('owner', ''),
+        notes       = f.get('notes', ''),
+    )
+    db.session.add(ctrl)
+    db.session.commit()
+    flash(f'✓ Existing control added to Row {row.seq_num}.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id) + f'#controls-{row_id}')
+
+
+@app.route('/risk-assessments/<ra_id>/controls/<int:ctrl_id>/delete', methods=['POST'])
+@require_login
+def ra_delete_control(ra_id, ctrl_id):
+    ctrl = RAControl.query.get_or_404(ctrl_id)
+    row_id = ctrl.row_id
+    seq    = ctrl.row.seq_num
+    db.session.delete(ctrl)
+    db.session.commit()
+    flash(f'✓ Control removed from Row {seq}.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id) + f'#controls-{row_id}')
+
 
 # ─── ADD REVIEW (Page 5) ─────────────────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/add-review', methods=['POST'])

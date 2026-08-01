@@ -860,27 +860,119 @@ def pdf_risk_assessment(ra, hazard, rows, mitigations, reviews,
     if rows:
         E.append(_section_header('3. Risk Table', S))
         E.append(Spacer(1, 4))
-        cw = [8*mm, 26*mm, 26*mm, 34*mm, 14*mm, 34*mm, 14*mm,
-              CONTENT_W - 8*mm - 26*mm - 26*mm - 34*mm - 14*mm - 34*mm - 14*mm]
+        # 7-col summary table (no controls column — controls get their own section)
+        cw7 = [8*mm, 30*mm, 30*mm, 14*mm, 14*mm, 14*mm,
+               CONTENT_W - 8*mm - 30*mm - 30*mm - 14*mm - 14*mm - 14*mm]
         tbl_rows = []
         for row in rows:
+            ctrl_count = len(row.controls) if hasattr(row, 'controls') else 0
+            ctrl_label = f'{ctrl_count} ctrl' if ctrl_count else ('legacy' if row.current_defenses else 'None')
             tbl_rows.append([
                 Paragraph(str(row.seq_num or ''), S['mono']),
                 Paragraph(row.type_of_activity or '—', S['td']),
                 Paragraph(row.generic_hazard or '—', S['td']),
-                Paragraph(row.consequences or '—', S['td']),
                 _risk_matrix_cell(row.risk_index_initial or '—', S),
-                Paragraph(row.current_defenses or '—', S['td']),
+                Paragraph(ctrl_label, S['caption']),
                 _risk_matrix_cell(row.risk_index_residual or '—', S),
                 Paragraph(row.risk_tolerance_residual or '—', S['td']),
             ])
         E.append(_std_table(
-            ['#','ACTIVITY','HAZARD','CONSEQUENCE','INIT','CONTROLS','RES','TOL'],
-            tbl_rows, cw, S))
+            ['#', 'ACTIVITY', 'HAZARD / SCENARIO', 'INIT RISK', 'CONTROLS', 'RES RISK', 'TOLERANCE'],
+            tbl_rows, cw7, S))
         E.append(Spacer(1, 8))
 
+    # ── Section 4: Existing Controls (structured, per row) ────────────────────
+    any_controls = rows and any(
+        (hasattr(r, 'controls') and r.controls) or r.current_defenses
+        for r in rows
+    )
+    if any_controls:
+        E.append(_section_header('4. Existing Controls / Current Defences', S))
+        E.append(Spacer(1, 4))
+        E.append(Paragraph(
+            'The following existing controls and safety barriers were identified as being in place '
+            'prior to the assessment of residual risk. Controls are documented per hazard scenario '
+            'in accordance with ICAO Doc 9859 §6.3.',
+            S['body']))
+        E.append(Spacer(1, 8))
+
+        EFF_COLORS = {
+            'Effective':           ('#15803d', '#dcfce7'),
+            'Partially Effective': ('#b45309', '#fef3c7'),
+            'Ineffective':         ('#dc2626', '#fee2e2'),
+            'Unknown':             ('#6b7280', '#f3f4f6'),
+        }
+        CAT_COLORS = {
+            'SOP':         ('#1e40af', '#dbeafe'),
+            'Training':    ('#065f46', '#dcfce7'),
+            'Monitoring':  ('#6b21a8', '#f3e8ff'),
+            'Equipment':   ('#92400e', '#fef3c7'),
+            'Engineering': ('#0e7490', '#cffafe'),
+            'PPE':         ('#be123c', '#ffe4e6'),
+            'Procedural':  ('#1e40af', '#dbeafe'),
+            'Other':       ('#374151', '#f3f4f6'),
+        }
+
+        for row in (rows or []):
+            # Row banner
+            risk_label = f'{row.risk_index_initial or "—"}  {row.risk_tolerance_initial or ""}'.strip()
+            E.append(KeepTogether([
+                Table([[
+                    Paragraph(f'SEQ {row.seq_num}', S['mono']),
+                    Paragraph(f'{row.type_of_activity or "—"}  ·  {row.generic_hazard or ""}', S['section_text']),
+                    Paragraph(risk_label, S['risk_high'] if row.risk_tolerance_initial == 'INTOLERABLE'
+                              else S['risk_med'] if row.risk_tolerance_initial == 'TOLERABLE'
+                              else S['risk_low']),
+                ]], colWidths=[16*mm, CONTENT_W - 16*mm - 30*mm, 30*mm],
+                style=TableStyle([
+                    ('BACKGROUND',    (0, 0), (-1, -1), HexColor('#EEF1F8')),
+                    ('LINEBEFORE',    (0, 0), (0, -1),  3, C_GOLD),
+                    ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING',    (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+                    ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
+                ])),
+            ]))
+
+            controls = list(row.controls) if hasattr(row, 'controls') else []
+            if controls:
+                # Controls table for this row
+                cw_c = [22*mm, 14*mm, CONTENT_W - 22*mm - 14*mm - 40*mm - 30*mm, 40*mm, 30*mm]
+                ctrl_rows = []
+                for idx, c in enumerate(controls, 1):
+                    cat_fg, cat_bg = CAT_COLORS.get(c.category, ('#374151', '#f3f4f6'))
+                    eff_fg, eff_bg = EFF_COLORS.get(c.effectiveness or '', ('#6b7280', '#f3f4f6'))
+                    ctrl_rows.append([
+                        Paragraph(c.category or '—',
+                                  ParagraphStyle(f'_cc{idx}', fontName='Helvetica-Bold',
+                                                 fontSize=7.5, textColor=HexColor(cat_fg))),
+                        Paragraph(str(idx), S['caption']),
+                        Paragraph(c.description or '—', S['td']),
+                        Paragraph(c.evidence or '—', S['small']),
+                        Paragraph(c.effectiveness or '—',
+                                  ParagraphStyle(f'_ce{idx}', fontName='Helvetica-Bold',
+                                                 fontSize=7.5, textColor=HexColor(eff_fg))),
+                    ])
+                E.append(_std_table(
+                    ['CATEGORY', '#', 'DESCRIPTION', 'EVIDENCE / REFERENCE', 'EFFECTIVENESS'],
+                    ctrl_rows, cw_c, S))
+                # Owner/notes as a supplementary notes row if any
+                notes_items = [
+                    f'#{i+1} {c.owner}{"  |  " + c.notes if c.notes else ""}'
+                    for i, c in enumerate(controls) if c.owner or c.notes
+                ]
+                if notes_items:
+                    E.append(Paragraph('Owners / Notes: ' + '   ·   '.join(notes_items), S['caption']))
+            elif row.current_defenses:
+                # Legacy fallback
+                E.append(_text_block('Existing Controls (Legacy)', row.current_defenses, S))
+            else:
+                E.append(Paragraph('No existing controls documented for this scenario.', S['caption']))
+            E.append(Spacer(1, 8))
+
     if mitigations:
-        E.append(_section_header('4. Mitigation Responsibilities', S))
+        E.append(_section_header('5. Mitigation Responsibilities', S))
         E.append(Spacer(1, 4))
         cw = [12*mm, CONTENT_W-12*mm-45*mm-22*mm-25*mm, 45*mm, 22*mm, 25*mm]
         tbl_rows = [[
@@ -895,7 +987,7 @@ def pdf_risk_assessment(ra, hazard, rows, mitigations, reviews,
         E.append(Spacer(1, 8))
 
     if reviews:
-        E.append(_section_header('5. Effectiveness Reviews', S))
+        E.append(_section_header('6. Effectiveness Reviews', S))
         E.append(Spacer(1, 4))
         cw = [40*mm, CONTENT_W-40*mm-30*mm-22*mm-30*mm, 30*mm, 22*mm, 30*mm]
         tbl_rows = [[
@@ -909,7 +1001,7 @@ def pdf_risk_assessment(ra, hazard, rows, mitigations, reviews,
                             tbl_rows, cw, S))
         E.append(Spacer(1, 8))
 
-    E.append(_section_header('6. Signatures & Authorisation', S))
+    E.append(_section_header('7. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
         {'role': 'Prepared By',     'name': ra.prepared_by_name or '' if ra else '',  'date': ra.assessment_date or '' if ra else ''},

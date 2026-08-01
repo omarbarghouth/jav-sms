@@ -1266,13 +1266,34 @@ class RARow(db.Model):
     risk_index_initial        = db.Column(db.String(5))      # e.g. 4B
     risk_tolerance_initial    = db.Column(db.String(20))     # INTOLERABLE/TOLERABLE/ACCEPTABLE
     # Controls
-    current_defenses          = db.Column(db.Text)           # "Current Defenses" column
+    current_defenses          = db.Column(db.Text)           # legacy free-text (preserved for old records)
     further_mitigations       = db.Column(db.Text)           # "Further Mitigation Measures" column
     # Residual risk (after controls)
     likelihood_residual       = db.Column(db.Integer)
     severity_residual         = db.Column(db.String(2))
     risk_index_residual       = db.Column(db.String(5))
     risk_tolerance_residual   = db.Column(db.String(20))
+    # Structured existing controls (new)
+    controls                  = db.relationship('RAControl', backref='row', lazy=True,
+                                                cascade='all, delete-orphan',
+                                                order_by='RAControl.id')
+
+
+class RAControl(db.Model):
+    """
+    Structured existing control / defence linked to a specific RARow.
+    Replaces the legacy current_defenses free-text field.
+    """
+    __tablename__ = 'ra_controls'
+    id            = db.Column(db.Integer, primary_key=True)
+    row_id        = db.Column(db.Integer, db.ForeignKey('ra_rows.id'), nullable=False)
+    category      = db.Column(db.String(50))    # SOP / Training / Monitoring / Equipment / Engineering / PPE / Procedural / Other
+    description   = db.Column(db.Text)          # narrative description of the control
+    effectiveness = db.Column(db.String(30))    # Effective / Partially Effective / Ineffective / Unknown
+    evidence      = db.Column(db.String(500))   # reference doc / record
+    owner         = db.Column(db.String(100))   # responsible person / dept (optional)
+    notes         = db.Column(db.Text)          # additional notes (optional)
+
 
 class RAMitigation(db.Model):
     """
