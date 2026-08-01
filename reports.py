@@ -155,8 +155,8 @@ class _AviaHeader:
     def __call__(self, canvas, doc):
         canvas.saveState()
         w, h = A4
-        pg   = doc.page
-        pg_str = f'Page {pg} of {self.total_pages}' if self.total_pages else f'Page {pg}'
+        pg     = doc.page
+        pg_str = f'Page {pg}'
 
         # ── HEADER BAND (28 mm) ───────────────────────────────────────────────
         band_h = 28 * mm
@@ -237,7 +237,7 @@ class _AviaHeader:
 
 
 # =============================================================================
-#  CORE PDF BUILDER  (2-pass for Page X of Y)
+#  CORE PDF BUILDER  — single pass, header/footer via onFirstPage/onLaterPages
 # =============================================================================
 def _build_doc(flowables, doc_type, control_number, classification,
                generated_by, report_status, watermark=None):
@@ -252,18 +252,9 @@ def _build_doc(flowables, doc_type, control_number, classification,
         creator='AviaS SMS Corporate Edition v2.0',
     )
 
-    # Pass 1 — count pages
-    buf = BytesIO()
     hf  = _AviaHeader(doc_type, control_number, classification,
                       generated_by, report_status, total_pages=0, watermark=watermark)
-    d   = SimpleDocTemplate(buf, **kw)
-    d.build(flowables, onFirstPage=hf, onLaterPages=hf)
-    total = d.page
-
-    # Pass 2 — final render with correct page count
     buf = BytesIO()
-    hf  = _AviaHeader(doc_type, control_number, classification,
-                      generated_by, report_status, total_pages=total, watermark=watermark)
     d   = SimpleDocTemplate(buf, **kw)
     d.build(flowables, onFirstPage=hf, onLaterPages=hf)
     return buf.getvalue()
