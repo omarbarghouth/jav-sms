@@ -247,71 +247,158 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
-<!-- STEP 4: CURRENT CONTROLS CHECKLIST                             -->
+<!-- STEP 4: EXISTING CONTROLS (free-form, professional)            -->
 <!-- ════════════════════════════════════════════════════════════════ -->
 {% elif step == 4 %}
-<div class="card" style="max-width:900px">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-    <div style="width:44px;height:44px;background:#06574610;border:2px solid #06574630;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px">🛡</div>
-    <div><div style="font-size:18px;font-weight:700;color:var(--navy)">Step 4 — Current Controls</div>
-    <div style="font-size:13px;color:var(--muted)">Check all existing defences and controls that currently apply. Tick everything that is IN PLACE.</div></div>
-  </div>
+<div style="max-width:900px">
 
-  {% set cat_icons = {'SOP':'📄','Training':'🎓','Monitoring':'📈','Equipment':'🔧','Procedure':'📋','Reporting':'📢'} %}
+  <!-- Header -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="width:44px;height:44px;background:#0a162810;border:2px solid #0a162830;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🛡</div>
+      <div>
+        <div style="font-size:18px;font-weight:700;color:var(--navy)">Step 4 — Existing Controls / Current Defences</div>
+        <div style="font-size:13px;color:var(--muted)">Document all existing safety barriers and controls already in place for each risk scenario. Follow ICAO Doc 9859 §6.3.</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px 14px;background:#f8f9fc;border-radius:8px;border-left:3px solid var(--gold);font-size:12px;color:#374151">
+      Add controls individually using the form under each risk row. Include the category, a professional description, effectiveness rating, and a reference document or evidence.
+      When you have documented all controls, click <strong>Next → Step 5</strong> below.
+    </div>
+  </div>
 
   {% if not ra.rows %}
-  <div style="background:#fef9c3;border:1.5px solid #fde68a;border-radius:10px;padding:20px;text-align:center;color:#b45309">
-    ⚠ No risk scenarios added yet. Please go back to Step 2 and add at least one risk.
-    <br><br><a href="/ra-wizard/{{ hazard.id }}/step/2" class="btn btn-nav btn-sm">← Go to Step 2</a>
+  <div class="card" style="text-align:center;color:#b45309;background:#fef9c3;border:1.5px solid #fde68a">
+    ⚠ No risk scenarios added yet. Go back to Step 2 and add at least one risk scenario first.
+    <br><br><a href="/ra-wizard/{{ hazard.id }}/step/2" class="btn btn-nav btn-sm">← Back to Step 2</a>
   </div>
   {% else %}
+
+  {% set wizard_next = '/ra-wizard/' ~ hazard.id ~ '/step/4' %}
+
   {% for row in ra.rows %}
-  <div style="border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-      <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted)">SEQ {{ row.seq_num }}</span>
-      <span style="font-size:13px;color:#374151">{{ (row.consequences or "—")[:80] }}</span>
-      {% if row.risk_index_initial %}<span style="font-weight:800;font-size:16px;font-family:monospace;margin-left:auto;
-        color:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %}">
-        {{ row.risk_index_initial }}
-      </span>{% endif %}
+  <div class="card" style="margin-bottom:16px;padding:0;overflow:hidden">
+
+    <!-- Row banner -->
+    <div style="background:var(--navy);color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="background:var(--gold);color:#0a1628;font-weight:800;font-size:11px;padding:3px 10px;border-radius:5px">SEQ {{ row.seq_num }}</span>
+        <div>
+          <div style="font-weight:700;font-size:13px">{{ row.type_of_activity or row.generic_hazard or '—' }}</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.6)">{{ row.generic_hazard or '' }}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        {% if row.risk_index_initial %}
+        <span style="padding:4px 12px;border-radius:6px;font-weight:800;font-size:13px;
+          background:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %};color:#fff">
+          {{ row.risk_index_initial }} — {{ row.risk_tolerance_initial or '' }}
+        </span>
+        {% endif %}
+        <span style="font-size:11px;color:rgba(255,255,255,.5)">{{ (row.controls|length) }} control{{ 's' if (row.controls|length) != 1 }}</span>
+      </div>
     </div>
 
-    {% set prev_cat = namespace(v='') %}
-    {% for idx, (cat, desc) in enumerate(checklist) %}
-      {% if cat != prev_cat.v %}
-        {% if not loop.first %}</div>{% endif %}
-        <div style="margin-bottom:8px">
-        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:5px">
-          {{ cat_icons.get(cat,'📋') }} {{ cat }}
-        </div>
-        {% set prev_cat.v = cat %}
-      {% endif %}
-      {% set item_key = checklist_items.get(row.seq_num, {}).get(desc) %}
-      <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;
-        {% if item_key and item_key.checked %}background:#f0fdf4;border:1px solid #bbf7d0{% else %}background:#f8f9fc;border:1px solid transparent{% endif %}"
-        onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='{% if item_key and item_key.checked %}#f0fdf4{% else %}#f8f9fc{% endif %}'">
-        <input type="checkbox" name="ctrl_{{ row.seq_num }}_{{ idx }}"
-          {% if item_key and item_key.checked %}checked{% endif %}
-          style="width:16px;height:16px;margin-top:2px;accent-color:var(--navy);flex-shrink:0"/>
+    <!-- Saved controls -->
+    {% if row.controls %}
+    <div style="padding:0 18px">
+      {% for ctrl in row.controls %}
+      <div style="padding:12px 0;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
         <div style="flex:1">
-          <div style="font-size:13px;color:#374151">{{ desc }}</div>
-          <input type="text" name="notes_{{ row.seq_num }}_{{ idx }}"
-            value="{{ item_key.notes if item_key else '' }}"
-            placeholder="Notes (optional)…"
-            style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;width:100%;margin-top:4px;background:#fff"/>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
+            <span style="font-size:9.5px;font-weight:800;text-transform:uppercase;padding:3px 9px;border-radius:4px;
+              background:{% if ctrl.category=='SOP' %}#dbeafe{% elif ctrl.category=='Training' %}#dcfce7{% elif ctrl.category=='Monitoring' %}#f3e8ff{% elif ctrl.category=='Equipment' %}#fef3c7{% elif ctrl.category=='Engineering' %}#cffafe{% elif ctrl.category=='PPE' %}#ffe4e6{% else %}#f3f4f6{% endif %};
+              color:{% if ctrl.category=='SOP' %}#1e40af{% elif ctrl.category=='Training' %}#065f46{% elif ctrl.category=='Monitoring' %}#6b21a8{% elif ctrl.category=='Equipment' %}#92400e{% elif ctrl.category=='Engineering' %}#0e7490{% elif ctrl.category=='PPE' %}#be123c{% else %}#374151{% endif %}">
+              {{ ctrl.category or 'Other' }}
+            </span>
+            {% if ctrl.effectiveness %}
+            <span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;
+              background:{% if ctrl.effectiveness=='Effective' %}#dcfce7{% elif ctrl.effectiveness=='Partially Effective' %}#fef3c7{% elif ctrl.effectiveness=='Ineffective' %}#fee2e2{% else %}#f3f4f6{% endif %};
+              color:{% if ctrl.effectiveness=='Effective' %}#15803d{% elif ctrl.effectiveness=='Partially Effective' %}#b45309{% elif ctrl.effectiveness=='Ineffective' %}#dc2626{% else %}#6b7280{% endif %}">
+              {{ ctrl.effectiveness }}
+            </span>
+            {% endif %}
+          </div>
+          <div style="font-size:13px;color:#111827;line-height:1.5;margin-bottom:4px">{{ ctrl.description or '—' }}</div>
+          {% if ctrl.evidence %}<div style="font-size:11px;color:#6b7280"><strong style="color:#374151">Evidence:</strong> {{ ctrl.evidence }}</div>{% endif %}
+          {% if ctrl.owner %}<div style="font-size:11px;color:#6b7280"><strong style="color:#374151">Owner:</strong> {{ ctrl.owner }}</div>{% endif %}
+          {% if ctrl.notes %}<div style="font-size:11px;color:#9ca3af;font-style:italic;margin-top:3px">{{ ctrl.notes }}</div>{% endif %}
         </div>
-      </label>
-    {% endfor %}
+        <form method="POST" action="/risk-assessments/{{ ra.id }}/controls/{{ ctrl.id }}/delete"
+              onsubmit="return confirm('Remove this control?')" style="margin:0;flex-shrink:0">
+          <input type="hidden" name="_next" value="{{ wizard_next }}">
+          <button type="submit" style="background:none;border:1px solid #fca5a5;color:#dc2626;border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap">✕ Remove</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding:14px 18px;background:#fafbfc;color:#9ca3af;font-size:12px;font-style:italic">
+      No existing controls documented yet for this scenario. Add the first one below.
+    </div>
+    {% endif %}
+
+    <!-- Add control form -->
+    <div style="padding:14px 18px;background:#fffbf0;border-top:1.5px dashed #c9a84c">
+      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:10px">+ Add Existing Control to Row {{ row.seq_num }}</div>
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/rows/{{ row.id }}/add-control">
+        <input type="hidden" name="_next" value="{{ wizard_next }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Category *</label>
+            <select name="category" required style="width:100%;font-size:12px">
+              <option value="">— Select —</option>
+              <option value="SOP">SOP</option>
+              <option value="Training">Training</option>
+              <option value="Monitoring">Monitoring / Inspection</option>
+              <option value="Equipment">Equipment / Technology</option>
+              <option value="Engineering">Engineering Control</option>
+              <option value="PPE">PPE</option>
+              <option value="Procedural">Procedural / Administrative</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Effectiveness *</label>
+            <select name="effectiveness" required style="width:100%;font-size:12px">
+              <option value="">— Select —</option>
+              <option value="Effective">Effective</option>
+              <option value="Partially Effective">Partially Effective</option>
+              <option value="Ineffective">Ineffective</option>
+              <option value="Unknown">Unknown / Not Assessed</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Evidence / Reference</label>
+            <input type="text" name="evidence" placeholder="e.g. SOP-OPS-001 Rev.5" style="width:100%;font-size:12px"/>
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Control Description *</label>
+          <textarea name="description" required rows="2"
+            placeholder="Describe the existing control professionally. E.g.: SOP-OPS-001 FOD Prevention Programme implemented across all operating stations with daily apron inspections conducted before first departure."
+            style="width:100%;font-size:12px;resize:vertical"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-bottom:12px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Owner (optional)</label>
+            <input type="text" name="owner" placeholder="Department or person" style="width:100%;font-size:12px"/>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Notes (optional)</label>
+            <input type="text" name="notes" placeholder="Limitations, caveats, or additional context" style="width:100%;font-size:12px"/>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-nav btn-sm" style="background:#0a1628;color:#c9a84c;border:1px solid #c9a84c">
+          ✓ Save Control
+        </button>
+      </form>
     </div>
 
-    <!-- Count checked -->
-    <div style="margin-top:10px;padding:8px 12px;background:#f8f9fc;border-radius:6px;font-size:12px;color:var(--muted)">
-      {% set checked_count = checklist_items.get(row.seq_num, {}).values() | selectattr('checked') | list | length %}
-      {{ checked_count }} of {{ checklist|length }} controls in place
-    </div>
   </div>
   {% endfor %}
   {% endif %}
+
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
