@@ -173,13 +173,37 @@
 
       {# Upload new version #}
       <details style="margin-top:16px">
-        <summary class="details-toggle">⬆ Upload New Version</summary>
+        <summary class="details-toggle">⬆ Add New Version</summary>
         <form method="post" action="{{ url_for('dms_upload_version', doc_id=doc.id) }}"
               enctype="multipart/form-data" style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
-          <div class="fg">
-            <label class="fl">File <span style="color:var(--red)">*</span></label>
-            <input type="file" name="document_file" class="input" accept=".pdf,.docx,.xlsx,.pptx,.doc,.xls" required>
-            <div class="fh">Supported: PDF, DOCX, XLSX, PPTX</div>
+
+          {# ── Option 1: Direct URL (always available) ── #}
+          <div style="background:#fffdf5;border:1px solid #fde68a;border-radius:6px;padding:12px">
+            <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:8px">
+              🔗 Option 1 — Paste a Direct File URL (Google Drive, SharePoint, OneDrive, Dropbox…)
+            </div>
+            <div class="fg">
+              <input name="direct_file_url" class="input" placeholder="https://drive.google.com/file/d/…  or  https://…/document.pdf"
+                     style="background:#fff">
+              <div class="fh">Paste a shareable direct link. The file must be publicly accessible or shared with your team.</div>
+            </div>
+            <div class="fg" style="margin-top:6px">
+              <label class="fl">Display Name (optional)</label>
+              <input name="file_display_name" class="input" placeholder="e.g. SMS Manual v2.0.pdf" style="background:#fff">
+            </div>
+          </div>
+
+          <div style="text-align:center;color:var(--muted);font-size:11px;font-weight:600">— OR —</div>
+
+          {# ── Option 2: File upload via Cloudinary ── #}
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">
+              ☁ Option 2 — Upload File (requires Cloudinary to be configured)
+            </div>
+            <div class="fg">
+              <input type="file" name="document_file" class="input" accept=".pdf,.docx,.xlsx,.pptx,.doc,.xls">
+              <div class="fh">PDF, DOCX, XLSX, PPTX — only works if CLOUDINARY_URL is set in Render environment</div>
+            </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div class="fg"><label class="fl">Version Number</label><input name="version_number" class="input" placeholder="e.g. 1.0" required></div>
