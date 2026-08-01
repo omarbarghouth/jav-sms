@@ -13533,11 +13533,17 @@ def new_ra():
 @app.route('/risk-assessments/<ra_id>')
 @require_login
 def ra_detail(ra_id):
-    ra = RiskAssessment.query.get_or_404(ra_id)
-    worst_i, worst_r = compute_ra_summary(ra)
-    return render_template('risk/ra_detail.html', ra=ra,
-                           worst_initial=worst_i, worst_residual=worst_r,
-                           get_tolerance=get_tolerance)
+    try:
+        ra = RiskAssessment.query.get_or_404(ra_id)
+        worst_i, worst_r = compute_ra_summary(ra)
+        return render_template('risk/ra_detail.html', ra=ra,
+                               worst_initial=worst_i, worst_residual=worst_r,
+                               get_tolerance=get_tolerance)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        flash(f'✗ Error loading Risk Assessment: {e}', 'error')
+        return redirect(url_for('risk_assessments'))
 
 # ─── RA ASSIGN SAG REVIEW ─────────────────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/assign-sag', methods=['GET', 'POST'])
