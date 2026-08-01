@@ -16421,15 +16421,35 @@ def ra_export_excel():
 #  ICAO Annex 19 / Doc 9859 / IOSA ISM controlled document library
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _dms_cloudinary_config():
+    """Configure cloudinary from either CLOUDINARY_URL or the three separate vars."""
+    import cloudinary
+    url = os.environ.get('CLOUDINARY_URL', '')
+    if url:
+        cloudinary.config(cloudinary_url=url)
+    else:
+        cloudinary.config(
+            cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', ''),
+            api_key=os.environ.get('CLOUDINARY_API_KEY', ''),
+            api_secret=os.environ.get('CLOUDINARY_API_SECRET', ''),
+        )
+
+
+def _dms_cloudinary_ready():
+    """Return True if Cloudinary is usable (via CLOUDINARY_URL or the three separate vars)."""
+    if os.environ.get('CLOUDINARY_URL'):
+        return True
+    return all([
+        os.environ.get('CLOUDINARY_CLOUD_NAME'),
+        os.environ.get('CLOUDINARY_API_KEY'),
+        os.environ.get('CLOUDINARY_API_SECRET'),
+    ])
+
+
 def _dms_cloudinary_upload(file_storage, doc_id, version_number):
     """Upload a document file to Cloudinary DMS folder. Returns (secure_url, public_id, file_size)."""
-    import cloudinary
     import cloudinary.uploader
-    cloudinary.config(
-        cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME',''),
-        api_key=os.environ.get('CLOUDINARY_API_KEY',''),
-        api_secret=os.environ.get('CLOUDINARY_API_SECRET',''),
-    )
+    _dms_cloudinary_config()
     public_id = f'avias/dms/{doc_id}/v{version_number.replace(".","-")}_{uuid.uuid4().hex[:8]}'
     data = file_storage.read()
     result = cloudinary.uploader.upload(
@@ -16444,13 +16464,8 @@ def _dms_cloudinary_upload(file_storage, doc_id, version_number):
 
 def _dms_cloudinary_delete(public_id):
     try:
-        import cloudinary
         import cloudinary.uploader
-        cloudinary.config(
-            cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME',''),
-            api_key=os.environ.get('CLOUDINARY_API_KEY',''),
-            api_secret=os.environ.get('CLOUDINARY_API_SECRET',''),
-        )
+        _dms_cloudinary_config()
         cloudinary.uploader.destroy(public_id, resource_type='raw')
         cloudinary.uploader.destroy(public_id, resource_type='image')
     except Exception as e:
@@ -16578,8 +16593,8 @@ def dms_upload_version(doc_id):
     if not file or file.filename == '':
         flash('✗ No file selected.', 'error')
         return redirect(url_for('dms_detail', doc_id=doc_id))
-    if not _cloudinary_configured():
-        flash('✗ Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET env vars.', 'error')
+    if not _dms_cloudinary_ready():
+        flash('✗ Cloudinary is not configured. Set CLOUDINARY_URL (or CLOUDINARY_CLOUD_NAME + API_KEY + API_SECRET) in environment variables.', 'error')
         return redirect(url_for('dms_detail', doc_id=doc_id))
     ver_num = request.form.get('version_number','1.0').strip()
     try:
