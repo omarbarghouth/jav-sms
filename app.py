@@ -1,7 +1,7 @@
 import json
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from sqlalchemy import text as _sa_text
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, InvestigationEvent, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, ERPDrill, ERPActivation, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, RAControl, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, ComplianceObligation
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, InvestigationEvent, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, ERPDrill, ERPActivation, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, RAControl, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, ComplianceObligation, DocCategory, ControlledDoc, DocVersion, DocDistribution, DocReadRecord, DocAcknowledgement
 try:
     from models import SPIEventLink
 except ImportError:
@@ -16413,6 +16413,544 @@ def document_export_excel():
 def ra_export_excel():
     ras = RiskAssessment.query.order_by(RiskAssessment.id.desc()).all()
     return export_ra_register(ras)
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  DOCUMENT MANAGEMENT SYSTEM (DMS)
+#  ICAO Annex 19 / Doc 9859 / IOSA ISM controlled document library
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _dms_cloudinary_upload(file_storage, doc_id, version_number):
+    """Upload a document file to Cloudinary DMS folder. Returns (secure_url, public_id, file_size)."""
+    import cloudinary
+    import cloudinary.uploader
+    cloudinary.config(
+        cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME',''),
+        api_key=os.environ.get('CLOUDINARY_API_KEY',''),
+        api_secret=os.environ.get('CLOUDINARY_API_SECRET',''),
+    )
+    public_id = f'avias/dms/{doc_id}/v{version_number.replace(".","-")}_{uuid.uuid4().hex[:8]}'
+    data = file_storage.read()
+    result = cloudinary.uploader.upload(
+        data,
+        public_id=public_id,
+        resource_type='auto',
+        overwrite=True,
+        use_filename=True,
+    )
+    return result['secure_url'], result['public_id'], len(data)
+
+
+def _dms_cloudinary_delete(public_id):
+    try:
+        import cloudinary
+        import cloudinary.uploader
+        cloudinary.config(
+            cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME',''),
+            api_key=os.environ.get('CLOUDINARY_API_KEY',''),
+            api_secret=os.environ.get('CLOUDINARY_API_SECRET',''),
+        )
+        cloudinary.uploader.destroy(public_id, resource_type='raw')
+        cloudinary.uploader.destroy(public_id, resource_type='image')
+    except Exception as e:
+        app.logger.warning(f'DMS Cloudinary delete failed: {e}')
+
+
+def _dms_next_doc_id():
+    last = ControlledDoc.query.filter(ControlledDoc.id.like('DOC-SMS-%')) \
+               .order_by(ControlledDoc.id.desc()).first()
+    if last:
+        try:
+            n = int(last.id.split('-')[-1]) + 1
+        except Exception:
+            n = 1
+    else:
+        n = 1
+    return f'DOC-SMS-{n:03d}'
+
+
+def _dms_compliance_stats(doc):
+    """Return dict with read/ack counts for the current published version."""
+    if not doc.current_version_id:
+        return {'reads': 0, 'acks': 0, 'audience': 0}
+    reads = DocReadRecord.query.filter_by(version_id=doc.current_version_id, doc_id=doc.id).count()
+    acks  = DocAcknowledgement.query.filter_by(version_id=doc.current_version_id, doc_id=doc.id).count()
+    # Estimate audience size from distribution
+    audience = 0
+    for d in doc.distributions:
+        if d.audience_type == 'all':
+            audience = Employee.query.count()
+            break
+        elif d.audience_type == 'department' and d.department:
+            audience += Employee.query.filter_by(department=d.department).count()
+        elif d.audience_type == 'role' and d.employee_role:
+            audience += Employee.query.filter_by(role=d.employee_role).count()
+        elif d.audience_type == 'employee' and d.employee_id:
+            audience += 1
+    return {'reads': reads, 'acks': acks, 'audience': audience}
+
+
+# ─── Web Admin: Document Library ─────────────────────────────────────────────
+
+@app.route('/dms')
+@require_login
+def dms_library():
+    q        = request.args.get('q', '').strip()
+    cat_id   = request.args.get('cat', '')
+    status   = request.args.get('status', '')
+    query    = ControlledDoc.query
+    if q:
+        query = query.filter(
+            db.or_(ControlledDoc.title.ilike(f'%{q}%'),
+                   ControlledDoc.doc_number.ilike(f'%{q}%'),
+                   ControlledDoc.keywords.ilike(f'%{q}%'))
+        )
+    if cat_id:
+        query = query.filter_by(category_id=int(cat_id))
+    if status:
+        query = query.filter_by(status=status)
+    docs       = query.order_by(ControlledDoc.created_at.desc()).all()
+    categories = DocCategory.query.filter_by(is_active=True).order_by(DocCategory.sort_order).all()
+    stats      = {d.id: _dms_compliance_stats(d) for d in docs}
+    return render_template('dms/library.html', docs=docs, categories=categories,
+                           stats=stats, q=q, cat_id=cat_id, status=status)
+
+
+@app.route('/dms/new', methods=['GET', 'POST'])
+@require_login
+def dms_new():
+    categories = DocCategory.query.filter_by(is_active=True).order_by(DocCategory.sort_order).all()
+    if request.method == 'POST':
+        doc_id = _dms_next_doc_id()
+        doc = ControlledDoc(
+            id=doc_id,
+            doc_number=request.form['doc_number'].strip(),
+            title=request.form['title'].strip(),
+            category_id=request.form.get('category_id') or None,
+            department=request.form.get('department','').strip(),
+            document_owner=request.form.get('document_owner','').strip(),
+            approving_authority=request.form.get('approving_authority','').strip(),
+            description=request.form.get('description','').strip(),
+            keywords=request.form.get('keywords','').strip(),
+            classification=request.form.get('classification','INTERNAL'),
+            is_mandatory_reading=bool(request.form.get('is_mandatory_reading')),
+            created_by=session.get('username','system'),
+        )
+        db.session.add(doc)
+        db.session.commit()
+        flash(f'✓ Document {doc_id} created. Now upload the first version.', 'success')
+        return redirect(url_for('dms_detail', doc_id=doc_id))
+    return render_template('dms/new.html', categories=categories)
+
+
+@app.route('/dms/<doc_id>')
+@require_login
+def dms_detail(doc_id):
+    doc        = ControlledDoc.query.get_or_404(doc_id)
+    versions   = DocVersion.query.filter_by(doc_id=doc_id).order_by(DocVersion.uploaded_at.desc()).all()
+    categories = DocCategory.query.filter_by(is_active=True).order_by(DocCategory.sort_order).all()
+    stats      = _dms_compliance_stats(doc)
+    # Read records for current version
+    read_records = []
+    if doc.current_version_id:
+        read_records = (DocReadRecord.query
+                        .filter_by(version_id=doc.current_version_id)
+                        .join(Employee, DocReadRecord.employee_id == Employee.id)
+                        .add_entity(Employee).all())
+        acks = set(
+            a.employee_id for a in
+            DocAcknowledgement.query.filter_by(version_id=doc.current_version_id).all()
+        )
+    else:
+        acks = set()
+    departments = [d[0] for d in db.session.query(Employee.department).distinct().all() if d[0]]
+    return render_template('dms/detail.html', doc=doc, versions=versions,
+                           categories=categories, stats=stats,
+                           read_records=read_records, acks=acks, departments=departments)
+
+
+@app.route('/dms/<doc_id>/upload-version', methods=['POST'])
+@require_login
+def dms_upload_version(doc_id):
+    doc  = ControlledDoc.query.get_or_404(doc_id)
+    file = request.files.get('document_file')
+    if not file or file.filename == '':
+        flash('✗ No file selected.', 'error')
+        return redirect(url_for('dms_detail', doc_id=doc_id))
+    if not _cloudinary_configured():
+        flash('✗ Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET env vars.', 'error')
+        return redirect(url_for('dms_detail', doc_id=doc_id))
+    ver_num = request.form.get('version_number','1.0').strip()
+    try:
+        secure_url, public_id, file_size = _dms_cloudinary_upload(file, doc_id, ver_num)
+    except Exception as e:
+        flash(f'✗ Upload failed: {e}', 'error')
+        return redirect(url_for('dms_detail', doc_id=doc_id))
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'bin'
+    ver = DocVersion(
+        doc_id=doc_id,
+        version_number=ver_num,
+        revision=request.form.get('revision','REV0').strip(),
+        file_url=secure_url,
+        file_public_id=public_id,
+        file_name=file.filename,
+        file_size=file_size,
+        file_type=ext,
+        status='Draft',
+        prepared_by=request.form.get('prepared_by','').strip(),
+        reviewed_by=request.form.get('reviewed_by','').strip(),
+        approved_by=request.form.get('approved_by','').strip(),
+        issue_date=datetime.strptime(request.form['issue_date'], '%Y-%m-%d').date() if request.form.get('issue_date') else None,
+        effective_date=datetime.strptime(request.form['effective_date'], '%Y-%m-%d').date() if request.form.get('effective_date') else None,
+        review_date=datetime.strptime(request.form['review_date'], '%Y-%m-%d').date() if request.form.get('review_date') else None,
+        expiry_date=datetime.strptime(request.form['expiry_date'], '%Y-%m-%d').date() if request.form.get('expiry_date') else None,
+        change_summary=request.form.get('change_summary','').strip(),
+        uploaded_by=session.get('username','system'),
+    )
+    db.session.add(ver)
+    db.session.commit()
+    flash(f'✓ Version {ver_num} uploaded successfully (Draft). Click Publish when ready.', 'success')
+    return redirect(url_for('dms_detail', doc_id=doc_id))
+
+
+@app.route('/dms/<doc_id>/versions/<int:ver_id>/publish', methods=['POST'])
+@require_login
+def dms_publish_version(doc_id, ver_id):
+    doc = ControlledDoc.query.get_or_404(doc_id)
+    ver = DocVersion.query.get_or_404(ver_id)
+    if ver.doc_id != doc_id:
+        return 'Not found', 404
+    # Supersede previous published version
+    DocVersion.query.filter_by(doc_id=doc_id, status='Published').update({'status': 'Superseded'})
+    ver.status       = 'Published'
+    ver.published_at = datetime.utcnow()
+    ver.published_by = session.get('username','system')
+    doc.current_version_id = ver.id
+    db.session.commit()
+    # Push notification to all employees
+    try:
+        push_notify_all(
+            title=f'New Document: {doc.title}',
+            body=f'{doc.doc_number} — Version {ver.version_number} is now available.',
+            data={'screen': 'DocumentDetail', 'doc_id': doc_id},
+        )
+    except Exception as e:
+        app.logger.warning(f'DMS push notification failed: {e}')
+    flash(f'✓ Version {ver.version_number} published and employees notified.', 'success')
+    return redirect(url_for('dms_detail', doc_id=doc_id))
+
+
+@app.route('/dms/<doc_id>/versions/<int:ver_id>/approve', methods=['POST'])
+@require_login
+def dms_approve_version(doc_id, ver_id):
+    ver = DocVersion.query.get_or_404(ver_id)
+    if ver.doc_id != doc_id:
+        return 'Not found', 404
+    ver.status      = 'Approved'
+    ver.approved_by = request.form.get('approved_by', session.get('username','system'))
+    db.session.commit()
+    flash('✓ Version approved. You can now publish it.', 'success')
+    return redirect(url_for('dms_detail', doc_id=doc_id))
+
+
+@app.route('/dms/<doc_id>/versions/<int:ver_id>/delete', methods=['POST'])
+@require_login
+def dms_delete_version(doc_id, ver_id):
+    ver = DocVersion.query.get_or_404(ver_id)
+    if ver.doc_id != doc_id:
+        return 'Not found', 404
+    if ver.status == 'Published':
+        flash('✗ Cannot delete a Published version. Supersede it by publishing a new version first.', 'error')
+        return redirect(url_for('dms_detail', doc_id=doc_id))
+    if ver.file_public_id:
+        _dms_cloudinary_delete(ver.file_public_id)
+    doc = ControlledDoc.query.get(doc_id)
+    if doc and doc.current_version_id == ver_id:
+        doc.current_version_id = None
+    db.session.delete(ver)
+    db.session.commit()
+    flash('✓ Version deleted.', 'success')
+    return redirect(url_for('dms_detail', doc_id=doc_id))
+
+
+@app.route('/dms/<doc_id>/edit', methods=['POST'])
+@require_login
+def dms_edit(doc_id):
+    doc = ControlledDoc.query.get_or_404(doc_id)
+    doc.title               = request.form.get('title', doc.title).strip()
+    doc.doc_number          = request.form.get('doc_number', doc.doc_number).strip()
+    doc.category_id         = request.form.get('category_id') or None
+    doc.department          = request.form.get('department', '').strip()
+    doc.document_owner      = request.form.get('document_owner', '').strip()
+    doc.approving_authority = request.form.get('approving_authority', '').strip()
+    doc.description         = request.form.get('description', '').strip()
+    doc.keywords            = request.form.get('keywords', '').strip()
+    doc.classification      = request.form.get('classification', 'INTERNAL')
+    doc.is_mandatory_reading = bool(request.form.get('is_mandatory_reading'))
+    db.session.commit()
+    flash('✓ Document updated.', 'success')
+    return redirect(url_for('dms_detail', doc_id=doc_id))
+
+
+@app.route('/dms/<doc_id>/archive', methods=['POST'])
+@require_login
+def dms_archive(doc_id):
+    doc = ControlledDoc.query.get_or_404(doc_id)
+    doc.status = 'Archived'
+    db.session.commit()
+    flash(f'✓ {doc_id} archived.', 'success')
+    return redirect(url_for('dms_library'))
+
+
+@app.route('/dms/<doc_id>/distribution', methods=['POST'])
+@require_login
+def dms_add_distribution(doc_id):
+    ControlledDoc.query.get_or_404(doc_id)
+    audience_type = request.form.get('audience_type', 'all')
+    d = DocDistribution(
+        doc_id=doc_id,
+        audience_type=audience_type,
+        department=request.form.get('department','').strip() or None,
+        employee_role=request.form.get('employee_role','').strip() or None,
+        employee_id=request.form.get('employee_id') or None,
+    )
+    db.session.add(d)
+    db.session.commit()
+    flash('✓ Distribution rule added.', 'success')
+    return redirect(url_for('dms_detail', doc_id=doc_id))
+
+
+@app.route('/dms/distribution/<int:dist_id>/delete', methods=['POST'])
+@require_login
+def dms_delete_distribution(dist_id):
+    d = DocDistribution.query.get_or_404(dist_id)
+    doc_id = d.doc_id
+    db.session.delete(d)
+    db.session.commit()
+    flash('✓ Distribution rule removed.', 'success')
+    return redirect(url_for('dms_detail', doc_id=doc_id))
+
+
+@app.route('/dms/compliance')
+@require_login
+def dms_compliance():
+    docs  = ControlledDoc.query.filter_by(status='Active').all()
+    stats = {d.id: _dms_compliance_stats(d) for d in docs}
+    mandatory_docs = [d for d in docs if d.is_mandatory_reading]
+    return render_template('dms/compliance.html', docs=docs, mandatory_docs=mandatory_docs, stats=stats)
+
+
+@app.route('/dms/categories', methods=['GET', 'POST'])
+@require_login
+def dms_categories():
+    if request.method == 'POST':
+        action = request.form.get('action', 'create')
+        if action == 'create':
+            cat = DocCategory(
+                name=request.form['name'].strip(),
+                code=request.form['code'].strip().upper(),
+                icon=request.form.get('icon','📄').strip(),
+                description=request.form.get('description','').strip(),
+                sort_order=int(request.form.get('sort_order', 0)),
+            )
+            db.session.add(cat)
+            db.session.commit()
+            flash(f'✓ Category "{cat.name}" created.', 'success')
+        elif action == 'delete':
+            cat = DocCategory.query.get(int(request.form['cat_id']))
+            if cat:
+                db.session.delete(cat)
+                db.session.commit()
+                flash('✓ Category deleted.', 'success')
+        return redirect(url_for('dms_categories'))
+    cats = DocCategory.query.order_by(DocCategory.sort_order).all()
+    return render_template('dms/categories.html', cats=cats)
+
+
+# ─── Mobile API: DMS ─────────────────────────────────────────────────────────
+
+@app.route('/api/docs/library')
+def api_docs_library():
+    """List all published documents accessible to the authenticated employee."""
+    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
+    if not api_token:
+        return jsonify({'error': 'Unauthorized'}), 401
+    emp = Employee.query.get(api_token.employee_id)
+    if not emp:
+        return jsonify({'error': 'Employee not found'}), 404
+
+    # Get published docs
+    docs = (ControlledDoc.query
+            .join(DocVersion, ControlledDoc.current_version_id == DocVersion.id)
+            .filter(ControlledDoc.status == 'Active',
+                    DocVersion.status == 'Published')
+            .all())
+
+    # Acknowledgement set for this employee
+    ack_set = set(
+        a.doc_id for a in
+        DocAcknowledgement.query.filter_by(employee_id=emp.id).all()
+    )
+    read_set = set(
+        r.doc_id for r in
+        DocReadRecord.query.filter_by(employee_id=emp.id).all()
+    )
+
+    result = []
+    for doc in docs:
+        ver = DocVersion.query.get(doc.current_version_id)
+        result.append({
+            'id': doc.id,
+            'doc_number': doc.doc_number,
+            'title': doc.title,
+            'category': doc.category.name if doc.category else None,
+            'category_icon': doc.category.icon if doc.category else '📄',
+            'classification': doc.classification,
+            'is_mandatory': doc.is_mandatory_reading,
+            'version': ver.version_number if ver else None,
+            'effective_date': ver.effective_date.isoformat() if ver and ver.effective_date else None,
+            'file_url': ver.file_url if ver else None,
+            'file_type': ver.file_type if ver else None,
+            'acknowledged': doc.id in ack_set,
+            'read': doc.id in read_set,
+        })
+    return jsonify({'documents': result, 'total': len(result)})
+
+
+@app.route('/api/docs/<doc_id>')
+def api_doc_detail(doc_id):
+    """Get full document metadata + download URL."""
+    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
+    if not api_token:
+        return jsonify({'error': 'Unauthorized'}), 401
+    doc = ControlledDoc.query.get_or_404(doc_id)
+    ver = DocVersion.query.get(doc.current_version_id) if doc.current_version_id else None
+    emp_id = api_token.employee_id
+    acked = DocAcknowledgement.query.filter_by(doc_id=doc_id, employee_id=emp_id,
+                                               version_id=doc.current_version_id).first() is not None
+    return jsonify({
+        'id': doc.id,
+        'doc_number': doc.doc_number,
+        'title': doc.title,
+        'description': doc.description,
+        'category': doc.category.name if doc.category else None,
+        'department': doc.department,
+        'document_owner': doc.document_owner,
+        'approving_authority': doc.approving_authority,
+        'classification': doc.classification,
+        'is_mandatory': doc.is_mandatory_reading,
+        'keywords': doc.keywords,
+        'version': {
+            'id': ver.id, 'number': ver.version_number, 'revision': ver.revision,
+            'file_url': ver.file_url, 'file_name': ver.file_name, 'file_type': ver.file_type,
+            'file_size': ver.file_size, 'effective_date': ver.effective_date.isoformat() if ver.effective_date else None,
+            'review_date': ver.review_date.isoformat() if ver.review_date else None,
+            'change_summary': ver.change_summary, 'prepared_by': ver.prepared_by,
+            'approved_by': ver.approved_by,
+        } if ver else None,
+        'acknowledged': acked,
+    })
+
+
+@app.route('/api/docs/<doc_id>/read-start', methods=['POST'])
+def api_doc_read_start(doc_id):
+    """Called when employee opens a document. Creates DocReadRecord."""
+    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
+    if not api_token:
+        return jsonify({'error': 'Unauthorized'}), 401
+    doc = ControlledDoc.query.get_or_404(doc_id)
+    if not doc.current_version_id:
+        return jsonify({'error': 'No published version'}), 404
+    emp_id = api_token.employee_id
+    # Upsert — don't duplicate if already opened
+    rec = DocReadRecord.query.filter_by(
+        version_id=doc.current_version_id, employee_id=emp_id).first()
+    if not rec:
+        data = request.get_json(silent=True) or {}
+        rec = DocReadRecord(
+            doc_id=doc_id, version_id=doc.current_version_id, employee_id=emp_id,
+            device=data.get('device'), app_version=data.get('app_version'),
+        )
+        db.session.add(rec)
+        db.session.commit()
+    return jsonify({'ok': True, 'record_id': rec.id})
+
+
+@app.route('/api/docs/<doc_id>/read-complete', methods=['POST'])
+def api_doc_read_complete(doc_id):
+    """Called when employee finishes reading. Updates DocReadRecord."""
+    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
+    if not api_token:
+        return jsonify({'error': 'Unauthorized'}), 401
+    doc = ControlledDoc.query.get_or_404(doc_id)
+    emp_id = api_token.employee_id
+    rec = DocReadRecord.query.filter_by(
+        version_id=doc.current_version_id, employee_id=emp_id).first()
+    if rec:
+        data = request.get_json(silent=True) or {}
+        rec.completed_at       = datetime.utcnow()
+        rec.time_spent_seconds = data.get('time_spent_seconds')
+        db.session.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/docs/<doc_id>/acknowledge', methods=['POST'])
+def api_doc_acknowledge(doc_id):
+    """Employee mandatory reading sign-off: 'I have read and understood'."""
+    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    api_token = ApiToken.query.filter_by(token=token, is_active=True).first()
+    if not api_token:
+        return jsonify({'error': 'Unauthorized'}), 401
+    doc = ControlledDoc.query.get_or_404(doc_id)
+    if not doc.current_version_id:
+        return jsonify({'error': 'No published version'}), 404
+    emp_id = api_token.employee_id
+    existing = DocAcknowledgement.query.filter_by(
+        version_id=doc.current_version_id, employee_id=emp_id).first()
+    if existing:
+        return jsonify({'ok': True, 'already_acknowledged': True,
+                        'acknowledged_at': existing.acknowledged_at.isoformat()})
+    data = request.get_json(silent=True) or {}
+    ack = DocAcknowledgement(
+        doc_id=doc_id, version_id=doc.current_version_id, employee_id=emp_id,
+        device=data.get('device'), ip_address=request.remote_addr,
+    )
+    db.session.add(ack)
+    db.session.commit()
+    return jsonify({'ok': True, 'acknowledged_at': ack.acknowledged_at.isoformat()})
+
+
+@app.route('/api/docs/categories')
+def api_docs_categories():
+    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    if not ApiToken.query.filter_by(token=token, is_active=True).first():
+        return jsonify({'error': 'Unauthorized'}), 401
+    cats = DocCategory.query.filter_by(is_active=True).order_by(DocCategory.sort_order).all()
+    return jsonify({'categories': [{'id': c.id, 'name': c.name, 'code': c.code, 'icon': c.icon} for c in cats]})
+
+
+@app.route('/api/docs/search')
+def api_docs_search():
+    token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    if not ApiToken.query.filter_by(token=token, is_active=True).first():
+        return jsonify({'error': 'Unauthorized'}), 401
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'documents': []})
+    docs = (ControlledDoc.query
+            .join(DocVersion, ControlledDoc.current_version_id == DocVersion.id)
+            .filter(ControlledDoc.status == 'Active',
+                    DocVersion.status == 'Published',
+                    db.or_(ControlledDoc.title.ilike(f'%{q}%'),
+                           ControlledDoc.doc_number.ilike(f'%{q}%'),
+                           ControlledDoc.keywords.ilike(f'%{q}%')))
+            .all())
+    return jsonify({'documents': [{'id': d.id, 'doc_number': d.doc_number, 'title': d.title} for d in docs]})
 
 
 if __name__ == '__main__':

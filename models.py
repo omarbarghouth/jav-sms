@@ -1153,6 +1153,118 @@ class DocumentLink(db.Model):
     )
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  DOCUMENT MANAGEMENT SYSTEM (DMS)
+#  ICAO Annex 19 / Doc 9859 / IOSA ISM / EASA SMS controlled document library
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class DocCategory(db.Model):
+    __tablename__ = 'doc_categories'
+    id          = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(100), nullable=False)
+    code        = db.Column(db.String(20), unique=True, nullable=False)
+    icon        = db.Column(db.String(10), default='📄')
+    description = db.Column(db.Text)
+    sort_order  = db.Column(db.Integer, default=0)
+    is_active   = db.Column(db.Boolean, default=True)
+    documents   = db.relationship('ControlledDoc', backref='category', lazy=True)
+
+
+class ControlledDoc(db.Model):
+    """Master document record — stable identifier across all versions."""
+    __tablename__ = 'controlled_docs'
+    id                   = db.Column(db.String(30), primary_key=True)   # e.g. DOC-SMS-001
+    doc_number           = db.Column(db.String(50), unique=True, nullable=False)  # e.g. SMS/MAN/001
+    title                = db.Column(db.String(300), nullable=False)
+    category_id          = db.Column(db.Integer, db.ForeignKey('doc_categories.id'))
+    department           = db.Column(db.String(100))
+    document_owner       = db.Column(db.String(150))
+    approving_authority  = db.Column(db.String(150))
+    description          = db.Column(db.Text)
+    keywords             = db.Column(db.String(500))
+    classification       = db.Column(db.String(30), default='INTERNAL')  # UNCLASSIFIED/INTERNAL/CONFIDENTIAL/RESTRICTED
+    is_mandatory_reading = db.Column(db.Boolean, default=False)
+    status               = db.Column(db.String(20), default='Active')     # Active/Archived
+    current_version_id   = db.Column(db.Integer, db.ForeignKey('doc_versions.id', use_alter=True, name='fk_current_version'), nullable=True)
+    created_by           = db.Column(db.String(100))
+    created_at           = db.Column(db.DateTime, default=datetime.utcnow)
+    versions             = db.relationship('DocVersion', backref='document',
+                                           foreign_keys='DocVersion.doc_id',
+                                           lazy=True, cascade='all, delete-orphan')
+    distributions        = db.relationship('DocDistribution', backref='document', lazy=True, cascade='all, delete-orphan')
+    read_records         = db.relationship('DocReadRecord', backref='document', lazy=True, cascade='all, delete-orphan')
+    acknowledgements     = db.relationship('DocAcknowledgement', backref='document', lazy=True, cascade='all, delete-orphan')
+
+
+class DocVersion(db.Model):
+    """One file upload per version. Tracks full lifecycle from Draft → Published."""
+    __tablename__ = 'doc_versions'
+    id                = db.Column(db.Integer, primary_key=True)
+    doc_id            = db.Column(db.String(30), db.ForeignKey('controlled_docs.id'), nullable=False)
+    version_number    = db.Column(db.String(20), nullable=False)   # e.g. "1.0", "2.0"
+    revision          = db.Column(db.String(20), default='REV0')   # e.g. "REV0", "REV1"
+    file_url          = db.Column(db.String(800))                  # Cloudinary secure_url
+    file_public_id    = db.Column(db.String(300))                  # Cloudinary public_id for deletion
+    file_name         = db.Column(db.String(300))                  # original filename
+    file_size         = db.Column(db.BigInteger)                   # bytes
+    file_type         = db.Column(db.String(20))                   # pdf/docx/xlsx/pptx
+    status            = db.Column(db.String(30), default='Draft')  # Draft/Under Review/Approved/Published/Superseded/Archived/Expired
+    prepared_by       = db.Column(db.String(150))
+    reviewed_by       = db.Column(db.String(150))
+    approved_by       = db.Column(db.String(150))
+    issue_date        = db.Column(db.Date)
+    effective_date    = db.Column(db.Date)
+    review_date       = db.Column(db.Date)
+    expiry_date       = db.Column(db.Date)
+    change_summary    = db.Column(db.Text)
+    uploaded_by       = db.Column(db.String(100))
+    uploaded_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    published_at      = db.Column(db.DateTime)
+    published_by      = db.Column(db.String(100))
+    read_records      = db.relationship('DocReadRecord', backref='version', lazy=True, cascade='all, delete-orphan')
+    acknowledgements  = db.relationship('DocAcknowledgement', backref='version', lazy=True, cascade='all, delete-orphan')
+
+
+class DocDistribution(db.Model):
+    """Defines who should receive / read a document. audience_type controls the filter."""
+    __tablename__ = 'doc_distributions'
+    id             = db.Column(db.Integer, primary_key=True)
+    doc_id         = db.Column(db.String(30), db.ForeignKey('controlled_docs.id'), nullable=False)
+    audience_type  = db.Column(db.String(20), default='all')   # all/department/role/employee
+    department     = db.Column(db.String(100))
+    employee_role  = db.Column(db.String(100))
+    employee_id    = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class DocReadRecord(db.Model):
+    """Created when a mobile employee opens a document version; updated when they finish."""
+    __tablename__ = 'doc_read_records'
+    id                  = db.Column(db.Integer, primary_key=True)
+    doc_id              = db.Column(db.String(30), db.ForeignKey('controlled_docs.id'), nullable=False)
+    version_id          = db.Column(db.Integer, db.ForeignKey('doc_versions.id'), nullable=False)
+    employee_id         = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=False)
+    opened_at           = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at        = db.Column(db.DateTime)
+    time_spent_seconds  = db.Column(db.Integer)
+    device              = db.Column(db.String(100))
+    app_version         = db.Column(db.String(30))
+    __table_args__ = (db.UniqueConstraint('version_id', 'employee_id', name='uq_read_record'),)
+
+
+class DocAcknowledgement(db.Model):
+    """Mandatory reading sign-off: employee taps 'I have read and understood'."""
+    __tablename__ = 'doc_acknowledgements'
+    id              = db.Column(db.Integer, primary_key=True)
+    doc_id          = db.Column(db.String(30), db.ForeignKey('controlled_docs.id'), nullable=False)
+    version_id      = db.Column(db.Integer, db.ForeignKey('doc_versions.id'), nullable=False)
+    employee_id     = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=False)
+    acknowledged_at = db.Column(db.DateTime, default=datetime.utcnow)
+    device          = db.Column(db.String(100))
+    ip_address      = db.Column(db.String(45))
+    __table_args__ = (db.UniqueConstraint('version_id', 'employee_id', name='uq_acknowledgement'),)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  SAFETY RISK MANAGEMENT (SRM) - EXTENDED MODELS
 #  Extends existing Risk + Control + Hazard with SRM-grade fields
 #  ICAO Annex 19 s5 / Doc 9859 Ch.5 - Added as extension
