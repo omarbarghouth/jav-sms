@@ -1275,8 +1275,7 @@ class RARow(db.Model):
     risk_tolerance_residual   = db.Column(db.String(20))
     # Structured existing controls (new)
     controls                  = db.relationship('RAControl', backref='row', lazy=True,
-                                                cascade='all, delete-orphan',
-                                                order_by='RAControl.id')
+                                                cascade='all, delete-orphan')
 
 
 class RAControl(db.Model):

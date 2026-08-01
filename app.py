@@ -13543,7 +13543,7 @@ def ra_detail(ra_id):
         import traceback
         traceback.print_exc()
         flash(f'✗ Error loading Risk Assessment: {e}', 'error')
-        return redirect(url_for('risk_assessments'))
+        return redirect(url_for('ra_list'))
 
 # ─── RA ASSIGN SAG REVIEW ─────────────────────────────────────────────────────
 @app.route('/risk-assessments/<ra_id>/assign-sag', methods=['GET', 'POST'])
