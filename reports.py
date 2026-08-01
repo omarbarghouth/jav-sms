@@ -1,20 +1,10 @@
 # =============================================================================
-#  AviaS — AVIATION SMS ENTERPRISE REPORTING ENGINE
-#  ICAO Annex 19 / IOSA ISM Compliant — Controlled Document Generation
-#  reports.py  |  Rev 01  |  DO NOT MODIFY WITHOUT CHANGE CONTROL
+#  AviaS — CORPORATE AVIATION DOCUMENT DESIGN SYSTEM v2.0
+#  ICAO Annex 19 / IOSA ISM Compliant  |  Corporate Edition
+#  Every document produced by AviaS meets airline executive presentation standards.
 # =============================================================================
-"""
-Professional PDF report generator for the Aviation SMS platform.
-Produces ICAO/IOSA-grade controlled documents with full lifecycle traceability.
-
-Usage:
-    from reports import build_pdf
-    pdf_bytes = build_pdf('hazard_report', record_id=rid, db=db, models=...)
-"""
-
 from io import BytesIO
 from datetime import datetime
-
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.colors import HexColor, white, black
@@ -25,558 +15,590 @@ from reportlab.platypus import (
     HRFlowable, PageBreak, KeepTogether
 )
 from reportlab.platypus.flowables import HRFlowable
-from reportlab.lib import colors
 
-# ── Brand palette ─────────────────────────────────────────────────────────────
-C_NAVY      = HexColor('#0a1628')
-C_NAVY2     = HexColor('#111f3a')
-C_GOLD      = HexColor('#c9a84c')
-C_GOLD_LITE = HexColor('#f5e9c8')
-C_RED       = HexColor('#dc2626')
-C_RED_LITE  = HexColor('#fee2e2')
-C_GREEN     = HexColor('#16a34a')
-C_GREEN_LITE= HexColor('#dcfce7')
-C_BLUE      = HexColor('#1d4ed8')
-C_BLUE_LITE = HexColor('#dbeafe')
-C_ORANGE    = HexColor('#d97706')
-C_ORANGE_LT = HexColor('#fef3c7')
-C_PURPLE    = HexColor('#7c3aed')
-C_PURPLE_LT = HexColor('#ede9fe')
-C_GRAY      = HexColor('#6b7280')
-C_GRAY_LITE = HexColor('#f3f4f6')
-C_BORDER    = HexColor('#e5e7eb')
+# ── Brand Palette ─────────────────────────────────────────────────────────────
+C_NAVY      = HexColor('#0A1628')
+C_NAVY2     = HexColor('#111F3A')
+C_NAVY3     = HexColor('#1A2E4A')
+C_GOLD      = HexColor('#C9A84C')
+C_GOLD_LITE = HexColor('#F5E9C8')
+C_RED       = HexColor('#DC2626')
+C_RED_LITE  = HexColor('#FEE2E2')
+C_GREEN     = HexColor('#15803D')
+C_GREEN_LITE= HexColor('#DCFCE7')
+C_BLUE      = HexColor('#1D4ED8')
+C_BLUE_LITE = HexColor('#DBEAFE')
+C_ORANGE    = HexColor('#D97706')
+C_ORANGE_LT = HexColor('#FEF3C7')
+C_GRAY      = HexColor('#6B7280')
+C_GRAY_LITE = HexColor('#F8F9FC')
+C_BORDER    = HexColor('#E5E7EB')
+C_DIVIDER   = HexColor('#D1D5DB')
+C_TEXT      = HexColor('#111827')
+C_MUTED     = HexColor('#6B7280')
 C_WHITE     = white
 
+# ── Page Constants ─────────────────────────────────────────────────────────────
 PAGE_W, PAGE_H = A4
-MARGIN = 18 * mm
-CONTENT_W = PAGE_W - 2 * MARGIN
+MARGIN    = 18 * mm
+CONTENT_W = PAGE_W - 2 * MARGIN   # 174 mm on A4
 
 
 # =============================================================================
-#  STYLE DEFINITIONS
+#  TYPOGRAPHY SYSTEM
 # =============================================================================
 def _styles():
-    """Return dict of all ParagraphStyles used in reports."""
-    base = dict(fontName='Helvetica', fontSize=9, leading=13,
-                textColor=HexColor('#1f2937'))
     return {
-        'title': ParagraphStyle('title', fontName='Helvetica-Bold',
-                                fontSize=16, leading=20,
-                                textColor=C_NAVY, alignment=TA_LEFT),
-        'subtitle': ParagraphStyle('subtitle', fontName='Helvetica',
-                                   fontSize=9, leading=12,
-                                   textColor=C_GRAY, alignment=TA_LEFT),
-        'section': ParagraphStyle('section', fontName='Helvetica-Bold',
-                                  fontSize=8, leading=10,
-                                  textColor=C_NAVY, spaceBefore=10,
-                                  spaceAfter=4, letterSpacing=0.5,
-                                  backColor=C_GRAY_LITE,
-                                  borderPad=4),
+        # Document title (inside cover banner)
+        'doc_title': ParagraphStyle('doc_title', fontName='Helvetica-Bold',
+                                    fontSize=17, leading=22, textColor=C_WHITE,
+                                    alignment=TA_LEFT),
+        # Section-level heading (H2)
+        'section_text': ParagraphStyle('section_text', fontName='Helvetica-Bold',
+                                       fontSize=8.5, leading=11, textColor=C_NAVY),
+        # Subsection heading (H3)
+        'heading3': ParagraphStyle('heading3', fontName='Helvetica-Bold',
+                                   fontSize=8, leading=11, textColor=C_NAVY3,
+                                   spaceBefore=4, spaceAfter=2),
+        # Standard body text
+        'body': ParagraphStyle('body', fontName='Helvetica', fontSize=9,
+                               leading=13, textColor=C_TEXT, alignment=TA_JUSTIFY,
+                               spaceAfter=3),
+        # Field label (uppercase, muted)
         'field_label': ParagraphStyle('field_label', fontName='Helvetica-Bold',
-                                      fontSize=7.5, leading=11,
-                                      textColor=C_GRAY),
-        'field_value': ParagraphStyle('field_value', **base),
-        'body': ParagraphStyle('body', **base, spaceAfter=4,
-                               alignment=TA_JUSTIFY),
-        'small': ParagraphStyle('small', fontName='Helvetica',
-                                fontSize=7, leading=10,
-                                textColor=C_GRAY),
-        'mono': ParagraphStyle('mono', fontName='Courier',
-                               fontSize=8, leading=12,
-                               textColor=HexColor('#374151')),
-        'badge_red': ParagraphStyle('badge_red', fontName='Helvetica-Bold',
-                                    fontSize=8, textColor=C_RED),
+                                      fontSize=7, leading=10, textColor=C_MUTED),
+        # Field value
+        'field_value': ParagraphStyle('field_value', fontName='Helvetica',
+                                      fontSize=8.5, leading=12, textColor=C_TEXT),
+        # Table header cell
+        'th': ParagraphStyle('th', fontName='Helvetica-Bold', fontSize=7.5,
+                             leading=10, textColor=C_WHITE),
+        # Table data cell
+        'td': ParagraphStyle('td', fontName='Helvetica', fontSize=8,
+                             leading=11, textColor=C_TEXT),
+        # Small / caption
+        'small': ParagraphStyle('small', fontName='Helvetica', fontSize=7.5,
+                                leading=10, textColor=C_TEXT),
+        'caption': ParagraphStyle('caption', fontName='Helvetica', fontSize=7,
+                                  leading=9, textColor=C_MUTED),
+        # Monospace (IDs, codes)
+        'mono': ParagraphStyle('mono', fontName='Courier', fontSize=8,
+                               leading=11, textColor=C_NAVY),
+        # Cover banner subtitle label
+        'cover_label': ParagraphStyle('cover_label', fontName='Helvetica',
+                                      fontSize=7.5, leading=10,
+                                      textColor=HexColor('#94A3B8')),
+        'cover_value': ParagraphStyle('cover_value', fontName='Helvetica-Bold',
+                                      fontSize=8.5, leading=11, textColor=C_WHITE),
+        # Risk colours
+        'risk_high':   ParagraphStyle('risk_high',   fontName='Helvetica-Bold',
+                                      fontSize=8, textColor=C_RED),
+        'risk_med':    ParagraphStyle('risk_med',    fontName='Helvetica-Bold',
+                                      fontSize=8, textColor=C_ORANGE),
+        'risk_low':    ParagraphStyle('risk_low',    fontName='Helvetica-Bold',
+                                      fontSize=8, textColor=C_GREEN),
+        # Centered
+        'center': ParagraphStyle('center', fontName='Helvetica', fontSize=8,
+                                 leading=11, textColor=C_TEXT, alignment=TA_CENTER),
+        # Title for standalone pages
+        'title': ParagraphStyle('title', fontName='Helvetica-Bold', fontSize=16,
+                                leading=20, textColor=C_NAVY),
+        # Legacy aliases used in some call-sites
+        'section':     ParagraphStyle('section',     fontName='Helvetica-Bold',
+                                      fontSize=8.5, leading=11, textColor=C_NAVY),
+        'heading2':    ParagraphStyle('heading2',    fontName='Helvetica-Bold',
+                                      fontSize=9, leading=13, textColor=C_NAVY),
+        'subtitle':    ParagraphStyle('subtitle',    fontName='Helvetica',
+                                      fontSize=9, leading=12, textColor=C_GRAY),
+        'badge_red':   ParagraphStyle('badge_red',   fontName='Helvetica-Bold',
+                                      fontSize=8, textColor=C_RED),
         'badge_green': ParagraphStyle('badge_green', fontName='Helvetica-Bold',
                                       fontSize=8, textColor=C_GREEN),
-        'badge_gold': ParagraphStyle('badge_gold', fontName='Helvetica-Bold',
-                                     fontSize=8, textColor=C_GOLD),
-        'badge_blue': ParagraphStyle('badge_blue', fontName='Helvetica-Bold',
-                                     fontSize=8, textColor=C_BLUE),
-        'badge_gray': ParagraphStyle('badge_gray', fontName='Helvetica-Bold',
-                                     fontSize=8, textColor=C_GRAY),
-        'watermark': ParagraphStyle('watermark', fontName='Helvetica-Bold',
-                                    fontSize=42, textColor=HexColor('#e5e7eb'),
-                                    alignment=TA_CENTER),
-        'center': ParagraphStyle('center', **base, alignment=TA_CENTER),
-        'right': ParagraphStyle('right', **base, alignment=TA_RIGHT),
-        'heading2': ParagraphStyle('heading2', fontName='Helvetica-Bold',
-                                   fontSize=10, leading=14,
-                                   textColor=C_NAVY, spaceAfter=4),
-        'risk_intolerable': ParagraphStyle('risk_intolerable',
-                                           fontName='Helvetica-Bold',
+        'badge_gold':  ParagraphStyle('badge_gold',  fontName='Helvetica-Bold',
+                                      fontSize=8, textColor=C_GOLD),
+        'badge_blue':  ParagraphStyle('badge_blue',  fontName='Helvetica-Bold',
+                                      fontSize=8, textColor=C_BLUE),
+        'badge_gray':  ParagraphStyle('badge_gray',  fontName='Helvetica-Bold',
+                                      fontSize=8, textColor=C_GRAY),
+        'watermark':   ParagraphStyle('watermark',   fontName='Helvetica-Bold',
+                                      fontSize=42, textColor=HexColor('#e5e7eb'),
+                                      alignment=TA_CENTER),
+        'right':       ParagraphStyle('right',       fontName='Helvetica',
+                                      fontSize=8, leading=11, textColor=C_TEXT,
+                                      alignment=TA_RIGHT),
+        'risk_intolerable': ParagraphStyle('risk_intolerable', fontName='Helvetica-Bold',
                                            fontSize=8, textColor=C_RED),
-        'risk_tolerable': ParagraphStyle('risk_tolerable',
-                                         fontName='Helvetica-Bold',
-                                         fontSize=8, textColor=C_ORANGE),
-        'risk_acceptable': ParagraphStyle('risk_acceptable',
-                                          fontName='Helvetica-Bold',
-                                          fontSize=8, textColor=C_GREEN),
+        'risk_tolerable':   ParagraphStyle('risk_tolerable',   fontName='Helvetica-Bold',
+                                           fontSize=8, textColor=C_ORANGE),
+        'risk_acceptable':  ParagraphStyle('risk_acceptable',  fontName='Helvetica-Bold',
+                                           fontSize=8, textColor=C_GREEN),
     }
 
 
 # =============================================================================
-#  HEADER / FOOTER CANVAS
+#  PAGE CANVAS  —  Header · Footer · Watermark
 # =============================================================================
 class _AviaHeader:
-    """Page canvas callback for header and footer on every page."""
+    """Canvas callback drawn on every page."""
 
     def __init__(self, doc_type, control_number, classification,
-                 generated_by, report_status):
+                 generated_by, report_status, total_pages=0, watermark=None):
         self.doc_type       = str(doc_type or 'Document')
         self.control_number = str(control_number or '—')
-        self.classification = str(classification or 'INTERNAL')
+        self.classification = str(classification or 'INTERNAL').upper()
         self.generated_by   = str(generated_by or 'Safety Department')
         self.report_status  = str(report_status or '—')
+        self.total_pages    = total_pages
+        self.watermark      = watermark
         self.timestamp      = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
 
     def __call__(self, canvas, doc):
         canvas.saveState()
         w, h = A4
+        pg   = doc.page
+        pg_str = f'Page {pg} of {self.total_pages}' if self.total_pages else f'Page {pg}'
 
-        # ── TOP HEADER BAND ───────────────────────────────────────────────────
+        # ── HEADER BAND (28 mm) ───────────────────────────────────────────────
+        band_h = 28 * mm
         canvas.setFillColor(C_NAVY)
-        canvas.rect(0, h - 24 * mm, w, 24 * mm, fill=1, stroke=0)
+        canvas.rect(0, h - band_h, w, band_h, fill=1, stroke=0)
 
-        # Gold accent line
+        # Gold accent line below header
         canvas.setFillColor(C_GOLD)
-        canvas.rect(0, h - 25 * mm, w, 1 * mm, fill=1, stroke=0)
+        canvas.rect(0, h - band_h - 1.2*mm, w, 1.2*mm, fill=1, stroke=0)
 
-        # Company name
+        # Left: AviaS wordmark
         canvas.setFillColor(C_WHITE)
-        canvas.setFont('Helvetica-Bold', 12)
-        canvas.drawString(MARGIN, h - 10 * mm, 'AviaS')
+        canvas.setFont('Helvetica-Bold', 13)
+        canvas.drawString(MARGIN, h - 10*mm, 'AviaS')
+        canvas.setFillColor(C_GOLD)
         canvas.setFont('Helvetica', 8)
-        canvas.setFillColor(HexColor('#c9a84c'))
-        canvas.drawString(MARGIN, h - 15 * mm, 'Safety Management System')
+        canvas.drawString(MARGIN, h - 16*mm, 'Safety Management System')
+        canvas.setFillColor(HexColor('#64748B'))
+        canvas.setFont('Helvetica', 6.5)
+        canvas.drawString(MARGIN, h - 21.5*mm, 'ICAO Annex 19 Compliant')
 
-        # Document type — centre
+        # Center: Document type
         canvas.setFillColor(C_WHITE)
         canvas.setFont('Helvetica-Bold', 11)
-        canvas.drawCentredString(w / 2, h - 10 * mm, self.doc_type.upper())
-        canvas.setFont('Helvetica', 8)
-        canvas.setFillColor(HexColor('#94a3b8'))
-        canvas.drawCentredString(w / 2, h - 15 * mm, 'CONTROLLED DOCUMENT — ICAO Annex 19 Compliant')
+        canvas.drawCentredString(w/2, h - 10*mm, self.doc_type.upper())
+        canvas.setFillColor(HexColor('#94A3B8'))
+        canvas.setFont('Helvetica', 7)
+        canvas.drawCentredString(w/2, h - 16*mm, 'CONTROLLED DOCUMENT')
+        canvas.drawCentredString(w/2, h - 21.5*mm, self.report_status.upper())
 
-        # Control number — right
+        # Right: Control number + page
         canvas.setFillColor(C_WHITE)
-        canvas.setFont('Helvetica-Bold', 9)
-        canvas.drawRightString(w - MARGIN, h - 9 * mm, self.control_number)
-        canvas.setFont('Helvetica', 7.5)
-        canvas.setFillColor(HexColor('#94a3b8'))
-        canvas.drawRightString(w - MARGIN, h - 14 * mm, f'Page {doc.page}')
-        canvas.drawRightString(w - MARGIN, h - 19 * mm, self.timestamp)
+        canvas.setFont('Helvetica-Bold', 8.5)
+        canvas.drawRightString(w - MARGIN, h - 10*mm, self.control_number)
+        canvas.setFillColor(HexColor('#94A3B8'))
+        canvas.setFont('Helvetica', 7)
+        canvas.drawRightString(w - MARGIN, h - 16*mm, pg_str)
+        canvas.drawRightString(w - MARGIN, h - 21.5*mm, self.timestamp)
 
-        # ── BOTTOM FOOTER BAND ────────────────────────────────────────────────
-        canvas.setFillColor(C_NAVY2)
-        canvas.rect(0, 0, w, 12 * mm, fill=1, stroke=0)
+        # ── FOOTER BAND (13 mm) ───────────────────────────────────────────────
+        canvas.setFillColor(C_NAVY)
+        canvas.rect(0, 0, w, 13*mm, fill=1, stroke=0)
         canvas.setFillColor(C_GOLD)
-        canvas.rect(0, 12 * mm, w, 0.5 * mm, fill=1, stroke=0)
+        canvas.rect(0, 13*mm, w, 0.7*mm, fill=1, stroke=0)
 
-        canvas.setFillColor(HexColor('#94a3b8'))
+        canvas.setFillColor(HexColor('#94A3B8'))
         canvas.setFont('Helvetica', 6.5)
-        canvas.drawString(MARGIN, 8 * mm,
-                          f'Generated by: {self.generated_by}  |  {self.timestamp}')
-        canvas.drawString(MARGIN, 4.5 * mm,
-                          'This document is a controlled record of the AviaS '
-                          'Safety Management System. Unauthorised alteration is prohibited.')
+        canvas.drawString(MARGIN, 8.5*mm,
+                          f'Generated by: {self.generated_by}  ·  {self.timestamp}')
+        canvas.drawString(MARGIN, 4.5*mm,
+                          'AviaS Safety Management System  ·  Controlled Document  ·  '
+                          'Unauthorised alteration is prohibited.')
 
-        # Classification badge — right footer
-        cls = self.classification.upper()
-        cls_color = C_RED if 'CONFIDENTIAL' in cls else (
-                    C_ORANGE if 'RESTRICTED' in cls else C_GREEN)
-        canvas.setFillColor(cls_color)
-        canvas.roundRect(w - MARGIN - 55, 5 * mm, 55, 7 * mm, 2, fill=1, stroke=0)
+        # Classification badge
+        cls = self.classification
+        cls_bg = (C_RED   if 'CONFIDENTIAL' in cls else
+                  C_ORANGE if 'RESTRICTED'   in cls else
+                  C_GREEN  if 'INTERNAL'     in cls else C_GRAY)
+        bw = 52
+        canvas.setFillColor(cls_bg)
+        canvas.roundRect(w - MARGIN - bw, 4*mm, bw, 8*mm, 1.5, fill=1, stroke=0)
         canvas.setFillColor(C_WHITE)
         canvas.setFont('Helvetica-Bold', 6.5)
-        canvas.drawCentredString(w - MARGIN - 27.5, 8 * mm, cls)
+        canvas.drawCentredString(w - MARGIN - bw/2, 7.2*mm, cls)
+
+        # ── WATERMARK ─────────────────────────────────────────────────────────
+        if self.watermark:
+            canvas.saveState()
+            canvas.translate(w/2, h/2)
+            canvas.rotate(45)
+            canvas.setFillColor(HexColor('#E5E7EB'))
+            canvas.setFont('Helvetica-Bold', 56)
+            canvas.setFillAlpha(0.12)
+            canvas.drawCentredString(0, 0, self.watermark.upper())
+            canvas.restoreState()
 
         canvas.restoreState()
 
 
 # =============================================================================
-#  BUILDER HELPERS
+#  CORE PDF BUILDER  (2-pass for Page X of Y)
 # =============================================================================
-def _hr(color=C_BORDER, thickness=0.5, spaceB=4, spaceA=4):
+def _build_doc(flowables, doc_type, control_number, classification,
+               generated_by, report_status, watermark=None):
+
+    kw = dict(
+        pagesize=A4,
+        leftMargin=MARGIN, rightMargin=MARGIN,
+        topMargin=32*mm, bottomMargin=19*mm,
+        title=f'{doc_type} — {control_number}',
+        author='AviaS Safety Management System',
+        subject='ICAO Annex 19 Controlled Document',
+        creator='AviaS SMS Corporate Edition v2.0',
+    )
+
+    # Pass 1 — count pages
+    buf = BytesIO()
+    hf  = _AviaHeader(doc_type, control_number, classification,
+                      generated_by, report_status, total_pages=0, watermark=watermark)
+    d   = SimpleDocTemplate(buf, **kw)
+    d.build(flowables, onFirstPage=hf, onLaterPages=hf)
+    total = d.page
+
+    # Pass 2 — final render with correct page count
+    buf = BytesIO()
+    hf  = _AviaHeader(doc_type, control_number, classification,
+                      generated_by, report_status, total_pages=total, watermark=watermark)
+    d   = SimpleDocTemplate(buf, **kw)
+    d.build(flowables, onFirstPage=hf, onLaterPages=hf)
+    return buf.getvalue()
+
+
+# =============================================================================
+#  DESIGN HELPERS
+# =============================================================================
+
+def _hr(color=C_BORDER, thickness=0.5, spaceB=3, spaceA=3):
     return HRFlowable(width='100%', thickness=thickness, color=color,
                       spaceAfter=spaceA, spaceBefore=spaceB)
 
 
-def _section_header(text, S):
-    """Dark navy section divider with all-caps label."""
-    data = [[Paragraph(f'&nbsp;{text.upper()}', S['section'])]]
-    t = Table(data, colWidths=[CONTENT_W])
+def _section_header(text, S, level=1):
+    """Premium section header — gold left accent bar on light blue-gray background."""
+    bg  = HexColor('#EEF1F8') if level == 1 else HexColor('#F4F6FB')
+    fs  = 8.5 if level == 1 else 8
+    lbl = Paragraph(text.upper(),
+                    ParagraphStyle('_sh', fontName='Helvetica-Bold',
+                                   fontSize=fs, leading=fs+3, textColor=C_NAVY))
+    t = Table([[' ', lbl]], colWidths=[3.5*mm, CONTENT_W - 3.5*mm])
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), C_NAVY),
-        ('TEXTCOLOR',  (0, 0), (-1, -1), C_WHITE),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING',  (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [C_NAVY]),
+        ('BACKGROUND',    (0, 0), (0, 0),   C_GOLD),
+        ('BACKGROUND',    (1, 0), (1, 0),   bg),
+        ('LEFTPADDING',   (0, 0), (0, 0),   0),
+        ('RIGHTPADDING',  (0, 0), (0, 0),   0),
+        ('LEFTPADDING',   (1, 0), (1, 0),   10),
+        ('RIGHTPADDING',  (1, 0), (1, 0),   6),
+        ('TOPPADDING',    (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
     ]))
     return t
 
 
 def _info_grid(pairs, S, cols=2):
-    """
-    Render a grid of (label, value) pairs.
-    cols=2 → two side-by-side label/value columns
-    cols=1 → full-width single column
-    """
+    """Clean metadata grid — alternating rows, no heavy borders."""
     if not pairs:
         return Spacer(1, 2)
-
-    col_w = CONTENT_W / cols
-    label_w = col_w * 0.36
-    value_w = col_w * 0.64
-
-    rows = []
-    chunk = cols * 1  # pairs per row
-
-    for i in range(0, len(pairs), chunk):
-        row_cells = []
-        for j in range(chunk):
+    col_w  = CONTENT_W / cols
+    lbl_w  = col_w * 0.38
+    val_w  = col_w * 0.62
+    rows   = []
+    step   = cols
+    for i in range(0, len(pairs), step):
+        row = []
+        for j in range(step):
             if i + j < len(pairs):
                 lbl, val = pairs[i + j]
-                val_str = str(val) if val is not None else '—'
-                row_cells += [
-                    Paragraph(str(lbl), S['field_label']),
-                    Paragraph(val_str or '—', S['field_value']),
-                ]
+                val_str  = str(val) if val is not None else '—'
+                row += [Paragraph(str(lbl), S['field_label']),
+                        Paragraph(val_str or '—', S['field_value'])]
             else:
-                row_cells += [Paragraph('', S['field_label']),
-                              Paragraph('', S['field_value'])]
-
-        rows.append(row_cells)
-
-    col_widths = [label_w, value_w] * cols
-    t = Table(rows, colWidths=col_widths, repeatRows=0)
+                row += [Paragraph('', S['field_label']),
+                        Paragraph('', S['field_value'])]
+        rows.append(row)
+    widths = [lbl_w, val_w] * cols
+    t = Table(rows, colWidths=widths)
     t.setStyle(TableStyle([
-        ('VALIGN',      (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING',  (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 4),
-        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-        ('LINEBELOW',   (0, 0), (-1, -2), 0.3, C_BORDER),
-        ('LINEAFTER',   (1, 0), (1, -1), 0.3, C_BORDER),
+        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [C_GRAY_LITE, C_WHITE]),
+        ('LEFTPADDING',    (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING',   (0, 0), (-1, -1), 6),
+        ('TOPPADDING',     (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING',  (0, 0), (-1, -1), 4),
+        ('LINEBELOW',      (0, 0), (-1, -2), 0.25, C_BORDER),
+        ('VALIGN',         (0, 0), (-1, -1), 'TOP'),
     ]))
     return t
 
 
 def _text_block(label, text, S):
-    """Full-width text area with label."""
-    if not text:
-        text = '— Not provided —'
-    items = [
-        Paragraph(label.upper(), S['field_label']),
-        Spacer(1, 2),
-        Paragraph(str(text).replace('\n', '<br/>'), S['body']),
-    ]
+    """Labelled text block with gold left accent."""
+    items = [Paragraph(label.upper(), S['field_label']), Spacer(1, 3)]
+    if text and str(text).strip():
+        items.append(Paragraph(str(text), S['body']))
+    else:
+        items.append(Paragraph('Not recorded.', S['caption']))
     data = [[items]]
     t = Table(data, colWidths=[CONTENT_W])
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), C_WHITE),
-        ('BOX',        (0, 0), (-1, -1), 0.5, C_BORDER),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING',(0, 0), (-1, -1), 6),
+        ('BACKGROUND',    (0, 0), (-1, -1), C_GRAY_LITE),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 10),
+        ('TOPPADDING',    (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+        ('LINEBEFORE',    (0, 0), (0, -1),  2.5, C_GOLD),
     ]))
     return t
 
 
-def _status_badge(status, S):
-    """Colour-coded status badge."""
-    s = (status or '').upper()
-    if any(x in s for x in ('CLOSED', 'COMPLETED', 'APPROVED', 'EFFECTIVE',
-                              'ACCEPTED', 'ACTIVE')):
-        style = S['badge_green']
-        bg = C_GREEN_LITE
-    elif any(x in s for x in ('OPEN', 'SUBMITTED', 'PENDING', 'PLANNED',
-                                'DRAFT', 'IN PROGRESS')):
-        style = S['badge_gold']
-        bg = C_GOLD_LITE
-    elif any(x in s for x in ('REJECTED', 'OVERDUE', 'INTOLERABLE', 'CRITICAL',
-                                'FAILED')):
-        style = S['badge_red']
-        bg = C_RED_LITE
-    else:
-        style = S['badge_blue']
-        bg = C_BLUE_LITE
+def _std_table(header_cells, data_rows, col_widths, S, stripe=True):
+    """
+    Premium standard table.
+    header_cells: list of strings
+    data_rows: list of lists of Paragraph (or strings auto-converted)
+    col_widths: list of mm values, must sum to CONTENT_W
+    """
+    def _p(v, style):
+        if isinstance(v, Paragraph):
+            return v
+        return Paragraph(str(v) if v is not None else '—', S[style])
 
-    data = [[Paragraph(f'  {status or "—"}  ', style)]]
-    t = Table(data)
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), bg),
-        ('BOX',        (0, 0), (-1, -1), 0.5, HexColor('#d1d5db')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING',(0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 6),
-    ]))
+    rows = [[_p(h, 'th') for h in header_cells]]
+    for dr in data_rows:
+        rows.append([_p(c, 'td') for c in dr])
+
+    t = Table(rows, colWidths=col_widths, repeatRows=1)
+    style = [
+        # Header
+        ('BACKGROUND',    (0, 0), (-1, 0),   C_NAVY),
+        ('TEXTCOLOR',     (0, 0), (-1, 0),   C_WHITE),
+        ('TOPPADDING',    (0, 0), (-1, 0),   5),
+        ('BOTTOMPADDING', (0, 0), (-1, 0),   5),
+        # Body
+        ('TOPPADDING',    (0, 1), (-1, -1),  4),
+        ('BOTTOMPADDING', (0, 1), (-1, -1),  4),
+        ('LINEBELOW',     (0, 0), (-1, -1),  0.3, C_BORDER),
+        ('VALIGN',        (0, 0), (-1, -1),  'TOP'),
+        ('LEFTPADDING',   (0, 0), (-1, -1),  5),
+        ('RIGHTPADDING',  (0, 0), (-1, -1),  5),
+    ]
+    if stripe:
+        style.append(('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]))
+    t.setStyle(TableStyle(style))
     return t
 
 
-def _risk_matrix_cell(risk_index, S):
-    """Render a risk index value with INTOLERABLE/TOLERABLE/ACCEPTABLE colour."""
-    INTOLERABLE = {'5A','5B','5C','4A','4B','3A'}
-    TOLERABLE   = {'5D','5E','4C','4D','4E','3B','3C','3D','2A','2B','2C','1A'}
-    ri = (risk_index or '').upper()
-    if ri in INTOLERABLE:
-        bg, style = C_RED_LITE, S['risk_intolerable']
-        label = f'{ri} — INTOLERABLE'
-    elif ri in TOLERABLE:
-        bg, style = C_ORANGE_LT, S['risk_tolerable']
-        label = f'{ri} — TOLERABLE'
-    else:
-        bg, style = C_GREEN_LITE, S['risk_acceptable']
-        label = f'{ri} — ACCEPTABLE' if ri else '— Not Assessed'
+def _status_para(status, S):
+    """Coloured status text paragraph."""
+    s = (status or '').strip()
+    up = s.upper()
+    color = (C_GREEN  if up in ('CLOSED', 'APPROVED', 'COMPLETED', 'EFFECTIVE',
+                                 'VERIFIED', 'IMPLEMENTED') else
+             C_RED    if up in ('OVERDUE', 'REJECTED', 'FAILED', 'INTOLERABLE') else
+             C_ORANGE if up in ('UNDER REVIEW', 'PENDING', 'DRAFT',
+                                 'TOLERABLE', 'IN PROGRESS') else
+             C_BLUE   if up in ('OPEN', 'ACTIVE', 'ASSIGNED') else C_GRAY)
+    return Paragraph(s,
+                     ParagraphStyle('_sp', fontName='Helvetica-Bold',
+                                    fontSize=8, textColor=color))
 
-    data = [[Paragraph(label, style)]]
-    t = Table(data)
+
+def _signature_block(signatories, S):
+    """
+    Premium signature block.
+    signatories: list of {'role': str, 'name': str, 'date': str}
+    """
+    n = len(signatories)
+    if not n:
+        return Spacer(1, 2)
+    col_w = CONTENT_W / n
+    cells = []
+    for sig in signatories:
+        cell = [
+            Paragraph(sig.get('role', '').upper(), S['field_label']),
+            Spacer(1, 14),
+            Table([['']], colWidths=[col_w - 12*mm],
+                  style=TableStyle([('LINEABOVE', (0,0), (-1,-1), 0.8, C_DIVIDER)])),
+            Spacer(1, 3),
+            Paragraph(sig.get('name', '') or '________________', S['field_value']),
+            Paragraph(f"Date: {sig.get('date', '') or '____________'}", S['caption']),
+        ]
+        cells.append(cell)
+    t = Table([cells], colWidths=[col_w] * n)
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), bg),
-        ('BOX',        (0, 0), (-1, -1), 0.5, HexColor('#d1d5db')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING',(0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 6),
+        ('BACKGROUND',    (0, 0), (-1, -1), C_GRAY_LITE),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
+        ('TOPPADDING',    (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('LINEBEFORE',    (1, 0), (-1, -1), 0.5, C_BORDER),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
     ]))
     return t
 
 
 def _timeline_table(events, S):
-    """Render an audit timeline as a bordered table."""
+    """Premium activity timeline table."""
     if not events:
-        return Paragraph('No timeline events recorded.', S['small'])
-
-    rows = [[
-        Paragraph('DATE / TIME', S['field_label']),
-        Paragraph('EVENT', S['field_label']),
-        Paragraph('USER', S['field_label']),
-        Paragraph('NOTES', S['field_label']),
-    ]]
+        return Paragraph('No activity recorded.', S['caption'])
+    headers = ['DATE / TIME', 'EVENT', 'BY', 'NOTES']
+    cw = [32*mm, 52*mm, 35*mm, CONTENT_W - 32*mm - 52*mm - 35*mm]
+    rows = []
     for ev in events:
         rows.append([
-            Paragraph(str(ev.get('date', '—')), S['small']),
-            Paragraph(str(ev.get('event', '—')), S['mono']),
-            Paragraph(str(ev.get('user', '—')), S['small']),
-            Paragraph(str(ev.get('notes', '')), S['small']),
+            Paragraph(ev.get('date', '—'), S['mono']),
+            Paragraph(ev.get('event', '—'), S['td']),
+            Paragraph(ev.get('user', '—'), S['small']),
+            Paragraph(ev.get('notes', '') or '—', S['small']),
         ])
-
-    col_w = [32 * mm, 60 * mm, 35 * mm, CONTENT_W - 32 * mm - 60 * mm - 35 * mm]
-    t = Table(rows, colWidths=col_w, repeatRows=1)
-    t.setStyle(TableStyle([
-        ('BACKGROUND',  (0, 0), (-1, 0),  C_NAVY),
-        ('TEXTCOLOR',   (0, 0), (-1, 0),  C_WHITE),
-        ('FONTNAME',    (0, 0), (-1, 0),  'Helvetica-Bold'),
-        ('FONTSIZE',    (0, 0), (-1, 0),  7),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-        ('GRID',        (0, 0), (-1, -1), 0.3, C_BORDER),
-        ('VALIGN',      (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING',  (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING',(0,0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 5),
-    ]))
-    return t
+    return _std_table(headers, rows, cw, S)
 
 
-def _actions_table(actions, S):
-    """Render linked actions/CAPs as a table."""
-    if not actions:
-        return Paragraph('No corrective actions linked.', S['small'])
-
-    rows = [[
-        Paragraph('REF', S['field_label']),
-        Paragraph('DESCRIPTION', S['field_label']),
-        Paragraph('OWNER', S['field_label']),
-        Paragraph('DUE', S['field_label']),
-        Paragraph('PRIORITY', S['field_label']),
-        Paragraph('STATUS', S['field_label']),
-    ]]
-    for a in actions:
+def _actions_table(action_dicts, S):
+    """Standard corrective actions table."""
+    if not action_dicts:
+        return Paragraph('No corrective actions recorded.', S['caption'])
+    headers = ['ACTION ID', 'DESCRIPTION', 'STATUS', 'ASSIGNED TO', 'DUE DATE']
+    cw = [20*mm, 72*mm, 22*mm, 38*mm, CONTENT_W - 20*mm - 72*mm - 22*mm - 38*mm]
+    rows = []
+    for a in action_dicts:
         rows.append([
             Paragraph(str(a.get('id', '—')), S['mono']),
-            Paragraph(str(a.get('description', '—'))[:120], S['small']),
-            Paragraph(str(a.get('owner', '—')), S['small']),
-            Paragraph(str(a.get('due_date', '—')), S['small']),
-            Paragraph(str(a.get('priority', '—')), S['small']),
-            Paragraph(str(a.get('status', '—')), S['small']),
+            Paragraph(a.get('description', '—') or '—', S['td']),
+            _status_para(a.get('status', '—'), S),
+            Paragraph(a.get('owner', '—') or '—', S['small']),
+            Paragraph(a.get('due_date', '—') or '—', S['small']),
         ])
-
-    col_w = [22*mm, CONTENT_W-22*mm-28*mm-18*mm-18*mm-22*mm, 28*mm, 18*mm, 18*mm, 22*mm]
-    t = Table(rows, colWidths=col_w, repeatRows=1)
-    t.setStyle(TableStyle([
-        ('BACKGROUND',  (0, 0), (-1, 0),  C_NAVY),
-        ('TEXTCOLOR',   (0, 0), (-1, 0),  C_WHITE),
-        ('FONTNAME',    (0, 0), (-1, 0),  'Helvetica-Bold'),
-        ('FONTSIZE',    (0, 0), (-1, 0),  7),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-        ('GRID',        (0, 0), (-1, -1), 0.3, C_BORDER),
-        ('VALIGN',      (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING',  (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING',(0,0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 5),
-    ]))
-    return t
+    return _std_table(headers, rows, cw, S)
 
 
-def _signature_block(signers, S):
+def _cover_banner(title, ref, doc_type, status, dept, date_str,
+                  classification, S):
     """
-    Render a multi-column signature block.
-    signers: list of {'role': str, 'name': str, 'date': str}
+    Premium A4-width cover section — full navy card with gold accents.
+    Used as the first flowable in every report.
     """
-    if not signers:
-        return Spacer(1, 2)
+    # Status colour
+    su = (status or '').upper()
+    sc = (C_GREEN  if su in ('CLOSED', 'APPROVED', 'COMPLETED', 'IMPLEMENTED') else
+          C_RED    if su in ('OVERDUE', 'REJECTED') else
+          C_ORANGE if su in ('UNDER REVIEW', 'DRAFT', 'PENDING') else
+          C_BLUE   if su in ('OPEN', 'ACTIVE') else C_GRAY)
 
-    col_w = CONTENT_W / len(signers)
-    cells = []
-    for sig in signers:
-        block = [
-            Paragraph(str(sig.get('role', '')).upper(), S['field_label']),
-            Spacer(1, 12),
-            _hr(C_NAVY, thickness=0.8, spaceB=2, spaceA=2),
-            Paragraph(str(sig.get('name', '')) or '________________________', S['field_value']),
-            Paragraph(f"Date: {sig.get('date', '') or '____________'}", S['small']),
-        ]
-        cells.append(block)
-
-    t = Table([cells], colWidths=[col_w] * len(signers))
-    t.setStyle(TableStyle([
-        ('VALIGN',      (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING',  (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING',(0,0), (-1, -1), 8),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 8),
-        ('LINEAFTER',   (0, 0), (-2, -1), 0.5, C_BORDER),
-        ('BOX',         (0, 0), (-1, -1), 0.5, C_NAVY),
-        ('BACKGROUND',  (0, 0), (-1, -1), C_GRAY_LITE),
+    status_badge = Table(
+        [[Paragraph(f'  {status or "—"}  ',
+                    ParagraphStyle('_sb', fontName='Helvetica-Bold',
+                                   fontSize=8, textColor=C_WHITE))]],
+        colWidths=[28*mm])
+    status_badge.setStyle(TableStyle([
+        ('BACKGROUND',    (0,0), (-1,-1), sc),
+        ('TOPPADDING',    (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('LEFTPADDING',   (0,0), (-1,-1), 4),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 4),
     ]))
-    return t
 
+    top_content = [
+        Paragraph(doc_type.upper(),
+                  ParagraphStyle('_dt', fontName='Helvetica', fontSize=8,
+                                 textColor=C_GOLD, leading=11)),
+        Spacer(1, 5),
+        Paragraph(title or doc_type,
+                  ParagraphStyle('_tt', fontName='Helvetica-Bold', fontSize=16,
+                                 textColor=C_WHITE, leading=21)),
+        Spacer(1, 8),
+        _hr(C_GOLD, thickness=1, spaceB=0, spaceA=6),
+        Table([[
+            [Paragraph('REFERENCE', S['cover_label']),
+             Paragraph(ref or '—', S['cover_value'])],
+            [Paragraph('STATUS', S['cover_label']), status_badge],
+            [Paragraph('DEPARTMENT', S['cover_label']),
+             Paragraph(dept or '—', S['cover_value'])],
+            [Paragraph('DATE', S['cover_label']),
+             Paragraph(date_str or '—', S['cover_value'])],
+            [Paragraph('CLASSIFICATION', S['cover_label']),
+             Paragraph(classification, S['cover_value'])],
+            [Paragraph('GENERATED', S['cover_label']),
+             Paragraph(datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC'),
+                       S['cover_value'])],
+        ]], colWidths=[CONTENT_W - 24*mm]),
+    ]
 
-def _cover_banner(title, ref, doc_type, status, dept, date_str, classification, S):
-    """Full-width cover banner rendered as the first flowable after header."""
-    data = [[
-        [
-            Spacer(1, 2),
-            Paragraph(doc_type.upper(), S['small']),
-            Paragraph(title or doc_type, S['title']),
-            Spacer(1, 4),
-            _hr(C_GOLD, thickness=1.5, spaceB=2, spaceA=4),
-            _info_grid([
-                ('Reference', ref or '—'),
-                ('Status', status or '—'),
-                ('Department', dept or '—'),
-                ('Date', date_str or '—'),
-                ('Classification', classification),
-                ('Generated', datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')),
-            ], S, cols=2),
-        ]
-    ]]
-    t = Table(data, colWidths=[CONTENT_W])
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), C_WHITE),
-        ('BOX',        (0, 0), (-1, -1), 1, C_NAVY),
-        ('LEFTPADDING', (0, 0), (-1, -1), 12),
-        ('RIGHTPADDING',(0, 0), (-1, -1), 12),
-        ('TOPPADDING', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING',(0,0), (-1, -1), 10),
-        ('LINEBELOW',  (0, 0), (-1, 0),  3, C_GOLD),
+    outer = Table([[top_content]], colWidths=[CONTENT_W])
+    outer.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), C_NAVY),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 14),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 14),
+        ('TOPPADDING',    (0, 0), (-1, -1), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+        ('LINEBELOW',     (0, 0), (-1, -1), 3.5, C_GOLD),
+        ('LINEBEFORE',    (0, 0), (0,  -1), 4,   C_GOLD),
     ]))
-    return t
+    return outer
+
+
+def _risk_matrix_cell(code, S):
+    INTOLER = {'5A','5B','5C','4A','4B','3A'}
+    TOLER   = {'4C','3B','3C','2A','2B','5D','4D'}
+    if code in INTOLER:
+        return Paragraph(code, S['risk_high'])
+    if code in TOLER:
+        return Paragraph(code, S['risk_med'])
+    return Paragraph(code, S['risk_low'])
 
 
 # =============================================================================
-#  CORE PDF BUILDER
-# =============================================================================
-def _build_doc(flowables, doc_type, control_number, classification,
-               generated_by, report_status):
-    buf = BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=MARGIN, rightMargin=MARGIN,
-        topMargin=28 * mm, bottomMargin=18 * mm,
-        title=f'{doc_type} — {control_number}',
-        author='AviaS Safety Management System',
-        subject='ICAO Annex 19 Controlled Document',
-        creator='AviaS SMS v2.0',
-    )
-    hf = _AviaHeader(doc_type, control_number, classification,
-                     generated_by, report_status)
-    doc.build(flowables, onFirstPage=hf, onLaterPages=hf)
-    return buf.getvalue()
-
-
-# =============================================================================
-#  INDIVIDUAL REPORT GENERATORS
+#  REPORT GENERATORS
 # =============================================================================
 
+# ── 1. HAZARD REPORT ─────────────────────────────────────────────────────────
 def pdf_hazard_report(hr, hazard, actions, history, risks, investigation,
                       ra, generated_by='Safety Department'):
-    """
-    Generate a complete Hazard Report PDF.
-    hr         : HazardReport model instance
-    hazard     : Hazard model instance (or None)
-    actions    : list of Action instances
-    history    : list of ActionHistory instances
-    risks      : list of Risk instances
-    investigation : Investigation instance (or None)
-    ra         : RiskAssessment instance (or None)
-    """
-    S = _styles()
-    dept_name = (hr.department.name if hr.department else '—') if hr else '—'
+    S   = _styles()
     ref = hr.id if hr else '—'
     status = hr.status if hr else '—'
-    title = (hr.generic_hazard or hr.description or 'Hazard Report')[:80] if hr else 'Hazard Report'
+    title  = (hr.generic_hazard or hr.description or 'Hazard Report') if hr else 'Hazard Report'
+    dept   = (hr.department.name if hr.department else '—') if hr else '—'
+    E = []
 
-    E = []  # flowables
+    E.append(_cover_banner(title, ref, 'Hazard Report', status, dept,
+                           hr.date if hr else '—',
+                           'RESTRICTED — SAFETY SENSITIVE', S))
+    E.append(Spacer(1, 10))
 
-    # Cover banner
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type='Hazard Report',
-        status=status, dept=dept_name,
-        date_str=hr.date if hr else '—',
-        classification='RESTRICTED — SAFETY SENSITIVE', S=S
-    ))
-    E.append(Spacer(1, 6))
-
-    # ── SECTION 1: REPORT INFORMATION ────────────────────────────────────────
     E.append(_section_header('1. Report Information', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Report Reference', ref),
-        ('Report Type',      hr.report_type or 'Hazard Report'),
-        ('Date of Occurrence', hr.date or '—'),
-        ('Location',         hr.location or '—'),
-        ('Classification',   hr.classification or '—'),
-        ('Reporter',         hr.reporter or 'Anonymous'),
-        ('Reporter Severity',hr.reporter_severity or '—'),
-        ('Workflow Status',  hr.status or '—'),
-        ('Linked Hazard',    hr.hazard_id or '—'),
-        ('Department',       dept_name),
+        ('Report Reference',    ref),
+        ('Report Type',         getattr(hr, 'report_type', 'Hazard Report') or 'Hazard Report'),
+        ('Date of Occurrence',  hr.date if hr else '—'),
+        ('Location',            getattr(hr, 'location', '—') or '—'),
+        ('Classification',      getattr(hr, 'classification', '—') or '—'),
+        ('Reporter',            getattr(hr, 'reporter', 'Anonymous') or 'Anonymous'),
+        ('Reporter Severity',   getattr(hr, 'reporter_severity', '—') or '—'),
+        ('Workflow Status',     status),
+        ('Linked Hazard',       getattr(hr, 'hazard_id', '—') or '—'),
+        ('Department',          dept),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
-    # ── SECTION 2: HAZARD DESCRIPTION ────────────────────────────────────────
     E.append(_section_header('2. Hazard Description', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Generic Hazard / Event Title',
-                         hr.generic_hazard if hr else '', S))
+    for lbl, attr in [
+        ('Generic Hazard / Event Title', 'generic_hazard'),
+        ('Detailed Description',          'description'),
+        ('Potential Consequences',         'consequences'),
+        ('Immediate Action Taken',         'immediate_action'),
+        ('Suggested Mitigation',           'suggested_mitigation'),
+    ]:
+        E.append(_text_block(lbl, getattr(hr, attr, '') if hr else '', S))
+        E.append(Spacer(1, 4))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Detailed Description', hr.description if hr else '', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Potential Consequences', hr.consequences if hr else '', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Immediate Action Taken', hr.immediate_action if hr else '', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Suggested Mitigation', hr.suggested_mitigation if hr else '', S))
-    E.append(Spacer(1, 6))
 
-    # ── SECTION 3: HAZARD LOG ENTRY ───────────────────────────────────────────
     if hazard:
         E.append(_section_header('3. Hazard Log Entry', S))
         E.append(Spacer(1, 4))
@@ -584,475 +606,324 @@ def pdf_hazard_report(hr, hazard, actions, history, risks, investigation,
             ('Hazard ID',        hazard.id),
             ('Source',           hazard.source or '—'),
             ('Classification',   hazard.classification or '—'),
-            ('Type of Activity', hazard.type_of_activity or '—'),
+            ('Type of Activity', getattr(hazard, 'type_of_activity', '—') or '—'),
             ('Generic Hazard',   hazard.generic_hazard or '—'),
             ('Status',           hazard.status or '—'),
             ('Owner',            hazard.owner or '—'),
             ('Department',       hazard.department.name if hazard.department else '—'),
         ], S, cols=2))
         E.append(Spacer(1, 4))
-        E.append(_text_block('Specific Components', hazard.specific_components, S))
-        E.append(Spacer(1, 4))
-        E.append(_text_block('Consequences', hazard.consequences, S))
-        E.append(Spacer(1, 6))
+        E.append(_text_block('Specific Components', getattr(hazard, 'specific_components', ''), S))
+        E.append(Spacer(1, 8))
 
-    # ── SECTION 4: RISK ASSESSMENT ────────────────────────────────────────────
     if risks:
         E.append(_section_header('4. Risk Assessment', S))
         E.append(Spacer(1, 4))
-        risk_rows = [[
-            Paragraph('RISK ID',           S['field_label']),
-            Paragraph('DESCRIPTION',       S['field_label']),
-            Paragraph('INITIAL RISK',      S['field_label']),
-            Paragraph('RESIDUAL RISK',     S['field_label']),
-            Paragraph('TOLERANCE',         S['field_label']),
-        ]]
-        for r in risks:
-            risk_rows.append([
-                Paragraph(r.id or '—', S['mono']),
-                Paragraph((r.description or '—')[:100], S['small']),
-                Paragraph(f'{r.initial_risk_index or "—"}', S['small']),
-                Paragraph(f'{r.residual_risk_index or "—"}', S['small']),
-                Paragraph(r.residual_tolerance or '—', S['small']),
-            ])
-        col_w = [22*mm, CONTENT_W-22*mm-30*mm-30*mm-35*mm, 30*mm, 30*mm, 35*mm]
-        rt = Table(risk_rows, colWidths=col_w, repeatRows=1)
-        rt.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
-            ('TEXTCOLOR',  (0, 0), (-1, 0), C_WHITE),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',       (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',     (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-            ('LEFTPADDING',(0, 0), (-1, -1), 5),
-        ]))
-        E.append(rt)
-        E.append(Spacer(1, 6))
+        cw = [22*mm, CONTENT_W-22*mm-30*mm-30*mm-30*mm, 30*mm, 30*mm, 30*mm]
+        rows = [[
+            Paragraph(getattr(r, 'id', '—') or '—', S['mono']),
+            Paragraph(getattr(r, 'description', '—') or '—', S['td']),
+            Paragraph(str(getattr(r, 'initial_risk_index', '—') or '—'), S['td']),
+            Paragraph(str(getattr(r, 'residual_risk_index', '—') or '—'), S['td']),
+            Paragraph(getattr(r, 'residual_tolerance', '—') or '—', S['td']),
+        ] for r in risks]
+        E.append(_std_table(['RISK ID','DESCRIPTION','INIT RISK','RES RISK','TOLERANCE'],
+                            rows, cw, S))
+        E.append(Spacer(1, 8))
 
-    # ── SECTION 5: INVESTIGATION ──────────────────────────────────────────────
     if investigation:
         E.append(_section_header('5. Investigation Summary', S))
         E.append(Spacer(1, 4))
         E.append(_info_grid([
-            ('Investigation ID',  investigation.id),
-            ('Investigator',      investigation.investigator or '—'),
-            ('Date of Occurrence', investigation.date_of_occurrence or '—'),
-            ('Status',            investigation.status or '—'),
+            ('Investigation ID',    investigation.id),
+            ('Investigator',        getattr(investigation, 'investigator', '—') or '—'),
+            ('Date of Occurrence',  getattr(investigation, 'date_of_occurrence', '—') or '—'),
+            ('Status',              investigation.status or '—'),
         ], S, cols=2))
         E.append(Spacer(1, 4))
-        E.append(_text_block('Investigation Description', investigation.description, S))
+        E.append(_text_block('Description',   getattr(investigation, 'description', ''), S))
         E.append(Spacer(1, 4))
-        E.append(_text_block('Root Cause Analysis', investigation.root_cause, S))
-        E.append(Spacer(1, 4))
-        # 5-Whys
-        whys = [(f'Why {i}', getattr(investigation, f'why{i}', None))
-                for i in range(1, 6)
-                if getattr(investigation, f'why{i}', None)]
-        if whys:
-            E.append(_text_block('5-Whys Analysis',
-                                 '\n'.join(f'WHY {i}: {v}' for (_, _), (i, v)
-                                            in zip(whys, enumerate(whys, 1))), S))
-        E.append(Spacer(1, 4))
-        E.append(_text_block('Recommendations', investigation.recommendations, S))
-        E.append(Spacer(1, 6))
-
-    # ── SECTION 6: CORRECTIVE ACTIONS ─────────────────────────────────────────
-    E.append(_section_header('6. Corrective Actions & Follow-Up', S))
-    E.append(Spacer(1, 4))
-    action_data = [{
-        'id':          a.id,
-        'description': a.description,
-        'owner':       a.owner,
-        'due_date':    a.due_date,
-        'priority':    a.priority,
-        'status':      a.status,
-    } for a in (actions or [])]
-    E.append(_actions_table(action_data, S))
-    E.append(Spacer(1, 6))
-
-    # ── SECTION 7: AUDIT TRAIL ────────────────────────────────────────────────
-    E.append(_section_header('7. Audit Trail & Timeline', S))
-    E.append(Spacer(1, 4))
-    timeline_events = []
-    for h in (history or []):
-        timeline_events.append({
-            'date':  h.changed_at.strftime('%Y-%m-%d %H:%M') if h.changed_at else '—',
-            'event': f'{h.from_status or "—"} → {h.to_status or "—"}',
-            'user':  h.changed_by or '—',
-            'notes': h.notes or '',
-        })
-    E.append(_timeline_table(timeline_events, S))
-    E.append(Spacer(1, 6))
-
-    # ── SECTION 8: SIGNATURES ─────────────────────────────────────────────────
-    E.append(_section_header('8. Approval & Signature Block', S))
-    E.append(Spacer(1, 6))
-    E.append(_signature_block([
-        {'role': 'Reporter',         'name': hr.reporter if hr else '', 'date': hr.date if hr else ''},
-        {'role': 'Safety Officer',   'name': '', 'date': ''},
-        {'role': 'Safety Manager',   'name': '', 'date': ''},
-        {'role': 'Accountable Mgr',  'name': '', 'date': ''},
-    ], S))
-
-    return _build_doc(E, 'Hazard Report', ref, 'RESTRICTED — SAFETY SENSITIVE',
-                      generated_by, status)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_asr_report(asr, hazard, hr, actions, generated_by='Safety Department'):
-    """Air Safety Report (ASR) PDF."""
-    S = _styles()
-    ref = asr.id if asr else '—'
-    status = 'Submitted'
-    title = (asr.occurrence_type or 'Air Safety Report') if asr else 'Air Safety Report'
-
-    E = []
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type='Air Safety Report (ASR)',
-        status=status, dept='Flight Operations',
-        date_str=asr.date if asr else '—',
-        classification='RESTRICTED — SAFETY SENSITIVE', S=S
-    ))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('1. Report Identification', S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('ASR Reference',     ref),
-        ('Report Type',       asr.report_type or '—'),
-        ('Occurrence Type',   asr.occurrence_type or '—'),
-        ('Date',              asr.date or '—'),
-        ('Time Local',        asr.time_local or '—'),
-        ('Time UTC',          asr.time_utc or '—'),
-        ('Flight Number',     asr.flight_no or '—'),
-        ('Route',             f"{asr.route_from or '—'} → {asr.route_to or '—'}"),
-        ('Aircraft Type',     asr.aircraft_type or '—'),
-        ('Registration',      asr.registration or '—'),
-        ('Flight Phase',      asr.flight_phase or '—'),
-        ('Altitude (ft)',     str(asr.altitude_ft or '—')),
-        ('PAX',               str(asr.pax or '—')),
-        ('Crew',              str(asr.crew or '—')),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('2. Crew Information', S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Captain / Reporter', asr.captain or '—'),
-        ('Staff No.',          asr.captain_staff_no or '—'),
-        ('Co-Pilot',           asr.copilot or '—'),
-        ('Co-Pilot Staff No.', asr.copilot_staff_no or '—'),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('3. Meteorological Conditions', S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Wind',     asr.weather_wind or '—'),
-        ('Vis/RVR',  asr.weather_vis_rvr or '—'),
-        ('Clouds',   asr.weather_clouds or '—'),
-        ('Temp (°C)',str(asr.weather_temp_c or '—')),
-        ('QNH',      str(asr.weather_qnh or '—')),
-        ('Runway',   asr.runway or '—'),
-        ('Rwy State',asr.runway_state or '—'),
-        ('Squawk',   asr.squawk or '—'),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('4. Event Description & Actions Taken', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Event Description', asr.event_description, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Immediate Actions Taken', asr.action_taken, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('5. Risk Index', S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Severity',     asr.severity or '—'),
-        ('Likelihood',   str(asr.likelihood or '—')),
-        ('Risk Index',   asr.risk_index or '—'),
-        ('Linked Hazard',asr.hazard_id or '—'),
-    ], S, cols=2))
-    E.append(Spacer(1, 4))
-    if asr.risk_index:
-        E.append(_risk_matrix_cell(asr.risk_index, S))
-    E.append(Spacer(1, 6))
+        E.append(_text_block('Root Cause',    getattr(investigation, 'root_cause', ''), S))
+        E.append(Spacer(1, 8))
 
     E.append(_section_header('6. Corrective Actions', S))
     E.append(Spacer(1, 4))
-    action_data = [{'id': a.id, 'description': a.description,
-                    'owner': a.owner, 'due_date': a.due_date,
-                    'priority': a.priority, 'status': a.status}
-                   for a in (actions or [])]
-    E.append(_actions_table(action_data, S))
-    E.append(Spacer(1, 6))
+    E.append(_actions_table([{
+        'id': a.id, 'description': a.description,
+        'owner': a.owner, 'due_date': a.due_date, 'status': a.status,
+    } for a in (actions or [])], S))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('7. Signatures', S))
+    E.append(_section_header('7. Audit Trail', S))
+    E.append(Spacer(1, 4))
+    E.append(_timeline_table([{
+        'date':  h.changed_at.strftime('%Y-%m-%d %H:%M') if h.changed_at else '—',
+        'event': f'{h.from_status or "—"} → {h.to_status or "—"}',
+        'user':  h.changed_by or '—', 'notes': h.notes or '',
+    } for h in (history or [])], S))
+    E.append(Spacer(1, 8))
+
+    E.append(_section_header('8. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
-        {'role': 'Captain / Reporter', 'name': asr.captain or '', 'date': asr.date or ''},
-        {'role': 'Safety Officer',     'name': '', 'date': ''},
-        {'role': 'Safety Manager',     'name': '', 'date': ''},
+        {'role': 'Reporter',        'name': getattr(hr, 'reporter', '') if hr else '', 'date': hr.date if hr else ''},
+        {'role': 'Safety Officer',  'name': '', 'date': ''},
+        {'role': 'Safety Manager',  'name': '', 'date': ''},
+        {'role': 'Accountable Mgr', 'name': '', 'date': ''},
     ], S))
 
-    return _build_doc(E, 'Air Safety Report', ref, 'RESTRICTED — SAFETY SENSITIVE',
-                      generated_by, 'Submitted')
+    return _build_doc(E, 'Hazard Report', ref,
+                      'RESTRICTED — SAFETY SENSITIVE', generated_by, status)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_investigation(inv, hazard, actions, generated_by='Safety Department'):
-    """Investigation Report PDF."""
-    S = _styles()
-    ref = inv.id if inv else '—'
-    status = inv.status if inv else '—'
-    title = inv.title or 'Investigation Report'
-    dept = inv.department.name if inv and inv.department else '—'
-
+# ── 2. AIR SAFETY REPORT ─────────────────────────────────────────────────────
+def pdf_asr_report(asr, hazard, hr, actions, generated_by='Safety Department'):
+    S      = _styles()
+    ref    = asr.id if asr else '—'
+    status = 'Submitted'
+    title  = (getattr(asr, 'occurrence_type', None) or 'Air Safety Report') if asr else 'Air Safety Report'
     E = []
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type='Investigation Report',
-        status=status, dept=dept,
-        date_str=inv.date_of_occurrence if inv else '—',
-        classification='RESTRICTED — SAFETY SENSITIVE', S=S
-    ))
-    E.append(Spacer(1, 6))
 
-    E.append(_section_header('1. Investigation Details', S))
+    E.append(_cover_banner(title, ref, 'Air Safety Report (ASR)', status,
+                           'Flight Operations', asr.date if asr else '—',
+                           'RESTRICTED — SAFETY SENSITIVE', S))
+    E.append(Spacer(1, 10))
+
+    E.append(_section_header('1. Occurrence Information', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Investigation Ref',    ref),
-        ('Title',                inv.title or '—'),
-        ('Linked Report',        inv.linked_report_id or '—'),
-        ('Linked Hazard',        inv.hazard_id or '—'),
-        ('Date of Occurrence',   inv.date_of_occurrence or '—'),
-        ('Investigator',         inv.investigator or '—'),
+        ('ASR Reference',       ref),
+        ('Occurrence Type',     getattr(asr, 'occurrence_type', '—') or '—'),
+        ('Date',                getattr(asr, 'date', '—') or '—'),
+        ('Time (UTC)',          getattr(asr, 'time_utc', '—') or '—'),
+        ('Phase of Flight',     getattr(asr, 'phase_of_flight', '—') or '—'),
+        ('Aircraft Reg.',       getattr(asr, 'aircraft_registration', '—') or '—'),
+        ('Aircraft Type',       getattr(asr, 'aircraft_type', '—') or '—'),
+        ('Route',               getattr(asr, 'route', '—') or '—'),
+        ('Captain',             getattr(asr, 'captain_name', '—') or '—'),
+        ('Reporter',            getattr(asr, 'reporter_name', '—') or '—'),
+    ], S, cols=2))
+    E.append(Spacer(1, 8))
+
+    E.append(_section_header('2. Description of Occurrence', S))
+    E.append(Spacer(1, 4))
+    for lbl, attr in [
+        ('Description',              'description'),
+        ('Hazard / Safety Issue',     'hazard_description'),
+        ('Immediate Actions Taken',   'immediate_action'),
+        ('Suggested Prevention',      'suggested_prevention'),
+    ]:
+        E.append(_text_block(lbl, getattr(asr, attr, '') if asr else '', S))
+        E.append(Spacer(1, 4))
+    E.append(Spacer(1, 4))
+
+    if hazard:
+        E.append(_section_header('3. Linked Hazard Record', S))
+        E.append(Spacer(1, 4))
+        E.append(_info_grid([
+            ('Hazard ID',   hazard.id),
+            ('Status',      hazard.status or '—'),
+            ('Owner',       hazard.owner or '—'),
+            ('Department',  hazard.department.name if hazard.department else '—'),
+        ], S, cols=2))
+        E.append(Spacer(1, 8))
+
+    E.append(_section_header('4. Corrective Actions', S))
+    E.append(Spacer(1, 4))
+    E.append(_actions_table([{
+        'id': a.id, 'description': a.description,
+        'owner': a.owner, 'due_date': a.due_date, 'status': a.status,
+    } for a in (actions or [])], S))
+    E.append(Spacer(1, 8))
+
+    E.append(_section_header('5. Signatures & Authorisation', S))
+    E.append(Spacer(1, 6))
+    E.append(_signature_block([
+        {'role': 'Reporting Crew',  'name': getattr(asr, 'reporter_name', '') if asr else '', 'date': getattr(asr, 'date', '') if asr else ''},
+        {'role': 'Safety Officer',  'name': '', 'date': ''},
+        {'role': 'Safety Manager',  'name': '', 'date': ''},
+        {'role': 'Accountable Mgr', 'name': '', 'date': ''},
+    ], S))
+
+    return _build_doc(E, 'Air Safety Report', ref,
+                      'RESTRICTED — SAFETY SENSITIVE', generated_by, status)
+
+
+# ── 3. INVESTIGATION ─────────────────────────────────────────────────────────
+def pdf_investigation(inv, hazard, actions, generated_by='Safety Department'):
+    S      = _styles()
+    ref    = inv.id if inv else '—'
+    status = inv.status if inv else '—'
+    title  = (inv.title or 'Safety Investigation') if inv else 'Safety Investigation'
+    dept   = (inv.department.name if inv.department else '—') if inv else '—'
+    E = []
+
+    E.append(_cover_banner(title, ref, 'Safety Investigation Report', status, dept,
+                           getattr(inv, 'date_of_occurrence', '—') if inv else '—',
+                           'RESTRICTED — SAFETY SENSITIVE', S))
+    E.append(Spacer(1, 10))
+
+    E.append(_section_header('1. Investigation Overview', S))
+    E.append(Spacer(1, 4))
+    E.append(_info_grid([
+        ('Investigation Ref.',   ref),
+        ('Classification',       getattr(inv, 'classification', '—') or '—'),
+        ('Date of Occurrence',   getattr(inv, 'date_of_occurrence', '—') or '—'),
+        ('Date Opened',          getattr(inv, 'date_opened', '—') or '—'),
+        ('Date Closed',          getattr(inv, 'date_closed', '—') or '—'),
+        ('Lead Investigator',    getattr(inv, 'investigator', '—') or '—'),
         ('Department',           dept),
         ('Status',               status),
+        ('Linked Hazard',        getattr(inv, 'hazard_id', '—') or '—'),
+        ('Linked Report',        getattr(inv, 'linked_report_id', '—') or '—'),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('2. Event Description', S))
+    E.append(_section_header('2. Investigation Narrative', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Description of Event', inv.description, S))
-    E.append(Spacer(1, 6))
+    for lbl, attr in [
+        ('Description',          'description'),
+        ('Contributing Factors', 'contributing_factors'),
+        ('Root Cause Analysis',  'root_cause'),
+        ('Recommendations',      'recommendations'),
+    ]:
+        E.append(_text_block(lbl, getattr(inv, attr, '') if inv else '', S))
+        E.append(Spacer(1, 4))
 
-    E.append(_section_header('3. Root Cause Analysis — 5-Whys', S))
-    E.append(Spacer(1, 4))
-    for i in range(1, 6):
-        why_text = getattr(inv, f'why{i}', None)
-        if why_text:
-            E.append(_text_block(f'Why {i}', why_text, S))
+    # 5-Whys
+    whys = [(f'Why {i}', getattr(inv, f'why{i}', None))
+            for i in range(1, 6) if getattr(inv, f'why{i}', None)]
+    if whys:
+        E.append(_section_header('3. Five-Whys Root Cause Analysis', S))
+        E.append(Spacer(1, 4))
+        for label, val in whys:
+            E.append(_text_block(label, val, S))
             E.append(Spacer(1, 3))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Root Cause Determination', inv.root_cause, S))
-    E.append(Spacer(1, 6))
+        E.append(Spacer(1, 4))
 
-    E.append(_section_header('4. Contributing Factors', S))
+    E.append(_section_header('4. Corrective & Preventive Actions', S))
     E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Human Factors',         inv.human_factors or '—'),
-        ('Technical Factors',     inv.technical_factors or '—'),
-        ('Organizational Factors',inv.organizational_factors or '—'),
-        ('Environmental Factors', inv.environmental_factors or '—'),
-    ], S, cols=1))
-    E.append(Spacer(1, 6))
+    E.append(_actions_table([{
+        'id': a.id, 'description': a.description,
+        'owner': a.owner, 'due_date': a.due_date, 'status': a.status,
+    } for a in (actions or [])], S))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('5. Recommendations & Corrective Actions', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Recommendations', inv.recommendations, S))
-    E.append(Spacer(1, 4))
-    action_data = [{'id': a.id, 'description': a.description,
-                    'owner': a.owner, 'due_date': a.due_date,
-                    'priority': a.priority, 'status': a.status}
-                   for a in (actions or [])]
-    E.append(_actions_table(action_data, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('6. Signatures', S))
+    E.append(_section_header('5. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
-        {'role': 'Investigator',   'name': inv.investigator or '', 'date': ''},
-        {'role': 'Safety Manager', 'name': '', 'date': ''},
-        {'role': 'Accountable Mgr','name': '', 'date': ''},
+        {'role': 'Lead Investigator', 'name': getattr(inv, 'investigator', '') if inv else '', 'date': getattr(inv, 'date_closed', '') if inv else ''},
+        {'role': 'Safety Manager',    'name': '', 'date': ''},
+        {'role': 'Accountable Mgr',   'name': '', 'date': ''},
+        {'role': 'Reviewed By',       'name': '', 'date': ''},
     ], S))
 
-    return _build_doc(E, 'Investigation Report', ref, 'RESTRICTED — SAFETY SENSITIVE',
-                      generated_by, status)
+    return _build_doc(E, 'Safety Investigation', ref,
+                      'RESTRICTED — SAFETY SENSITIVE', generated_by, status)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
+# ── 4. RISK ASSESSMENT ───────────────────────────────────────────────────────
 def pdf_risk_assessment(ra, hazard, rows, mitigations, reviews,
                         generated_by='Safety Department'):
-    """Risk Assessment PDF — mirrors AviaS RA Form pages 1-5."""
-    S = _styles()
+    S   = _styles()
     ref = ra.control_number or ra.id if ra else '—'
     status = ra.status if ra else '—'
-    title = ra.title or 'Risk Assessment'
-    dept = ra.department.name if ra and ra.department else '—'
-    rev = f'REV{ra.revision}' if ra else 'REV0'
-
+    title  = ra.title or 'Risk Assessment' if ra else 'Risk Assessment'
+    dept   = ra.department.name if ra and ra.department else '—'
+    rev    = f'REV{ra.revision}' if ra and ra.revision else 'REV0'
     E = []
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type=f'Risk Assessment — {rev}',
-        status=status, dept=dept,
-        date_str=ra.assessment_date if ra else '—',
-        classification='RESTRICTED — SAFETY SENSITIVE', S=S
-    ))
-    E.append(Spacer(1, 6))
 
-    # Page 1 — Administration
+    E.append(_cover_banner(title, ref, f'Risk Assessment — {rev}', status, dept,
+                           ra.assessment_date if ra else '—',
+                           'RESTRICTED — SAFETY SENSITIVE', S))
+    E.append(Spacer(1, 10))
+
     E.append(_section_header('1. Administration', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Control Number',    ref),
-        ('Revision',          rev),
-        ('Assessment Date',   ra.assessment_date or '—'),
-        ('Next Review Date',  ra.next_review_date or '—'),
-        ('Responsible Name',  ra.responsible_name or '—'),
-        ('Assessors',         ra.assessors_names or '—'),
-        ('Status',            status),
-        ('Management Accept.',ra.management_acceptance or 'Pending'),
-        ('Acceptance Date',   ra.acceptance_date or '—'),
-        ('Linked Hazard',     ra.hazard_id or '—'),
+        ('Control Number',      ref),
+        ('Revision',            rev),
+        ('Assessment Date',     ra.assessment_date or '—' if ra else '—'),
+        ('Next Review Date',    ra.next_review_date or '—' if ra else '—'),
+        ('Responsible',         ra.responsible_name or '—' if ra else '—'),
+        ('Assessors',           ra.assessors_names or '—' if ra else '—'),
+        ('Status',              status),
+        ('Management Accept.',  ra.management_acceptance or 'Pending' if ra else '—'),
+        ('Acceptance Date',     ra.acceptance_date or '—' if ra else '—'),
+        ('Linked Hazard',       ra.hazard_id or '—' if ra else '—'),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
-    # Page 2 — General Information
     E.append(_section_header('2. General Information', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Risk Level Before Controls', ra.risk_level_prior or '—'),
-        ('Risk Level After Controls',  ra.risk_level_after or '—'),
+        ('Risk Level Before Controls', ra.risk_level_prior or '—' if ra else '—'),
+        ('Risk Level After Controls',  ra.risk_level_after or '—' if ra else '—'),
     ], S, cols=2))
     E.append(Spacer(1, 4))
-    E.append(_text_block('General Description', ra.general_description, S))
+    E.append(_text_block('General Description',          ra.general_description if ra else '', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Reasons for Risk Assessment', ra.reasons, S))
-    E.append(Spacer(1, 6))
+    E.append(_text_block('Reasons for Risk Assessment',  ra.reasons if ra else '', S))
+    E.append(Spacer(1, 8))
 
-    # Page 3 — Risk Table
     if rows:
         E.append(_section_header('3. Risk Table', S))
         E.append(Spacer(1, 4))
-        risk_rows = [[
-            Paragraph('#',          S['field_label']),
-            Paragraph('ACTIVITY',   S['field_label']),
-            Paragraph('HAZARD',     S['field_label']),
-            Paragraph('CONSEQUENCE',S['field_label']),
-            Paragraph('INIT RISK',  S['field_label']),
-            Paragraph('CONTROLS',   S['field_label']),
-            Paragraph('RES RISK',   S['field_label']),
-            Paragraph('TOLERANCE',  S['field_label']),
-        ]]
+        cw = [8*mm, 26*mm, 26*mm, 34*mm, 14*mm, 34*mm, 14*mm,
+              CONTENT_W - 8*mm - 26*mm - 26*mm - 34*mm - 14*mm - 34*mm - 14*mm]
+        tbl_rows = []
         for row in rows:
-            risk_rows.append([
+            tbl_rows.append([
                 Paragraph(str(row.seq_num or ''), S['mono']),
-                Paragraph((row.type_of_activity or '—')[:40], S['small']),
-                Paragraph((row.generic_hazard or '—')[:40], S['small']),
-                Paragraph((row.consequences or '—')[:60], S['small']),
-                Paragraph(row.risk_index_initial or '—', S['small']),
-                Paragraph((row.current_defenses or '—')[:60], S['small']),
-                Paragraph(row.risk_index_residual or '—', S['small']),
-                Paragraph(row.risk_tolerance_residual or '—', S['small']),
+                Paragraph(row.type_of_activity or '—', S['td']),
+                Paragraph(row.generic_hazard or '—', S['td']),
+                Paragraph(row.consequences or '—', S['td']),
+                _risk_matrix_cell(row.risk_index_initial or '—', S),
+                Paragraph(row.current_defenses or '—', S['td']),
+                _risk_matrix_cell(row.risk_index_residual or '—', S),
+                Paragraph(row.risk_tolerance_residual or '—', S['td']),
             ])
-        col_w = [8*mm, 24*mm, 24*mm, 32*mm, 14*mm, 34*mm, 14*mm,
-                 CONTENT_W - 8*mm - 24*mm - 24*mm - 32*mm - 14*mm - 34*mm - 14*mm]
-        rt = Table(risk_rows, colWidths=col_w, repeatRows=1)
-        rt.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
-            ('TEXTCOLOR',  (0, 0), (-1, 0), C_WHITE),
-            ('FONTSIZE',   (0, 0), (-1, 0), 6.5),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',       (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',     (0, 0), (-1, -1), 'TOP'),
-            ('FONTSIZE',   (0, 1), (-1, -1), 7),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING',(0,0),(-1, -1), 3),
-            ('LEFTPADDING',(0, 0), (-1, -1), 3),
-        ]))
-        E.append(rt)
-        E.append(Spacer(1, 6))
+        E.append(_std_table(
+            ['#','ACTIVITY','HAZARD','CONSEQUENCE','INIT','CONTROLS','RES','TOL'],
+            tbl_rows, cw, S))
+        E.append(Spacer(1, 8))
 
-    # Page 4 — Mitigations
     if mitigations:
         E.append(_section_header('4. Mitigation Responsibilities', S))
         E.append(Spacer(1, 4))
-        mit_rows = [[
-            Paragraph('SEQ', S['field_label']),
-            Paragraph('MITIGATION', S['field_label']),
-            Paragraph('RESPONSIBLE MANAGER', S['field_label']),
-            Paragraph('DUE DATE', S['field_label']),
-            Paragraph('STATUS', S['field_label']),
-        ]]
-        for m in mitigations:
-            mit_rows.append([
-                Paragraph(str(m.hazard_seq or '—'), S['mono']),
-                Paragraph((m.mitigation or '—')[:100], S['small']),
-                Paragraph(m.responsible_manager or '—', S['small']),
-                Paragraph(m.due_date or '—', S['small']),
-                Paragraph(m.status or '—', S['small']),
-            ])
-        col_w = [12*mm, CONTENT_W-12*mm-45*mm-22*mm-25*mm, 45*mm, 22*mm, 25*mm]
-        mt = Table(mit_rows, colWidths=col_w, repeatRows=1)
-        mt.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
-            ('TEXTCOLOR',  (0, 0), (-1, 0), C_WHITE),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',       (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',     (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('BOTTOMPADDING',(0,0),(-1, -1), 4),
-            ('LEFTPADDING',(0, 0), (-1, -1), 4),
-        ]))
-        E.append(mt)
-        E.append(Spacer(1, 6))
+        cw = [12*mm, CONTENT_W-12*mm-45*mm-22*mm-25*mm, 45*mm, 22*mm, 25*mm]
+        tbl_rows = [[
+            Paragraph(str(m.hazard_seq or '—'), S['mono']),
+            Paragraph(m.mitigation or '—', S['td']),
+            Paragraph(m.responsible_manager or '—', S['td']),
+            Paragraph(m.due_date or '—', S['td']),
+            _status_para(m.status or '—', S),
+        ] for m in mitigations]
+        E.append(_std_table(['SEQ','MITIGATION','RESPONSIBLE MANAGER','DUE DATE','STATUS'],
+                            tbl_rows, cw, S))
+        E.append(Spacer(1, 8))
 
-    # Page 5 — Reviews
     if reviews:
-        E.append(_section_header('5. Mitigation Effectiveness Review', S))
+        E.append(_section_header('5. Effectiveness Reviews', S))
         E.append(Spacer(1, 4))
-        rev_rows = [[
-            Paragraph('MITIGATION', S['field_label']),
-            Paragraph('EFFECTIVENESS REVIEW', S['field_label']),
-            Paragraph('RATING', S['field_label']),
-            Paragraph('DATE', S['field_label']),
-            Paragraph('ACTIONER', S['field_label']),
-        ]]
-        for rv in reviews:
-            rev_rows.append([
-                Paragraph((rv.risk_mitigation or '—')[:60], S['small']),
-                Paragraph((rv.review_of_effectiveness or '—')[:100], S['small']),
-                Paragraph(rv.effectiveness_rating or '—', S['small']),
-                Paragraph(rv.date_completed or '—', S['small']),
-                Paragraph(rv.actioner or '—', S['small']),
-            ])
-        col_w = [40*mm, CONTENT_W-40*mm-30*mm-22*mm-30*mm, 30*mm, 22*mm, 30*mm]
-        rvt = Table(rev_rows, colWidths=col_w, repeatRows=1)
-        rvt.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
-            ('TEXTCOLOR',  (0, 0), (-1, 0), C_WHITE),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',       (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',     (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('BOTTOMPADDING',(0,0),(-1, -1), 4),
-            ('LEFTPADDING',(0, 0), (-1, -1), 4),
-        ]))
-        E.append(rvt)
-        E.append(Spacer(1, 6))
+        cw = [40*mm, CONTENT_W-40*mm-30*mm-22*mm-30*mm, 30*mm, 22*mm, 30*mm]
+        tbl_rows = [[
+            Paragraph(rv.risk_mitigation or '—', S['td']),
+            Paragraph(rv.review_of_effectiveness or '—', S['td']),
+            Paragraph(rv.effectiveness_rating or '—', S['td']),
+            Paragraph(rv.date_completed or '—', S['td']),
+            Paragraph(rv.actioner or '—', S['td']),
+        ] for rv in reviews]
+        E.append(_std_table(['MITIGATION','EFFECTIVENESS REVIEW','RATING','DATE','ACTIONER'],
+                            tbl_rows, cw, S))
+        E.append(Spacer(1, 8))
 
-    # Signatures
-    E.append(_section_header('6. Signatures', S))
+    E.append(_section_header('6. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
-        {'role': 'Prepared By',     'name': ra.prepared_by_name or '', 'date': ra.assessment_date or ''},
-        {'role': 'Reviewed By',     'name': ra.reviewed_by_name or '',  'date': ''},
-        {'role': 'Approved By',     'name': ra.approved_by_name or '',  'date': ''},
+        {'role': 'Prepared By',     'name': ra.prepared_by_name or '' if ra else '',  'date': ra.assessment_date or '' if ra else ''},
+        {'role': 'Reviewed By',     'name': ra.reviewed_by_name or '' if ra else '',  'date': ''},
+        {'role': 'Approved By',     'name': ra.approved_by_name or '' if ra else '',  'date': ''},
         {'role': 'Accountable Mgr', 'name': '', 'date': ''},
     ], S))
 
@@ -1060,238 +931,164 @@ def pdf_risk_assessment(ra, hazard, rows, mitigations, reviews,
                       'RESTRICTED — SAFETY SENSITIVE', generated_by, status)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
+# ── 5. ACTION / CORRECTIVE ACTION ────────────────────────────────────────────
 def pdf_action(action, history, generated_by='Safety Department'):
-    """Corrective / Preventive Action Record PDF."""
-    S = _styles()
-    ref = action.id if action else '—'
+    S      = _styles()
+    ref    = action.id if action else '—'
     status = action.status if action else '—'
-    title = (action.description or 'Action Record')[:80] if action else 'Action Record'
-
+    title  = (action.description or 'Action Record') if action else 'Action Record'
     E = []
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type='Corrective / Preventive Action Record',
-        status=status, dept='—',
-        date_str=action.created_at.strftime('%Y-%m-%d') if action and action.created_at else '—',
-        classification='INTERNAL — SAFETY RECORD', S=S
-    ))
-    E.append(Spacer(1, 6))
+
+    E.append(_cover_banner(title[:120], ref, 'Corrective / Preventive Action Record',
+                           status, '—',
+                           action.created_at.strftime('%Y-%m-%d') if action and action.created_at else '—',
+                           'INTERNAL — SAFETY RECORD', S))
+    E.append(Spacer(1, 10))
 
     E.append(_section_header('1. Action Details', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Action Reference', ref),
-        ('Action Type',      action.action_type or 'Corrective'),
-        ('Source',           action.source or '—'),
-        ('Linked Hazard',    action.hazard_id or '—'),
-        ('Owner',            action.owner or '—'),
-        ('Assigned By',      action.assigned_by or '—'),
-        ('Priority',         action.priority or '—'),
-        ('Status',           status),
-        ('Due Date',         action.due_date or '—'),
-        ('Closed Date',      action.closed_date or '—'),
+        ('Action Reference',    ref),
+        ('Action Type',         getattr(action, 'action_type', 'Corrective') or 'Corrective'),
+        ('Source',              getattr(action, 'source', '—') or '—'),
+        ('Linked Hazard',       getattr(action, 'hazard_id', '—') or '—'),
+        ('Owner',               getattr(action, 'owner', '—') or '—'),
+        ('Assigned By',         getattr(action, 'assigned_by', '—') or '—'),
+        ('Priority',            getattr(action, 'priority', '—') or '—'),
+        ('Status',              status),
+        ('Due Date',            getattr(action, 'due_date', '—') or '—'),
+        ('Closed Date',         getattr(action, 'closed_date', '—') or '—'),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
     E.append(_section_header('2. Description & Root Cause', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Action Description', action.description, S))
+    E.append(_text_block('Action Description',    getattr(action, 'description', '') if action else '', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Root Cause', action.root_cause, S))
-    E.append(Spacer(1, 6))
+    E.append(_text_block('Root Cause',            getattr(action, 'root_cause', '') if action else '', S))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('3. Mitigation & Corrective Work', S))
+    E.append(_section_header('3. Implementation', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Mitigation Description', action.mitigation_description, S))
+    E.append(_text_block('Mitigation Description',   getattr(action, 'mitigation_description', '') if action else '', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Corrective Action Details', action.corrective_description, S))
+    E.append(_text_block('Corrective Action Details', getattr(action, 'corrective_description', '') if action else '', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Evidence', action.evidence, S))
-    E.append(Spacer(1, 6))
+    E.append(_text_block('Evidence',                 getattr(action, 'evidence', '') if action else '', S))
+    E.append(Spacer(1, 8))
 
     E.append(_section_header('4. Safety Review', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Reviewed By',     action.safety_reviewer or '—'),
-        ('Review Date',     action.safety_review_date or '—'),
-        ('Effectiveness',   action.effectiveness or '—'),
-        ('Verified By',     action.verified_by or '—'),
-        ('Verified Date',   action.verified_date or '—'),
-        ('Implementation Date', action.implementation_date or '—'),
+        ('Reviewed By',          getattr(action, 'safety_reviewer', '—') or '—'),
+        ('Review Date',          getattr(action, 'safety_review_date', '—') or '—'),
+        ('Effectiveness',        getattr(action, 'effectiveness', '—') or '—'),
+        ('Verified By',          getattr(action, 'verified_by', '—') or '—'),
+        ('Verified Date',        getattr(action, 'verified_date', '—') or '—'),
+        ('Implementation Date',  getattr(action, 'implementation_date', '—') or '—'),
     ], S, cols=2))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Safety Review Notes', action.safety_review_notes, S))
+    E.append(_text_block('Safety Notes',        getattr(action, 'safety_notes', '') if action else '', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Effectiveness Review', action.effectiveness_review, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Safety Notes', action.safety_notes, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Follow-Up Notes', action.follow_up_notes, S))
-    E.append(Spacer(1, 6))
+    E.append(_text_block('Follow-Up Notes',     getattr(action, 'follow_up_notes', '') if action else '', S))
+    E.append(Spacer(1, 8))
 
     E.append(_section_header('5. Audit Trail', S))
     E.append(Spacer(1, 4))
-    timeline_events = [{
+    E.append(_timeline_table([{
         'date':  h.changed_at.strftime('%Y-%m-%d %H:%M') if h.changed_at else '—',
         'event': f'{h.from_status or "—"} → {h.to_status or "—"}',
-        'user':  h.changed_by or '—',
-        'notes': h.notes or '',
-    } for h in (history or [])]
-    E.append(_timeline_table(timeline_events, S))
-    E.append(Spacer(1, 6))
+        'user':  h.changed_by or '—', 'notes': h.notes or '',
+    } for h in (history or [])], S))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('6. Signatures', S))
+    E.append(_section_header('6. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
-        {'role': 'Action Owner',   'name': action.owner or '', 'date': action.closed_date or ''},
-        {'role': 'Safety Reviewer','name': action.safety_reviewer or '', 'date': action.safety_review_date or ''},
-        {'role': 'Verified By',    'name': action.verified_by or '', 'date': action.verified_date or ''},
+        {'role': 'Action Owner',    'name': getattr(action, 'owner', '') if action else '',           'date': getattr(action, 'closed_date', '') if action else ''},
+        {'role': 'Safety Reviewer', 'name': getattr(action, 'safety_reviewer', '') if action else '', 'date': getattr(action, 'safety_review_date', '') if action else ''},
+        {'role': 'Verified By',     'name': getattr(action, 'verified_by', '') if action else '',     'date': getattr(action, 'verified_date', '') if action else ''},
+        {'role': 'Accountable Mgr', 'name': '', 'date': ''},
     ], S))
 
-    return _build_doc(E, 'Action Record', ref, 'INTERNAL — SAFETY RECORD',
-                      generated_by, status)
+    return _build_doc(E, 'Corrective / Preventive Action', ref,
+                      'INTERNAL — SAFETY RECORD', generated_by, status)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
+# ── 6. MANAGEMENT OF CHANGE ──────────────────────────────────────────────────
 def pdf_moc(moc, generated_by='Safety Department',
             milestones=None, stakeholders=None, updates=None,
             actions=None, linked_ra=None, investigations=None, avis=None):
-    """
-    Full Management of Change Record PDF — all related modules included.
-    Sections:
-      1  Change Identification
-      2  Change Description
-      3  Impact Assessment
-      4  Regulatory Compliance
-      5  Approval Chain
-      6  Safety Risk Assessment (linked RA summary)
-      7  Stakeholder Consultation
-      8  Implementation Planning & Milestones
-      9  Actions Taken
-     10  Investigations
-     11  Post-Implementation Review (PIR)
-     12  Audit Verification Items (AVI)
-     13  Activity Log
-     14  Signatures
-    """
-    S = _styles()
-    ref    = (moc.moc_number or moc.id) if moc else '—'
-    status = moc.status or moc.approval_status or '—'
-    title  = moc.title or 'Management of Change'
+    S      = _styles()
+    mid    = moc.id if moc else '—'
+    status = moc.status if moc else '—'
+    title  = moc.title or 'Management of Change' if moc else 'Management of Change'
     dept   = moc.department.name if moc and moc.department else '—'
-
-    milestones    = milestones    or []
-    stakeholders  = stakeholders  or []
-    updates       = updates       or []
-    actions       = actions       or []
-    investigations= investigations or []
-    avis          = avis          or []
-
     E = []
 
-    # ── Cover banner ─────────────────────────────────────────────────────────
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type='Management of Change Record',
-        status=status, dept=dept,
-        date_str=moc.date_raised or moc.planned_date or '—',
-        classification='INTERNAL — CONTROLLED CHANGE', S=S
-    ))
-    E.append(Spacer(1, 8))
+    # Cover
+    E.append(_cover_banner(title, mid, 'Management of Change', status, dept,
+                           moc.date_raised if moc else '—',
+                           'INTERNAL — CONTROLLED CHANGE', S))
+    E.append(Spacer(1, 10))
 
     # ── 1. Change Identification ─────────────────────────────────────────────
     E.append(_section_header('1. Change Identification', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('MOC Reference',      ref),
-        ('MOC Number',         moc.moc_number or moc.id),
-        ('Change Category',    moc.change_category or moc.change_type or '—'),
-        ('Department',         dept),
-        ('Initiator',          moc.initiator or '—'),
-        ('Date Raised',        moc.date_raised or '—'),
-        ('Target Completion',  moc.target_completion_date or '—'),
-        ('Lifecycle Status',   status),
-        ('Approval Status',    moc.approval_status or '—'),
-        ('Approved By',        moc.approved_by or '—'),
-        ('Approved Date',      moc.approved_date or '—'),
-        ('Implemented Date',   moc.implemented_date or '—'),
-        ('Closed Date',        moc.closed_date or '—'),
-        ('Linked Hazard',      moc.hazard_id or '—'),
+        ('MOC Reference',     mid),
+        ('MOC Number',        mid),
+        ('Change Category',   getattr(moc, 'change_category', '—') or '—'),
+        ('Department',        dept),
+        ('Initiator',         getattr(moc, 'initiator', '—') or '—'),
+        ('Date Raised',       getattr(moc, 'date_raised', '—') or '—'),
+        ('Target Completion', getattr(moc, 'target_completion_date', '—') or '—'),
+        ('Lifecycle Status',  status),
+        ('Approval Status',   getattr(moc, 'approval_status', '—') or '—'),
+        ('Approved By',       getattr(moc, 'approved_by', '—') or '—'),
+        ('Approved Date',     getattr(moc, 'approved_date', '—') or '—'),
+        ('Implemented Date',  getattr(moc, 'implemented_date', '—') or '—'),
+        ('Closed Date',       getattr(moc, 'closed_date', '—') or '—'),
+        ('Linked Hazard',     getattr(moc, 'linked_hazard_id', '—') or '—'),
     ], S, cols=2))
     E.append(Spacer(1, 8))
 
     # ── 2. Change Description ────────────────────────────────────────────────
     E.append(_section_header('2. Change Description', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Current Situation', moc.current_situation or moc.pre_change_risk, S))
+    for lbl, attr in [
+        ('Current Situation',           'current_situation'),
+        ('Proposed Change / Description','description'),
+        ('Reason for Change',           'reason_for_change'),
+        ('Expected Benefits',           'expected_benefits'),
+    ]:
+        E.append(_text_block(lbl, getattr(moc, attr, '') if moc else '', S))
+        E.append(Spacer(1, 4))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Proposed Change / Description', moc.proposed_change or moc.description, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Reason for Change', moc.reason_for_change, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Expected Benefits', moc.expected_benefits, S))
-    E.append(Spacer(1, 8))
 
     # ── 3. Impact Assessment ─────────────────────────────────────────────────
     E.append(_section_header('3. Impact Assessment', S))
     E.append(Spacer(1, 4))
-    impact_fields = [
-        ('Aircraft Operations',  moc.impact_aircraft_ops),
-        ('Flight Crew',          moc.impact_flight_crew),
-        ('Cabin Crew',           moc.impact_cabin_crew),
-        ('Ground Operations',    moc.impact_ground_ops),
-        ('Maintenance',          moc.impact_maintenance),
-        ('Operations Control',   moc.impact_occ),
-        ('Training',             moc.impact_training),
-        ('Safety Reporting',     moc.impact_safety_reporting),
-        ('Emergency Response',   moc.impact_erp),
-        ('Security',             moc.impact_security),
-        ('Regulatory',           moc.impact_regulatory),
-        ('Contractors',          moc.impact_contractor),
-    ]
-    impact_rows = [[
-        Paragraph('AREA', S['field_label']),
-        Paragraph('IMPACTED', S['field_label']),
-        Paragraph('AREA', S['field_label']),
-        Paragraph('IMPACTED', S['field_label']),
-    ]]
-    for i in range(0, len(impact_fields), 2):
-        row = []
-        for k in range(2):
-            if i + k < len(impact_fields):
-                area, val = impact_fields[i + k]
-                hit = bool(val)
-                row.append(Paragraph(area, S['field_value']))
-                clr = C_GREEN if hit else C_GRAY
-                row.append(Paragraph('YES' if hit else 'No',
-                    ParagraphStyle('imp', fontName='Helvetica-Bold',
-                                   fontSize=8, textColor=clr)))
-            else:
-                row += [Paragraph('', S['field_value']), Paragraph('', S['field_value'])]
-        impact_rows.append(row)
-    hw = CONTENT_W / 2
-    imp_t = Table(impact_rows, colWidths=[hw * 0.65, hw * 0.35, hw * 0.65, hw * 0.35],
-                  repeatRows=1)
-    imp_t.setStyle(TableStyle([
-        ('BACKGROUND',    (0, 0), (-1, 0), C_NAVY),
-        ('TEXTCOLOR',     (0, 0), (-1, 0), C_WHITE),
-        ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-        ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING',   (0, 0), (-1, -1), 6),
-    ]))
-    E.append(imp_t)
-    E.append(Spacer(1, 4))
+    yes_no = lambda a: 'YES' if getattr(moc, a, False) else 'No'
     E.append(_info_grid([
-        ('Safety Impact Level',        moc.safety_impact_level or '—'),
-        ('Risk Assessment Required',   'Yes' if moc.risk_assessment_required else 'No'),
-        ('Training Required',          'Yes' if moc.training_required else 'No'),
-        ('Documentation Update',       'Yes' if moc.documentation_update_required else 'No'),
-        ('SOP Revision Required',      'Yes' if moc.sop_revision_required else 'No'),
-        ('ERP Update Required',        'Yes' if moc.erp_update_required else 'No'),
+        ('Aircraft Operations',  yes_no('impact_aircraft_ops')),
+        ('Flight Crew',          yes_no('impact_flight_crew')),
+        ('Cabin Crew',           yes_no('impact_cabin_crew')),
+        ('Ground Operations',    yes_no('impact_ground_ops')),
+        ('Maintenance',          yes_no('impact_maintenance')),
+        ('Operations Control',   yes_no('impact_ops_control')),
+        ('Training',             yes_no('impact_training')),
+        ('Safety Reporting',     yes_no('impact_safety_reporting')),
+        ('Emergency Response',   yes_no('impact_emergency')),
+        ('Security',             yes_no('impact_security')),
+        ('Regulatory',           yes_no('impact_regulatory')),
+        ('Contractors',          yes_no('impact_contractors')),
+        ('Safety Impact Level',  getattr(moc, 'safety_impact_level', '—') or '—'),
+        ('RA Required',          'Yes' if getattr(moc, 'ra_required', False) else 'No'),
+        ('Training Required',    'Yes' if getattr(moc, 'training_required', False) else 'No'),
+        ('Documentation Update', 'Yes' if getattr(moc, 'documentation_update', False) else 'No'),
+        ('SOP Revision',         'Yes' if getattr(moc, 'sop_revision', False) else 'No'),
+        ('ERP Update Required',  'Yes' if getattr(moc, 'erp_update', False) else 'No'),
     ], S, cols=2))
     E.append(Spacer(1, 8))
 
@@ -1299,1055 +1096,679 @@ def pdf_moc(moc, generated_by='Safety Department',
     E.append(_section_header('4. Regulatory Compliance', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('ICAO Impact',              'Yes' if moc.icao_impact else 'No'),
-        ('IOSA Impact',              'Yes' if moc.iosa_impact else 'No'),
-        ('EASA Impact',              'Yes' if moc.easa_impact else 'No'),
-        ('National Authority Impact','Yes' if moc.national_authority_impact else 'No'),
-        ('Company Manual Impact',    'Yes' if moc.company_manual_impact else 'No'),
-        ('Regulatory Approval Req.', 'Yes' if moc.regulatory_approval_required else 'No'),
-        ('Regulatory Approval Ref',  moc.regulatory_approval_ref or '—'),
-        ('Regulatory Approval Date', moc.regulatory_approval_date or '—'),
+        ('ICAO Impact',             'Yes' if getattr(moc, 'icao_impact', False) else 'No'),
+        ('IOSA Impact',             'Yes' if getattr(moc, 'iosa_impact', False) else 'No'),
+        ('EASA Impact',             'Yes' if getattr(moc, 'easa_impact', False) else 'No'),
+        ('National Authority',      'Yes' if getattr(moc, 'national_authority_impact', False) else 'No'),
+        ('Company Manual Impact',   'Yes' if getattr(moc, 'company_manual_impact', False) else 'No'),
+        ('Regulatory Approval Req.','Yes' if getattr(moc, 'regulatory_approval_required', False) else 'No'),
+        ('Reg. Approval Ref.',      getattr(moc, 'regulatory_approval_ref', 'N/A') or 'N/A'),
+        ('Reg. Approval Date',      getattr(moc, 'regulatory_approval_date', '—') or '—'),
     ], S, cols=2))
-    if moc.regulatory_evidence:
-        E.append(Spacer(1, 4))
-        E.append(_text_block('Regulatory Evidence / Notes', moc.regulatory_evidence, S))
     E.append(Spacer(1, 8))
 
-    # ── 5. Approval Chain ───────────────────────────────────────────────────
+    # ── 5. Approval Chain ────────────────────────────────────────────────────
     E.append(_section_header('5. Approval Chain', S))
     E.append(Spacer(1, 4))
-    approval_rows = [[
-        Paragraph('STEP', S['field_label']),
-        Paragraph('APPROVER', S['field_label']),
-        Paragraph('DECISION', S['field_label']),
-        Paragraph('DATE', S['field_label']),
-        Paragraph('COMMENTS', S['field_label']),
-    ]]
-    approval_steps = [
-        ('1. Department Manager', moc.dept_manager_name,   moc.dept_manager_status,  moc.dept_manager_date,  moc.dept_manager_comments),
-        ('2. Safety Review',      moc.safety_reviewer_name,moc.safety_review_status, moc.safety_review_date, moc.safety_review_comments),
-        ('3. Safety Manager',     moc.sm_name,             moc.sm_approval_status,   moc.sm_date,            moc.sm_comments),
-    ]
-    if moc.ae_approval_required:
-        approval_steps.append(
-            ('4. Accountable Executive', moc.ae_name, moc.ae_approval_status, moc.ae_date, moc.ae_comments)
-        )
-    for step, name, decision, date, comments in approval_steps:
-        dec = (decision or 'Pending').upper()
-        dec_clr = C_GREEN if 'APPROVED' in dec else (C_RED if 'REJECT' in dec else C_GRAY)
-        approval_rows.append([
-            Paragraph(step, S['field_value']),
-            Paragraph(name or '—', S['field_value']),
-            Paragraph(decision or 'Pending',
-                      ParagraphStyle('apdec', fontName='Helvetica-Bold',
-                                     fontSize=8, textColor=dec_clr)),
-            Paragraph(date or '—', S['small']),
-            Paragraph((comments or '—')[:120], S['small']),
+    chain_rows = []
+    for step, (role, appr_attr, date_attr, notes_attr) in enumerate([
+        ('1. Department Manager', 'dept_manager_approver', 'dept_manager_date', 'dept_manager_notes'),
+        ('2. Safety Review',      'safety_reviewer',       'safety_review_date', 'safety_review_notes'),
+        ('3. Safety Manager',     'safety_manager_approver','safety_manager_date','safety_manager_notes'),
+        ('4. Accountable Executive','ae_approver',          'ae_date',            'ae_notes'),
+    ], 1):
+        approver  = getattr(moc, appr_attr, '—') or '—'
+        decision  = 'Approved' if approver and approver != '—' else 'Pending'
+        date_val  = getattr(moc, date_attr, '—') or '—'
+        notes_val = getattr(moc, notes_attr, '—') or '—'
+        chain_rows.append([
+            Paragraph(role, S['td']),
+            Paragraph(approver, S['td']),
+            _status_para(decision, S),
+            Paragraph(date_val, S['td']),
+            Paragraph(notes_val, S['small']),
         ])
-    ap_col = [38*mm, 38*mm, 28*mm, 22*mm, CONTENT_W - 38*mm - 38*mm - 28*mm - 22*mm]
-    ap_t = Table(approval_rows, colWidths=ap_col, repeatRows=1)
-    ap_t.setStyle(TableStyle([
-        ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-        ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-        ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-        ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING',   (0, 0), (-1, -1), 5),
-    ]))
-    E.append(ap_t)
+    cw = [40*mm, 38*mm, 22*mm, 24*mm, CONTENT_W-40*mm-38*mm-22*mm-24*mm]
+    E.append(_std_table(['STEP','APPROVER','DECISION','DATE','COMMENTS'],
+                        chain_rows, cw, S))
     E.append(Spacer(1, 8))
 
-    # ── 6. Safety Risk Assessment ────────────────────────────────────────────
+    # ── 6. Safety Risk Assessment ─────────────────────────────────────────────
     E.append(_section_header('6. Safety Risk Assessment', S))
     E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('RA Required',   'Yes' if moc.risk_assessment_required else 'No'),
-        ('RA Status',     moc.ra_status or '—'),
-        ('Linked RA Ref', moc.linked_ra_id or '—'),
-    ], S, cols=2))
+    ra_req = getattr(moc, 'ra_required', False)
     if linked_ra:
-        E.append(Spacer(1, 4))
         E.append(_info_grid([
-            ('RA Control Number', linked_ra.control_number or linked_ra.id),
+            ('RA Required',       'Yes'),
+            ('RA Status',         getattr(moc, 'linked_ra_status', linked_ra.status or '—')),
+            ('Linked RA Ref',     linked_ra.id),
+            ('RA Control Number', linked_ra.control_number or '—'),
             ('RA Title',          linked_ra.title or '—'),
             ('RA Status',         linked_ra.status or '—'),
             ('Responsible',       linked_ra.responsible_name or '—'),
             ('Assessment Date',   linked_ra.assessment_date or '—'),
             ('Next Review Date',  linked_ra.next_review_date or '—'),
         ], S, cols=2))
-        # RA Rows (risk table)
+        E.append(Spacer(1, 6))
+        # RA Rows table
         if hasattr(linked_ra, 'rows') and linked_ra.rows:
             E.append(Spacer(1, 4))
-            ra_rows_data = [[
-                Paragraph('SEQ', S['field_label']),
-                Paragraph('HAZARD / ACTIVITY', S['field_label']),
-                Paragraph('CONSEQUENCES', S['field_label']),
-                Paragraph('INITIAL RISK', S['field_label']),
-                Paragraph('RESIDUAL RISK', S['field_label']),
-                Paragraph('FURTHER MITIGATIONS', S['field_label']),
-            ]]
+            cw = [10*mm, 36*mm, 36*mm, 16*mm, 16*mm,
+                  CONTENT_W - 10*mm - 36*mm - 36*mm - 16*mm - 16*mm]
+            tbl_rows = []
             for row in linked_ra.rows:
-                init_ri = row.risk_index_initial or '—'
-                res_ri  = row.risk_index_residual or '—'
-                INTOLER = {'5A','5B','5C','4A','4B','3A'}
-                ra_rows_data.append([
-                    Paragraph(str(row.seq_num or '—'), S['small']),
-                    Paragraph(row.generic_hazard or row.type_of_activity or '—', S['small']),
-                    Paragraph(row.consequences or '—', S['small']),
-                    Paragraph(init_ri,
-                              ParagraphStyle('ri', fontName='Helvetica-Bold',
-                                             fontSize=8,
-                                             textColor=C_RED if init_ri in INTOLER else C_ORANGE)),
-                    Paragraph(res_ri,
-                              ParagraphStyle('rr', fontName='Helvetica-Bold',
-                                             fontSize=8, textColor=C_GREEN)),
-                    Paragraph(row.further_mitigations or row.current_defenses or '—', S['small']),
+                tbl_rows.append([
+                    Paragraph(str(row.seq_num or '—'), S['mono']),
+                    Paragraph(row.generic_hazard or row.type_of_activity or '—', S['td']),
+                    Paragraph(row.consequences or '—', S['td']),
+                    _risk_matrix_cell(row.risk_index_initial or '—', S),
+                    _risk_matrix_cell(row.risk_index_residual or '—', S),
+                    Paragraph(row.further_mitigations or row.current_defenses or '—', S['td']),
                 ])
-            ra_col = [10*mm, 38*mm, 38*mm, 16*mm, 16*mm, CONTENT_W - 10*mm - 38*mm - 38*mm - 16*mm - 16*mm]
-            ra_t = Table(ra_rows_data, colWidths=ra_col, repeatRows=1)
-            ra_t.setStyle(TableStyle([
-                ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-                ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-                ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-                ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-                ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-                ('TOPPADDING',    (0, 0), (-1, -1), 3),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-                ('LEFTPADDING',   (0, 0), (-1, -1), 4),
-            ]))
-            E.append(ra_t)
+            E.append(_std_table(
+                ['SEQ','HAZARD / ACTIVITY','CONSEQUENCES','INITIAL RISK','RESIDUAL RISK','FURTHER MITIGATIONS'],
+                tbl_rows, cw, S))
+            E.append(Spacer(1, 6))
         # RA Mitigations
         if hasattr(linked_ra, 'mitigations') and linked_ra.mitigations:
-            E.append(Spacer(1, 4))
-            mit_rows = [[
-                Paragraph('HAZARD REF', S['field_label']),
-                Paragraph('MITIGATION', S['field_label']),
-                Paragraph('RESPONSIBLE', S['field_label']),
-                Paragraph('DUE DATE', S['field_label']),
-                Paragraph('STATUS', S['field_label']),
-            ]]
-            for mit in linked_ra.mitigations:
-                mit_rows.append([
-                    Paragraph(mit.hazard_seq or '—', S['small']),
-                    Paragraph(mit.mitigation or '—', S['small']),
-                    Paragraph(mit.responsible_manager or '—', S['small']),
-                    Paragraph(mit.due_date or '—', S['small']),
-                    Paragraph(mit.status or '—',
-                              ParagraphStyle('ms', fontName='Helvetica-Bold',
-                                             fontSize=8,
-                                             textColor=C_GREEN if mit.status == 'Closed' else C_ORANGE)),
-                ])
-            mc = [18*mm, CONTENT_W - 18*mm - 38*mm - 22*mm - 20*mm, 38*mm, 22*mm, 20*mm]
-            mt = Table(mit_rows, colWidths=mc, repeatRows=1)
-            mt.setStyle(TableStyle([
-                ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-                ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-                ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-                ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-                ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-                ('TOPPADDING',    (0, 0), (-1, -1), 3),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-                ('LEFTPADDING',   (0, 0), (-1, -1), 4),
-            ]))
-            E.append(mt)
+            cw = [18*mm, CONTENT_W-18*mm-40*mm-22*mm-20*mm, 40*mm, 22*mm, 20*mm]
+            tbl_rows = [[
+                Paragraph(mit.hazard_seq or '—', S['mono']),
+                Paragraph(mit.mitigation or '—', S['td']),
+                Paragraph(mit.responsible_manager or '—', S['td']),
+                Paragraph(mit.due_date or '—', S['td']),
+                _status_para(mit.status or '—', S),
+            ] for mit in linked_ra.mitigations]
+            E.append(_std_table(['HAZARD REF','MITIGATION','RESPONSIBLE','DUE DATE','STATUS'],
+                                tbl_rows, cw, S))
     else:
+        E.append(_info_grid([
+            ('RA Required', 'Yes' if ra_req else 'No'),
+            ('RA Status',   getattr(moc, 'linked_ra_status', '—') or '—'),
+        ], S, cols=2))
         E.append(Spacer(1, 4))
-        E.append(Paragraph('No linked Risk Assessment found.', S['small']))
+        if not ra_req:
+            E.append(Paragraph('Risk Assessment not required for this change.', S['caption']))
+        else:
+            E.append(Paragraph('No linked Risk Assessment found.', S['caption']))
     E.append(Spacer(1, 8))
 
     # ── 7. Stakeholder Consultation ──────────────────────────────────────────
     E.append(_section_header('7. Stakeholder Consultation', S))
     E.append(Spacer(1, 4))
-    if moc.stakeholder_summary:
+    if getattr(moc, 'stakeholder_summary', None):
         E.append(_text_block('Consultation Summary', moc.stakeholder_summary, S))
         E.append(Spacer(1, 4))
     if stakeholders:
-        sk_rows = [[
-            Paragraph('CONTACT NAME', S['field_label']),
-            Paragraph('DEPARTMENT', S['field_label']),
-            Paragraph('DATE', S['field_label']),
-            Paragraph('COMMENTS', S['field_label']),
-        ]]
-        for sk in stakeholders:
-            sk_rows.append([
-                Paragraph(getattr(sk, 'contact_name', None) or getattr(sk, 'name', None) or '—', S['field_value']),
-                Paragraph(getattr(sk, 'department_name', None) or getattr(sk, 'department', None) or '—', S['small']),
-                Paragraph(getattr(sk, 'consultation_date', None) or getattr(sk, 'consulted_date', None) or '—', S['small']),
-                Paragraph(getattr(sk, 'comments', None) or getattr(sk, 'feedback', None) or '—', S['small']),
-            ])
-        sk_col = [45*mm, 40*mm, 22*mm, CONTENT_W - 45*mm - 40*mm - 22*mm]
-        sk_t = Table(sk_rows, colWidths=sk_col, repeatRows=1)
-        sk_t.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING',    (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
-        ]))
-        E.append(sk_t)
+        cw = [45*mm, 40*mm, 22*mm, CONTENT_W-45*mm-40*mm-22*mm]
+        tbl_rows = [[
+            Paragraph(getattr(sk, 'contact_name', None) or getattr(sk, 'name', '—') or '—', S['td']),
+            Paragraph(getattr(sk, 'department_name', None) or getattr(sk, 'department', '—') or '—', S['td']),
+            Paragraph(getattr(sk, 'consultation_date', None) or getattr(sk, 'consulted_date', '—') or '—', S['td']),
+            Paragraph(getattr(sk, 'comments', None) or getattr(sk, 'feedback', '—') or '—', S['small']),
+        ] for sk in stakeholders]
+        E.append(_std_table(['CONTACT NAME','DEPARTMENT','DATE','COMMENTS'], tbl_rows, cw, S))
     else:
-        E.append(Paragraph('No individual stakeholder records. See summary above.', S['small']))
+        E.append(Paragraph('No individual stakeholder records. See summary above.', S['caption']))
     E.append(Spacer(1, 8))
 
-    # ── 8. Implementation Planning & Milestones ──────────────────────────────
+    # ── 8. Implementation Planning & Milestones ───────────────────────────────
     E.append(PageBreak())
     E.append(_section_header('8. Implementation Planning & Milestones', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Implementation Start',   moc.implementation_start_date or '—'),
-        ('Target Completion',      moc.target_completion_date or '—'),
-        ('Implementation Status',  moc.implementation_status or '—'),
-        ('Implemented Date',       moc.implemented_date or '—'),
+        ('Implementation Start',  getattr(moc, 'implementation_start_date', '—') or '—'),
+        ('Target Completion',     getattr(moc, 'target_completion_date', '—') or '—'),
+        ('Implementation Status', getattr(moc, 'implementation_status', '—') or '—'),
+        ('Implemented Date',      getattr(moc, 'implemented_date', '—') or '—'),
     ], S, cols=2))
     E.append(Spacer(1, 4))
     if milestones:
-        ms_rows = [[
-            Paragraph('MILESTONE', S['field_label']),
-            Paragraph('RESPONSIBLE', S['field_label']),
-            Paragraph('TARGET DATE', S['field_label']),
-            Paragraph('STATUS', S['field_label']),
-            Paragraph('COMPLETED', S['field_label']),
-            Paragraph('NOTES', S['field_label']),
-        ]]
-        for ms in milestones:
-            st_clr = C_GREEN if ms.status == 'Complete' else (
-                     C_RED if ms.status == 'Overdue' else
-                     C_BLUE if ms.status == 'In Progress' else C_GRAY)
-            ms_rows.append([
-                Paragraph(ms.description or '—', S['field_value']),
-                Paragraph(ms.responsible_person or '—', S['small']),
-                Paragraph(ms.target_date or '—', S['small']),
-                Paragraph(ms.status or '—',
-                          ParagraphStyle('mst', fontName='Helvetica-Bold',
-                                         fontSize=8, textColor=st_clr)),
-                Paragraph(ms.completed_date or '—', S['small']),
-                Paragraph(ms.notes or '—', S['small']),
-            ])
-        ms_col = [50*mm, 30*mm, 20*mm, 18*mm, 18*mm,
-                  CONTENT_W - 50*mm - 30*mm - 20*mm - 18*mm - 18*mm]
-        ms_t = Table(ms_rows, colWidths=ms_col, repeatRows=1)
-        ms_t.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING',    (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
-        ]))
-        E.append(ms_t)
+        cw = [50*mm, 30*mm, 20*mm, 18*mm, 20*mm,
+              CONTENT_W-50*mm-30*mm-20*mm-18*mm-20*mm]
+        tbl_rows = [[
+            Paragraph(ms.description or '—', S['td']),
+            Paragraph(ms.responsible_person or '—', S['td']),
+            Paragraph(ms.target_date or '—', S['td']),
+            _status_para(ms.status or '—', S),
+            Paragraph(ms.completed_date or '—', S['td']),
+            Paragraph(ms.notes or '—', S['small']),
+        ] for ms in milestones]
+        E.append(_std_table(['MILESTONE','RESPONSIBLE','TARGET','STATUS','COMPLETED','NOTES'],
+                            tbl_rows, cw, S))
         done = sum(1 for m in milestones if m.status == 'Complete')
         E.append(Spacer(1, 4))
-        E.append(Paragraph(f'Milestones: {done}/{len(milestones)} complete',
-                           S['field_label']))
+        E.append(Paragraph(f'Milestones: {done} of {len(milestones)} complete.',
+                           S['caption']))
     else:
-        E.append(Paragraph('No milestones recorded.', S['small']))
+        E.append(Paragraph('No milestones recorded.', S['caption']))
     E.append(Spacer(1, 8))
 
-    # ── 9. Actions Taken ────────────────────────────────────────────────────
+    # ── 9. Actions Taken ─────────────────────────────────────────────────────
     E.append(_section_header('9. Actions Taken (Corrective & Preventive)', S))
     E.append(Spacer(1, 4))
     if actions:
-        act_rows = [[
-            Paragraph('ACTION ID', S['field_label']),
-            Paragraph('DESCRIPTION', S['field_label']),
-            Paragraph('STATUS', S['field_label']),
-            Paragraph('ASSIGNED TO', S['field_label']),
-            Paragraph('DUE DATE', S['field_label']),
-            Paragraph('CLOSED DATE', S['field_label']),
-        ]]
-        for a in actions:
-            st_clr = C_GREEN if a.status == 'Closed' else (
-                     C_RED if a.status == 'Overdue' else
-                     C_ORANGE if a.status in ('Assigned', 'In Progress') else C_GRAY)
-            act_rows.append([
-                Paragraph(str(a.id), S['mono']),
-                Paragraph(a.description or '—', S['small']),
-                Paragraph(a.status or '—',
-                          ParagraphStyle('ast', fontName='Helvetica-Bold',
-                                         fontSize=8, textColor=st_clr)),
-                Paragraph(a.sag_member or a.owner or '—', S['small']),
-                Paragraph(a.due_date or '—', S['small']),
-                Paragraph(a.closed_date or '—', S['small']),
-            ])
-        a_col = [20*mm, 74*mm, 22*mm, 30*mm, 18*mm,
-                 CONTENT_W - 20*mm - 74*mm - 22*mm - 30*mm - 18*mm]
-        a_t = Table(act_rows, colWidths=a_col, repeatRows=1)
-        a_t.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING',    (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('LEFTPADDING',   (0, 0), (-1, -1), 3),
-        ]))
-        E.append(a_t)
+        cw = [20*mm, 72*mm, 22*mm, 30*mm, 18*mm,
+              CONTENT_W-20*mm-72*mm-22*mm-30*mm-18*mm]
+        tbl_rows = [[
+            Paragraph(str(a.id), S['mono']),
+            Paragraph(a.description or '—', S['td']),
+            _status_para(a.status or '—', S),
+            Paragraph(getattr(a, 'sag_member', None) or a.owner or '—', S['td']),
+            Paragraph(a.due_date or '—', S['td']),
+            Paragraph(a.closed_date or '—', S['td']),
+        ] for a in actions]
+        E.append(_std_table(['ACTION ID','DESCRIPTION','STATUS','ASSIGNED TO','DUE','CLOSED'],
+                            tbl_rows, cw, S))
         closed = sum(1 for a in actions if a.status == 'Closed')
         E.append(Spacer(1, 4))
-        E.append(Paragraph(f'Actions: {closed}/{len(actions)} closed',
-                           S['field_label']))
+        E.append(Paragraph(f'Actions: {closed} of {len(actions)} closed.',
+                           S['caption']))
     else:
-        E.append(Paragraph('No actions recorded for this MOC.', S['small']))
+        E.append(Paragraph('No actions recorded for this MOC.', S['caption']))
     E.append(Spacer(1, 8))
 
-    # ── 10. Linked Investigations ────────────────────────────────────────────
+    # ── 10. Linked Investigations ─────────────────────────────────────────────
     E.append(_section_header('10. Linked Investigations', S))
     E.append(Spacer(1, 4))
     if investigations:
-        inv_rows = [[
-            Paragraph('REFERENCE', S['field_label']),
-            Paragraph('TITLE', S['field_label']),
-            Paragraph('CLASSIFICATION', S['field_label']),
-            Paragraph('STATUS', S['field_label']),
-            Paragraph('INVESTIGATOR', S['field_label']),
-            Paragraph('CLOSED DATE', S['field_label']),
-        ]]
-        for inv in investigations:
-            inv_rows.append([
-                Paragraph(str(inv.id), S['mono']),
-                Paragraph(inv.title or '—', S['small']),
-                Paragraph(getattr(inv, 'classification', None) or getattr(inv, 'investigation_type', None) or '—', S['small']),
-                Paragraph(inv.status or '—', S['small']),
-                Paragraph(getattr(inv, 'investigator', None) or getattr(inv, 'lead_investigator', None) or '—', S['small']),
-                Paragraph(inv.closed_date or '—', S['small']),
-            ])
-        inv_col = [22*mm, 60*mm, 25*mm, 20*mm, 38*mm,
-                   CONTENT_W - 22*mm - 60*mm - 25*mm - 20*mm - 38*mm]
-        inv_t = Table(inv_rows, colWidths=inv_col, repeatRows=1)
-        inv_t.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING',    (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
-        ]))
-        E.append(inv_t)
+        cw = [22*mm, 50*mm, 28*mm, 28*mm, CONTENT_W-22*mm-50*mm-28*mm-28*mm]
+        tbl_rows = [[
+            Paragraph(str(inv.id), S['mono']),
+            Paragraph(inv.title or '—', S['td']),
+            Paragraph(getattr(inv, 'classification', None) or
+                      getattr(inv, 'investigation_type', '—') or '—', S['td']),
+            Paragraph(getattr(inv, 'investigator', None) or
+                      getattr(inv, 'lead_investigator', '—') or '—', S['td']),
+            _status_para(inv.status or '—', S),
+        ] for inv in investigations]
+        E.append(_std_table(['REF','TITLE','TYPE','INVESTIGATOR','STATUS'],
+                            tbl_rows, cw, S))
     else:
-        E.append(Paragraph('No linked investigations.', S['small']))
+        E.append(Paragraph('No linked investigations.', S['caption']))
     E.append(Spacer(1, 8))
 
-    # ── 11. Post-Implementation Review (PIR) ─────────────────────────────────
+    # ── 11. Post-Implementation Review (PIR) ──────────────────────────────────
     E.append(_section_header('11. Post-Implementation Review (PIR)', S))
     E.append(Spacer(1, 4))
-    if moc.pir_actual_outcome:
-        E.append(_info_grid([
-            ('PIR Date',          moc.pir_date or '—'),
-            ('Reviewer',          moc.pir_reviewer or '—'),
-            ('Effectiveness',     moc.pir_effectiveness or '—'),
-            ('Additional Actions', moc.pir_additional_actions or '—'),
-        ], S, cols=2))
+    pir_date   = getattr(moc, 'pir_date', '—') or '—'
+    pir_rev    = getattr(moc, 'pir_reviewer', '—') or '—'
+    pir_eff    = getattr(moc, 'pir_effectiveness', '—') or '—'
+    pir_act    = getattr(moc, 'pir_additional_actions', '—') or '—'
+    pir_out    = getattr(moc, 'pir_outcome', '') or ''
+    E.append(_info_grid([
+        ('PIR Date',           pir_date),
+        ('Reviewer',           pir_rev),
+        ('Effectiveness',      pir_eff),
+        ('Additional Actions', pir_act),
+    ], S, cols=2))
+    if pir_out:
         E.append(Spacer(1, 4))
-        E.append(_text_block('Actual Outcome', moc.pir_actual_outcome, S))
-        if moc.pir_new_hazards:
-            E.append(Spacer(1, 4))
-            E.append(_text_block('New Hazards Identified', moc.pir_new_hazards, S))
-        if moc.pir_lessons_learned:
-            E.append(Spacer(1, 4))
-            E.append(_text_block('Lessons Learned', moc.pir_lessons_learned, S))
-    else:
-        E.append(Paragraph('Post-Implementation Review not yet completed.', S['small']))
+        E.append(_text_block('Actual Outcome', pir_out, S))
     E.append(Spacer(1, 8))
 
-    # ── 12. Audit Verification Items (AVI) ──────────────────────────────────
+    # ── 12. Audit Verification Items (AVI) ────────────────────────────────────
     E.append(_section_header('12. Audit Verification Items (AVI)', S))
     E.append(Spacer(1, 4))
     if avis:
-        avi_rows = [[
-            Paragraph('AVI ID', S['field_label']),
-            Paragraph('OBJECTIVE', S['field_label']),
-            Paragraph('STATUS', S['field_label']),
-            Paragraph('VERIFIED DATE', S['field_label']),
-            Paragraph('VERIFIED BY', S['field_label']),
-        ]]
-        for avi in avis:
-            st_clr = C_GREEN if avi.status == 'Verified' else (
-                     C_RED if avi.status in ('Ineffective', 'Escalated') else C_ORANGE)
-            avi_rows.append([
-                Paragraph(avi.id, S['mono']),
-                Paragraph(avi.verification_objective or '—', S['small']),
-                Paragraph(avi.status or '—',
-                          ParagraphStyle('avst', fontName='Helvetica-Bold',
-                                         fontSize=8, textColor=st_clr)),
-                Paragraph(avi.verified_date or '—', S['small']),
-                Paragraph(avi.verified_by or '—', S['small']),
-            ])
-        av_col = [22*mm, CONTENT_W - 22*mm - 25*mm - 25*mm - 30*mm, 25*mm, 25*mm, 30*mm]
-        av_t = Table(avi_rows, colWidths=av_col, repeatRows=1)
-        av_t.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING',    (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
-        ]))
-        E.append(av_t)
+        cw = [16*mm, CONTENT_W-16*mm-22*mm-28*mm-28*mm, 22*mm, 28*mm, 28*mm]
+        tbl_rows = [[
+            Paragraph(str(avi.id), S['mono']),
+            Paragraph(avi.verification_objective or '—', S['td']),
+            _status_para(avi.status or '—', S),
+            Paragraph(avi.verified_date or '—', S['td']),
+            Paragraph(avi.verified_by or '—', S['td']),
+        ] for avi in avis]
+        E.append(_std_table(['AVI ID','OBJECTIVE','STATUS','VERIFIED DATE','VERIFIED BY'],
+                            tbl_rows, cw, S))
     else:
-        E.append(Paragraph('AVIs are auto-generated when the change is marked Implemented.', S['small']))
+        E.append(Paragraph('No audit verification items recorded.', S['caption']))
     E.append(Spacer(1, 8))
 
-    # ── 13. Activity Log ────────────────────────────────────────────────────
+    # ── 13. Activity Log ──────────────────────────────────────────────────────
+    E.append(_section_header('13. Activity Log', S))
+    E.append(Spacer(1, 4))
     if updates:
-        E.append(PageBreak())
-        E.append(_section_header('13. Activity Log', S))
-        E.append(Spacer(1, 4))
-        upd_rows = [[
-            Paragraph('DATE', S['field_label']),
-            Paragraph('TYPE', S['field_label']),
-            Paragraph('BY', S['field_label']),
-            Paragraph('UPDATE', S['field_label']),
-        ]]
-        for upd in updates[:50]:
-            upd_rows.append([
-                Paragraph(upd.created_at.strftime('%Y-%m-%d %H:%M') if upd.created_at else '—', S['small']),
-                Paragraph(upd.update_type or '—', S['small']),
-                Paragraph(upd.update_by or '—', S['small']),
-                Paragraph((upd.update_text or '—')[:120], S['small']),
-            ])
-        upd_col = [24*mm, 22*mm, 30*mm, CONTENT_W - 24*mm - 22*mm - 30*mm]
-        upd_t = Table(upd_rows, colWidths=upd_col, repeatRows=1)
-        upd_t.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, 0),  C_NAVY),
-            ('TEXTCOLOR',     (0, 0), (-1, 0),  C_WHITE),
-            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',          (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING',    (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('LEFTPADDING',   (0, 0), (-1, -1), 4),
-        ]))
-        E.append(upd_t)
-        E.append(Spacer(1, 8))
+        cw = [30*mm, 20*mm, 28*mm, CONTENT_W-30*mm-20*mm-28*mm]
+        tbl_rows = [[
+            Paragraph(u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '—', S['mono']),
+            Paragraph(getattr(u, 'update_type', 'Progress') or 'Progress', S['td']),
+            Paragraph(getattr(u, 'updated_by', '—') or '—', S['td']),
+            Paragraph(getattr(u, 'notes', '') or getattr(u, 'content', '') or '—', S['td']),
+        ] for u in updates]
+        E.append(_std_table(['DATE','TYPE','BY','UPDATE'], tbl_rows, cw, S))
+    else:
+        E.append(Paragraph('No activity log entries.', S['caption']))
+    E.append(Spacer(1, 8))
 
-    # ── 14. Signatures ───────────────────────────────────────────────────────
-    E.append(PageBreak())
+    # ── 14. Signatures & Authorisation ───────────────────────────────────────
     E.append(_section_header('14. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
-        {'role': 'Initiator',          'name': moc.initiator or '',       'date': moc.date_raised or ''},
-        {'role': 'Department Manager', 'name': moc.dept_manager_name or '','date': moc.dept_manager_date or ''},
-        {'role': 'Safety Manager',     'name': moc.sm_name or '',          'date': moc.sm_date or ''},
-        {'role': 'Accountable Mgr',    'name': moc.ae_name or moc.approved_by or '', 'date': moc.ae_date or moc.approved_date or ''},
+        {'role': 'Initiator',         'name': getattr(moc, 'initiator', '') if moc else '',       'date': getattr(moc, 'date_raised', '') if moc else ''},
+        {'role': 'Department Manager','name': getattr(moc, 'dept_manager_approver', '') if moc else '', 'date': getattr(moc, 'dept_manager_date', '') if moc else ''},
+        {'role': 'Safety Manager',    'name': getattr(moc, 'safety_manager_approver', '') if moc else '', 'date': getattr(moc, 'safety_manager_date', '') if moc else ''},
+        {'role': 'Accountable MGR',   'name': getattr(moc, 'ae_approver', '') if moc else '',     'date': getattr(moc, 'ae_date', '') if moc else ''},
     ], S))
 
-    return _build_doc(E, 'Management of Change', ref,
+    return _build_doc(E, 'Management of Change', mid,
                       'INTERNAL — CONTROLLED CHANGE', generated_by, status)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_audit(schedule, findings, checklist, generated_by='Safety Department'):
-    """Audit Report PDF."""
-    S = _styles()
-    ref = schedule.id if schedule else '—'
-    status = schedule.status if schedule else '—'
-    dept = schedule.department.name if schedule and schedule.department else '—'
-    title = f'{schedule.audit_type or "Internal"} Audit — {dept}' if schedule else 'Audit Report'
-
+# ── 7. AUDIT REPORT ──────────────────────────────────────────────────────────
+def pdf_audit(audit, findings, generated_by='Safety Department'):
+    S      = _styles()
+    ref    = audit.id if audit else '—'
+    status = audit.status if audit else '—'
+    title  = audit.title or 'Audit Report' if audit else 'Audit Report'
+    dept   = audit.department.name if audit and audit.department else '—'
     E = []
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type='Audit Report',
-        status=status, dept=dept,
-        date_str=schedule.scheduled_date if schedule else '—',
-        classification='INTERNAL — AUDIT RECORD', S=S
-    ))
-    E.append(Spacer(1, 6))
 
-    E.append(_section_header('1. Audit Details', S))
+    E.append(_cover_banner(title, ref, 'Safety Audit Report', status, dept,
+                           getattr(audit, 'planned_date', '—') if audit else '—',
+                           'RESTRICTED — SAFETY SENSITIVE', S))
+    E.append(Spacer(1, 10))
+
+    E.append(_section_header('1. Audit Information', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
         ('Audit Reference',  ref),
-        ('Audit Type',       schedule.audit_type or '—'),
+        ('Audit Type',       getattr(audit, 'audit_type', '—') or '—'),
+        ('Planned Date',     getattr(audit, 'planned_date', '—') or '—'),
+        ('Actual Date',      getattr(audit, 'actual_date', '—') or '—'),
+        ('Lead Auditor',     getattr(audit, 'lead_auditor', '—') or '—'),
         ('Department',       dept),
-        ('Scheduled Date',   schedule.scheduled_date or '—'),
-        ('Actual Date',      schedule.actual_date or '—'),
-        ('Lead Auditor',     schedule.lead_auditor or '—'),
-        ('Audit Team',       schedule.audit_team or '—'),
+        ('Standard',         getattr(audit, 'standard', '—') or '—'),
         ('Status',           status),
-        ('Opening Meeting',  schedule.opening_meeting or '—'),
-        ('Closing Meeting',  schedule.closing_meeting or '—'),
-        ('Closure Date',     schedule.closure_date or '—'),
-        ('Closed By',        schedule.closed_by or '—'),
+        ('Closed Date',      getattr(audit, 'closed_date', '—') or '—'),
+        ('Next Audit Date',  getattr(audit, 'next_audit_date', '—') or '—'),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('2. Scope & Objectives', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Scope', schedule.scope, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Objectives', schedule.objectives, S))
-    E.append(Spacer(1, 6))
-
-    # Findings
-    if findings:
-        E.append(_section_header(f'3. Findings ({len(findings)} total)', S))
-        E.append(Spacer(1, 4))
-        for f in findings:
-            sev_color = C_RED if f.severity == 'Major' else (
-                        C_ORANGE if f.severity == 'Minor' else C_BLUE)
-            sev_bg = C_RED_LITE if f.severity == 'Major' else (
-                     C_ORANGE_LT if f.severity == 'Minor' else C_BLUE_LITE)
-
-            fdata = [[
-                Paragraph(f'Finding {f.finding_ref or f.id}', S['heading2']),
-                Paragraph(f.severity or '—',
-                          ParagraphStyle('fsev', fontName='Helvetica-Bold',
-                                         fontSize=8, textColor=sev_color)),
-            ]]
-            ft = Table(fdata, colWidths=[CONTENT_W * 0.8, CONTENT_W * 0.2])
-            ft.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), sev_bg),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
-                ('BOTTOMPADDING',(0,0),(-1, -1), 6),
-                ('LEFTPADDING',(0, 0), (-1, -1), 8),
-                ('BOX',        (0, 0), (-1, -1), 0.5, sev_color),
-                ('ALIGN',      (1, 0), (1, 0), 'RIGHT'),
-            ]))
-            E.append(ft)
-            E.append(Spacer(1, 3))
-            E.append(_info_grid([
-                ('Finding Ref',      f.finding_ref or f.id),
-                ('Category',         f.category or '—'),
-                ('Standard Ref',     f.standard_ref or '—'),
-                ('Status',           f.status or '—'),
-                ('Assigned To',      f.assigned_to or '—'),
-                ('CAP Due Date',     f.cap_due_date or '—'),
-                ('Reviewed By',      f.reviewed_by or '—'),
-                ('Closure Date',     f.closure_date or '—'),
-            ], S, cols=2))
-            E.append(Spacer(1, 3))
-            E.append(_text_block('Finding Description', f.description, S))
-            E.append(Spacer(1, 3))
-            E.append(_text_block('Root Cause', f.root_cause, S))
-            E.append(Spacer(1, 3))
-            E.append(_text_block('Immediate Action', f.immediate_action, S))
-            E.append(Spacer(1, 3))
-            E.append(_text_block('Long-Term Action', f.longterm_action, S))
-            E.append(Spacer(1, 3))
-            E.append(_text_block('Safety Review Notes', f.review_notes, S))
-            E.append(Spacer(1, 8))
-
-    # Checklist summary
-    if checklist:
-        E.append(PageBreak())
-        E.append(_section_header('4. Audit Checklist', S))
-        E.append(Spacer(1, 4))
-        cl_rows = [[
-            Paragraph('REF',      S['field_label']),
-            Paragraph('QUESTION', S['field_label']),
-            Paragraph('RESPONSE', S['field_label']),
-            Paragraph('COMMENT',  S['field_label']),
-        ]]
-        for item in checklist:
-            resp_color = C_GREEN if item.response == 'Yes' else (
-                         C_RED if item.response == 'No' else C_GRAY)
-            cl_rows.append([
-                Paragraph(item.item_ref or '—', S['mono']),
-                Paragraph((item.question or '—')[:120], S['small']),
-                Paragraph(item.response or '—',
-                          ParagraphStyle('cr', fontName='Helvetica-Bold',
-                                         fontSize=8, textColor=resp_color)),
-                Paragraph((item.comment or '')[:80], S['small']),
-            ])
-        col_w = [18*mm, CONTENT_W-18*mm-18*mm-50*mm, 18*mm, 50*mm]
-        clt = Table(cl_rows, colWidths=col_w, repeatRows=1)
-        clt.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
-            ('TEXTCOLOR',  (0, 0), (-1, 0), C_WHITE),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',       (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',     (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING',(0,0),(-1, -1), 3),
-            ('LEFTPADDING',(0, 0), (-1, -1), 4),
-        ]))
-        E.append(clt)
-        E.append(Spacer(1, 6))
-
-    E.append(_section_header('5. Audit Summary & Final Remarks', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Audit Summary', schedule.summary, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Final Remarks', schedule.final_remarks, S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Audit Result',      schedule.audit_result or '—'),
-        ('Follow-Up Required',schedule.followup_required or '—'),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('6. Signatures', S))
-    E.append(Spacer(1, 6))
-    E.append(_signature_block([
-        {'role': 'Lead Auditor',   'name': schedule.lead_auditor or '', 'date': schedule.actual_date or ''},
-        {'role': 'Dept. Manager',  'name': '', 'date': ''},
-        {'role': 'Safety Manager', 'name': '', 'date': ''},
-    ], S))
-
-    return _build_doc(E, 'Audit Report', ref, 'INTERNAL — AUDIT RECORD',
-                      generated_by, status)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_erp(erp, generated_by='Safety Department'):
-    """Emergency Response Plan PDF."""
-    S = _styles()
-    ref = erp.erp_ref or erp.id if erp else '—'
-    status = erp.status if erp else '—'
-    title = erp.title or 'Emergency Response Plan'
-    rev = erp.version if erp else 'REV0'
-
-    E = []
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type=f'Emergency Response Plan — {rev}',
-        status=status, dept='Safety Department',
-        date_str='—',
-        classification='RESTRICTED — EMERGENCY OPERATIONS', S=S
-    ))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('1. ERP Identification', S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('ERP Reference',    ref),
-        ('Scenario Type',    erp.scenario_type or '—'),
-        ('Version',          rev),
-        ('Status',           status),
-        ('Review Date',      erp.review_date or '—'),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('2. Description', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Scenario Description', erp.description, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('3. Activation Criteria', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Activation Criteria', erp.activation_criteria, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('4. Response Procedures', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Step-by-Step Response Procedures', erp.response_procedures, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('5. Roles & Contacts', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Responsible Roles', erp.responsible_roles, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Emergency Contacts', erp.emergency_contacts, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Notification List', erp.notification_list, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('6. Resources', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Resources Required', erp.resources_required, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('7. Signatures', S))
-    E.append(Spacer(1, 6))
-    E.append(_signature_block([
-        {'role': 'Safety Manager',    'name': '', 'date': ''},
-        {'role': 'Accountable Manager','name': '', 'date': ''},
-        {'role': 'Operations Manager', 'name': '', 'date': ''},
-    ], S))
-
-    return _build_doc(E, f'Emergency Response Plan {rev}', ref,
-                      'RESTRICTED — EMERGENCY OPERATIONS', generated_by, status)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_voluntary(report, generated_by='Safety Department'):
-    """Voluntary Safety Report PDF."""
-    S = _styles()
-    ref = report.ref_number or str(report.id) if report else '—'
-    status = report.status if report else '—'
-    dept = report.department.name if report and report.department else '—'
-
-    E = []
-    E.append(_cover_banner(
-        title='Voluntary Safety Report', ref=ref,
-        doc_type='Voluntary Safety Report',
-        status=status, dept=dept,
-        date_str=report.date if report else '—',
-        classification='INTERNAL — SAFETY REPORT', S=S
-    ))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('1. Report Details', S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Reference',     ref),
-        ('Report Type',   report.report_type or '—'),
-        ('Date',          report.date or '—'),
-        ('Location',      report.location or '—'),
-        ('Department',    dept),
-        ('Status',        status),
-        ('Reporter',      report.reporter_name or 'Anonymous'),
-        ('Position',      report.position or '—'),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('2. Report Content', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Description of Safety Concern', report.description, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Potential Consequences', report.consequences, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Suggestion / Recommendation', report.suggestion, S))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('3. Safety Review', S))
-    E.append(Spacer(1, 4))
-    E.append(Paragraph(
-        'This report has been received by the Safety Department and will be reviewed '
-        'in accordance with AviaS SMS procedures. Reporter confidentiality '
-        'is protected under the Just Culture policy.',
-        S['body']))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('4. Signatures', S))
-    E.append(Spacer(1, 6))
-    E.append(_signature_block([
-        {'role': 'Safety Officer',  'name': '', 'date': ''},
-        {'role': 'Safety Manager',  'name': '', 'date': ''},
-    ], S))
-
-    return _build_doc(E, 'Voluntary Safety Report', ref,
-                      'INTERNAL — SAFETY REPORT', generated_by, status)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_confidential(report, generated_by='Safety Department'):
-    """Confidential Safety Report PDF — identity-protected."""
-    S = _styles()
-    ref = report.ref_number or str(report.id) if report else '—'
-    status = report.status if report else '—'
-
-    E = []
-    E.append(_cover_banner(
-        title='Confidential Safety Report', ref=ref,
-        doc_type='Confidential Safety Report',
-        status=status, dept='Safety Department',
-        date_str=report.date if report else '—',
-        classification='CONFIDENTIAL — REPORTER IDENTITY PROTECTED', S=S
-    ))
-    E.append(Spacer(1, 6))
-
-    E.append(Paragraph(
-        '⚠  CONFIDENTIALITY NOTICE: This report was submitted under the AviaS '
-        'Confidential Reporting Programme. The identity of the reporter '
-        'is known only to the Safety Manager and is protected by company policy '
-        'and applicable aviation regulations. This document must not be shared '
-        'beyond the Safety Management System team.',
-        ParagraphStyle('notice', fontName='Helvetica-Bold', fontSize=8,
-                       leading=12, textColor=C_RED,
-                       backColor=C_RED_LITE, borderPad=6)))
     E.append(Spacer(1, 8))
 
-    E.append(_section_header('1. Report Details', S))
+    E.append(_section_header('2. Audit Scope & Objectives', S))
     E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Reference', ref),
-        ('Date',      report.date or '—'),
-        ('Location',  report.location or '—'),
-        ('Status',    status),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
+    for lbl, attr in [
+        ('Scope',        'scope'),
+        ('Objectives',   'objectives'),
+        ('Criteria',     'criteria'),
+        ('Methodology',  'methodology'),
+    ]:
+        E.append(_text_block(lbl, getattr(audit, attr, '') if audit else '', S))
+        E.append(Spacer(1, 4))
+    E.append(Spacer(1, 4))
 
-    E.append(_section_header('2. Report Content', S))
+    E.append(_section_header('3. Audit Findings', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Description of Safety Concern', report.description, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Potential Consequences', report.consequences, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Suggestion / Recommendation', report.suggestion, S))
-    E.append(Spacer(1, 6))
+    if findings:
+        cw = [22*mm, 22*mm, 16*mm, CONTENT_W-22*mm-22*mm-16*mm-22*mm-30*mm, 22*mm, 30*mm]
+        tbl_rows = [[
+            Paragraph(str(f.id), S['mono']),
+            Paragraph(getattr(f, 'reference', '—') or '—', S['td']),
+            Paragraph(getattr(f, 'severity', '—') or '—', S['td']),
+            Paragraph(getattr(f, 'description', '—') or '—', S['td']),
+            _status_para(getattr(f, 'status', '—') or '—', S),
+            Paragraph(getattr(f, 'due_date', '—') or '—', S['td']),
+        ] for f in findings]
+        E.append(_std_table(['ID','REF','SEVERITY','DESCRIPTION','STATUS','DUE DATE'],
+                            tbl_rows, cw, S))
+        sev = {'Major': 0, 'Minor': 0, 'Observation': 0}
+        for f in findings:
+            k = getattr(f, 'severity', 'Observation') or 'Observation'
+            sev[k] = sev.get(k, 0) + 1
+        E.append(Spacer(1, 4))
+        E.append(Paragraph(
+            f"Summary: {sev['Major']} Major · {sev['Minor']} Minor · {sev['Observation']} Observations",
+            S['caption']))
+    else:
+        E.append(Paragraph('No findings recorded for this audit.', S['caption']))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('3. Safety Manager Acknowledgement', S))
+    E.append(_section_header('4. Audit Conclusion', S))
+    E.append(Spacer(1, 4))
+    for lbl, attr in [
+        ('Overall Conclusion',    'conclusion'),
+        ('Summary of Findings',   'findings_summary'),
+        ('Recommendations',       'recommendations'),
+        ('Follow-Up Required',    'follow_up'),
+    ]:
+        E.append(_text_block(lbl, getattr(audit, attr, '') if audit else '', S))
+        E.append(Spacer(1, 4))
+    E.append(Spacer(1, 4))
+
+    E.append(_section_header('5. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
+        {'role': 'Lead Auditor',    'name': getattr(audit, 'lead_auditor', '') if audit else '',   'date': getattr(audit, 'actual_date', '') if audit else ''},
+        {'role': 'Auditee',         'name': getattr(audit, 'auditee', '') if audit else '',        'date': ''},
+        {'role': 'Safety Manager',  'name': getattr(audit, 'safety_manager', '') if audit else '', 'date': ''},
+        {'role': 'Accountable Mgr', 'name': '', 'date': ''},
+    ], S))
+
+    return _build_doc(E, 'Safety Audit Report', ref,
+                      'RESTRICTED — SAFETY SENSITIVE', generated_by, status)
+
+
+# ── 8. ERP / EMERGENCY REPORT ────────────────────────────────────────────────
+def pdf_erp(report, generated_by='Safety Department'):
+    S      = _styles()
+    ref    = report.id if report else '—'
+    status = getattr(report, 'status', 'Submitted') or 'Submitted'
+    title  = getattr(report, 'title', 'Emergency Response Report') or 'Emergency Response Report'
+    E = []
+
+    E.append(_cover_banner(title, ref, 'Emergency Response Report', status, '—',
+                           getattr(report, 'date', '—') if report else '—',
+                           'RESTRICTED — SAFETY SENSITIVE', S))
+    E.append(Spacer(1, 10))
+
+    E.append(_section_header('1. Incident Information', S))
+    E.append(Spacer(1, 4))
+    E.append(_info_grid([
+        ('Report Reference',  ref),
+        ('Incident Type',     getattr(report, 'incident_type', '—') or '—'),
+        ('Date',              getattr(report, 'date', '—') or '—'),
+        ('Time',              getattr(report, 'time', '—') or '—'),
+        ('Location',          getattr(report, 'location', '—') or '—'),
+        ('Reporter',          getattr(report, 'reporter', '—') or '—'),
+    ], S, cols=2))
+    E.append(Spacer(1, 8))
+
+    for lbl, attr in [
+        ('Description', 'description'),
+        ('Actions Taken', 'actions_taken'),
+        ('Outcome', 'outcome'),
+        ('Lessons Learned', 'lessons_learned'),
+    ]:
+        E.append(_section_header(lbl, S, level=2))
+        E.append(Spacer(1, 4))
+        E.append(_text_block(lbl, getattr(report, attr, '') if report else '', S))
+        E.append(Spacer(1, 6))
+
+    E.append(_section_header('5. Signatures', S))
+    E.append(Spacer(1, 6))
+    E.append(_signature_block([
+        {'role': 'Reporter',       'name': getattr(report, 'reporter', '') if report else '', 'date': getattr(report, 'date', '') if report else ''},
         {'role': 'Safety Manager', 'name': '', 'date': ''},
         {'role': 'Accountable Mgr','name': '', 'date': ''},
     ], S))
 
-    return _build_doc(E, 'Confidential Safety Report', ref,
-                      'CONFIDENTIAL — REPORTER IDENTITY PROTECTED',
-                      generated_by, status)
+    return _build_doc(E, 'Emergency Response Report', ref,
+                      'RESTRICTED — SAFETY SENSITIVE', generated_by, status)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_training(training, generated_by='Safety Department'):
-    """Training Record PDF."""
-    S = _styles()
-    ref = f'TRN-{training.id}' if training else '—'
-    status = training.status if training else '—'
-    dept = training.department.name if training and training.department else '—'
-
+# ── 9. VOLUNTARY REPORT ──────────────────────────────────────────────────────
+def pdf_voluntary(report, generated_by='Safety Department'):
+    S      = _styles()
+    ref    = report.id if report else '—'
+    status = getattr(report, 'status', 'Received') or 'Received'
+    title  = getattr(report, 'subject', 'Voluntary Safety Report') or 'Voluntary Safety Report'
     E = []
-    E.append(_cover_banner(
-        title=training.training_program or 'Training Record' if training else 'Training Record',
-        ref=ref, doc_type='Training Record',
-        status=status, dept=dept,
-        date_str=training.training_date or training.scheduled_date if training else '—',
-        classification='INTERNAL — TRAINING RECORD', S=S
-    ))
-    E.append(Spacer(1, 6))
 
-    E.append(_section_header('1. Employee Information', S))
+    E.append(_cover_banner(title, ref, 'Voluntary Safety Report', status,
+                           getattr(report, 'department', '—') if report else '—',
+                           getattr(report, 'date', '—') if report else '—',
+                           'CONFIDENTIAL — VOLUNTARY REPORT', S))
+    E.append(Spacer(1, 10))
+
+    E.append(_section_header('1. Report Details', S))
+    E.append(Spacer(1, 4))
+    anon = getattr(report, 'anonymous', True)
+    E.append(_info_grid([
+        ('Report Reference', ref),
+        ('Date Submitted',   getattr(report, 'date', '—') or '—'),
+        ('Category',         getattr(report, 'category', '—') or '—'),
+        ('Reporter',         'Anonymous' if anon else (getattr(report, 'reporter_name', '—') or '—')),
+        ('Department',       getattr(report, 'department', '—') or '—'),
+        ('Status',           status),
+    ], S, cols=2))
+    E.append(Spacer(1, 8))
+
+    for lbl, attr in [
+        ('Description of Safety Concern', 'description'),
+        ('Suggested Improvement',          'suggestion'),
+        ('Safety Officer Notes',           'safety_notes'),
+    ]:
+        E.append(_text_block(lbl, getattr(report, attr, '') if report else '', S))
+        E.append(Spacer(1, 6))
+
+    E.append(Paragraph(
+        'NOTE: This report was submitted voluntarily. Reporter identity is protected '
+        'in accordance with the AviaS Just Culture Policy.',
+        S['caption']))
+
+    return _build_doc(E, 'Voluntary Safety Report', ref,
+                      'CONFIDENTIAL — VOLUNTARY REPORT', generated_by, status,
+                      watermark='CONFIDENTIAL')
+
+
+# ── 10. CONFIDENTIAL REPORT ──────────────────────────────────────────────────
+def pdf_confidential(report, generated_by='Safety Department'):
+    S      = _styles()
+    ref    = report.id if report else '—'
+    status = getattr(report, 'status', 'Received') or 'Received'
+    title  = getattr(report, 'subject', 'Confidential Safety Report') or 'Confidential Safety Report'
+    E = []
+
+    E.append(_cover_banner(title, ref, 'Confidential Safety Report', status, '—',
+                           getattr(report, 'date', '—') if report else '—',
+                           'STRICTLY CONFIDENTIAL', S))
+    E.append(Spacer(1, 10))
+
+    E.append(_section_header('1. Report Information', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Employee Name',   training.employee_name or '—'),
-        ('Employee ID',     training.employee_id or '—'),
-        ('Department',      dept),
-        ('Position',        training.position or '—'),
+        ('Report Reference', ref),
+        ('Date',             getattr(report, 'date', '—') or '—'),
+        ('Category',         getattr(report, 'category', '—') or '—'),
+        ('Status',           status),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('2. Training Details', S))
+    for lbl, attr in [
+        ('Safety Concern',    'description'),
+        ('Suggested Action',  'suggestion'),
+        ('Officer Response',  'safety_notes'),
+    ]:
+        E.append(_text_block(lbl, getattr(report, attr, '') if report else '', S))
+        E.append(Spacer(1, 6))
+
+    E.append(Paragraph(
+        'STRICTLY CONFIDENTIAL. Access restricted to the Safety Manager and Accountable Executive only.',
+        S['caption']))
+
+    return _build_doc(E, 'Confidential Safety Report', ref,
+                      'STRICTLY CONFIDENTIAL', generated_by, status,
+                      watermark='CONFIDENTIAL')
+
+
+# ── 11. TRAINING RECORD ──────────────────────────────────────────────────────
+def pdf_training(employee, records, generated_by='Safety Department'):
+    S    = _styles()
+    ref  = employee.id if employee else '—'
+    name = employee.full_name if employee else 'Employee'
+    dept = employee.department.name if employee and employee.department else '—'
+    E = []
+
+    E.append(_cover_banner(f'Training Record — {name}', ref,
+                           'Employee Training Record', 'Active', dept,
+                           datetime.utcnow().strftime('%Y-%m-%d'),
+                           'INTERNAL — HR RECORD', S))
+    E.append(Spacer(1, 10))
+
+    E.append(_section_header('1. Employee Profile', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Training Type',     training.training_type or '—'),
-        ('Programme',         training.training_program or '—'),
-        ('Course Code',       training.course_code or '—'),
-        ('Instructor',        training.instructor or '—'),
-        ('Location',          training.location or '—'),
-        ('Duration (hrs)',    str(training.duration_hours or '—')),
-        ('Scheduled Date',    training.scheduled_date or '—'),
-        ('Training Date',     training.training_date or '—'),
-        ('Completion Date',   training.completion_date or '—'),
-        ('Expiry Date',       training.expiry_date or '—'),
-        ('Status',            status),
-        ('Recurrent',         'Yes' if training.is_recurrent else 'No'),
+        ('Employee ID',    ref),
+        ('Full Name',      name),
+        ('Department',     dept),
+        ('Role',           getattr(employee, 'role', '—') or '—'),
+        ('Position',       getattr(employee, 'position', '—') or '—'),
+        ('Email',          getattr(employee, 'email', '—') or '—'),
+        ('Date of Join',   getattr(employee, 'date_of_join', '—') or '—'),
+        ('Report Date',    datetime.utcnow().strftime('%Y-%m-%d')),
     ], S, cols=2))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Notes', training.notes, S))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('3. Signatures', S))
+    E.append(_section_header('2. Training Records', S))
+    E.append(Spacer(1, 4))
+    if records:
+        cw = [28*mm, 40*mm, 24*mm, 20*mm, 22*mm, CONTENT_W-28*mm-40*mm-24*mm-20*mm-22*mm]
+        tbl_rows = [[
+            Paragraph(getattr(r, 'course_code', '—') or '—', S['mono']),
+            Paragraph(getattr(r, 'course_name', '—') or '—', S['td']),
+            Paragraph(getattr(r, 'training_date', '—') or '—', S['td']),
+            Paragraph(getattr(r, 'expiry_date', '—') or '—', S['td']),
+            _status_para(getattr(r, 'status', '—') or '—', S),
+            Paragraph(getattr(r, 'provider', '—') or '—', S['td']),
+        ] for r in records]
+        E.append(_std_table(
+            ['CODE','COURSE / TRAINING','DATE','EXPIRY','STATUS','PROVIDER'],
+            tbl_rows, cw, S))
+        expired = sum(1 for r in records if (getattr(r, 'status', '') or '').lower() in ('expired','overdue'))
+        E.append(Spacer(1, 4))
+        E.append(Paragraph(f'Total: {len(records)} records  ·  {expired} expired / overdue.',
+                           S['caption']))
+    else:
+        E.append(Paragraph('No training records found for this employee.', S['caption']))
+    E.append(Spacer(1, 8))
+
+    E.append(_section_header('3. Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
-        {'role': 'Employee',     'name': training.employee_name or '', 'date': training.completion_date or ''},
-        {'role': 'Instructor',   'name': training.instructor or '', 'date': training.completion_date or ''},
-        {'role': 'Training Mgr', 'name': '', 'date': ''},
+        {'role': 'Employee',          'name': name, 'date': ''},
+        {'role': 'Training Manager',  'name': '', 'date': ''},
+        {'role': 'Safety Manager',    'name': '', 'date': ''},
     ], S))
 
-    return _build_doc(E, 'Training Record', ref, 'INTERNAL — TRAINING RECORD',
-                      generated_by, status)
+    return _build_doc(E, 'Employee Training Record', ref,
+                      'INTERNAL — HR RECORD', generated_by, 'Active')
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_audit_finding(finding, audit, generated_by='Safety Department'):
-    """Single Audit Finding / NCR / CAP PDF."""
-    S = _styles()
-    ref = finding.finding_ref or finding.id if finding else '—'
-    status = finding.status if finding else '—'
-    title = finding.finding_title or f'Finding {ref}'
-    dept = audit.department.name if audit and audit.department else '—'
-
+# ── 12. AUDIT FINDING ────────────────────────────────────────────────────────
+def pdf_audit_finding(finding, audit, actions, generated_by='Safety Department'):
+    S      = _styles()
+    ref    = finding.id if finding else '—'
+    status = getattr(finding, 'status', '—') or '—'
+    title  = getattr(finding, 'description', 'Audit Finding') or 'Audit Finding'
     E = []
-    E.append(_cover_banner(
-        title=title, ref=ref, doc_type='Audit Finding / CAP Record',
-        status=status, dept=dept,
-        date_str=finding.assigned_date if finding else '—',
-        classification='INTERNAL — AUDIT FINDING', S=S
-    ))
-    E.append(Spacer(1, 6))
+
+    E.append(_cover_banner(title[:120], ref, 'Audit Finding Report', status,
+                           audit.department.name if audit and audit.department else '—',
+                           getattr(audit, 'actual_date', getattr(audit, 'planned_date', '—')) if audit else '—',
+                           'RESTRICTED — AUDIT RECORD', S))
+    E.append(Spacer(1, 10))
 
     E.append(_section_header('1. Finding Details', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('Finding Reference', ref),
-        ('Severity',          finding.severity or '—'),
-        ('Category',          finding.category or '—'),
-        ('Standard Reference',finding.standard_ref or '—'),
-        ('Audit Reference',   finding.schedule_id or '—'),
-        ('Assigned To',       finding.assigned_to or '—'),
-        ('Assigned Dept',     finding.assigned_dept or '—'),
-        ('Assigned Date',     finding.assigned_date or '—'),
-        ('CAP Responsible',   finding.cap_responsible or '—'),
-        ('CAP Due Date',      finding.cap_due_date or '—'),
-        ('Status',            status),
-        ('Closure Date',      finding.closure_date or '—'),
+        ('Finding Reference',  ref),
+        ('Audit Reference',    audit.id if audit else '—'),
+        ('Audit Type',         getattr(audit, 'audit_type', '—') or '—' if audit else '—'),
+        ('Severity',           getattr(finding, 'severity', '—') or '—'),
+        ('Standard / Clause',  getattr(finding, 'standard_clause', '—') or '—'),
+        ('Audit Date',         getattr(audit, 'actual_date', '—') or '—' if audit else '—'),
+        ('Lead Auditor',       getattr(audit, 'lead_auditor', '—') or '—' if audit else '—'),
+        ('Status',             status),
+        ('Due Date',           getattr(finding, 'due_date', '—') or '—'),
+        ('Closed Date',        getattr(finding, 'closed_date', '—') or '—'),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('2. Requirement & Evidence', S))
+    E.append(_section_header('2. Finding Narrative', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Regulatory/Standard Requirement', finding.requirement, S))
+    for lbl, attr in [
+        ('Description',              'description'),
+        ('Evidence / Objective Evidence', 'evidence'),
+        ('Required Corrective Action',    'required_action'),
+        ('Root Cause',                    'root_cause'),
+    ]:
+        E.append(_text_block(lbl, getattr(finding, attr, '') if finding else '', S))
+        E.append(Spacer(1, 4))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Auditor Evidence', finding.evidence, S))
-    E.append(Spacer(1, 6))
 
-    E.append(_section_header('3. Root Cause Analysis', S))
+    E.append(_section_header('3. Corrective Actions', S))
     E.append(Spacer(1, 4))
-    E.append(_text_block('Root Cause', finding.root_cause, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Investigation Notes', finding.investigation_notes, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Contributing Factors', finding.contributing_factors, S))
-    E.append(Spacer(1, 6))
+    E.append(_actions_table([{
+        'id': a.id, 'description': a.description,
+        'owner': a.owner, 'due_date': a.due_date, 'status': a.status,
+    } for a in (actions or [])], S))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('4. Corrective Action Plan (CAP)', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Immediate Action', finding.immediate_action, S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Long-Term / Preventive Action', finding.longterm_action, S))
+    E.append(_section_header('4. Verification & Close-Out', S))
     E.append(Spacer(1, 4))
     E.append(_info_grid([
-        ('CAP Completion %', f'{finding.cap_completion_pct or 0}%'),
-        ('CAP Status',       finding.cap_status or '—'),
+        ('Verified By',    getattr(finding, 'verified_by', '—') or '—'),
+        ('Verified Date',  getattr(finding, 'verified_date', '—') or '—'),
+        ('Closure Method', getattr(finding, 'closure_method', '—') or '—'),
+        ('Closure Notes',  getattr(finding, 'closure_notes', '—') or '—'),
     ], S, cols=2))
-    E.append(Spacer(1, 6))
+    E.append(Spacer(1, 8))
 
-    E.append(_section_header('5. Safety Review', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Review Notes', finding.review_notes, S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Reviewed By',   finding.reviewed_by or '—'),
-        ('Review Date',   finding.review_date or '—'),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('6. Closure', S))
-    E.append(Spacer(1, 4))
-    E.append(_text_block('Closure Notes', finding.closure_notes, S))
-    E.append(Spacer(1, 4))
-    E.append(_info_grid([
-        ('Closure Verified By', finding.closure_verified_by or '—'),
-        ('Closure Date',        finding.closure_date or '—'),
-    ], S, cols=2))
-    E.append(Spacer(1, 6))
-
-    E.append(_section_header('7. Signatures', S))
+    E.append(_section_header('5. Signatures & Authorisation', S))
     E.append(Spacer(1, 6))
     E.append(_signature_block([
-        {'role': 'Dept Manager',   'name': finding.sig_dept_manager or '', 'date': finding.sig_date or ''},
-        {'role': 'Lead Auditor',   'name': finding.sig_auditor or '',       'date': finding.sig_date or ''},
-        {'role': 'Safety Manager', 'name': finding.sig_safety_manager or '', 'date': finding.sig_date or ''},
+        {'role': 'Lead Auditor',    'name': getattr(audit, 'lead_auditor', '') if audit else '', 'date': getattr(audit, 'actual_date', '') if audit else ''},
+        {'role': 'Responsible Mgr', 'name': '', 'date': ''},
+        {'role': 'Safety Manager',  'name': '', 'date': ''},
+        {'role': 'Accountable Mgr', 'name': '', 'date': ''},
     ], S))
 
-    return _build_doc(E, 'Audit Finding / CAP', ref,
-                      'INTERNAL — AUDIT FINDING', generated_by, status)
+    return _build_doc(E, 'Audit Finding Report', ref,
+                      'RESTRICTED — AUDIT RECORD', generated_by, status)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-
-def pdf_spi_summary(indicators, data_by_spi, generated_by='Safety Department'):
-    """SPI/SPT Performance Summary Report PDF."""
-    S = _styles()
-    month_str = datetime.utcnow().strftime('%B %Y')
-    ref = f'SPI-{datetime.utcnow().strftime("%Y%m")}'
-
+# ── 13. SPI SUMMARY ──────────────────────────────────────────────────────────
+def pdf_spi_summary(indicators, period, generated_by='Safety Department'):
+    S   = _styles()
+    ref = f'SPI-{period}' if period else 'SPI-SUMMARY'
     E = []
-    E.append(_cover_banner(
-        title=f'Safety Performance Indicators — {month_str}',
-        ref=ref, doc_type='SPI / SPT Performance Report',
-        status='Current', dept='Safety Department',
-        date_str=datetime.utcnow().strftime('%Y-%m-%d'),
-        classification='INTERNAL — PERFORMANCE REPORT', S=S
-    ))
-    E.append(Spacer(1, 6))
 
-    E.append(_section_header('Safety Performance Indicators Summary', S))
+    E.append(_cover_banner(f'Safety Performance Indicators — {period or "All Periods"}',
+                           ref, 'Safety Performance Report', 'Active', 'Safety Department',
+                           datetime.utcnow().strftime('%Y-%m-%d'),
+                           'INTERNAL — SAFETY MANAGEMENT', S))
+    E.append(Spacer(1, 10))
+
+    E.append(_section_header('1. Report Information', S))
     E.append(Spacer(1, 4))
-
-    if not indicators:
-        E.append(Paragraph('No SPI indicators configured.', S['small']))
-    else:
-        rows = [[
-            Paragraph('CODE',       S['field_label']),
-            Paragraph('INDICATOR',  S['field_label']),
-            Paragraph('CATEGORY',   S['field_label']),
-            Paragraph('CALC TYPE',  S['field_label']),
-            Paragraph('SPT TARGET', S['field_label']),
-            Paragraph('L1 YELLOW',  S['field_label']),
-            Paragraph('L2 ORANGE',  S['field_label']),
-            Paragraph('L3 RED',     S['field_label']),
-            Paragraph('LATEST',     S['field_label']),
-            Paragraph('STATUS',     S['field_label']),
-        ]]
-        for ind in indicators:
-            entries = data_by_spi.get(ind.id, [])
-            latest = entries[-1].value if entries else None
-            latest_str = f'{latest:.2f}' if latest is not None else '—'
-
-            # Determine alert status
-            if latest is not None:
-                if ind.alert_l3 and latest >= ind.alert_l3:
-                    alert = 'RED L3'
-                    ac = C_RED
-                elif ind.alert_l2 and latest >= ind.alert_l2:
-                    alert = 'ORANGE L2'
-                    ac = C_ORANGE
-                elif ind.alert_l1 and latest >= ind.alert_l1:
-                    alert = 'YELLOW L1'
-                    ac = C_GOLD
-                else:
-                    alert = 'GREEN'
-                    ac = C_GREEN
-            else:
-                alert = 'NO DATA'
-                ac = C_GRAY
-
-            rows.append([
-                Paragraph(ind.code or '—', S['mono']),
-                Paragraph((ind.name or '—')[:40], S['small']),
-                Paragraph(ind.category or '—', S['small']),
-                Paragraph(ind.calc_type or '—', S['small']),
-                Paragraph(str(ind.spt_target or '—'), S['small']),
-                Paragraph(str(ind.alert_l1 or '—'), S['small']),
-                Paragraph(str(ind.alert_l2 or '—'), S['small']),
-                Paragraph(str(ind.alert_l3 or '—'), S['small']),
-                Paragraph(latest_str, S['small']),
-                Paragraph(alert, ParagraphStyle('as', fontName='Helvetica-Bold',
-                                                fontSize=7, textColor=ac)),
-            ])
-
-        col_w = [16*mm, 38*mm, 22*mm, 16*mm, 18*mm, 16*mm, 18*mm, 14*mm, 14*mm, 22*mm]
-        spi_t = Table(rows, colWidths=col_w, repeatRows=1)
-        spi_t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), C_NAVY),
-            ('TEXTCOLOR',  (0, 0), (-1, 0), C_WHITE),
-            ('FONTSIZE',   (0, 0), (-1, 0), 6.5),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_WHITE, C_GRAY_LITE]),
-            ('GRID',       (0, 0), (-1, -1), 0.3, C_BORDER),
-            ('VALIGN',     (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING',(0,0),(-1, -1), 3),
-            ('LEFTPADDING',(0, 0), (-1, -1), 3),
-            ('FONTSIZE',   (0, 1), (-1, -1), 7),
-        ]))
-        E.append(spi_t)
-
+    E.append(_info_grid([
+        ('Report Reference',   ref),
+        ('Reporting Period',   period or 'All'),
+        ('Generated By',       generated_by),
+        ('Generated Date',     datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')),
+        ('Total Indicators',   str(len(indicators or []))),
+        ('ICAO Standard',      'Doc 9859 — Safety Management Manual'),
+    ], S, cols=2))
     E.append(Spacer(1, 8))
-    E.append(Paragraph(
-        'This SPI Summary Report is produced automatically from the AviaS '
-        'Safety Management System. Data reflects the most recent monthly entries. '
-        'Trend analysis and statistical monitoring are performed in accordance with '
-        'ICAO Doc 9859 §10 and the approved SPI/SPT Framework.',
-        S['small']))
 
-    return _build_doc(E, 'SPI/SPT Summary', ref,
-                      'INTERNAL — PERFORMANCE REPORT', generated_by, 'Current')
+    E.append(_section_header('2. Safety Performance Indicators', S))
+    E.append(Spacer(1, 4))
+    if indicators:
+        cw = [22*mm, 50*mm, 20*mm, 20*mm, 20*mm, CONTENT_W-22*mm-50*mm-20*mm-20*mm-20*mm]
+        tbl_rows = []
+        for ind in indicators:
+            tbl_rows.append([
+                Paragraph(getattr(ind, 'code', str(ind.id)), S['mono']),
+                Paragraph(getattr(ind, 'name', '—') or '—', S['td']),
+                Paragraph(str(getattr(ind, 'target', '—') or '—'), S['td']),
+                Paragraph(str(getattr(ind, 'actual', '—') or '—'), S['td']),
+                _status_para(getattr(ind, 'performance_status', getattr(ind, 'status', '—')) or '—', S),
+                Paragraph(getattr(ind, 'trend', '—') or '—', S['td']),
+            ])
+        E.append(_std_table(
+            ['CODE','INDICATOR','TARGET','ACTUAL','STATUS','TREND'],
+            tbl_rows, cw, S))
+    else:
+        E.append(Paragraph('No safety performance indicators found for this period.', S['caption']))
+    E.append(Spacer(1, 8))
+
+    E.append(_section_header('3. Authorisation', S))
+    E.append(Spacer(1, 6))
+    E.append(_signature_block([
+        {'role': 'Safety Manager',    'name': generated_by, 'date': datetime.utcnow().strftime('%Y-%m-%d')},
+        {'role': 'Accountable Mgr',   'name': '', 'date': ''},
+        {'role': 'Reviewed By',       'name': '', 'date': ''},
+    ], S))
+
+    return _build_doc(E, 'Safety Performance Report', ref,
+                      'INTERNAL — SAFETY MANAGEMENT', generated_by, 'Active')
