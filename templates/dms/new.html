@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}New Controlled Document — AviaS DMS{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-sub"><a href="{{ url_for('dms_library') }}">Controlled Docs</a> › New Document</div>
+    <div class="page-title">📄 Create Controlled Document</div>
+  </div>
+  <a href="{{ url_for('dms_library') }}" class="btn-outline">← Back</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="alert alert-{{ 'success' if cat == 'success' else 'error' }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div style="max-width:700px">
+  <div class="card">
+    <div class="card-title">📋 Document Master Record</div>
+    <div style="color:var(--muted);font-size:11px;margin-bottom:16px">
+      This creates the master record. You will upload the file on the next screen.
+    </div>
+    <form method="post" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="fg">
+          <label class="fl">Document Number <span style="color:var(--red)">*</span></label>
+          <input name="doc_number" class="input" placeholder="e.g. SMS/MAN/001" required>
+          <div class="fh">Unique identifier per your numbering scheme</div>
+        </div>
+        <div class="fg">
+          <label class="fl">Category</label>
+          <select name="category_id" class="input">
+            <option value="">— Select Category —</option>
+            {% for c in categories %}
+              <option value="{{ c.id }}">{{ c.icon }} {{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Document Title <span style="color:var(--red)">*</span></label>
+        <input name="title" class="input" placeholder="e.g. Safety Management System Manual" required>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="fg">
+          <label class="fl">Department / Originating Unit</label>
+          <input name="department" class="input" placeholder="e.g. Flight Operations">
+        </div>
+        <div class="fg">
+          <label class="fl">Classification</label>
+          <select name="classification" class="input">
+            <option value="INTERNAL" selected>INTERNAL</option>
+            <option value="UNCLASSIFIED">UNCLASSIFIED</option>
+            <option value="CONFIDENTIAL">CONFIDENTIAL</option>
+            <option value="RESTRICTED">RESTRICTED</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="fg">
+          <label class="fl">Document Owner</label>
+          <input name="document_owner" class="input" placeholder="Name / Title">
+        </div>
+        <div class="fg">
+          <label class="fl">Approving Authority</label>
+          <input name="approving_authority" class="input" placeholder="Name / Title">
+        </div>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Description</label>
+        <textarea name="description" class="input" rows="3"
+          placeholder="Brief description of scope and purpose…"></textarea>
+      </div>
+
+      <div class="fg">
+        <label class="fl">Keywords</label>
+        <input name="keywords" class="input" placeholder="safety, manual, SMS, operations (comma separated)">
+        <div class="fh">Used for search on mobile app and web</div>
+      </div>
+
+      <div class="fg">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" name="is_mandatory_reading" style="width:16px;height:16px">
+          <div>
+            <div style="font-weight:600;font-size:12px">Mandatory Reading</div>
+            <div class="fh">Employees must acknowledge having read this document</div>
+          </div>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button type="submit" class="btn-primary">Create Document →</button>
+        <a href="{{ url_for('dms_library') }}" class="btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+.page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:16px}
+.page-title{font-size:20px;font-weight:800;color:var(--navy);margin-top:4px}
+.page-sub{font-size:11px;color:var(--muted)}
+.page-sub a{color:var(--muted);text-decoration:underline}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--shadow)}
+.card-title{font-weight:700;font-size:13px;color:var(--navy);margin-bottom:14px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fl{font-size:11px;font-weight:600;color:var(--muted)}
+.fh{font-size:10px;color:var(--muted2)}
+.input{border:1px solid var(--border2);border-radius:var(--r2);padding:7px 10px;font-size:12px;background:#fff;color:var(--text);font-family:inherit;width:100%}
+.input:focus{outline:none;border-color:var(--navy)}
+.btn-primary{background:var(--navy);color:#fff;border:none;border-radius:var(--r2);padding:9px 18px;font-size:12px;font-weight:600;cursor:pointer}
+.btn-primary:hover{background:var(--navy2)}
+.btn-outline{background:transparent;color:var(--navy);border:1px solid var(--border2);border-radius:var(--r2);padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;display:inline-block}
+.btn-outline:hover{background:var(--surface)}
+.alert{padding:10px 14px;border-radius:var(--r2);margin-bottom:14px;font-size:12px}
+.alert-success{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.alert-error{background:#fff1f1;color:#b91c1c;border:1px solid #fecaca}
+</style>
+{% endblock %}

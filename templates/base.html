@@ -323,7 +323,9 @@
     <a href="/safety-promotion/training/export/xlsx" class="nav-a" data-tip="Export Excel"><span class="nav-icon">⬇</span><span class="nav-label">Export Excel</span><span class="nav-tag-blue">XLS</span></a>
 
     <div class="sb-section">Documents</div>
-    <a href="/documents" class="nav-a {% if '/documents' in request.path and 'trace' not in request.path %}active{% endif %}" data-tip="Documents"><span class="nav-icon">📁</span><span class="nav-label">Document Control</span></a>
+    <a href="/documents" class="nav-a {% if '/documents' in request.path and 'trace' not in request.path and '/dms' not in request.path %}active{% endif %}" data-tip="Documents"><span class="nav-icon">📁</span><span class="nav-label">Document Control</span></a>
+    <a href="/dms" class="nav-a {% if '/dms' in request.path %}active{% endif %}" data-tip="Controlled Docs"><span class="nav-icon">🗂</span><span class="nav-label">Controlled Docs</span></a>
+    <a href="/dms/compliance" class="nav-a {% if request.path=='/dms/compliance' %}active{% endif %}" data-tip="Read Compliance"><span class="nav-icon">✅</span><span class="nav-label">Read Compliance</span></a>
     <a href="/traceability" class="nav-a {% if request.path=='/traceability' %}active{% endif %}" data-tip="Traceability"><span class="nav-icon">🔗</span><span class="nav-label">Traceability</span></a>
 
     <div class="sb-section">Governance &amp; Accountability</div>

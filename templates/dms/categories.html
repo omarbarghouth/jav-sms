@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Document Categories — AviaS DMS{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-sub"><a href="{{ url_for('dms_library') }}">Controlled Docs</a> › Categories</div>
+    <div class="page-title">🏷 Document Categories</div>
+  </div>
+  <a href="{{ url_for('dms_library') }}" class="btn-outline">← Library</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="alert alert-{{ 'success' if cat == 'success' else 'error' }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div style="display:grid;grid-template-columns:1fr 360px;gap:18px;align-items:start">
+
+  {# ── Existing categories ── #}
+  <div class="card">
+    <div class="card-title">📂 Existing Categories</div>
+    {% if cats %}
+    <table class="data-table">
+      <thead>
+        <tr><th style="width:40px">Icon</th><th>Name</th><th>Code</th><th>Documents</th><th>Sort</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for c in cats %}
+        <tr>
+          <td style="font-size:20px;text-align:center">{{ c.icon }}</td>
+          <td><strong>{{ c.name }}</strong>{% if c.description %}<div class="muted" style="font-size:10px">{{ c.description }}</div>{% endif %}</td>
+          <td><span class="pill pill-blue">{{ c.code }}</span></td>
+          <td>{{ c.documents|length }}</td>
+          <td>{{ c.sort_order }}</td>
+          <td>
+            {% if c.documents|length == 0 %}
+            <form method="post">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="cat_id" value="{{ c.id }}">
+              <button class="btn-xs btn-danger" onclick="return confirm('Delete category?')">Delete</button>
+            </form>
+            {% else %}
+              <span class="muted" style="font-size:10px">In use</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-sub">No categories yet. Add one below.</div>
+    {% endif %}
+  </div>
+
+  {# ── Add new category ── #}
+  <div class="card">
+    <div class="card-title">+ New Category</div>
+    <form method="post" style="display:flex;flex-direction:column;gap:12px">
+      <input type="hidden" name="action" value="create">
+      <div class="fg">
+        <label class="fl">Name <span style="color:var(--red)">*</span></label>
+        <input name="name" class="input" placeholder="e.g. Operations Manuals" required>
+      </div>
+      <div class="fg">
+        <label class="fl">Code <span style="color:var(--red)">*</span></label>
+        <input name="code" class="input" placeholder="e.g. OPS" maxlength="20" required>
+        <div class="fh">Short uppercase code, must be unique</div>
+      </div>
+      <div class="fg">
+        <label class="fl">Icon (emoji)</label>
+        <input name="icon" class="input" placeholder="📄" maxlength="4" value="📄">
+      </div>
+      <div class="fg">
+        <label class="fl">Description</label>
+        <textarea name="description" class="input" rows="2" placeholder="Brief description…"></textarea>
+      </div>
+      <div class="fg">
+        <label class="fl">Sort Order</label>
+        <input name="sort_order" type="number" class="input" value="0">
+      </div>
+      <button type="submit" class="btn-primary">Create Category</button>
+    </form>
+
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+      <div class="card-title" style="margin-bottom:10px">💡 Suggested Categories</div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--muted)">
+        <div>📘 Operations Manuals (OPS)</div>
+        <div>🛡 Safety Policies (SAF)</div>
+        <div>⚙ Maintenance Procedures (MNT)</div>
+        <div>🚨 Emergency Procedures (ERP)</div>
+        <div>📋 Checklists (CHK)</div>
+        <div>📊 Reports &amp; Forms (RPT)</div>
+        <div>🎓 Training Materials (TRN)</div>
+        <div>⚖ Regulatory Documents (REG)</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+.page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:16px}
+.page-title{font-size:20px;font-weight:800;color:var(--navy);margin-top:4px}
+.page-sub{font-size:11px;color:var(--muted)}
+.page-sub a{color:var(--muted);text-decoration:underline}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px;box-shadow:var(--shadow)}
+.card-title{font-weight:700;font-size:13px;color:var(--navy);margin-bottom:14px}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fl{font-size:11px;font-weight:600;color:var(--muted)}
+.fh{font-size:10px;color:var(--muted2)}
+.input{border:1px solid var(--border2);border-radius:var(--r2);padding:7px 10px;font-size:12px;background:#fff;color:var(--text);font-family:inherit;width:100%}
+.input:focus{outline:none;border-color:var(--navy)}
+.btn-primary{background:var(--navy);color:#fff;border:none;border-radius:var(--r2);padding:9px 18px;font-size:12px;font-weight:600;cursor:pointer}
+.btn-primary:hover{background:var(--navy2)}
+.btn-outline{display:inline-block;background:transparent;color:var(--navy);border:1px solid var(--border2);border-radius:var(--r2);padding:7px 14px;font-size:12px;font-weight:600}
+.btn-outline:hover{background:var(--surface)}
+.btn-xs{font-size:11px;padding:3px 9px;border:1px solid var(--border2);border-radius:3px;color:var(--text);background:var(--surface);cursor:pointer}
+.btn-danger{background:#fff1f1;color:#b91c1c;border-color:#fecaca}
+.btn-danger:hover{background:#b91c1c;color:#fff}
+.pill{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px}
+.pill-blue{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{background:var(--surface);padding:8px 10px;text-align:left;font-weight:600;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)}
+.data-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.muted{color:var(--muted)}
+.empty-sub{color:var(--muted);font-size:12px;padding:10px 0}
+.alert{padding:10px 14px;border-radius:var(--r2);margin-bottom:14px;font-size:12px}
+.alert-success{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.alert-error{background:#fff1f1;color:#b91c1c;border:1px solid #fecaca}
+</style>
+{% endblock %}

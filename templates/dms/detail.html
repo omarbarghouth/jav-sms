@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.doc_number }} — {{ doc.title }}{% endblock %}
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="alert alert-{{ 'success' if cat == 'success' else 'error' }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+{# ── Page header ── #}
+<div class="page-header">
+  <div>
+    <div class="page-sub"><a href="{{ url_for('dms_library') }}">Controlled Docs</a> › {{ doc.doc_number }}</div>
+    <div class="page-title">
+      {% if doc.category %}{{ doc.category.icon }}{% endif %}
+      {{ doc.title }}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <span class="pill {% if doc.status=='Active' %}pill-green{% else %}pill-muted{% endif %}">{{ doc.status }}</span>
+      <span class="pill pill-navy">{{ doc.classification }}</span>
+      {% if doc.is_mandatory_reading %}<span class="pill pill-red">MANDATORY READING</span>{% endif %}
+      {% if doc.category %}<span class="pill pill-muted">{{ doc.category.name }}</span>{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:flex-start">
+    {% if doc.status == 'Active' %}
+    <form method="post" action="{{ url_for('dms_archive', doc_id=doc.id) }}"
+          onsubmit="return confirm('Archive this document?')">
+      <button class="btn-outline" style="color:var(--muted)">Archive</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start">
+
+  {# ════ LEFT COLUMN ════ #}
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    {# ── Document info card ── #}
+    <div class="card">
+      <div class="card-title">📋 Document Information</div>
+      <div class="info-grid">
+        <div class="ig-row"><span class="ig-l">Document Number</span><span class="ig-v"><strong>{{ doc.doc_number }}</strong></span></div>
+        <div class="ig-row"><span class="ig-l">System ID</span><span class="ig-v">{{ doc.id }}</span></div>
+        <div class="ig-row"><span class="ig-l">Department</span><span class="ig-v">{{ doc.department or '—' }}</span></div>
+        <div class="ig-row"><span class="ig-l">Document Owner</span><span class="ig-v">{{ doc.document_owner or '—' }}</span></div>
+        <div class="ig-row"><span class="ig-l">Approving Authority</span><span class="ig-v">{{ doc.approving_authority or '—' }}</span></div>
+        <div class="ig-row"><span class="ig-l">Classification</span><span class="ig-v">{{ doc.classification }}</span></div>
+        <div class="ig-row"><span class="ig-l">Mandatory Reading</span><span class="ig-v">{{ '✅ Yes' if doc.is_mandatory_reading else 'No' }}</span></div>
+        <div class="ig-row"><span class="ig-l">Created By</span><span class="ig-v">{{ doc.created_by }}</span></div>
+        <div class="ig-row"><span class="ig-l">Created At</span><span class="ig-v">{{ doc.created_at.strftime('%d %b %Y') if doc.created_at else '—' }}</span></div>
+        {% if doc.description %}
+        <div class="ig-row" style="flex-direction:column;gap:4px">
+          <span class="ig-l">Description</span>
+          <span class="ig-v" style="max-width:none">{{ doc.description }}</span>
+        </div>
+        {% endif %}
+        {% if doc.keywords %}
+        <div class="ig-row"><span class="ig-l">Keywords</span><span class="ig-v">{{ doc.keywords }}</span></div>
+        {% endif %}
+      </div>
+
+      {# Edit form (collapsed by default) #}
+      <details style="margin-top:14px">
+        <summary class="details-toggle">✏️ Edit Document Info</summary>
+        <form method="post" action="{{ url_for('dms_edit', doc_id=doc.id) }}" style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+          <div class="fg"><label class="fl">Title</label><input name="title" class="input" value="{{ doc.title }}" required></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg"><label class="fl">Doc Number</label><input name="doc_number" class="input" value="{{ doc.doc_number }}" required></div>
+            <div class="fg"><label class="fl">Category</label>
+              <select name="category_id" class="input">
+                <option value="">— None —</option>
+                {% for c in categories %}<option value="{{ c.id }}" {% if doc.category_id == c.id %}selected{% endif %}>{{ c.icon }} {{ c.name }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg"><label class="fl">Department</label><input name="department" class="input" value="{{ doc.department or '' }}"></div>
+            <div class="fg"><label class="fl">Classification</label>
+              <select name="classification" class="input">
+                {% for cl in ['UNCLASSIFIED','INTERNAL','CONFIDENTIAL','RESTRICTED'] %}
+                  <option {% if doc.classification == cl %}selected{% endif %}>{{ cl }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg"><label class="fl">Document Owner</label><input name="document_owner" class="input" value="{{ doc.document_owner or '' }}"></div>
+            <div class="fg"><label class="fl">Approving Authority</label><input name="approving_authority" class="input" value="{{ doc.approving_authority or '' }}"></div>
+          </div>
+          <div class="fg"><label class="fl">Description</label><textarea name="description" class="input" rows="2">{{ doc.description or '' }}</textarea></div>
+          <div class="fg"><label class="fl">Keywords</label><input name="keywords" class="input" value="{{ doc.keywords or '' }}" placeholder="comma separated"></div>
+          <div class="fg">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" name="is_mandatory_reading" {% if doc.is_mandatory_reading %}checked{% endif %}>
+              <span>Mandatory Reading</span>
+            </label>
+          </div>
+          <div><button type="submit" class="btn-primary">Save Changes</button></div>
+        </form>
+      </details>
+    </div>
+
+    {# ── Version history ── #}
+    <div class="card">
+      <div class="card-title">📂 Versions</div>
+      {% if versions %}
+        {% for ver in versions %}
+        <div class="ver-row {% if ver.id == doc.current_version_id %}ver-current{% endif %}">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <strong>v{{ ver.version_number }}</strong>
+            <span class="muted">{{ ver.revision }}</span>
+            <span class="pill
+              {% if ver.status=='Published' %}pill-green
+              {% elif ver.status=='Draft' %}pill-muted
+              {% elif ver.status=='Approved' %}pill-blue
+              {% elif ver.status=='Superseded' %}pill-amber
+              {% else %}pill-muted{% endif %}">{{ ver.status }}</span>
+            {% if ver.id == doc.current_version_id %}<span class="pill pill-navy">CURRENT</span>{% endif %}
+            {% if ver.file_type %}<span class="pill pill-muted">{{ ver.file_type|upper }}</span>{% endif %}
+          </div>
+          <div class="ig-row" style="margin-top:8px;flex-wrap:wrap;gap:8px">
+            <span class="ig-l">File</span>
+            <span class="ig-v">
+              {% if ver.file_url %}
+                <a href="{{ ver.file_url }}" target="_blank" class="link-primary">{{ ver.file_name or 'Open file' }}</a>
+                ({{ (ver.file_size / 1024)|round(1) if ver.file_size else '?' }} KB)
+              {% else %}—{% endif %}
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;font-size:11px">
+            <div><span class="ig-l">Effective</span><br>{{ ver.effective_date.strftime('%d %b %Y') if ver.effective_date else '—' }}</div>
+            <div><span class="ig-l">Review</span><br>{{ ver.review_date.strftime('%d %b %Y') if ver.review_date else '—' }}</div>
+            <div><span class="ig-l">Expiry</span><br>{{ ver.expiry_date.strftime('%d %b %Y') if ver.expiry_date else '—' }}</div>
+            <div><span class="ig-l">Prepared by</span><br>{{ ver.prepared_by or '—' }}</div>
+            <div><span class="ig-l">Reviewed by</span><br>{{ ver.reviewed_by or '—' }}</div>
+            <div><span class="ig-l">Approved by</span><br>{{ ver.approved_by or '—' }}</div>
+          </div>
+          {% if ver.change_summary %}
+            <div style="margin-top:8px;font-size:11px;color:var(--muted)">Change: {{ ver.change_summary }}</div>
+          {% endif %}
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            {% if ver.file_url %}
+              <a href="{{ ver.file_url }}" target="_blank" class="btn-xs">⬇ Download</a>
+            {% endif %}
+            {% if ver.status == 'Draft' %}
+              <form method="post" action="{{ url_for('dms_approve_version', doc_id=doc.id, ver_id=ver.id) }}">
+                <button class="btn-xs btn-blue">✓ Approve</button>
+              </form>
+            {% endif %}
+            {% if ver.status in ('Draft','Approved') %}
+              <form method="post" action="{{ url_for('dms_publish_version', doc_id=doc.id, ver_id=ver.id) }}"
+                    onsubmit="return confirm('Publish this version? All employees will be notified.')">
+                <button class="btn-xs btn-green">🚀 Publish</button>
+              </form>
+            {% endif %}
+            {% if ver.status != 'Published' %}
+              <form method="post" action="{{ url_for('dms_delete_version', doc_id=doc.id, ver_id=ver.id) }}"
+                    onsubmit="return confirm('Delete this version?')">
+                <button class="btn-xs btn-danger">🗑 Delete</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state" style="padding:18px 0">
+          <div class="empty-sub">No versions yet. Upload the first version below.</div>
+        </div>
+      {% endif %}
+
+      {# Upload new version #}
+      <details style="margin-top:16px">
+        <summary class="details-toggle">⬆ Upload New Version</summary>
+        <form method="post" action="{{ url_for('dms_upload_version', doc_id=doc.id) }}"
+              enctype="multipart/form-data" style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+          <div class="fg">
+            <label class="fl">File <span style="color:var(--red)">*</span></label>
+            <input type="file" name="document_file" class="input" accept=".pdf,.docx,.xlsx,.pptx,.doc,.xls" required>
+            <div class="fh">Supported: PDF, DOCX, XLSX, PPTX</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg"><label class="fl">Version Number</label><input name="version_number" class="input" placeholder="e.g. 1.0" required></div>
+            <div class="fg"><label class="fl">Revision</label><input name="revision" class="input" placeholder="e.g. REV0"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="fg"><label class="fl">Issue Date</label><input type="date" name="issue_date" class="input"></div>
+            <div class="fg"><label class="fl">Effective Date</label><input type="date" name="effective_date" class="input"></div>
+            <div class="fg"><label class="fl">Review Date</label><input type="date" name="review_date" class="input"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="fg"><label class="fl">Expiry Date</label><input type="date" name="expiry_date" class="input"></div>
+            <div class="fg"><label class="fl">Prepared By</label><input name="prepared_by" class="input"></div>
+            <div class="fg"><label class="fl">Reviewed By</label><input name="reviewed_by" class="input"></div>
+          </div>
+          <div class="fg"><label class="fl">Change Summary</label><textarea name="change_summary" class="input" rows="2" placeholder="Describe what changed in this version…"></textarea></div>
+          <div><button type="submit" class="btn-primary">⬆ Upload Version</button></div>
+        </form>
+      </details>
+    </div>
+
+    {# ── Read records ── #}
+    {% if read_records %}
+    <div class="card">
+      <div class="card-title">👁 Read Records — Current Version
+        <span class="muted" style="font-weight:400;font-size:11px">(v{{ versions|selectattr('id','equalto',doc.current_version_id)|first|attr('version_number') if doc.current_version_id else '' }})</span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr><th>Employee</th><th>Opened</th><th>Completed</th><th>Time Spent</th><th>Acknowledged</th></tr>
+        </thead>
+        <tbody>
+          {% for rec, emp in read_records %}
+          <tr>
+            <td>{{ emp.full_name or emp.name or ('Emp #' + emp.id|string) }}</td>
+            <td>{{ rec.opened_at.strftime('%d %b %Y %H:%M') if rec.opened_at else '—' }}</td>
+            <td>{{ rec.completed_at.strftime('%d %b %Y %H:%M') if rec.completed_at else '<span class="muted">Not yet</span>'|safe }}</td>
+            <td>{{ ((rec.time_spent_seconds or 0) // 60)|string + 'm ' + ((rec.time_spent_seconds or 0) % 60)|string + 's' if rec.time_spent_seconds else '—' }}</td>
+            <td>{% if emp.id in acks %}<span class="pill pill-green">✓ Yes</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {# ════ RIGHT COLUMN ════ #}
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    {# ── Compliance summary ── #}
+    <div class="card">
+      <div class="card-title">✅ Read Compliance</div>
+      {% if stats.audience %}
+        {% set pct = ((stats.reads / stats.audience) * 100)|round|int %}
+        <div style="text-align:center;padding:8px 0">
+          <div style="font-size:36px;font-weight:800;color:{% if pct >= 80 %}var(--green){% elif pct >= 50 %}var(--amber){% else %}var(--red){% endif %}">{{ pct }}%</div>
+          <div class="muted" style="font-size:12px">Read Rate</div>
+        </div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{{ pct }}%;background:{% if pct >= 80 %}var(--green){% elif pct >= 50 %}#f59e0b{% else %}var(--red){% endif %}"></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+          <div class="mini-stat"><div class="mini-n">{{ stats.reads }}</div><div class="mini-l">Reads</div></div>
+          <div class="mini-stat"><div class="mini-n">{{ stats.audience }}</div><div class="mini-l">Audience</div></div>
+          {% if doc.is_mandatory_reading %}
+          <div class="mini-stat"><div class="mini-n">{{ stats.acks }}</div><div class="mini-l">Acknowledged</div></div>
+          <div class="mini-stat"><div class="mini-n">{{ stats.audience - stats.acks }}</div><div class="mini-l">Pending Ack</div></div>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="empty-sub">Add distribution rules to track compliance.</div>
+      {% endif %}
+    </div>
+
+    {# ── Distribution rules ── #}
+    <div class="card">
+      <div class="card-title">📢 Distribution</div>
+      {% if doc.distributions %}
+        {% for d in doc.distributions %}
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span class="pill pill-blue">{{ d.audience_type|upper }}</span>
+          {% if d.audience_type == 'all' %}<span>All Employees</span>
+          {% elif d.audience_type == 'department' %}<span>Dept: {{ d.department }}</span>
+          {% elif d.audience_type == 'role' %}<span>Role: {{ d.employee_role }}</span>
+          {% elif d.audience_type == 'employee' %}<span>Employee #{{ d.employee_id }}</span>
+          {% endif %}
+          <form method="post" action="{{ url_for('dms_delete_distribution', dist_id=d.id) }}" style="margin-left:auto">
+            <button class="btn-xs btn-danger" title="Remove">✕</button>
+          </form>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-sub" style="padding:8px 0">No distribution rules yet.</div>
+      {% endif %}
+
+      <details style="margin-top:12px">
+        <summary class="details-toggle">+ Add Distribution Rule</summary>
+        <form method="post" action="{{ url_for('dms_add_distribution', doc_id=doc.id) }}"
+              style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+          <div class="fg">
+            <label class="fl">Audience Type</label>
+            <select name="audience_type" class="input" id="distAudienceType" onchange="toggleDistFields()">
+              <option value="all">All Employees</option>
+              <option value="department">Specific Department</option>
+              <option value="role">Specific Role</option>
+              <option value="employee">Specific Employee</option>
+            </select>
+          </div>
+          <div class="fg" id="distDept" style="display:none">
+            <label class="fl">Department</label>
+            <select name="department" class="input">
+              {% for dep in departments %}<option>{{ dep }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="fg" id="distRole" style="display:none">
+            <label class="fl">Role</label>
+            <input name="employee_role" class="input" placeholder="e.g. Pilot, Engineer">
+          </div>
+          <div class="fg" id="distEmp" style="display:none">
+            <label class="fl">Employee ID</label>
+            <input name="employee_id" type="number" class="input" placeholder="Employee ID">
+          </div>
+          <button type="submit" class="btn-primary">Add Rule</button>
+        </form>
+      </details>
+    </div>
+
+  </div>
+</div>
+
+<style>
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px;box-shadow:var(--shadow)}
+.card-title{font-weight:700;font-size:13px;color:var(--navy);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:16px;flex-wrap:wrap}
+.page-title{font-size:20px;font-weight:800;color:var(--navy);margin-top:4px}
+.page-sub{font-size:11px;color:var(--muted)}
+.page-sub a{color:var(--muted);text-decoration:underline}
+.info-grid{display:flex;flex-direction:column;gap:0}
+.ig-row{display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.ig-l{color:var(--muted);min-width:150px;font-weight:500;flex-shrink:0}
+.ig-v{color:var(--text);font-weight:400}
+.ver-row{padding:14px;border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;background:var(--surface)}
+.ver-current{border-color:var(--gold);background:#fffdf5}
+.details-toggle{cursor:pointer;font-size:12px;font-weight:600;color:var(--navy);padding:6px 0;list-style:none;user-select:none}
+.details-toggle:hover{color:var(--gold)}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fl{font-size:11px;font-weight:600;color:var(--muted)}
+.fh{font-size:10px;color:var(--muted2)}
+.input{border:1px solid var(--border2);border-radius:var(--r2);padding:7px 10px;font-size:12px;background:#fff;color:var(--text);font-family:inherit;width:100%}
+.input:focus{outline:none;border-color:var(--navy)}
+.btn-primary{background:var(--navy);color:#fff;border:none;border-radius:var(--r2);padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer}
+.btn-primary:hover{background:var(--navy2)}
+.btn-outline{background:transparent;color:var(--navy);border:1px solid var(--border2);border-radius:var(--r2);padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
+.btn-outline:hover{background:var(--surface)}
+.btn-xs{font-size:11px;padding:3px 9px;border:1px solid var(--border2);border-radius:3px;color:var(--text);background:var(--surface);cursor:pointer}
+.btn-xs:hover{background:var(--navy);color:#fff}
+.btn-blue{background:#eff6ff;color:var(--blue);border-color:#bfdbfe}
+.btn-blue:hover{background:var(--blue);color:#fff}
+.btn-green{background:#f0fdf4;color:var(--green);border-color:#bbf7d0}
+.btn-green:hover{background:var(--green);color:#fff}
+.btn-danger{background:#fff1f1;color:var(--red);border-color:#fecaca}
+.btn-danger:hover{background:var(--red);color:#fff}
+.pill{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;letter-spacing:.4px}
+.pill-red{background:#fff1f1;color:#b91c1c;border:1px solid #fecaca}
+.pill-amber{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+.pill-green{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.pill-blue{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.pill-navy{background:var(--navy);color:#fff}
+.pill-muted{background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0}
+.muted{color:var(--muted)}
+.empty-sub{color:var(--muted);font-size:12px;text-align:center;padding:10px 0}
+.progress-bar-bg{background:var(--border);border-radius:99px;height:8px;overflow:hidden}
+.progress-bar-fill{height:8px;border-radius:99px;transition:width .4s}
+.mini-stat{text-align:center;padding:10px;background:var(--surface);border-radius:var(--r2)}
+.mini-n{font-size:22px;font-weight:800;color:var(--navy)}
+.mini-l{font-size:10px;color:var(--muted);margin-top:2px}
+.alert{padding:10px 14px;border-radius:var(--r2);margin-bottom:14px;font-size:12px}
+.alert-success{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.alert-error{background:#fff1f1;color:#b91c1c;border:1px solid #fecaca}
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{background:var(--surface);padding:8px 10px;text-align:left;font-weight:600;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)}
+.data-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.link-primary{color:var(--navy);font-weight:600}
+.link-primary:hover{color:var(--gold)}
+</style>
+<script>
+function toggleDistFields(){
+  var t=document.getElementById('distAudienceType').value;
+  document.getElementById('distDept').style.display=t==='department'?'flex':'none';
+  document.getElementById('distRole').style.display=t==='role'?'flex':'none';
+  document.getElementById('distEmp').style.display=t==='employee'?'flex':'none';
+}
+</script>
+{% endblock %}
