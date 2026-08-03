@@ -106,7 +106,7 @@
       </thead>
       <tbody>
         {% for log in logs %}
-        <tr style="{% if log.sod_check=='VIOLATION' %}background:#fff1f2{% endif %}">
+        <tr>
           <td style="font-size:11px;font-family:'IBM Plex Mono',monospace;white-space:nowrap;color:var(--muted)">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
           <td style="font-size:11px">
             {% if log.entity_type == 'RiskAcceptance' %}
@@ -129,25 +129,12 @@
             {% endif %}
           </td>
           <td style="font-size:11px;font-weight:600">{{ log.action|replace('_',' ')|title }}</td>
-          <td style="font-size:11px;font-weight:600">{{ log.actor_username }}</td>
-          <td style="font-size:11px;color:var(--muted)">{{ log.actor_role }}</td>
-          <td>
-            {% if log.sod_check == 'VIOLATION' %}
-            <span class="badge b-red" style="font-size:9px" title="{{ log.sod_note }}">⚠ VIOLATION</span>
-            {% elif log.sod_check == 'BYPASSED' %}
-            <span class="badge b-yellow" style="font-size:9px">BYPASSED</span>
-            {% elif log.sod_check == 'OK' %}
-            <span class="badge b-green" style="font-size:9px">OK</span>
-            {% else %}
-            <span style="color:var(--muted);font-size:11px">—</span>
-            {% endif %}
-          </td>
+          <td style="font-size:11px;font-weight:600">{{ log.performed_by or '—' }}</td>
+          <td style="font-size:11px;color:var(--muted)">—</td>
+          <td><span style="color:var(--muted);font-size:11px">—</span></td>
           <td style="font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace">{{ log.ip_address or '—' }}</td>
-          <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ log.notes }}">
-            {{ log.notes[:80] if log.notes else '—' }}
-            {% if log.sod_check == 'VIOLATION' and log.sod_note %}
-            <div style="font-size:10px;color:#dc2626;font-weight:600">SOD: {{ log.sod_note }}</div>
-            {% endif %}
+          <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ log.detail }}">
+            {{ log.detail[:80] if log.detail else '—' }}
           </td>
         </tr>
         {% else %}

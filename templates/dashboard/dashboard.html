@@ -19,7 +19,7 @@
     <div class="page-sub" style="margin-bottom:0">ICAO Annex 19 §3 · Doc 9859 §5 — Real-time safety governance · {{ now.strftime('%d %B %Y  %H:%M UTC') }}</div>
   </div>
   <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">
-    <a href="/hazard-reports/new" class="btn btn-gold btn-sm">+ Hazard Report</a>
+    <a href="/hazard-report" class="btn btn-gold btn-sm">+ Hazard Report</a>
     <a href="/audit-dashboard"    class="btn btn-nav btn-sm">Audits</a>
     <a href="/sag/governance"     class="btn btn-nav btn-sm">SAG</a>
     <a href="/spi"                class="btn btn-nav btn-sm">SPI</a>
@@ -460,9 +460,6 @@
   <!-- Trend snapshot placeholder -->
   <div class="card">
     <div class="card-title">Hazard Classification Breakdown — Recent Period</div>
-  <!-- Trend snapshot placeholder -->
-  <div class="card">
-    <div class="card-title">Hazard Classification Breakdown — Recent Period</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
       {% for cls, col in [
         ('Airspace','#1d4ed8'),
@@ -514,7 +511,7 @@
     <div class="card-title">Quick Access — All Modules</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px">
       {% for label, href, color in [
-        ('⚠ Report Hazard',       '/hazard-reports/new',       '#dc2626'),
+        ('⚠ Report Hazard',       '/hazard-report',       '#dc2626'),
         ('📋 Open Audit',          '/audit-dashboard',          '#0f1c3f'),
         ('🔺 Risk Assessment',     '/risk-assessments',         '#c2610a'),
         ('🔬 Investigation',       '/investigations',           '#374151'),
