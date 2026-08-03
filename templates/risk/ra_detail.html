@@ -501,33 +501,124 @@
 
   <!-- Add row form -->
   {% if ra.status != 'Archived' %}
-  <div id="add-row" style="margin-top:18px;padding:16px;background:#f8f9fc;border-radius:10px;border:1.5px solid var(--border)">
-    <div class="card-title">+ Add Risk Row</div>
-    <form method="POST" action="/risk-assessments/{{ ra.id }}/add-row">
-      <div class="g3">
+  <div id="add-row" style="margin-top:18px;border-radius:10px;border:1.5px solid var(--border);overflow:hidden">
+
+    <!-- Form header -->
+    <div style="background:var(--navy);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:13px;font-weight:800">+ Add Risk Row</span>
+      <span style="font-size:11px;color:rgba(255,255,255,.5)">Fill in the row details and optionally add existing controls below</span>
+    </div>
+
+    <form method="POST" action="/risk-assessments/{{ ra.id }}/add-row" style="padding:16px 20px;background:#f8f9fc">
+
+      <!-- Section A: Risk row fields -->
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);margin-bottom:10px">A. Risk Scenario</div>
+      <div class="g3" style="margin-bottom:10px">
         <div class="fg"><label>Type of Activity *</label><input type="text" name="type_of_activity" required/></div>
         <div class="fg"><label>Generic Hazard *</label><input type="text" name="generic_hazard" required/></div>
         <div class="fg"><label>Specific Components</label><textarea name="specific_components" rows="2"></textarea></div>
         <div class="fg"><label>Consequences *</label><textarea name="consequences" required rows="2"></textarea></div>
         <div class="fg"><label>Further Mitigation Measures</label><textarea name="further_mitigations" rows="2" placeholder="Additional controls or actions required to reduce residual risk."></textarea></div>
       </div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-        <div class="fg" style="margin:0"><label>Initial Likelihood</label>
-          <select name="likelihood_initial">{% for v in [5,4,3,2,1] %}<option value="{{ v }}" {% if v==3 %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
-        <div class="fg" style="margin:0"><label>Initial Severity</label>
-          <select name="severity_initial">{% for v in ['A','B','C','D','E'] %}<option {% if v=='C' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
-        <div class="fg" style="margin:0"><label>Residual Likelihood</label>
-          <select name="likelihood_residual"><option value="">—</option>{% for v in [5,4,3,2,1] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select></div>
-        <div class="fg" style="margin:0"><label>Residual Severity</label>
-          <select name="severity_residual"><option value="">—</option>{% for v in ['A','B','C','D','E'] %}<option>{{ v }}</option>{% endfor %}</select></div>
-        <div class="fg" style="margin:0"><label>Responsible Manager</label><input type="text" name="responsible_manager"/></div>
-        <div class="fg" style="margin:0"><label>Due Date</label><input type="date" name="due_date"/></div>
+
+      <!-- Risk indices -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;padding:12px 14px;background:#fff;border-radius:8px;border:1px solid var(--border)">
+        <div>
+          <label style="font-size:10px;font-weight:700;color:#92400e;display:block;margin-bottom:3px;text-transform:uppercase">Initial L</label>
+          <select name="likelihood_initial" style="border:1.5px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;background:#fef3c7">
+            {% for v in [5,4,3,2,1] %}<option value="{{ v }}" {% if v==3 %}selected{% endif %}>{{ v }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:#92400e;display:block;margin-bottom:3px;text-transform:uppercase">Initial S</label>
+          <select name="severity_initial" style="border:1.5px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;background:#fef3c7">
+            {% for v in ['A','B','C','D','E'] %}<option {% if v=='C' %}selected{% endif %}>{{ v }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="width:1px;background:#e5e7eb;margin:0 4px"></div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:#065f46;display:block;margin-bottom:3px;text-transform:uppercase">Residual L</label>
+          <select name="likelihood_residual" style="border:1.5px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;background:#f0fdf4">
+            <option value="">—</option>{% for v in [5,4,3,2,1] %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:#065f46;display:block;margin-bottom:3px;text-transform:uppercase">Residual S</label>
+          <select name="severity_residual" style="border:1.5px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;background:#f0fdf4">
+            <option value="">—</option>{% for v in ['A','B','C','D','E'] %}<option>{{ v }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase">Responsible Manager</label>
+          <input type="text" name="responsible_manager" style="border:1.5px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;width:160px"/>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase">Due Date</label>
+          <input type="date" name="due_date" style="border:1.5px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit"/>
+        </div>
       </div>
-      <button type="submit" class="btn btn-nav btn-sm">Add Row</button>
+
+      <!-- Section B: Existing Controls (inline, dynamic) -->
+      <div style="border-top:1.5px solid #e5e7eb;padding-top:14px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--navy)">B. Existing Controls / Current Defences <span style="font-weight:400;color:var(--muted)">(optional)</span></div>
+          <button type="button" onclick="addNewCtrlBlock()" style="font-size:11px;font-weight:700;padding:5px 14px;border-radius:5px;cursor:pointer;border:1.5px solid #1d4ed8;background:#eff6ff;color:#1d4ed8">+ Add Control</button>
+        </div>
+
+        <!-- Dynamic control blocks container -->
+        <div id="new-ctrl-blocks"></div>
+        <div id="no-ctrl-msg" style="font-size:12px;color:#9ca3af;font-style:italic;padding:10px 0">No existing controls added yet. Click "+ Add Control" to document a barrier or defence.</div>
+      </div>
+
+      <button type="submit" class="btn btn-nav">✓ Add Row</button>
     </form>
   </div>
   {% endif %}
 </div>
+
+<script>
+var ctrlIdx = 0;
+var ctrlCats = ['SOP / Standard Operating Procedure','Training','Monitoring / Inspection','Equipment / Technology','Engineering Control','PPE','Procedural / Administrative','Other'];
+var ctrlCatVals = ['SOP','Training','Monitoring','Equipment','Engineering','PPE','Procedural','Other'];
+var ctrlEff = ['Effective','Partially Effective','Ineffective','Unknown'];
+
+function addNewCtrlBlock(){
+  document.getElementById('no-ctrl-msg').style.display='none';
+  var i = ctrlIdx++;
+  var catOpts = ctrlCatVals.map(function(v,k){return '<option value="'+v+'">'+ctrlCats[k]+'</option>';}).join('');
+  var effOpts = ctrlEff.map(function(v){return '<option value="'+v+'">'+v+'</option>';}).join('');
+  var html = '<div id="nc-block-'+i+'" style="border:1.5px solid #dbeafe;border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fff">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +   '<span style="font-size:11px;font-weight:700;color:#1d4ed8">Control #'+(i+1)+'</span>'
+    +   '<button type="button" onclick="removeCtrlBlock('+i+')" style="font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer;border:1px solid #fca5a5;background:#fff;color:#dc2626;font-weight:600">✕ Remove</button>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+    +   '<div><label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Category *</label>'
+    +   '<select name="ctrl_category[]" required style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit"><option value="">— Select —</option>'+catOpts+'</select></div>'
+    +   '<div><label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Effectiveness *</label>'
+    +   '<select name="ctrl_effectiveness[]" required style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit"><option value="">— Select —</option>'+effOpts+'</select></div>'
+    +   '<div><label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Evidence / Reference</label>'
+    +   '<input type="text" name="ctrl_evidence[]" placeholder="e.g. SOP-OPS-001 Rev.5" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit"/></div>'
+    + '</div>'
+    + '<div style="margin-bottom:8px"><label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Control Description *</label>'
+    + '<textarea name="ctrl_description[]" required rows="2" placeholder="Describe the existing control — e.g. Daily apron FOD inspections per SOP-OPS-001 before first departure." style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical"></textarea></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px">'
+    +   '<div><label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Owner</label>'
+    +   '<input type="text" name="ctrl_owner[]" placeholder="Department or person" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit"/></div>'
+    +   '<div><label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Notes / Caveats</label>'
+    +   '<input type="text" name="ctrl_notes[]" placeholder="Any limitations or additional context" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit"/></div>'
+    + '</div>'
+    + '</div>';
+  document.getElementById('new-ctrl-blocks').insertAdjacentHTML('beforeend', html);
+}
+
+function removeCtrlBlock(i){
+  var el = document.getElementById('nc-block-'+i);
+  if(el) el.remove();
+  if(!document.getElementById('new-ctrl-blocks').children.length)
+    document.getElementById('no-ctrl-msg').style.display='';
+}
+</script>
 
 <!-- ══════════════════════════════════════════════════════════════════════
      EXISTING CONTROLS MODALS — one per risk row, opened from table cell
