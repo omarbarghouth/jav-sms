@@ -9530,7 +9530,10 @@ def delete_risk_assessment(ra_id):
         RAMitigation.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
         RAReview.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
         RAChecklistItem.query.filter_by(assessment_id=ra_id).delete(synchronize_session=False)
-        # RARows: nullify risk_id FK first, then delete
+        # RARows: delete controls first (FK ra_controls→ra_rows), then rows
+        row_ids = [r.id for r in RARow.query.filter_by(assessment_id=ra_id).with_entities(RARow.id).all()]
+        if row_ids:
+            RAControl.query.filter(RAControl.row_id.in_(row_ids)).delete(synchronize_session=False)
         for row in RARow.query.filter_by(assessment_id=ra_id).all():
             row.risk_id = None
         db.session.flush()
