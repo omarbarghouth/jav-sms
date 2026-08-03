@@ -321,11 +321,13 @@
           <th style="padding:8px;border:1px solid #374151;background:#065f46">L</th>
           <th style="padding:8px;border:1px solid #374151;background:#065f46">S</th>
           <th style="padding:8px;border:1px solid #374151;background:#065f46">Risk Index</th>
+          {% if ra.status != 'Archived' %}<th style="padding:8px;border:1px solid #374151;background:#1e3a5f;width:48px"></th>{% endif %}
         </tr>
       </thead>
       <tbody>
         {% for row in ra.rows %}
-        <tr>
+        <!-- ── View row ── -->
+        <tr id="view-row-{{ row.id }}">
           <td style="border:1px solid var(--border);padding:8px;text-align:center;font-weight:800;background:#f8f9fc">{{ row.seq_num }}</td>
           <td style="border:1px solid var(--border);padding:8px">{{ row.type_of_activity or '—' }}</td>
           <td style="border:1px solid var(--border);padding:8px">{{ row.generic_hazard or '—' }}</td>
@@ -340,9 +342,9 @@
             <div style="font-size:10px;color:var(--muted)">{{ row.risk_tolerance_initial or '' }}</div>
             {% if row.risk_id %}<a href="/risk/{{ row.risk_id }}" style="font-size:10px;color:#1d4ed8">Risk →</a>{% endif %}
           </td>
+          <!-- Existing Controls cell -->
           <td style="border:1px solid var(--border);padding:6px 8px;min-width:160px;vertical-align:top">
             {% set ctrl_count = row.controls|length %}
-            <!-- Existing controls summary -->
             {% if ctrl_count > 0 %}
               <div style="margin-bottom:5px">
                 {% for c in row.controls %}
@@ -382,12 +384,119 @@
             <div style="font-size:10px;color:var(--muted)">{{ row.risk_tolerance_residual or '' }}</div>
             {% else %}<span style="color:#9ca3af;font-size:11px">Pending</span>{% endif %}
           </td>
+          {% if ra.status != 'Archived' %}
+          <td style="border:1px solid var(--border);padding:6px;text-align:center;background:#f8f9fc">
+            <button type="button" onclick="toggleRowEdit({{ row.id }})"
+              title="Edit this row"
+              style="font-size:12px;padding:5px 8px;border-radius:5px;cursor:pointer;border:1.5px solid #d1d5db;background:#fff;color:#374151;font-weight:700;line-height:1">✎</button>
+          </td>
+          {% endif %}
         </tr>
+
+        <!-- ── Inline edit row (hidden by default) ── -->
+        {% if ra.status != 'Archived' %}
+        <tr id="edit-row-{{ row.id }}" style="display:none;background:#f0f4ff">
+          <td colspan="14" style="padding:0;border:2px solid #1d4ed8">
+            <form method="POST" action="/risk-assessments/{{ ra.id }}/rows/{{ row.id }}/edit">
+              <div style="padding:16px 20px">
+
+                <!-- Header -->
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#1d4ed8">
+                    ✎ Editing Row {{ row.seq_num }} — {{ row.type_of_activity or '' }}
+                  </div>
+                  <button type="button" onclick="toggleRowEdit({{ row.id }})"
+                    style="font-size:11px;padding:4px 12px;border-radius:5px;cursor:pointer;border:1.5px solid #d1d5db;background:#fff;color:#374151;font-weight:700">✕ Cancel</button>
+                </div>
+
+                <!-- Text fields row 1 -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Type of Activity *</label>
+                    <input type="text" name="type_of_activity" required value="{{ row.type_of_activity or '' }}"
+                      style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit"/>
+                  </div>
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Generic Hazard *</label>
+                    <input type="text" name="generic_hazard" required value="{{ row.generic_hazard or '' }}"
+                      style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit"/>
+                  </div>
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Specific Components</label>
+                    <textarea name="specific_components" rows="2"
+                      style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical">{{ row.specific_components or '' }}</textarea>
+                  </div>
+                </div>
+
+                <!-- Text fields row 2 -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Consequences *</label>
+                    <textarea name="consequences" required rows="2"
+                      style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical">{{ row.consequences or '' }}</textarea>
+                  </div>
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Further Mitigation Measures</label>
+                    <textarea name="further_mitigations" rows="2"
+                      style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical">{{ row.further_mitigations or '' }}</textarea>
+                  </div>
+                </div>
+
+                <!-- Risk indices -->
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#92400e;display:block;margin-bottom:3px;text-transform:uppercase">Initial Likelihood</label>
+                    <select name="likelihood_initial" style="border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit;background:#fef3c7">
+                      {% for v in [5,4,3,2,1] %}<option value="{{ v }}" {% if row.likelihood_initial==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#92400e;display:block;margin-bottom:3px;text-transform:uppercase">Initial Severity</label>
+                    <select name="severity_initial" style="border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit;background:#fef3c7">
+                      {% for v in ['A','B','C','D','E'] %}<option {% if row.severity_initial==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+                    </select>
+                  </div>
+                  <div style="width:1px;background:#d1d5db;align-self:stretch;margin:0 4px"></div>
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#065f46;display:block;margin-bottom:3px;text-transform:uppercase">Residual Likelihood</label>
+                    <select name="likelihood_residual" style="border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit;background:#f0fdf4">
+                      <option value="">—</option>
+                      {% for v in [5,4,3,2,1] %}<option value="{{ v }}" {% if row.likelihood_residual==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size:10px;font-weight:700;color:#065f46;display:block;margin-bottom:3px;text-transform:uppercase">Residual Severity</label>
+                    <select name="severity_residual" style="border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit;background:#f0fdf4">
+                      <option value="">—</option>
+                      {% for v in ['A','B','C','D','E'] %}<option {% if row.severity_residual==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+                    </select>
+                  </div>
+                  <div style="margin-left:auto">
+                    <button type="submit" style="font-size:13px;font-weight:700;padding:9px 22px;border-radius:7px;cursor:pointer;border:none;background:#0a1628;color:#fff">✓ Save Row</button>
+                  </div>
+                </div>
+
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% endif %}
+
         {% else %}
-        <tr><td colspan="13" style="text-align:center;color:var(--muted);padding:28px;border:1px solid var(--border)">No risk rows yet.</td></tr>
+        <tr><td colspan="14" style="text-align:center;color:var(--muted);padding:28px;border:1px solid var(--border)">No risk rows yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
+
+    <script>
+    function toggleRowEdit(id){
+      var vr=document.getElementById('view-row-'+id);
+      var er=document.getElementById('edit-row-'+id);
+      var editing=er.style.display!=='none';
+      er.style.display=editing?'none':'table-row';
+      vr.style.background=editing?'':'#e8f0fe';
+    }
+    </script>
   </div>
 
   <!-- Add row form -->
