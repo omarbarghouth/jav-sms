@@ -340,24 +340,35 @@
             <div style="font-size:10px;color:var(--muted)">{{ row.risk_tolerance_initial or '' }}</div>
             {% if row.risk_id %}<a href="/risk/{{ row.risk_id }}" style="font-size:10px;color:#1d4ed8">Risk →</a>{% endif %}
           </td>
-          <td style="border:1px solid var(--border);padding:8px;min-width:130px">
+          <td style="border:1px solid var(--border);padding:6px 8px;min-width:160px;vertical-align:top">
             {% set ctrl_count = row.controls|length %}
+            <!-- Existing controls summary -->
             {% if ctrl_count > 0 %}
-              <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px">
-                {% set ns = namespace(seen=[]) %}
+              <div style="margin-bottom:5px">
                 {% for c in row.controls %}
-                  {% if c.category and c.category not in ns.seen %}
-                    {% set ns.seen = ns.seen + [c.category] %}
-                    <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:#dbeafe;color:#1e40af">{{ c.category }}</span>
+                <div style="font-size:11px;color:#111827;line-height:1.4;margin-bottom:3px;padding:3px 0;{% if not loop.last %}border-bottom:1px solid #f3f4f6{% endif %}">
+                  <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#dbeafe;color:#1e40af;margin-right:4px">{{ c.category or '?' }}</span>
+                  {{ (c.description or '')[:55] }}{% if c.description and c.description|length > 55 %}…{% endif %}
+                  {% if c.effectiveness %}
+                  <span style="font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;margin-left:3px;
+                    background:{% if c.effectiveness=='Effective' %}#dcfce7{% elif c.effectiveness=='Partially Effective' %}#fef3c7{% else %}#fee2e2{% endif %};
+                    color:{% if c.effectiveness=='Effective' %}#15803d{% elif c.effectiveness=='Partially Effective' %}#b45309{% else %}#dc2626{% endif %}">
+                    {{ c.effectiveness[:7] }}</span>
                   {% endif %}
+                </div>
                 {% endfor %}
               </div>
-              <a href="#controls-{{ row.id }}" style="font-size:11px;color:#1d4ed8;font-weight:600">{{ ctrl_count }} control{{ 's' if ctrl_count != 1 }} ↓</a>
-            {% else %}
-              <a href="#controls-{{ row.id }}" style="font-size:11px;color:#9ca3af;font-style:italic">None — Add ↓</a>
             {% endif %}
-            {% if row.current_defenses %}
-              <div style="font-size:10px;color:#9ca3af;margin-top:3px;font-style:italic">Legacy: {{ row.current_defenses[:60] }}{% if row.current_defenses|length > 60 %}…{% endif %}</div>
+            {% if row.current_defenses and ctrl_count == 0 %}
+              <div style="font-size:11px;color:#374151;margin-bottom:5px;line-height:1.4">{{ row.current_defenses[:80] }}{% if row.current_defenses|length > 80 %}…{% endif %}</div>
+            {% endif %}
+            {% if ra.status != 'Archived' %}
+            <button type="button" onclick="openCtrlModal('ctrl-modal-{{ row.id }}')"
+              style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;cursor:pointer;border:1.5px solid {% if ctrl_count > 0 %}#1d4ed8{% else %}#9ca3af{% endif %};background:{% if ctrl_count > 0 %}#eff6ff{% else %}#f9fafb{% endif %};color:{% if ctrl_count > 0 %}#1d4ed8{% else %}#6b7280{% endif %}">
+              {% if ctrl_count > 0 %}✎ {{ ctrl_count }} Control{{ 's' if ctrl_count != 1 }}{% else %}+ Add Control{% endif %}
+            </button>
+            {% elif ctrl_count == 0 %}
+              <span style="font-size:11px;color:#9ca3af;font-style:italic">None</span>
             {% endif %}
           </td>
           <td style="border:1px solid var(--border);padding:8px;max-width:160px">{{ row.further_mitigations or '—' }}</td>
@@ -410,193 +421,198 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════
-     EXISTING CONTROLS — structured per-row controls module
+     EXISTING CONTROLS MODALS — one per risk row, opened from table cell
      ══════════════════════════════════════════════════════════════════════ -->
 {% if ra.rows %}
-<div class="card" style="margin-bottom:18px">
+<!-- Modal overlay backdrop -->
+<div id="ctrl-modal-backdrop" onclick="closeCtrlModal()" style="display:none;position:fixed;inset:0;background:rgba(10,22,40,.55);z-index:1000;backdrop-filter:blur(2px)"></div>
 
-  <!-- Section header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+{% for row in ra.rows %}
+<!-- Controls Modal for Row {{ row.seq_num }} -->
+<div id="ctrl-modal-{{ row.id }}" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;width:min(700px,96vw);max-height:88vh;overflow-y:auto;background:#fff;border-radius:12px;box-shadow:0 24px 60px rgba(10,22,40,.35);border:1.5px solid #e5e7eb">
+
+  <!-- Modal header -->
+  <div style="position:sticky;top:0;background:#0a1628;color:#fff;padding:14px 20px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;z-index:1">
     <div>
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:3px">ICAO Doc 9859 §6.3 · Safety Barriers & Defences</div>
-      <div class="card-title" style="margin:0">Existing Controls / Current Defences</div>
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.5);margin-bottom:3px">ICAO Doc 9859 §6.3 · Safety Barriers &amp; Defences</div>
+      <div style="font-weight:800;font-size:15px">Existing Controls — Row {{ row.seq_num }}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.6)">{{ row.type_of_activity or '' }}{% if row.generic_hazard %} · {{ row.generic_hazard }}{% endif %}</div>
     </div>
-    <div style="font-size:12px;color:var(--muted)">
-      {% set tc = namespace(n=0) %}{% for r in ra.rows %}{% set tc.n = tc.n + (r.controls|length) %}{% endfor %}
-      {{ tc.n }} control{{ 's' if tc.n != 1 }} across {{ (ra.rows|length) }} row{{ 's' if (ra.rows|length) != 1 }}
-    </div>
+    <button onclick="closeCtrlModal()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-weight:700;font-size:13px">✕ Close</button>
   </div>
 
-  <div style="font-size:12px;color:var(--muted);margin-bottom:16px;padding:10px 14px;background:#f8f9fc;border-radius:8px;border-left:3px solid var(--gold)">
-    Document <strong>all existing controls</strong> that are already in place for each hazard scenario.
-    Each control should include its category, a professional description, effectiveness rating, and supporting evidence reference.
-    These controls form the basis for your <em>initial risk index</em> evaluation.
-  </div>
+  <div style="padding:20px">
 
-  {% for row in ra.rows %}
-  <div id="controls-{{ row.id }}" style="margin-bottom:{% if not loop.last %}24px{% else %}0{% endif %}">
-
-    <!-- Row header -->
-    <div style="display:flex;justify-content:space-between;align-items:center;background:#0a1628;color:#fff;border-radius:8px 8px 0 0;padding:10px 16px">
-      <div style="display:flex;align-items:center;gap:12px">
-        <span style="background:var(--gold);color:#0a1628;font-weight:800;font-size:12px;padding:3px 10px;border-radius:5px">SEQ {{ row.seq_num }}</span>
-        <div>
-          <div style="font-weight:700;font-size:13px">{{ row.type_of_activity or '—' }}</div>
-          <div style="font-size:11px;color:rgba(255,255,255,.6)">{{ row.generic_hazard or '' }}</div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <!-- Initial risk badge -->
-        {% if row.risk_index_initial %}
-        <span style="padding:3px 10px;border-radius:5px;font-weight:800;font-size:12px;
-          background:{% if row.risk_tolerance_initial=='INTOLERABLE' %}#dc2626{% elif row.risk_tolerance_initial=='TOLERABLE' %}#d97706{% else %}#15803d{% endif %};color:#fff">
-          {{ row.risk_index_initial }} {{ row.risk_tolerance_initial or '' }}
-        </span>
-        {% endif %}
-        <span style="font-size:11px;color:rgba(255,255,255,.6)">{{ row.controls|length }} control{{ 's' if row.controls|length != 1 }}</span>
-      </div>
-    </div>
-
-    <!-- Existing controls cards -->
+    <!-- Existing controls list -->
     {% if row.controls %}
-    <div style="border:1.5px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
+    <div style="margin-bottom:20px">
       {% for ctrl in row.controls %}
-      <div style="padding:14px 16px;border-bottom:{% if not loop.last %}1px solid #f3f4f6{% else %}none{% endif %};background:{% if loop.index is odd %}#fff{% else %}#fafbfc{% endif %}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-
-          <!-- Left: category + description -->
-          <div style="flex:1;min-width:260px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <!-- Category pill -->
-              {% set cat_color = {
-                'SOP': '#1e40af:#dbeafe',
-                'Training': '#065f46:#dcfce7',
-                'Monitoring': '#6b21a8:#f3e8ff',
-                'Equipment': '#92400e:#fef3c7',
-                'Engineering': '#0e7490:#cffafe',
-                'PPE': '#be123c:#ffe4e6',
-                'Procedural': '#1e40af:#dbeafe',
-                'Other': '#374151:#f3f4f6'
-              } %}
-              {% set colors = (cat_color.get(ctrl.category, '#374151:#f3f4f6')).split(':') %}
-              <span style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 9px;border-radius:4px;background:{{ colors[1] }};color:{{ colors[0] }}">{{ ctrl.category or 'Other' }}</span>
-              <!-- Effectiveness pill -->
-              {% if ctrl.effectiveness %}
-              <span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;
-                background:{% if ctrl.effectiveness=='Effective' %}#dcfce7{% elif ctrl.effectiveness=='Partially Effective' %}#fef3c7{% elif ctrl.effectiveness=='Ineffective' %}#fee2e2{% else %}#f3f4f6{% endif %};
-                color:{% if ctrl.effectiveness=='Effective' %}#15803d{% elif ctrl.effectiveness=='Partially Effective' %}#b45309{% elif ctrl.effectiveness=='Ineffective' %}#dc2626{% else %}#6b7280{% endif %}">
-                {{ ctrl.effectiveness }}
-              </span>
-              {% endif %}
-              <span style="font-size:10px;color:#9ca3af">#{{ loop.index }}</span>
+      {% set cat_colors = {'SOP':'#1e40af|#dbeafe','Training':'#065f46|#dcfce7','Monitoring':'#6b21a8|#f3e8ff','Equipment':'#92400e|#fef3c7','Engineering':'#0e7490|#cffafe','PPE':'#be123c|#ffe4e6','Procedural':'#1e40af|#dbeafe','Other':'#374151|#f3f4f6'} %}
+      {% set cpair = (cat_colors.get(ctrl.category,'#374151|#f3f4f6')).split('|') %}
+      <div style="border:1.5px solid #e5e7eb;border-radius:8px;margin-bottom:10px;overflow:hidden">
+        <!-- Control view row -->
+        <div style="padding:12px 16px;background:{% if loop.index is odd %}#fff{% else %}#fafbfc{% endif %}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+                <span style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:{{ cpair[1] }};color:{{ cpair[0] }}">{{ ctrl.category or 'Other' }}</span>
+                {% if ctrl.effectiveness %}
+                <span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;
+                  background:{% if ctrl.effectiveness=='Effective' %}#dcfce7{% elif ctrl.effectiveness=='Partially Effective' %}#fef3c7{% elif ctrl.effectiveness=='Ineffective' %}#fee2e2{% else %}#f3f4f6{% endif %};
+                  color:{% if ctrl.effectiveness=='Effective' %}#15803d{% elif ctrl.effectiveness=='Partially Effective' %}#b45309{% elif ctrl.effectiveness=='Ineffective' %}#dc2626{% else %}#6b7280{% endif %}">
+                  {{ ctrl.effectiveness }}</span>
+                {% endif %}
+                {% if ctrl.evidence %}<span style="font-size:9px;color:#6b7280;font-style:italic">{{ ctrl.evidence }}</span>{% endif %}
+              </div>
+              <div style="font-size:13px;color:#111827;line-height:1.5">{{ ctrl.description or '—' }}</div>
+              {% if ctrl.owner %}<div style="font-size:11px;color:#6b7280;margin-top:4px"><strong>Owner:</strong> {{ ctrl.owner }}</div>{% endif %}
+              {% if ctrl.notes %}<div style="font-size:11px;color:#6b7280;margin-top:4px;padding:5px 10px;background:#f9fafb;border-radius:5px;border-left:2px solid #e5e7eb;font-style:italic">{{ ctrl.notes }}</div>{% endif %}
             </div>
-            <div style="font-size:13px;color:#111827;line-height:1.5;margin-bottom:{% if ctrl.evidence or ctrl.owner or ctrl.notes %}6px{% else %}0{% endif %}">{{ ctrl.description or '—' }}</div>
-            {% if ctrl.evidence %}
-            <div style="font-size:11px;color:#6b7280;display:flex;align-items:center;gap:5px;margin-bottom:2px">
-              <span style="font-weight:600;color:#374151">Evidence:</span> {{ ctrl.evidence }}
+            {% if ra.status != 'Archived' %}
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button type="button" onclick="toggleEditCtrl({{ ctrl.id }})"
+                style="font-size:11px;padding:4px 10px;border-radius:5px;cursor:pointer;border:1px solid #d1d5db;background:#f9fafb;color:#374151;font-weight:600">✎ Edit</button>
+              <form method="POST" action="/risk-assessments/{{ ra.id }}/controls/{{ ctrl.id }}/delete" onsubmit="return confirm('Remove this control?')" style="margin:0">
+                <button type="submit" style="font-size:11px;padding:4px 10px;border-radius:5px;cursor:pointer;border:1px solid #fca5a5;background:#fff;color:#dc2626;font-weight:600">✕</button>
+              </form>
             </div>
-            {% endif %}
-            {% if ctrl.owner %}
-            <div style="font-size:11px;color:#6b7280;display:flex;align-items:center;gap:5px;margin-bottom:2px">
-              <span style="font-weight:600;color:#374151">Owner:</span> {{ ctrl.owner }}
-            </div>
-            {% endif %}
-            {% if ctrl.notes %}
-            <div style="font-size:11px;color:#6b7280;margin-top:4px;padding:6px 10px;background:#f9fafb;border-radius:5px;border-left:2px solid #e5e7eb;font-style:italic">{{ ctrl.notes }}</div>
             {% endif %}
           </div>
-
-          <!-- Right: delete -->
-          {% if ra.status != 'Archived' %}
-          <form method="POST" action="/risk-assessments/{{ ra.id }}/controls/{{ ctrl.id }}/delete"
-                onsubmit="return confirm('Remove this control?')" style="margin:0">
-            <button type="submit" style="background:none;border:1px solid #fca5a5;color:#dc2626;border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">✕ Remove</button>
-          </form>
-          {% endif %}
-
         </div>
+        <!-- Inline edit form (hidden by default) -->
+        {% if ra.status != 'Archived' %}
+        <div id="edit-ctrl-{{ ctrl.id }}" style="display:none;border-top:1.5px solid #e5e7eb;padding:14px 16px;background:#f8f9fc">
+          <form method="POST" action="/risk-assessments/{{ ra.id }}/controls/{{ ctrl.id }}/edit">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+              <div>
+                <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Category</label>
+                <select name="category" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit">
+                  {% for cat in ['SOP','Training','Monitoring','Equipment','Engineering','PPE','Procedural','Other'] %}
+                  <option {% if ctrl.category==cat %}selected{% endif %}>{{ cat }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Effectiveness</label>
+                <select name="effectiveness" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit">
+                  {% for eff in ['Effective','Partially Effective','Ineffective','Unknown'] %}
+                  <option {% if ctrl.effectiveness==eff %}selected{% endif %}>{{ eff }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Evidence / Reference</label>
+                <input type="text" name="evidence" value="{{ ctrl.evidence or '' }}" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit"/>
+              </div>
+            </div>
+            <div style="margin-bottom:8px">
+              <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Description *</label>
+              <textarea name="description" required rows="3" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical">{{ ctrl.description or '' }}</textarea>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-bottom:10px">
+              <div>
+                <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Owner</label>
+                <input type="text" name="owner" value="{{ ctrl.owner or '' }}" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit"/>
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Notes</label>
+                <input type="text" name="notes" value="{{ ctrl.notes or '' }}" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit"/>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button type="submit" style="font-size:12px;font-weight:700;padding:7px 16px;border-radius:6px;cursor:pointer;border:none;background:#0a1628;color:#fff">✓ Save Changes</button>
+              <button type="button" onclick="toggleEditCtrl({{ ctrl.id }})" style="font-size:12px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;border:1.5px solid #d1d5db;background:#fff;color:#374151">Cancel</button>
+            </div>
+          </form>
+        </div>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
     {% else %}
-    <div style="border:1.5px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:16px 18px;background:#fafbfc;text-align:center;color:#9ca3af;font-size:12px;font-style:italic">
-      No existing controls documented for this risk scenario. Add the first control below.
+    <div style="text-align:center;padding:20px;color:#9ca3af;font-size:13px;font-style:italic;margin-bottom:16px;background:#f9fafb;border-radius:8px;border:1.5px dashed #e5e7eb">
+      No existing controls documented yet for this risk scenario.
     </div>
     {% endif %}
 
-    <!-- Add Control form (inline, collapsible) -->
+    <!-- Add new control form -->
     {% if ra.status != 'Archived' %}
-    <div style="margin-top:8px">
-      <details style="border:1.5px dashed #c9a84c;border-radius:8px;background:#fffbf0">
-        <summary style="padding:10px 16px;cursor:pointer;font-size:12px;font-weight:700;color:#92400e;list-style:none;display:flex;align-items:center;gap:8px">
-          <span style="background:#c9a84c;color:#fff;border-radius:4px;padding:2px 8px;font-size:11px">+</span>
-          Add Existing Control to Row {{ row.seq_num }}
-        </summary>
-        <form method="POST" action="/risk-assessments/{{ ra.id }}/rows/{{ row.id }}/add-control" style="padding:14px 16px 16px">
-          <div class="g3" style="margin-bottom:10px">
-
-            <div class="fg">
-              <label style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px;display:block">Control Category *</label>
-              <select name="category" required style="width:100%">
-                <option value="">— Select category —</option>
-                <option value="SOP">SOP — Standard Operating Procedure</option>
-                <option value="Training">Training</option>
-                <option value="Monitoring">Monitoring / Inspection</option>
-                <option value="Equipment">Equipment / Technology</option>
-                <option value="Engineering">Engineering Control</option>
-                <option value="PPE">PPE — Personal Protective Equipment</option>
-                <option value="Procedural">Procedural / Administrative</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-
-            <div class="fg">
-              <label style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px;display:block">Effectiveness *</label>
-              <select name="effectiveness" required style="width:100%">
-                <option value="">— Select —</option>
-                <option value="Effective">Effective</option>
-                <option value="Partially Effective">Partially Effective</option>
-                <option value="Ineffective">Ineffective</option>
-                <option value="Unknown">Unknown / Not Assessed</option>
-              </select>
-            </div>
-
-            <div class="fg">
-              <label style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px;display:block">Evidence / Reference</label>
-              <input type="text" name="evidence" placeholder="e.g. SOP-OPS-001 Rev.5 / Training Records / Inspection Log" style="width:100%"/>
-            </div>
-
+    <div style="border-top:1.5px solid #e5e7eb;padding-top:16px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#0a1628;margin-bottom:12px">+ Add Existing Control</div>
+      <form method="POST" action="/risk-assessments/{{ ra.id }}/rows/{{ row.id }}/add-control">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Category *</label>
+            <select name="category" required style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
+              <option value="">— Select —</option>
+              <option value="SOP">SOP / Standard Operating Procedure</option>
+              <option value="Training">Training</option>
+              <option value="Monitoring">Monitoring / Inspection</option>
+              <option value="Equipment">Equipment / Technology</option>
+              <option value="Engineering">Engineering Control</option>
+              <option value="PPE">PPE</option>
+              <option value="Procedural">Procedural / Administrative</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
-
-          <div class="fg" style="margin-bottom:10px">
-            <label style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px;display:block">Existing Control Description *</label>
-            <textarea name="description" required rows="3" placeholder="Describe the existing control in professional detail. E.g.: SOP-OPS-001 FOD Prevention Programme implemented across all operating stations. Daily apron inspections conducted before first departure by qualified ground crew." style="width:100%;font-size:13px"></textarea>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Effectiveness *</label>
+            <select name="effectiveness" required style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit">
+              <option value="">— Select —</option>
+              <option value="Effective">Effective</option>
+              <option value="Partially Effective">Partially Effective</option>
+              <option value="Ineffective">Ineffective</option>
+              <option value="Unknown">Unknown / Not Assessed</option>
+            </select>
           </div>
-
-          <div class="g3" style="margin-bottom:12px">
-            <div class="fg">
-              <label style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px;display:block">Owner / Responsible (optional)</label>
-              <input type="text" name="owner" placeholder="Department or person responsible" style="width:100%"/>
-            </div>
-            <div class="fg" style="grid-column:span 2">
-              <label style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px;display:block">Notes (optional)</label>
-              <input type="text" name="notes" placeholder="Any limitations, caveats, or additional context about this control" style="width:100%"/>
-            </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Evidence / Reference</label>
+            <input type="text" name="evidence" placeholder="e.g. SOP-OPS-001 Rev.5" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit"/>
           </div>
-
-          <button type="submit" class="btn btn-nav" style="background:#0a1628;color:#c9a84c;border:1px solid #c9a84c">
-            ✓ Save Existing Control
-          </button>
-        </form>
-      </details>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Control Description *</label>
+          <textarea name="description" required rows="3" placeholder="Describe the existing control in detail — e.g. FOD Prevention Programme per SOP-OPS-001, daily apron inspections before first departure by qualified ground crew." style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-bottom:12px">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Owner / Responsible</label>
+            <input type="text" name="owner" placeholder="Department or person" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit"/>
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px;text-transform:uppercase">Notes / Caveats</label>
+            <input type="text" name="notes" placeholder="Any limitations or additional context" style="width:100%;border:1.5px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit"/>
+          </div>
+        </div>
+        <button type="submit" style="font-size:13px;font-weight:700;padding:9px 20px;border-radius:7px;cursor:pointer;border:none;background:#0a1628;color:#c9a84c">✓ Save Control</button>
+      </form>
     </div>
     {% endif %}
 
-  </div>
-  {% endfor %}
+  </div><!-- /padding -->
+</div><!-- /modal -->
+{% endfor %}
 
-</div>
+</div><!-- /ctrl-modals-container -->
 {% endif %}
+
+<script>
+function openCtrlModal(id){
+  document.getElementById('ctrl-modal-backdrop').style.display='block';
+  document.getElementById(id).style.display='block';
+  document.body.style.overflow='hidden';
+}
+function closeCtrlModal(){
+  document.getElementById('ctrl-modal-backdrop').style.display='none';
+  document.querySelectorAll('[id^="ctrl-modal-"]:not(#ctrl-modal-backdrop):not(#ctrl-modals-container)').forEach(function(m){m.style.display='none';});
+  document.body.style.overflow='';
+}
+function toggleEditCtrl(id){
+  var el=document.getElementById('edit-ctrl-'+id);
+  el.style.display=el.style.display==='none'?'block':'none';
+}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeCtrlModal();});
+</script>
 
 <!-- PAGE 4 — Mitigation Implementation -->
 {% if ra.mitigations %}
