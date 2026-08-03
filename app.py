@@ -13549,44 +13549,96 @@ def ra_detail(ra_id):
 @app.route('/risk-assessments/<ra_id>/assign-sag', methods=['GET', 'POST'])
 @require_login
 def ra_assign_sag(ra_id):
-    """Step after RA creation: assign actions to SAG members for review."""
+    """Assign this Risk Assessment for SAG review — creates a dedicated SAG Review task."""
     ra = RiskAssessment.query.get_or_404(ra_id)
-    actions = Action.query.filter_by(linked_ref_id=ra_id, source='Risk Assessment').all()
+    # SAG review tasks are Actions with source='Risk Assessment' and linked_ref_id=ra_id
+    existing_reviews = Action.query.filter_by(linked_ref_id=ra_id, source='Risk Assessment').all()
     sag_members = User.query.filter_by(is_active=True).order_by(User.full_name).all()
     departments = Department.query.order_by(Department.name).all()
 
     if request.method == 'POST':
         f = request.form
-        assigned_count = 0
-        for action in actions:
-            sag_key  = f'sag_{action.id}'
-            dept_key = f'dept_{action.id}'
-            due_key  = f'due_{action.id}'
-            if f.get(sag_key):
-                old = action.sag_member or 'Unassigned'
-                action.sag_member    = f[sag_key]
-                action.department_id = int(f[dept_key]) if f.get(dept_key) else action.department_id
-                action.due_date      = f.get(due_key) or action.due_date
-                if action.status == 'Open':
-                    action.status = 'Assigned'
-                log_action_history(action.id, session.get('admin_name', 'Admin'),
-                                   old, action.sag_member,
-                                   f'SAG assigned via RA {ra.control_number}', 'assignment')
-                push_notify_by_name(action.sag_member,
-                    f'Action Assigned — {ra.control_number}',
-                    f'You have been assigned a corrective action for Risk Assessment {ra.control_number}.',
-                    'action_assigned', 'action', action.id)
-                assigned_count += 1
-        # Advance RA to Submitted
-        if assigned_count and ra.status == 'Draft':
-            ra.status = 'Submitted'
-            ra.submitted_date = datetime.utcnow().strftime('%Y-%m-%d')
-        db.session.commit()
-        flash(f'✓ {assigned_count} action(s) assigned to SAG. Risk Assessment submitted for review.', 'success')
-        return redirect(url_for('ra_detail', ra_id=ra_id))
+        btn = f.get('action_btn', 'create')
+
+        if btn == 'update_existing':
+            # Update assignments on already-created SAG review actions
+            assigned_count = 0
+            for action in existing_reviews:
+                sag_key  = f'sag_{action.id}'
+                dept_key = f'dept_{action.id}'
+                due_key  = f'due_{action.id}'
+                if f.get(sag_key):
+                    old = action.sag_member or 'Unassigned'
+                    action.sag_member    = f[sag_key]
+                    action.department_id = int(f[dept_key]) if f.get(dept_key) else action.department_id
+                    action.due_date      = f.get(due_key) or action.due_date
+                    if action.status in ('Open',):
+                        action.status = 'Assigned'
+                    log_action_history(action.id, session.get('admin_name', 'Admin'),
+                                       old, action.sag_member,
+                                       f'SAG reassigned via RA {ra.control_number}', 'assignment')
+                    push_notify_by_name(action.sag_member,
+                        f'SAG Review Assigned — {ra.control_number}',
+                        f'You have been assigned to review Risk Assessment {ra.control_number}: {ra.title or ra.general_description or ""}.',
+                        'action_assigned', 'action', action.id)
+                    assigned_count += 1
+            if assigned_count and ra.status == 'Draft':
+                ra.status = 'Submitted'
+                ra.submitted_date = datetime.utcnow().strftime('%Y-%m-%d')
+            db.session.commit()
+            flash(f'✓ {assigned_count} SAG review task(s) updated.', 'success')
+            return redirect(url_for('ra_detail', ra_id=ra_id))
+
+        else:
+            # Create a new SAG Review Action for this RA
+            sag_member  = f.get('sag_member', '').strip()
+            due_date    = f.get('due_date', '').strip()
+            dept_id     = f.get('department_id', '').strip()
+            priority    = f.get('priority', 'High').strip()
+            review_desc = f.get('review_description', '').strip()
+
+            if not sag_member:
+                flash('✗ Please select a SAG member to assign.', 'error')
+                return redirect(url_for('ra_assign_sag', ra_id=ra_id))
+
+            ra_title = (ra.title or ra.general_description or ra.control_number or ra_id)[:120]
+            description = review_desc or f'SAG Review: {ra.control_number} — {ra_title}'
+
+            new_action = Action(
+                id=new_id('ACT'),
+                source='Risk Assessment',
+                linked_ref_id=ra_id,
+                hazard_id=ra.hazard_id,
+                description=description,
+                sag_member=sag_member,
+                due_date=due_date or None,
+                department_id=int(dept_id) if dept_id else None,
+                priority=priority,
+                status='Assigned',
+                owner=session.get('admin_name', 'Admin'),
+            )
+            db.session.add(new_action)
+
+            if ra.status == 'Draft':
+                ra.status = 'Submitted'
+                ra.submitted_date = datetime.utcnow().strftime('%Y-%m-%d')
+
+            db.session.commit()
+
+            log_action_history(new_action.id, session.get('admin_name', 'Admin'),
+                               'New', sag_member,
+                               f'SAG review task created for RA {ra.control_number}', 'assignment')
+
+            push_notify_by_name(sag_member,
+                f'SAG Review Assigned — {ra.control_number}',
+                f'You have been assigned to review Risk Assessment {ra.control_number}: {ra_title}.',
+                'action_assigned', 'action', new_action.id)
+
+            flash(f'✓ SAG Review task created and assigned to {sag_member}. Risk Assessment submitted for review.', 'success')
+            return redirect(url_for('ra_detail', ra_id=ra_id))
 
     return render_template('risk/ra_assign_sag.html',
-                           ra=ra, actions=actions,
+                           ra=ra, existing_reviews=existing_reviews,
                            sag_members=sag_members, departments=departments)
 
 # ─── ADD ROW to existing RA ──────────────────────────────────────────────────
@@ -13693,6 +13745,22 @@ def ra_add_control(ra_id, row_id):
     return redirect(next_url)
 
 
+@app.route('/risk-assessments/<ra_id>/controls/<int:ctrl_id>/edit', methods=['POST'])
+@require_login
+def ra_edit_control(ra_id, ctrl_id):
+    ctrl = RAControl.query.get_or_404(ctrl_id)
+    f = request.form
+    ctrl.category      = f.get('category', ctrl.category)
+    ctrl.description   = f.get('description', ctrl.description)
+    ctrl.effectiveness = f.get('effectiveness', ctrl.effectiveness)
+    ctrl.evidence      = f.get('evidence', ctrl.evidence)
+    ctrl.owner         = f.get('owner', ctrl.owner)
+    ctrl.notes         = f.get('notes', ctrl.notes)
+    db.session.commit()
+    flash(f'✓ Control updated.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+
 @app.route('/risk-assessments/<ra_id>/controls/<int:ctrl_id>/delete', methods=['POST'])
 @require_login
 def ra_delete_control(ra_id, ctrl_id):
@@ -13704,7 +13772,7 @@ def ra_delete_control(ra_id, ctrl_id):
     db.session.delete(ctrl)
     db.session.commit()
     flash(f'✓ Control removed from Row {seq}.', 'success')
-    next_url = request.form.get('_next') or (url_for('ra_detail', ra_id=ra_id) + f'#controls-{row_id}')
+    next_url = request.form.get('_next') or (url_for('ra_detail', ra_id=ra_id))
     return redirect(next_url)
 
 
