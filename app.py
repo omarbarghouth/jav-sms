@@ -13642,6 +13642,42 @@ def ra_assign_sag(ra_id):
                            sag_members=sag_members, departments=departments)
 
 # ─── ADD ROW to existing RA ──────────────────────────────────────────────────
+@app.route('/risk-assessments/<ra_id>/rows/<int:row_id>/edit', methods=['POST'])
+@require_login
+def ra_edit_row(ra_id, row_id):
+    row = RARow.query.get_or_404(row_id)
+    if row.assessment_id != ra_id:
+        return 'Not found', 404
+    f = request.form
+    row.type_of_activity    = f.get('type_of_activity', row.type_of_activity)
+    row.generic_hazard      = f.get('generic_hazard', row.generic_hazard)
+    row.specific_components = f.get('specific_components', row.specific_components)
+    row.consequences        = f.get('consequences', row.consequences)
+    row.further_mitigations = f.get('further_mitigations', row.further_mitigations)
+    lik_i = f.get('likelihood_initial')
+    sev_i = f.get('severity_initial')
+    if lik_i and sev_i:
+        row.likelihood_initial = int(lik_i)
+        row.severity_initial   = sev_i
+        row.risk_index_initial = f'{lik_i}{sev_i}'
+        row.risk_tolerance_initial = get_tolerance(row.risk_index_initial)
+    lik_r = f.get('likelihood_residual')
+    sev_r = f.get('severity_residual')
+    if lik_r and sev_r:
+        row.likelihood_residual = int(lik_r)
+        row.severity_residual   = sev_r
+        row.risk_index_residual = f'{lik_r}{sev_r}'
+        row.risk_tolerance_residual = get_tolerance(row.risk_index_residual)
+    elif not lik_r and not sev_r:
+        row.likelihood_residual = None
+        row.severity_residual   = None
+        row.risk_index_residual = None
+        row.risk_tolerance_residual = None
+    db.session.commit()
+    flash(f'✓ Row {row.seq_num} updated.', 'success')
+    return redirect(url_for('ra_detail', ra_id=ra_id))
+
+
 @app.route('/risk-assessments/<ra_id>/add-row', methods=['POST'])
 @require_login
 def ra_add_row(ra_id):
