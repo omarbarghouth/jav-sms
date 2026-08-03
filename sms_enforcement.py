@@ -1108,8 +1108,11 @@ def sr_new():
         f = request.form
         yr  = datetime.utcnow().year
         seq = SafetyRecommendation.query.filter(
-            SafetyRecommendation.sr_number.like(f'JAV/SR/{yr}/%')).count() + 1
-        sr_num = f'JAV/SR/{yr}/{seq:03d}'
+            db.or_(
+                SafetyRecommendation.sr_number.like(f'SMS/SR/{yr}/%'),
+                SafetyRecommendation.sr_number.like(f'JAV/SR/{yr}/%')
+            )).count() + 1
+        sr_num = f'SMS/SR/{yr}/{seq:03d}'
 
         sr = SafetyRecommendation(
             sr_number       = sr_num,

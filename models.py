@@ -86,10 +86,10 @@ class HazardReport(db.Model):
     risk_index    = db.Column(db.String(5))
     reporter      = db.Column(db.String(100), default='Anonymous')
     report_type   = db.Column(db.String(30), default='Hazard Report')  # Hazard Report / ASR / Voluntary / Confidential / Technical Log
-    status        = db.Column(db.String(30), default='Submitted')
+    status        = db.Column(db.String(30), default='Submitted', index=True)
     # Submitted / Under Assessment / Actioned / Closed
     hazard_id     = db.Column(db.String(30), db.ForeignKey('hazards.id'))
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     # ── Phase 2: Reporter feedback lifecycle ─────────────────────────────────
     reporter_user_id    = db.Column(db.String(30), nullable=True, index=True)
     # 'emp_5' format — mobile reporter who submitted; null for web/anonymous
@@ -159,9 +159,9 @@ class Hazard(db.Model):
     generic_hazard         = db.Column(db.String(200))
     specific_components    = db.Column(db.Text)
     consequences           = db.Column(db.Text)
-    status                 = db.Column(db.String(20), default='Open')
+    status                 = db.Column(db.String(20), default='Open', index=True)
     owner                  = db.Column(db.String(100))
-    created_at             = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at             = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     department             = db.relationship('Department', foreign_keys=[department_id], backref=db.backref("hazard_set", lazy=True))
     risks                  = db.relationship('Risk', backref='hazard', lazy=True, cascade='all, delete-orphan')
     actions                = db.relationship('Action', backref='hazard', lazy=True)
@@ -216,9 +216,9 @@ class Action(db.Model):
     # The 5 fields every action needs
     description      = db.Column(db.Text)
     owner            = db.Column(db.String(100))
-    due_date         = db.Column(db.String(20))
+    due_date         = db.Column(db.String(20), index=True)
     priority         = db.Column(db.String(20), default='Medium')  # High / Medium / Low
-    status           = db.Column(db.String(50), default='Open')
+    status           = db.Column(db.String(50), default='Open', index=True)
     # Open / In Progress / Closed / Overdue
     # Effectiveness — mandatory on closure (Phase 2 enforcement)
     effectiveness        = db.Column(db.String(30))
@@ -258,7 +258,7 @@ class Action(db.Model):
     verified_date        = db.Column(db.String(20))
     created_at           = db.Column(db.DateTime, default=datetime.utcnow)
     # SAG governance fields
-    sag_member           = db.Column(db.String(100))   # assigned SAG member username
+    sag_member           = db.Column(db.String(100), index=True)   # assigned SAG member username
     department_id        = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     root_cause           = db.Column(db.Text)
     rejection_notes      = db.Column(db.Text)
@@ -409,7 +409,7 @@ class MOC(db.Model):
     hazard_id           = db.Column(db.String(30))
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
     # ── NEW: MOC Identification ───────────────────────────────────────────────
-    moc_number          = db.Column(db.String(30))    # e.g. JAV/MOC/2026/001
+    moc_number          = db.Column(db.String(30))    # e.g. SMS/MOC/2026/001
     change_category     = db.Column(db.String(50))    # Operational/Flight Ops/Ground Ops/…
     date_raised         = db.Column(db.String(20))
     # ── NEW: Change Details ───────────────────────────────────────────────────
@@ -1314,7 +1314,7 @@ class RiskAssessment(db.Model):
     __tablename__ = 'risk_assessments'
     id                    = db.Column(db.String(30), primary_key=True)
     # Page 1 - Administrator
-    control_number        = db.Column(db.String(50))    # e.g. JAV/RA/2024/001
+    control_number        = db.Column(db.String(50))    # e.g. SMS-RA-OPS-2024-001
     responsible_name      = db.Column(db.String(100))
     assessors_names       = db.Column(db.String(300))   # comma-separated
     assessment_date       = db.Column(db.String(20))
@@ -1601,7 +1601,7 @@ class AccountableExecutive(db.Model):
     phone            = db.Column(db.String(50))
     employee_number  = db.Column(db.String(30))
     authority_scope  = db.Column(db.Text)          # Documented authority & responsibilities
-    appointment_ref  = db.Column(db.String(50))    # e.g. JAV/AE/2026/001
+    appointment_ref  = db.Column(db.String(50))    # e.g. SMS/AE/2026/001
     effective_from   = db.Column(db.String(20))
     effective_to     = db.Column(db.String(20))    # null = current incumbent
     is_current       = db.Column(db.Boolean, default=True)
@@ -2160,7 +2160,7 @@ class SafetyRecommendation(db.Model):
     __tablename__ = 'safety_recommendations'
     id              = db.Column(db.Integer, primary_key=True)
     sr_number       = db.Column(db.String(30), unique=True, nullable=False)
-    # Format: JAV/SR/2026/001
+    # Format: SMS/SR/2026/001
 
     # Source
     source_type     = db.Column(db.String(30), nullable=False)

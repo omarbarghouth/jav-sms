@@ -67,7 +67,7 @@ SMTP_HOST=os.environ.get('SMTP_HOST','')
 SMTP_PORT=int(os.environ.get('SMTP_PORT',587))
 SMTP_USER=os.environ.get('SMTP_USER','')
 SMTP_PASSWORD=os.environ.get('SMTP_PASSWORD','')
-SMTP_FROM=os.environ.get('SMTP_FROM','safety@jordanaviation.com')
+SMTP_FROM=os.environ.get('SMTP_FROM','safety@aviation.jo')
 SMTP_FROM_NAME=os.environ.get('SMTP_FROM_NAME','AviaS Safety')
 
 def send_email(to_list, subject, html_body):
@@ -142,11 +142,12 @@ _db_opts = {'pool_pre_ping': True, 'pool_recycle': 280, 'pool_timeout': 20}
 if 'postgresql' in _db_url or 'postgres' in _db_url:
     _db_opts['connect_args'] = {'connect_timeout': 10}
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _db_opts
-app.secret_key = os.environ.get('SECRET_KEY', 'jav-sms-dev-only-change-in-prod')
+app.secret_key = os.environ.get('SECRET_KEY', 'sms-dev-only-change-in-prod')
 # IMPORTANT: Set a strong SECRET_KEY env var in production (Render dashboard)
 
 # ── Session / cookie security ──────────────────────────────────────────────────
-_is_prod = os.environ.get('FLASK_ENV', 'development') == 'production'
+# Detect production: Render sets RENDER=true; also honour explicit FLASK_ENV=production
+_is_prod = bool(os.environ.get('RENDER')) or os.environ.get('FLASK_ENV', '') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True          # no JS access to cookie
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'        # CSRF mitigation
 app.config['SESSION_COOKIE_SECURE']   = _is_prod      # HTTPS-only in prod
@@ -321,9 +322,12 @@ def inject_globals():
 
 @app.after_request
 def add_cors(response):
-    response.headers['Access-Control-Allow-Origin']  = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Dept-Id'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    from flask import request as _req
+    # Only allow CORS on mobile API routes — never on web/admin pages
+    if _req.path.startswith('/api/') and not _req.path.startswith('/api/admin'):
+        response.headers['Access-Control-Allow-Origin']  = '*'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Dept-Id'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     return response
 
 
@@ -399,7 +403,7 @@ def seed_admin():
         )
         db.session.add(admin)
         db.session.commit()
-        print("✅ Default admin created — user: admin / pass: Jordan@SMS2026")
+        app.logger.info("✅ Default admin account created.")
 
 # ─── SEED DATABASE ────────────────────────────────────────────────────────────
 def seed():
@@ -417,9 +421,9 @@ def seed():
         for d in depts:
             db.session.add(d)
         db.session.commit()
-        print('✅ Departments seeded.')
+        app.logger.info('✅ Departments seeded.')
     seed_admin()
-    print('✅ Database ready — no demo data loaded.')
+    app.logger.info('✅ Database ready.')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3938,6 +3942,7 @@ def api_send_overdue_reminders():
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
+@limiter.limit('10 per minute')
 @csrf.exempt
 def admin_login():
     # If already authenticated, go straight to dashboard
@@ -4967,14 +4972,14 @@ def hazard_log():
         hazards = pg.items
     except Exception as e:
         db.session.rollback()
-        print(f'hazard_log query error: {e}')
+        app.logger.error(f'hazard_log query error: {e}')
         hazards = []
         pg = None
     try:
         all_departments = Department.query.order_by(Department.name).all()
     except Exception as e:
         db.session.rollback()
-        print(f'hazard_log dept query error: {e}')
+        app.logger.error(f'hazard_log dept query error: {e}')
         all_departments = []
     # Build a minimal pagination-compatible object when query fails
     if pg is None:
@@ -6030,7 +6035,7 @@ def _moc_auto_generate_ra(m):
         return hazard, ra
     except Exception as e:
         db.session.rollback()
-        print(f'_moc_auto_generate_ra error: {e}')
+        app.logger.error(f'_moc_auto_generate_ra error: {e}')
         return None, None
 
 
@@ -6167,10 +6172,15 @@ def update_moc(mid):
 
 
 def _moc_number():
-    """Generate JAV/MOC/YYYY/NNN reference number."""
+    """Generate SMS/MOC/YYYY/NNN reference number."""
     yr = datetime.utcnow().year
-    count = MOC.query.filter(MOC.moc_number.like(f'JAV/MOC/{yr}/%')).count()
-    return f'JAV/MOC/{yr}/{count+1:03d}'
+    count = MOC.query.filter(
+        db.or_(
+            MOC.moc_number.like(f'SMS/MOC/{yr}/%'),
+            MOC.moc_number.like(f'JAV/MOC/{yr}/%')
+        )
+    ).count()
+    return f'SMS/MOC/{yr}/{count+1:03d}'
 
 def _moc_status_color(status):
     return {
@@ -13367,10 +13377,10 @@ def srm_dashboard():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def gen_control_number(dept_code):
-    """Generate RA control number: JAV/RA/DEPT/YEAR/SEQ"""
+    """Generate RA control number: SMS/RA/DEPT/YEAR/SEQ"""
     year = datetime.now().year
     count = RiskAssessment.query.count() + 1
-    return f"JAV-RA-{dept_code}-{year}-{count:03d}"
+    return f"SMS-RA-{dept_code}-{year}-{count:03d}"
 
 def compute_ra_summary(ra):
     """Compute overall risk level before and after controls for page 2."""
@@ -14434,7 +14444,7 @@ def hazard_log_excel():
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    filename = f'JAV_Hazard_Log_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+    filename = f'AviaS_Hazard_Log_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
     return send_file(buf, as_attachment=True,
                      download_name=filename,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -16348,7 +16358,7 @@ with app.app_context():
                         f"ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS {_col} {_ctype}"
                     )
                 except Exception as _ce:
-                    print(f"[MIGRATION] {_tbl}.{_col}: {_ce}", flush=True)
+                    app.logger.warning(f"[MIGRATION] {_tbl}.{_col}: {_ce}")
         # Widen profile_image to VARCHAR(500) for Cloudinary URLs
         try:
             _cur.execute(
@@ -16365,9 +16375,9 @@ with app.app_context():
             pass
         _cur.close()
         _raw.close()
-        print("[MIGRATION] Column migrations complete", flush=True)
+        app.logger.info("[MIGRATION] Column migrations complete")
     except Exception as _mig_err:
-        print(f"[MIGRATION] Could not run migrations: {_mig_err}", flush=True)
+        app.logger.error(f"[MIGRATION] Could not run migrations: {_mig_err}")
 
     # spi_event_links DDL
     try:
@@ -16425,6 +16435,7 @@ with app.app_context():
     except Exception: pass
 
 def seed():
+    db.create_all()
     try:
         if not Department.query.first():
             for code, name in [
@@ -16438,6 +16449,7 @@ def seed():
             db.session.commit()
     except Exception:
         db.session.rollback()
+    seed_admin()
 
 with app.app_context():
     seed()
