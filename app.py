@@ -13749,12 +13749,38 @@ def ra_add_row(ra_id):
         )
         db.session.add(action)
 
+    # Save any existing controls submitted with the row
+    db.session.flush()  # get row.id before inserting controls
+    ctrl_categories    = request.form.getlist('ctrl_category[]')
+    ctrl_descriptions  = request.form.getlist('ctrl_description[]')
+    ctrl_effectivenes  = request.form.getlist('ctrl_effectiveness[]')
+    ctrl_evidences     = request.form.getlist('ctrl_evidence[]')
+    ctrl_owners        = request.form.getlist('ctrl_owner[]')
+    ctrl_notes_list    = request.form.getlist('ctrl_notes[]')
+    ctrl_count = 0
+    for idx in range(len(ctrl_descriptions)):
+        desc = ctrl_descriptions[idx].strip() if idx < len(ctrl_descriptions) else ''
+        if not desc:
+            continue
+        ctrl = RAControl(
+            row_id      = row.id,
+            category    = ctrl_categories[idx].strip()   if idx < len(ctrl_categories)   else 'Other',
+            description = desc,
+            effectiveness = ctrl_effectivenes[idx].strip() if idx < len(ctrl_effectivenes) else '',
+            evidence    = ctrl_evidences[idx].strip()    if idx < len(ctrl_evidences)     else '',
+            owner       = ctrl_owners[idx].strip()       if idx < len(ctrl_owners)        else '',
+            notes       = ctrl_notes_list[idx].strip()   if idx < len(ctrl_notes_list)    else '',
+        )
+        db.session.add(ctrl)
+        ctrl_count += 1
+
     # Refresh summary
     worst_i, worst_r = compute_ra_summary(ra)
     ra.risk_level_prior = worst_i or ra.risk_level_prior
     ra.risk_level_after = worst_r or ra.risk_level_after
     db.session.commit()
-    flash(f'✓ Risk row {seq} added. Risk index: {ri_i} ({tol_i}).', 'success')
+    ctrl_msg = f' with {ctrl_count} existing control{"s" if ctrl_count != 1 else ""}' if ctrl_count else ''
+    flash(f'✓ Risk row {seq} added{ctrl_msg}. Risk index: {ri_i} ({tol_i}).', 'success')
     return redirect(url_for('ra_detail', ra_id=ra_id))
 
 # ─── ADD EXISTING CONTROL (structured control per RARow) ─────────────────────
