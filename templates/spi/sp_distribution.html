@@ -86,7 +86,7 @@
       <div class="card-title">➕ Add Recipient</div>
       <form method="POST" action="/safety-promotion/distribution/add">
         <div class="fg"><label>Full Name</label><input type="text" name="name" placeholder="e.g. Captain Omar Al-Hassan"/></div>
-        <div class="fg"><label>Email Address *</label><input type="email" name="email" required placeholder="omar@jordanaviation.com"/></div>
+        <div class="fg"><label>Email Address *</label><input type="email" name="email" required placeholder="name@airline.com"/></div>
         <div class="fg"><label>Department</label>
           <select name="department_id">
             <option value="">Select…</option>
@@ -105,7 +105,7 @@
       </p>
       <form method="POST" action="/safety-promotion/distribution/import">
         <div class="fg">
-          <textarea name="csv_text" rows="6" placeholder="Captain Omar, omar@jav.com, 1, Captain&#10;Safety Officer, safety@jav.com, 2, Safety Officer"></textarea>
+          <textarea name="csv_text" rows="6" placeholder="Captain Ahmed, ahmed@airline.com, 1, Captain&#10;Safety Officer, safety@airline.com, 2, Safety Officer"></textarea>
         </div>
         <button type="submit" class="btn btn-nav" style="width:100%">📥 Import</button>
       </form>

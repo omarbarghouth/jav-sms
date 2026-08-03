@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Safety Operations Center — Jordan Aviation{% endblock %}
+{% block title %}Safety Operations Center — AviaS{% endblock %}
 {% block content %}
 
 <!-- ── SOC HEADER ─────────────────────────────────────────────── -->
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px">
   <div>
-    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">Jordan Aviation · JAV/SMS/001</div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">AviaS · AviaS/SMS/001</div>
     <div class="page-title" style="font-size:20px;display:flex;align-items:center;gap:10px">
       Safety Operations Center
       {% if spi_l3 > 0 %}
@@ -544,7 +544,7 @@
 <script>
 (function(){
   var TABS=['executive','operational','intelligence','governance'];
-  var KEY='jav_soc_tab';
+  var KEY='sms_soc_tab';
 
   function switchTab(id){
     TABS.forEach(function(t){
