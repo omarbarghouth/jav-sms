@@ -639,8 +639,7 @@ def gov_audit_log():
 
     q = GovernanceAuditLog.query
     if etype:     q = q.filter(GovernanceAuditLog.entity_type == etype)
-    if actor:     q = q.filter(GovernanceAuditLog.actor_username.ilike(f'%{actor}%'))
-    if sod:       q = q.filter(GovernanceAuditLog.sod_check == sod)
+    if actor:     q = q.filter(GovernanceAuditLog.performed_by.ilike(f'%{actor}%'))
     if action_f:  q = q.filter(GovernanceAuditLog.action == action_f)
     if date_from: q = q.filter(GovernanceAuditLog.created_at >= date_from)
     if date_to:   q = q.filter(GovernanceAuditLog.created_at <= date_to + ' 23:59:59')
@@ -651,10 +650,10 @@ def gov_audit_log():
     today_str    = date.today().isoformat()
     today_count  = GovernanceAuditLog.query.filter(
                        GovernanceAuditLog.created_at >= today_str).count()
-    sod_violations = GovernanceAuditLog.query.filter_by(sod_check='VIOLATION').count()
     ae_actions   = GovernanceAuditLog.query.filter(
                        GovernanceAuditLog.action.like('ae_%')).count()
     total        = GovernanceAuditLog.query.count()
+    sod_violations = 0  # sod_check column not in schema
 
     return render_template('governance/audit_log.html',
                            logs=pg.items, pagination=pg,
