@@ -2539,3 +2539,51 @@ class LeadingIndicatorConfig(db.Model):
 
     spi = db.relationship('SPIIndicator', foreign_keys=[spi_id],
               backref=db.backref('leading_config', uselist=False))
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  DEMO LEAD — B2B Sales / Book a Demo workflow
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DEMO_LEAD_STATUSES = [
+    'NEW', 'CONTACTED', 'DEMO SCHEDULED', 'DEMO COMPLETED',
+    'PROPOSAL SENT', 'NEGOTIATION', 'WON', 'LOST',
+]
+
+class DemoLead(db.Model):
+    """Incoming Book-a-Demo leads from the AviaS marketing website."""
+    __tablename__ = 'demo_leads'
+
+    id               = db.Column(db.Integer, primary_key=True)
+    lead_ref         = db.Column(db.String(20), unique=True, nullable=False)
+    # Contact
+    full_name        = db.Column(db.String(150), nullable=False)
+    company          = db.Column(db.String(150), nullable=False)
+    position         = db.Column(db.String(100))
+    email            = db.Column(db.String(200), nullable=False)
+    phone            = db.Column(db.String(60))
+    country          = db.Column(db.String(100))
+    # Organisation
+    org_type         = db.Column(db.String(100))
+    fleet_size       = db.Column(db.String(50))
+    employee_count   = db.Column(db.String(50))
+    # Interest
+    interested_modules = db.Column(db.Text)   # comma-separated list
+    # Scheduling preference
+    preferred_date   = db.Column(db.String(30))
+    preferred_time   = db.Column(db.String(30))
+    message          = db.Column(db.Text)
+    # Meta
+    submitted_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    source           = db.Column(db.String(50), default='website')
+    ip_address       = db.Column(db.String(60))
+    # CRM
+    status           = db.Column(db.String(30), default='NEW')
+    last_contact     = db.Column(db.DateTime)
+    follow_up_date   = db.Column(db.String(20))
+    assigned_to      = db.Column(db.String(100))
+    notes            = db.Column(db.Text)
+    sales_notes      = db.Column(db.Text)
+    is_archived      = db.Column(db.Boolean, default=False)
+    updated_at       = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

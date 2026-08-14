@@ -1,7 +1,7 @@
 ﻿import json
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from sqlalchemy import text as _sa_text
-from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, InvestigationEvent, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, ERPDrill, ERPActivation, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, RAControl, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, ComplianceObligation, DocCategory, ControlledDoc, DocVersion, DocDistribution, DocReadRecord, DocAcknowledgement
+from models import db, Department, ActionHistory, HazardReport, ASRReport, Hazard, Risk, Control, Action, Audit, Finding, Investigation, InvestigationEvent, MOC, MOCHazard, MOCMilestone, MOCUpdate, MOCStakeholder, SPIIndicator, SPIData, SPIEscalation, ChecklistTemplate, ChecklistTemplateItem, DistributionList, EmailLog, SurveyResponse, User, VoluntaryReport, ConfidentialReport, SafetyNewsletter, SafetyCampaign, SafetySurvey, LessonLearned, SafetyBulletin, Training, AuditPlan, AuditSchedule, AuditChecklist, AuditFinding, AuditAction, SafetyPolicy, SafetyRole, SafetyPersonnel, ERPlan, ERPDrill, ERPActivation, SMSDocument, DocumentLink, RiskOccurrence, RiskAction, RAChecklistItem, RiskAssessment, RARow, RAMitigation, RAReview, RAControl, Employee, ApiToken, DeviceToken, SafetyPromoRead, SafetyPromoAck, AccountableExecutive, SRBMeeting, SRBAgendaItem, SRBAttendee, SRBDecision, RiskAcceptance, GovernanceAuditLog, ComplianceObligation, DocCategory, ControlledDoc, DocVersion, DocDistribution, DocReadRecord, DocAcknowledgement, DemoLead, DEMO_LEAD_STATUSES
 try:
     from models import SPIEventLink
 except ImportError:
@@ -63,6 +63,8 @@ def fromjson_filter(s):
 import smtplib, json as _json_mod
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders as _email_encoders
 SMTP_HOST=os.environ.get('SMTP_HOST','')
 SMTP_PORT=int(os.environ.get('SMTP_PORT',587))
 SMTP_USER=os.environ.get('SMTP_USER','')
@@ -85,6 +87,42 @@ def send_email(to_list, subject, html_body):
                 except Exception as ex: errs.append(str(ex)[:40])
     except Exception as ex: return 0, str(ex)
     return sent, '; '.join(errs) if errs else None
+
+def send_email_with_attachment(to_list, subject, html_body, attachment_path=None, attachment_name=None):
+    """Like send_email but optionally attaches a file (e.g. PDF brochure)."""
+    if not SMTP_HOST or not SMTP_USER:
+        return len(to_list), None
+    sent = 0; errs = []
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as srv:
+            srv.starttls(); srv.login(SMTP_USER, SMTP_PASSWORD)
+            for r in to_list:
+                try:
+                    outer = MIMEMultipart('mixed')
+                    outer['Subject'] = subject
+                    outer['From']    = SMTP_FROM_NAME + ' <' + SMTP_FROM + '>'
+                    outer['To']      = r
+                    # HTML body
+                    alt = MIMEMultipart('alternative')
+                    alt.attach(MIMEText(html_body, 'html'))
+                    outer.attach(alt)
+                    # PDF attachment
+                    if attachment_path and os.path.exists(attachment_path):
+                        with open(attachment_path, 'rb') as fp:
+                            part = MIMEBase('application', 'octet-stream')
+                            part.set_payload(fp.read())
+                        _email_encoders.encode_base64(part)
+                        fname = attachment_name or os.path.basename(attachment_path)
+                        part.add_header('Content-Disposition', f'attachment; filename="{fname}"')
+                        outer.attach(part)
+                    srv.sendmail(SMTP_FROM, r, outer.as_string())
+                    sent += 1
+                except Exception as ex:
+                    errs.append(str(ex)[:60])
+    except Exception as ex:
+        return 0, str(ex)
+    return sent, '; '.join(errs) if errs else None
+
 
 def get_recipients(dept_ids=None):
     q=DistributionList.query.filter_by(is_active=True)
@@ -436,6 +474,403 @@ def index():
     if is_logged_in():
         return redirect(url_for('dashboard'))
     return redirect(url_for('public_portal'))
+
+
+@app.route('/request-brochure', methods=['POST'])
+def request_brochure():
+    """Public endpoint — visitor requests AviaS brochure; notifies admin by email."""
+    data     = request.get_json(silent=True) or request.form
+    name     = (data.get('name')    or '').strip()
+    email    = (data.get('email')   or '').strip()
+    company  = (data.get('company') or '').strip()
+    phone    = (data.get('phone')   or '').strip()
+    message  = (data.get('message') or '').strip()
+
+    if not email:
+        return jsonify({'error': 'Email is required.'}), 400
+
+    ADMIN_EMAIL = os.environ.get('ADMIN_NOTIFY_EMAIL', 'omarbarghouthi680@gmail.com')
+    subject = f'AviaS Brochure Request — {name or email}'
+    body = (
+        '<div style="font-family:Arial,sans-serif;background:#f0f2f8;padding:24px">'
+        '<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden">'
+        '<div style="background:#0b1728;padding:20px 28px">'
+        '<h2 style="color:#c8a84b;margin:0;font-size:18px">AviaS Brochure Request</h2>'
+        '<p style="color:#8a9ab5;margin:4px 0 0;font-size:12px">A visitor has requested the AviaS product brochure</p>'
+        '</div>'
+        '<div style="padding:24px 28px">'
+        f'<p><strong>Name:</strong> {name or "—"}</p>'
+        f'<p><strong>Email:</strong> <a href="mailto:{email}">{email}</a></p>'
+        f'<p><strong>Company:</strong> {company or "—"}</p>'
+        f'<p><strong>Phone:</strong> {phone or "—"}</p>'
+        f'<p><strong>Message:</strong> {message or "—"}</p>'
+        '<hr style="border:none;border-top:1px solid #eee;margin:20px 0">'
+        '<p style="color:#8a9ab5;font-size:11px">Sent from the AviaS marketing website</p>'
+        '</div></div></div>'
+    )
+    send_email([ADMIN_EMAIL], subject, body)
+    return jsonify({'success': True})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  BOOK A DEMO — B2B Lead Generation Workflow
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _demo_customer_email(lead):
+    """Premium branded confirmation email sent to the prospect."""
+    modules_html = ''
+    if lead.interested_modules:
+        items = [m.strip() for m in lead.interested_modules.split(',') if m.strip()]
+        modules_html = '<ul style="margin:8px 0 16px 0;padding-left:18px;color:#374151">' + \
+                       ''.join(f'<li style="margin:3px 0">{m}</li>' for m in items) + '</ul>'
+
+    return f'''<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f0f2f8;font-family:'Segoe UI',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
+<table width="600" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(10,22,40,.12)">
+
+  <!-- Header -->
+  <tr><td style="background:linear-gradient(135deg,#0a1628 0%,#112040 100%);padding:0">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:28px 32px;border-bottom:3px solid #c8a84b">
+        <table cellpadding="0" cellspacing="0"><tr>
+          <td style="background:#c8a84b;border-radius:8px;padding:6px 14px;margin-right:12px">
+            <span style="font-size:13px;font-weight:900;color:#0a1628;letter-spacing:.05em">AviaS</span>
+          </td>
+          <td style="padding-left:14px">
+            <span style="color:rgba(255,255,255,.5);font-size:10px;text-transform:uppercase;letter-spacing:1.5px">Aviation Safety Management System</span>
+          </td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:24px 32px 28px">
+        <div style="color:rgba(255,255,255,.45);font-size:10px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Demo Request Confirmation</div>
+        <div style="color:#ffffff;font-size:24px;font-weight:800;line-height:1.2">Thank You for Your Interest in AviaS</div>
+      </td></tr>
+    </table>
+  </td></tr>
+
+  <!-- Body -->
+  <tr><td style="padding:32px 32px 24px">
+    <p style="color:#374151;font-size:15px;line-height:1.7;margin:0 0 20px">
+      Dear <strong style="color:#0a1628">{lead.full_name}</strong>,
+    </p>
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 20px">
+      Thank you for your interest in AviaS. We have received your request for a product demonstration
+      and are pleased to introduce you to <strong>AviaS</strong> — an integrated Aviation Safety
+      Management System designed to connect safety reporting, risk management, investigations,
+      corrective actions, safety assurance, safety promotion, and employee engagement in one
+      unified platform.
+    </p>
+
+    <!-- Platform highlight box -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px">
+      <tr><td style="background:#f5f7fb;border-left:3px solid #c8a84b;border-radius:0 8px 8px 0;padding:16px 20px">
+        <div style="color:#0a1628;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">AviaS Platform Modules</div>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td width="50%" style="vertical-align:top;padding:0 8px 0 0">
+              <div style="font-size:12px;color:#374151;line-height:1.8">
+                ✈ Safety Reporting<br>⚠ Risk Management<br>🔍 Investigations<br>✅ Corrective Actions<br>📋 Audit Management
+              </div>
+            </td>
+            <td width="50%" style="vertical-align:top">
+              <div style="font-size:12px;color:#374151;line-height:1.8">
+                📊 Safety Performance (SPI)<br>📢 Safety Promotion<br>🎓 Training Records<br>📄 Controlled Documents<br>📱 Mobile Application
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 20px">
+      Our team will review your request and contact you shortly to arrange a suitable time
+      for your personalised demonstration.
+    </p>
+    <p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 28px">
+      We look forward to showing you how AviaS can support
+      <strong>{lead.company}</strong>'s safety management processes.
+    </p>
+
+    <!-- What happens next -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px">
+      <tr><td style="background:#0a1628;border-radius:10px;padding:20px 24px">
+        <div style="color:#c8a84b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">What Happens Next</div>
+        <table cellpadding="0" cellspacing="0">
+          <tr><td style="padding:4px 0"><span style="color:#c8a84b;font-weight:700">01 &nbsp;</span><span style="color:rgba(255,255,255,.8);font-size:13px">Our team reviews your request</span></td></tr>
+          <tr><td style="padding:4px 0"><span style="color:#c8a84b;font-weight:700">02 &nbsp;</span><span style="color:rgba(255,255,255,.8);font-size:13px">We contact you to confirm a suitable time</span></td></tr>
+          <tr><td style="padding:4px 0"><span style="color:#c8a84b;font-weight:700">03 &nbsp;</span><span style="color:rgba(255,255,255,.8);font-size:13px">Personalised demonstration of AviaS</span></td></tr>
+          <tr><td style="padding:4px 0"><span style="color:#c8a84b;font-weight:700">04 &nbsp;</span><span style="color:rgba(255,255,255,.8);font-size:13px">Discussion of your specific requirements</span></td></tr>
+        </table>
+      </td></tr>
+    </table>
+
+    <p style="color:#6b7a99;font-size:13px;line-height:1.6;margin:0">
+      We have also attached the AviaS Product Brochure to this email for your reference.
+    </p>
+  </td></tr>
+
+  <!-- Signature -->
+  <tr><td style="padding:0 32px 32px">
+    <table cellpadding="0" cellspacing="0">
+      <tr><td style="border-top:1px solid #e8ecf5;padding-top:20px">
+        <div style="color:#0a1628;font-size:14px;font-weight:700">Kind regards,</div>
+        <div style="color:#0a1628;font-size:15px;font-weight:800;margin:4px 0 2px">The AviaS Team</div>
+        <div style="color:#6b7a99;font-size:12px">Aviation Safety Management System</div>
+        <div style="color:#c8a84b;font-size:11px;margin-top:4px">ICAO Annex 19 &bull; Doc 9859 4th Edition</div>
+      </td></tr>
+    </table>
+  </td></tr>
+
+  <!-- Footer -->
+  <tr><td style="background:#f5f7fb;border-top:1px solid #e8ecf5;padding:16px 32px">
+    <p style="color:#9ca3af;font-size:10px;margin:0;line-height:1.6">
+      This email was sent in response to a demo request submitted at avias.aero.
+      If you did not submit this request, please disregard this message.
+    </p>
+  </td></tr>
+
+</table>
+</td></tr></table>
+</body></html>'''
+
+
+def _demo_admin_notification(lead):
+    """Internal notification email sent to the AviaS sales team."""
+    admin_url = os.environ.get('APP_BASE_URL', 'https://jav-sms.onrender.com')
+    lead_url  = f"{admin_url}/admin/demo-requests/{lead.id}"
+    modules   = lead.interested_modules or '—'
+    return f'''<!DOCTYPE html>
+<html>
+<body style="background:#f0f2f8;font-family:Arial,sans-serif;padding:24px;margin:0">
+<table width="580" style="background:#fff;border-radius:12px;overflow:hidden;margin:0 auto;box-shadow:0 4px 20px rgba(10,22,40,.1)">
+  <tr><td style="background:#0a1628;padding:20px 28px;border-bottom:3px solid #c8a84b">
+    <span style="color:#c8a84b;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">🔔 New Demo Request</span>
+    <div style="color:#fff;font-size:18px;font-weight:800;margin-top:4px">AviaS — Lead Notification</div>
+  </td></tr>
+  <tr><td style="padding:24px 28px">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Reference</strong> <span style="color:#c8a84b;font-weight:700">{lead.lead_ref}</span></td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Name</strong> {lead.full_name}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Company</strong> {lead.company}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Position</strong> {lead.position or "—"}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Email</strong> <a href="mailto:{lead.email}" style="color:#1d4ed8">{lead.email}</a></td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Phone</strong> {lead.phone or "—"}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Country</strong> {lead.country or "—"}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Org Type</strong> {lead.org_type or "—"}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Fleet Size</strong> {lead.fleet_size or "—"}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Employees</strong> {lead.employee_count or "—"}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Requested Date</strong> {lead.preferred_date or "—"} {lead.preferred_time or ""}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #f0f2f8;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Interested In</strong> {modules}</td></tr>
+      <tr><td style="padding:6px 0;font-size:13px"><strong style="color:#0a1628;width:140px;display:inline-block">Message</strong> {lead.message or "—"}</td></tr>
+    </table>
+    <div style="margin-top:24px;text-align:center">
+      <a href="{lead_url}" style="background:#c8a84b;color:#0a1628;padding:12px 28px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;display:inline-block">
+        Open Lead in Admin Panel →
+      </a>
+    </div>
+  </td></tr>
+  <tr><td style="background:#f5f7fb;padding:12px 28px;font-size:10px;color:#9ca3af">
+    AviaS · Sales Lead Notification · {lead.submitted_at.strftime("%d %b %Y %H:%M UTC")}
+  </td></tr>
+</table>
+</body></html>'''
+
+
+_demo_submissions: dict = {}   # ip → last submission time (rate-limit in memory)
+
+@app.route('/book-demo', methods=['POST'])
+@limiter.limit('5 per hour')
+@csrf.exempt
+def book_demo():
+    """Public endpoint — Book a Demo form submission."""
+    import re, time as _time
+
+    data      = request.get_json(silent=True) or request.form
+    full_name = (data.get('full_name') or '').strip()
+    company   = (data.get('company')   or '').strip()
+    position  = (data.get('position')  or '').strip()
+    email     = (data.get('email')     or '').strip()
+    phone     = (data.get('phone')     or '').strip()
+    country   = (data.get('country')   or '').strip()
+    org_type  = (data.get('org_type')  or '').strip()
+    fleet     = (data.get('fleet_size')    or '').strip()
+    employees = (data.get('employee_count')or '').strip()
+    modules_raw = data.get('interested_modules') or ''
+    if isinstance(modules_raw, list):
+        modules = ', '.join(str(m).strip() for m in modules_raw if str(m).strip())
+    else:
+        modules = str(modules_raw).strip()
+    pref_date = (data.get('preferred_date') or '').strip()
+    pref_time = (data.get('preferred_time') or '').strip()
+    message   = (data.get('message')   or '').strip()
+
+    # ── Validation ────────────────────────────────────────────────
+    errors = {}
+    if not full_name:         errors['full_name'] = 'Full name is required.'
+    if not company:           errors['company']   = 'Company name is required.'
+    if not email:             errors['email']     = 'Email is required.'
+    elif not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        errors['email'] = 'Please enter a valid email address.'
+    # Email injection guard
+    for field_val in (full_name, company, position, email, phone, country):
+        if any(h in field_val.lower() for h in ('\r', '\n', 'bcc:', 'cc:', 'content-type')):
+            return jsonify({'error': 'Invalid input.'}), 400
+    if errors:
+        return jsonify({'errors': errors}), 422
+
+    # ── Duplicate guard (same email within 10 min) ────────────────
+    ip = request.remote_addr or ''
+    now_ts = _time.time()
+    last = _demo_submissions.get(email.lower(), 0)
+    if now_ts - last < 600:
+        return jsonify({'success': True, 'duplicate': True})   # silent dedup
+    _demo_submissions[email.lower()] = now_ts
+
+    # ── Generate lead reference ───────────────────────────────────
+    seq = (DemoLead.query.count() or 0) + 1
+    lead_ref = f'DEMO-{datetime.utcnow().strftime("%Y%m")}-{seq:04d}'
+
+    # ── Save to database ──────────────────────────────────────────
+    lead = DemoLead(
+        lead_ref         = lead_ref,
+        full_name        = full_name,
+        company          = company,
+        position         = position,
+        email            = email.lower(),
+        phone            = phone,
+        country          = country,
+        org_type         = org_type,
+        fleet_size       = fleet,
+        employee_count   = employees,
+        interested_modules = modules,
+        preferred_date   = pref_date,
+        preferred_time   = pref_time,
+        message          = message,
+        source           = 'website',
+        ip_address       = ip[:60],
+        status           = 'NEW',
+    )
+    try:
+        db.session.add(lead)
+        db.session.commit()
+    except Exception as db_err:
+        db.session.rollback()
+        app.logger.error('book_demo DB error: %s', db_err)
+        return jsonify({'error': 'Database error. Please try again.'}), 500
+
+    # ── Brochure path ─────────────────────────────────────────────
+    brochure_path = os.path.join(BASE_DIR, 'static', 'AviaS_Brochure.pdf')
+
+    # ── Send customer confirmation + brochure ─────────────────────
+    customer_subject = 'Thank You for Your Interest in AviaS'
+    customer_html    = _demo_customer_email(lead)
+    send_email_with_attachment(
+        [email], customer_subject, customer_html,
+        attachment_path=brochure_path,
+        attachment_name='AviaS_Product_Brochure.pdf',
+    )
+
+    # ── Send internal sales notification ─────────────────────────
+    ADMIN_EMAIL = os.environ.get('ADMIN_NOTIFY_EMAIL', 'omarbarghouthi680@gmail.com')
+    admin_subject = f'🔔 New Demo Request — {full_name} | {company} | {country}'
+    admin_html    = _demo_admin_notification(lead)
+    send_email([ADMIN_EMAIL], admin_subject, admin_html)
+
+    return jsonify({'success': True, 'lead_ref': lead_ref})
+
+
+# ── Admin: Demo Requests list ──────────────────────────────────────────────────
+
+@app.route('/admin/demo-requests')
+@require_login
+def admin_demo_requests():
+    status_filter  = request.args.get('status', '')
+    search         = request.args.get('q', '').strip()
+    archived       = request.args.get('archived', '0') == '1'
+    page           = max(1, int(request.args.get('page', 1)))
+    per_page       = 25
+
+    q = DemoLead.query.filter_by(is_archived=archived)
+    if status_filter:
+        q = q.filter_by(status=status_filter)
+    if search:
+        like = f'%{search}%'
+        q = q.filter(
+            db.or_(
+                DemoLead.full_name.ilike(like),
+                DemoLead.company.ilike(like),
+                DemoLead.email.ilike(like),
+                DemoLead.country.ilike(like),
+            )
+        )
+    q = q.order_by(DemoLead.submitted_at.desc())
+    total  = q.count()
+    leads  = q.offset((page-1)*per_page).limit(per_page).all()
+    pages  = max(1, (total + per_page - 1) // per_page)
+
+    status_counts = {}
+    for s in DEMO_LEAD_STATUSES:
+        status_counts[s] = DemoLead.query.filter_by(status=s, is_archived=False).count()
+
+    return render_template(
+        'admin/demo_requests.html',
+        leads=leads, statuses=DEMO_LEAD_STATUSES,
+        status_filter=status_filter, search=search, archived=archived,
+        page=page, pages=pages, total=total,
+        status_counts=status_counts,
+    )
+
+
+@app.route('/admin/demo-requests/<int:lid>')
+@require_login
+def admin_demo_detail(lid):
+    lead = DemoLead.query.get_or_404(lid)
+    return render_template(
+        'admin/demo_request_detail.html',
+        lead=lead, statuses=DEMO_LEAD_STATUSES,
+    )
+
+
+@app.route('/admin/demo-requests/<int:lid>/update', methods=['POST'])
+@require_login
+def admin_demo_update(lid):
+    lead    = DemoLead.query.get_or_404(lid)
+    action  = request.form.get('action', '')
+
+    if action == 'status':
+        new_status = request.form.get('status', '').strip().upper()
+        if new_status in DEMO_LEAD_STATUSES:
+            lead.status = new_status
+            if new_status == 'CONTACTED':
+                lead.last_contact = datetime.utcnow()
+    elif action == 'notes':
+        lead.notes       = request.form.get('notes', '').strip()
+        lead.sales_notes = request.form.get('sales_notes', '').strip()
+        follow_up        = request.form.get('follow_up_date', '').strip()
+        if follow_up:
+            lead.follow_up_date = follow_up
+        assigned = request.form.get('assigned_to', '').strip()
+        if assigned:
+            lead.assigned_to = assigned
+    elif action == 'contact':
+        lead.last_contact = datetime.utcnow()
+        note = request.form.get('contact_note', '').strip()
+        if note:
+            ts = datetime.utcnow().strftime('%d %b %Y %H:%M')
+            prev = lead.notes or ''
+            lead.notes = f'[{ts}] {note}\n\n{prev}'.strip()
+    elif action == 'archive':
+        lead.is_archived = True
+    elif action == 'unarchive':
+        lead.is_archived = False
+
+    lead.updated_at = datetime.utcnow()
+    db.session.commit()
+    flash('Lead updated successfully.', 'success')
+    return redirect(url_for('admin_demo_detail', lid=lid))
 
 
 @app.route('/portal')
