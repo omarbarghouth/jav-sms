@@ -54,6 +54,13 @@ except ImportError:
 
 app = Flask(__name__)
 
+@app.after_request
+def _add_cors(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
+
 @app.template_filter('fromjson')
 def fromjson_filter(s):
     import json
