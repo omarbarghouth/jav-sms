@@ -681,10 +681,16 @@ def _demo_admin_notification(lead):
 
 _demo_submissions: dict = {}   # ip → last submission time (rate-limit in memory)
 
-@app.route('/book-demo', methods=['POST'])
-@limiter.limit('5 per hour')
+@app.route('/book-demo', methods=['POST', 'OPTIONS'])
+@limiter.limit('5 per hour', methods=['POST'])
 @csrf.exempt
 def book_demo():
+    if request.method == 'OPTIONS':
+        r = app.make_default_options_response()
+        r.headers['Access-Control-Allow-Origin'] = '*'
+        r.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        r.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        return r
     """Public endpoint — Book a Demo form submission."""
     import re, time as _time
 
@@ -779,7 +785,9 @@ def book_demo():
     admin_html    = _demo_admin_notification(lead)
     send_email([ADMIN_EMAIL], admin_subject, admin_html)
 
-    return jsonify({'success': True, 'lead_ref': lead_ref})
+    resp = jsonify({'success': True, 'lead_ref': lead_ref})
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
 
 
 # ── Admin: Demo Requests list ──────────────────────────────────────────────────
