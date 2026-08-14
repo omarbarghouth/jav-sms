@@ -67,68 +67,62 @@ def fromjson_filter(s):
     try: return json.loads(s or '{}')
     except: return {}
 
-import smtplib, json as _json_mod
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders as _email_encoders
+import json as _json_mod, base64 as _b64, requests as _requests
+SMTP_FROM=os.environ.get('SMTP_FROM','safety@aviation.jo')
+SMTP_FROM_NAME=os.environ.get('SMTP_FROM_NAME','AviaS Safety')
+SENDGRID_API_KEY=os.environ.get('SENDGRID_API_KEY','')
+
+def send_email(to_list, subject, html_body):
+    if not SENDGRID_API_KEY: return 0, 'No API key'
+    sent=0; errs=[]
+    for r in to_list:
+        try:
+            resp=_requests.post(
+                'https://api.sendgrid.com/v3/mail/send',
+                headers={'Authorization':f'Bearer {SENDGRID_API_KEY}','Content-Type':'application/json'},
+                json={'personalizations':[{'to':[{'email':r}]}],
+                      'from':{'email':SMTP_FROM,'name':SMTP_FROM_NAME},
+                      'subject':subject,
+                      'content':[{'type':'text/html','value':html_body}]},
+                timeout=15)
+            if resp.status_code in(200,202): sent+=1
+            else: errs.append(f'{r}:{resp.status_code}')
+        except Exception as ex: errs.append(str(ex)[:60])
+    return sent, '; '.join(errs) if errs else None
+
+def send_email_with_attachment(to_list, subject, html_body, attachment_path=None, attachment_name=None):
+    if not SENDGRID_API_KEY: return 0, 'No API key'
+    attachments=[]
+    if attachment_path and os.path.exists(attachment_path):
+        with open(attachment_path,'rb') as fp: data=fp.read()
+        attachments=[{'content':_b64.b64encode(data).decode(),
+                      'type':'application/pdf',
+                      'filename':attachment_name or os.path.basename(attachment_path),
+                      'disposition':'attachment'}]
+    sent=0; errs=[]
+    for r in to_list:
+        try:
+            body={'personalizations':[{'to':[{'email':r}]}],
+                  'from':{'email':SMTP_FROM,'name':SMTP_FROM_NAME},
+                  'subject':subject,
+                  'content':[{'type':'text/html','value':html_body}]}
+            if attachments: body['attachments']=attachments
+            resp=_requests.post(
+                'https://api.sendgrid.com/v3/mail/send',
+                headers={'Authorization':f'Bearer {SENDGRID_API_KEY}','Content-Type':'application/json'},
+                json=body, timeout=15)
+            if resp.status_code in(200,202): sent+=1
+            else: errs.append(f'{r}:{resp.status_code}:{resp.text[:80]}')
+        except Exception as ex: errs.append(str(ex)[:60])
+    return sent, '; '.join(errs) if errs else None
+
+# legacy stubs kept so old callers still work
+def _smtp_compat_stub(*a,**k): pass
 SMTP_HOST=os.environ.get('SMTP_HOST','')
 SMTP_PORT=int(os.environ.get('SMTP_PORT',587))
 SMTP_USER=os.environ.get('SMTP_USER','')
 SMTP_PASSWORD=os.environ.get('SMTP_PASSWORD','')
-SMTP_FROM=os.environ.get('SMTP_FROM','safety@aviation.jo')
-SMTP_FROM_NAME=os.environ.get('SMTP_FROM_NAME','AviaS Safety')
 
-def send_email(to_list, subject, html_body):
-    if not SMTP_HOST or not SMTP_USER: return len(to_list), None
-    sent=0; errs=[]
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as srv:
-            srv.starttls(); srv.login(SMTP_USER, SMTP_PASSWORD)
-            for r in to_list:
-                try:
-                    msg=MIMEMultipart('alternative')
-                    msg['Subject']=subject; msg['From']=SMTP_FROM_NAME+' <'+SMTP_FROM+'>'; msg['To']=r
-                    msg.attach(MIMEText(html_body,'html'))
-                    srv.sendmail(SMTP_FROM, r, msg.as_string()); sent+=1
-                except Exception as ex: errs.append(str(ex)[:40])
-    except Exception as ex: return 0, str(ex)
-    return sent, '; '.join(errs) if errs else None
-
-def send_email_with_attachment(to_list, subject, html_body, attachment_path=None, attachment_name=None):
-    """Like send_email but optionally attaches a file (e.g. PDF brochure)."""
-    if not SMTP_HOST or not SMTP_USER:
-        return len(to_list), None
-    sent = 0; errs = []
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as srv:
-            srv.starttls(); srv.login(SMTP_USER, SMTP_PASSWORD)
-            for r in to_list:
-                try:
-                    outer = MIMEMultipart('mixed')
-                    outer['Subject'] = subject
-                    outer['From']    = SMTP_FROM_NAME + ' <' + SMTP_FROM + '>'
-                    outer['To']      = r
-                    # HTML body
-                    alt = MIMEMultipart('alternative')
-                    alt.attach(MIMEText(html_body, 'html'))
-                    outer.attach(alt)
-                    # PDF attachment
-                    if attachment_path and os.path.exists(attachment_path):
-                        with open(attachment_path, 'rb') as fp:
-                            part = MIMEBase('application', 'octet-stream')
-                            part.set_payload(fp.read())
-                        _email_encoders.encode_base64(part)
-                        fname = attachment_name or os.path.basename(attachment_path)
-                        part.add_header('Content-Disposition', f'attachment; filename="{fname}"')
-                        outer.attach(part)
-                    srv.sendmail(SMTP_FROM, r, outer.as_string())
-                    sent += 1
-                except Exception as ex:
-                    errs.append(str(ex)[:60])
-    except Exception as ex:
-        return 0, str(ex)
-    return sent, '; '.join(errs) if errs else None
 
 
 def get_recipients(dept_ids=None):
