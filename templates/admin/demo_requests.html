@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Demo Requests — AviaS{% endblock %}
+{% block content %}
+<style>
+.dr-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.dr-title{font-size:20px;font-weight:800;color:var(--text)}
+.status-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px}
+.pill{padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;border:1.5px solid;cursor:pointer;text-decoration:none;transition:.15s}
+.pill.all{background:var(--navy);color:#fff;border-color:var(--navy)}
+.pill.active-filter{background:var(--gold);color:var(--navy);border-color:var(--gold)}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--border)}
+.lead-table{width:100%;border-collapse:collapse}
+.lead-table th{padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface)}
+.lead-table td{padding:10px 12px;font-size:12.5px;border-bottom:1px solid var(--border);vertical-align:middle}
+.lead-table tr:hover td{background:var(--surface)}
+.lead-table tr:last-child td{border-bottom:none}
+.st-badge{padding:3px 9px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.st-NEW{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.st-CONTACTED{background:#fefce8;color:#ca8a04;border:1px solid #fde68a}
+.st-DEMO-SCHEDULED{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.st-DEMO-COMPLETED{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.st-PROPOSAL-SENT{background:#faf5ff;color:#7c3aed;border:1px solid #ddd6fe}
+.st-NEGOTIATION{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+.st-WON{background:#f0fdf4;color:#15803d;border:1px solid #4ade80}
+.st-LOST{background:#fff1f1;color:#dc2626;border:1px solid #fecaca}
+.count-card{background:var(--card);border-radius:var(--r);padding:12px 16px;border:1px solid var(--border);text-align:center;min-width:80px}
+.count-val{font-size:22px;font-weight:800;color:var(--text);line-height:1}
+.count-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+.search-row{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.search-input{padding:7px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;color:var(--text);background:var(--card);outline:none;width:260px}
+.search-input:focus{border-color:var(--gold)}
+.btn-sm{padding:6px 14px;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;border:none;text-decoration:none;display:inline-block}
+.btn-navy{background:var(--navy);color:#fff}
+.btn-gold{background:var(--gold);color:var(--navy)}
+.pagination{display:flex;gap:4px;align-items:center;justify-content:center;margin-top:16px}
+.pg-btn{padding:5px 11px;border-radius:4px;font-size:12px;font-weight:600;text-decoration:none;color:var(--text);border:1px solid var(--border);background:var(--card)}
+.pg-btn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.pg-btn:hover:not(.active){background:var(--surface)}
+.empty-state{text-align:center;padding:56px 24px;color:var(--muted)}
+.empty-state .icon{font-size:2.5rem;margin-bottom:12px}
+</style>
+
+<div style="padding:24px 28px;max-width:1300px">
+
+  <!-- Header -->
+  <div class="dr-header">
+    <div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:4px">Sales CRM</div>
+      <div class="dr-title">📋 Demo Requests</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      {% if archived %}
+        <a href="{{ url_for('admin_demo_requests') }}" class="btn-sm btn-navy">← Active Leads</a>
+      {% else %}
+        <a href="{{ url_for('admin_demo_requests', archived=1) }}" class="btn-sm" style="background:var(--surface);border:1px solid var(--border);color:var(--muted)">Archived</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Status count cards -->
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+    {% for s, cnt in status_counts.items() %}
+    <a href="{{ url_for('admin_demo_requests', status=s) }}" style="text-decoration:none">
+      <div class="count-card {% if status_filter == s %}outline{% endif %}" style="{% if status_filter == s %}border-color:var(--gold){% endif %}">
+        <div class="count-val">{{ cnt }}</div>
+        <div class="count-lbl">{{ s }}</div>
+      </div>
+    </a>
+    {% endfor %}
+    <a href="{{ url_for('admin_demo_requests') }}" style="text-decoration:none">
+      <div class="count-card" style="{% if not status_filter %}border-color:var(--navy){% endif %}">
+        <div class="count-val">{{ total }}</div>
+        <div class="count-lbl">{{ 'showing' if status_filter else 'Total' }}</div>
+      </div>
+    </a>
+  </div>
+
+  <!-- Search + filter bar -->
+  <form method="get" class="search-row">
+    <input class="search-input" type="text" name="q" value="{{ search }}" placeholder="Search name, company, email, country…">
+    <select name="status" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:12px;color:var(--text);background:var(--card);outline:none">
+      <option value="">All Statuses</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn-sm btn-navy">Search</button>
+    {% if search or status_filter %}
+    <a href="{{ url_for('admin_demo_requests') }}" class="btn-sm" style="background:var(--surface);border:1px solid var(--border);color:var(--muted)">Clear</a>
+    {% endif %}
+  </form>
+
+  <!-- Leads table -->
+  <div class="card">
+    {% if leads %}
+    <table class="lead-table">
+      <thead>
+        <tr>
+          <th>Ref</th>
+          <th>Name</th>
+          <th>Company</th>
+          <th>Position</th>
+          <th>Country</th>
+          <th>Email</th>
+          <th>Submitted</th>
+          <th>Demo Date</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in leads %}
+        <tr>
+          <td style="font-family:monospace;color:var(--gold);font-size:11px;font-weight:700">{{ lead.lead_ref }}</td>
+          <td style="font-weight:600">{{ lead.full_name }}</td>
+          <td>{{ lead.company }}</td>
+          <td style="color:var(--muted)">{{ lead.position or '—' }}</td>
+          <td>{{ lead.country or '—' }}</td>
+          <td><a href="mailto:{{ lead.email }}" style="color:var(--blue)">{{ lead.email }}</a></td>
+          <td style="color:var(--muted);font-size:11px">{{ lead.submitted_at.strftime('%d %b %Y') }}</td>
+          <td style="color:var(--muted);font-size:11px">{{ lead.preferred_date or '—' }}</td>
+          <td>
+            {% set st_key = lead.status.replace(' ','-') %}
+            <span class="st-badge st-{{ st_key }}">{{ lead.status }}</span>
+          </td>
+          <td>
+            <a href="{{ url_for('admin_demo_detail', lid=lead.id) }}" class="btn-sm btn-gold" style="font-size:11px">Open →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <div class="icon">📭</div>
+      <div style="font-weight:700;margin-bottom:6px">No demo requests found</div>
+      <div style="font-size:12px">Leads will appear here when visitors submit the Book a Demo form on the AviaS website.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Pagination -->
+  {% if pages > 1 %}
+  <div class="pagination">
+    {% if page > 1 %}<a class="pg-btn" href="?page={{ page-1 }}&status={{ status_filter }}&q={{ search }}">←</a>{% endif %}
+    {% for p in range(1, pages+1) %}
+      <a class="pg-btn {% if p == page %}active{% endif %}" href="?page={{ p }}&status={{ status_filter }}&q={{ search }}">{{ p }}</a>
+    {% endfor %}
+    {% if page < pages %}<a class="pg-btn" href="?page={{ page+1 }}&status={{ status_filter }}&q={{ search }}">→</a>{% endif %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

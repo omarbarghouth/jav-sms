@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.full_name }} — Demo Request — AviaS{% endblock %}
+{% block content %}
+<style>
+.detail-grid{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--border)}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-header h3{font-size:13px;font-weight:700;color:var(--text);margin:0}
+.card-body{padding:18px}
+.field-row{display:flex;padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px}
+.field-row:last-child{border-bottom:none}
+.field-label{width:160px;flex-shrink:0;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:1px}
+.field-val{color:var(--text);flex:1;line-height:1.5}
+.st-badge{padding:4px 12px;border-radius:5px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.st-NEW{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.st-CONTACTED{background:#fefce8;color:#ca8a04;border:1px solid #fde68a}
+.st-DEMO-SCHEDULED,.st-DEMO-COMPLETED{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.st-PROPOSAL-SENT{background:#faf5ff;color:#7c3aed;border:1px solid #ddd6fe}
+.st-NEGOTIATION{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+.st-WON{background:#f0fdf4;color:#15803d;border:1px solid #4ade80}
+.st-LOST{background:#fff1f1;color:#dc2626;border:1px solid #fecaca}
+.form-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:4px;display:block}
+.form-ctrl{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:12.5px;color:var(--text);background:var(--card);outline:none;font-family:inherit}
+.form-ctrl:focus{border-color:var(--gold)}
+select.form-ctrl{cursor:pointer}
+textarea.form-ctrl{resize:vertical;min-height:80px}
+.btn{padding:8px 18px;border-radius:var(--r);font-size:12.5px;font-weight:700;cursor:pointer;border:none;display:inline-block;text-align:center}
+.btn-gold{background:var(--gold);color:var(--navy)}
+.btn-navy{background:var(--navy);color:#fff}
+.btn-red{background:#dc2626;color:#fff}
+.btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--muted)}
+.btn:hover{opacity:.88}
+.timeline-entry{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.timeline-entry:last-child{border-bottom:none}
+.tl-dot{width:8px;height:8px;border-radius:50%;background:var(--gold);flex-shrink:0;margin-top:4px}
+.alert{padding:10px 14px;border-radius:var(--r);font-size:12.5px;margin-bottom:16px}
+.alert-success{background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d}
+.module-tag{display:inline-block;padding:2px 8px;background:rgba(200,168,75,.1);border:1px solid rgba(200,168,75,.25);border-radius:100px;font-size:11px;color:var(--gold);margin:2px}
+</style>
+
+<div style="padding:24px 28px;max-width:1200px">
+
+  <!-- Breadcrumb -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:12px;color:var(--muted)">
+    <a href="{{ url_for('admin_demo_requests') }}" style="color:var(--muted)">Demo Requests</a>
+    <span>›</span>
+    <span style="color:var(--text);font-weight:600">{{ lead.lead_ref }}</span>
+  </div>
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Lead header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:4px;font-family:monospace">{{ lead.lead_ref }}</div>
+      <div style="font-size:22px;font-weight:800;color:var(--text)">{{ lead.full_name }}</div>
+      <div style="font-size:14px;color:var(--muted);margin-top:2px">{{ lead.position or '' }}{% if lead.position and lead.company %} · {% endif %}{{ lead.company }}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      {% set st_key = lead.status.replace(' ','-') %}
+      <span class="st-badge st-{{ st_key }}">{{ lead.status }}</span>
+      <a href="mailto:{{ lead.email }}" class="btn btn-navy">✉ Email Lead</a>
+    </div>
+  </div>
+
+  <div class="detail-grid">
+
+    <!-- LEFT: Lead data -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+
+      <!-- Contact Information -->
+      <div class="card">
+        <div class="card-header"><h3>👤 Contact Information</h3></div>
+        <div class="card-body" style="padding:0 18px">
+          <div class="field-row"><div class="field-label">Full Name</div><div class="field-val"><strong>{{ lead.full_name }}</strong></div></div>
+          <div class="field-row"><div class="field-label">Company</div><div class="field-val">{{ lead.company }}</div></div>
+          <div class="field-row"><div class="field-label">Position</div><div class="field-val">{{ lead.position or '—' }}</div></div>
+          <div class="field-row"><div class="field-label">Email</div><div class="field-val"><a href="mailto:{{ lead.email }}" style="color:var(--blue)">{{ lead.email }}</a></div></div>
+          <div class="field-row"><div class="field-label">Phone</div><div class="field-val">{{ lead.phone or '—' }}</div></div>
+          <div class="field-row"><div class="field-label">Country</div><div class="field-val">{{ lead.country or '—' }}</div></div>
+        </div>
+      </div>
+
+      <!-- Organisation Details -->
+      <div class="card">
+        <div class="card-header"><h3>✈ Organisation Details</h3></div>
+        <div class="card-body" style="padding:0 18px">
+          <div class="field-row"><div class="field-label">Org Type</div><div class="field-val">{{ lead.org_type or '—' }}</div></div>
+          <div class="field-row"><div class="field-label">Fleet Size</div><div class="field-val">{{ lead.fleet_size or '—' }}</div></div>
+          <div class="field-row"><div class="field-label">Employees</div><div class="field-val">{{ lead.employee_count or '—' }}</div></div>
+        </div>
+      </div>
+
+      <!-- Interested Modules -->
+      {% if lead.interested_modules %}
+      <div class="card">
+        <div class="card-header"><h3>📋 Areas of Interest</h3></div>
+        <div class="card-body">
+          {% for mod in lead.interested_modules.split(',') %}
+            {% if mod.strip() %}
+            <span class="module-tag">{{ mod.strip() }}</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Demo Preferences -->
+      <div class="card">
+        <div class="card-header"><h3>📅 Demo Preferences</h3></div>
+        <div class="card-body" style="padding:0 18px">
+          <div class="field-row"><div class="field-label">Preferred Date</div><div class="field-val">{{ lead.preferred_date or '—' }}</div></div>
+          <div class="field-row"><div class="field-label">Preferred Time</div><div class="field-val">{{ lead.preferred_time or '—' }}</div></div>
+        </div>
+      </div>
+
+      <!-- Message -->
+      {% if lead.message %}
+      <div class="card">
+        <div class="card-header"><h3>💬 Message from Lead</h3></div>
+        <div class="card-body">
+          <div style="font-size:13px;color:var(--text);line-height:1.7;white-space:pre-wrap;background:var(--surface);border-radius:var(--r);padding:12px 14px;border:1px solid var(--border)">{{ lead.message }}</div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Notes & Sales Notes -->
+      <div class="card">
+        <div class="card-header"><h3>📝 Notes &amp; Sales Notes</h3></div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('admin_demo_update', lid=lead.id) }}">
+            <input type="hidden" name="action" value="notes">
+            <div style="margin-bottom:12px">
+              <label class="form-label">Internal Notes</label>
+              <textarea class="form-ctrl" name="notes" rows="4" placeholder="Add internal notes, contact history, observations…">{{ lead.notes or '' }}</textarea>
+            </div>
+            <div style="margin-bottom:12px">
+              <label class="form-label">Sales Notes</label>
+              <textarea class="form-ctrl" name="sales_notes" rows="3" placeholder="Proposal details, budget discussions, decision timeline…">{{ lead.sales_notes or '' }}</textarea>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+              <div>
+                <label class="form-label">Follow-up Date</label>
+                <input class="form-ctrl" type="date" name="follow_up_date" value="{{ lead.follow_up_date or '' }}">
+              </div>
+              <div>
+                <label class="form-label">Assigned To</label>
+                <input class="form-ctrl" type="text" name="assigned_to" value="{{ lead.assigned_to or '' }}" placeholder="Sales rep name">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-gold">Save Notes</button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: CRM actions sidebar -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Status -->
+      <div class="card">
+        <div class="card-header"><h3>🏷 Lead Status</h3></div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('admin_demo_update', lid=lead.id) }}">
+            <input type="hidden" name="action" value="status">
+            <label class="form-label">Change Status</label>
+            <select class="form-ctrl" name="status" style="margin-bottom:10px">
+              {% for s in statuses %}
+              <option value="{{ s }}" {% if s == lead.status %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-gold" style="width:100%">Update Status</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="card">
+        <div class="card-header"><h3>⚡ Quick Actions</h3></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+          <a href="mailto:{{ lead.email }}?subject=AviaS Demo Request — {{ lead.company }}" class="btn btn-navy" style="text-align:center">✉ Send Email</a>
+          {% if lead.phone %}
+          <a href="tel:{{ lead.phone }}" class="btn btn-ghost" style="text-align:center">📞 {{ lead.phone }}</a>
+          {% endif %}
+          <!-- Record contact -->
+          <form method="post" action="{{ url_for('admin_demo_update', lid=lead.id) }}" style="display:flex;flex-direction:column;gap:6px">
+            <input type="hidden" name="action" value="contact">
+            <textarea class="form-ctrl" name="contact_note" rows="2" placeholder="Contact note (optional)…"></textarea>
+            <button type="submit" class="btn btn-navy">✅ Record Contact</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Lead meta -->
+      <div class="card">
+        <div class="card-header"><h3>ℹ Lead Info</h3></div>
+        <div class="card-body" style="padding:0 18px">
+          <div class="field-row"><div class="field-label">Source</div><div class="field-val">{{ lead.source or 'website' }}</div></div>
+          <div class="field-row"><div class="field-label">Submitted</div><div class="field-val" style="font-size:11px">{{ lead.submitted_at.strftime('%d %b %Y %H:%M') }} UTC</div></div>
+          <div class="field-row"><div class="field-label">Last Contact</div><div class="field-val" style="font-size:11px">{{ lead.last_contact.strftime('%d %b %Y') if lead.last_contact else '—' }}</div></div>
+          <div class="field-row"><div class="field-label">Follow-up</div><div class="field-val" style="font-size:11px">{{ lead.follow_up_date or '—' }}</div></div>
+          <div class="field-row"><div class="field-label">Assigned To</div><div class="field-val">{{ lead.assigned_to or '—' }}</div></div>
+        </div>
+      </div>
+
+      <!-- Archive -->
+      <div class="card">
+        <div class="card-header"><h3>🗄 Archive</h3></div>
+        <div class="card-body">
+          {% if lead.is_archived %}
+          <form method="post" action="{{ url_for('admin_demo_update', lid=lead.id) }}">
+            <input type="hidden" name="action" value="unarchive">
+            <button type="submit" class="btn btn-ghost" style="width:100%">Restore Lead</button>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('admin_demo_update', lid=lead.id) }}" onsubmit="return confirm('Archive this lead?')">
+            <input type="hidden" name="action" value="archive">
+            <p style="font-size:11px;color:var(--muted);margin-bottom:10px">Archive removes this lead from the active list. It can be restored at any time.</p>
+            <button type="submit" class="btn btn-ghost" style="width:100%">Archive Lead</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
