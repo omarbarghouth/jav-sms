@@ -68,62 +68,50 @@ def fromjson_filter(s):
     except: return {}
 
 import json as _json_mod, base64 as _b64, requests as _requests
-SMTP_FROM=os.environ.get('SMTP_FROM','safety@aviation.jo')
-SMTP_FROM_NAME=os.environ.get('SMTP_FROM_NAME','AviaS Safety')
-SENDGRID_API_KEY=os.environ.get('SENDGRID_API_KEY','')
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+SMTP_FROM      = os.environ.get('SMTP_FROM', 'onboarding@resend.dev')
+SMTP_FROM_NAME = os.environ.get('SMTP_FROM_NAME', 'AviaS Safety')
+
+def _resend_send(to_list, subject, html_body, attachments=None):
+    if not RESEND_API_KEY:
+        return 0, 'No RESEND_API_KEY'
+    sent = 0; errs = []
+    for r in to_list:
+        try:
+            body = {
+                'from': f'{SMTP_FROM_NAME} <{SMTP_FROM}>',
+                'to': [r],
+                'subject': subject,
+                'html': html_body,
+            }
+            if attachments:
+                body['attachments'] = attachments
+            resp = _requests.post(
+                'https://api.resend.com/emails',
+                headers={'Authorization': f'Bearer {RESEND_API_KEY}',
+                         'Content-Type': 'application/json'},
+                json=body, timeout=20)
+            if resp.status_code in (200, 201, 202):
+                sent += 1
+            else:
+                errs.append(f'{r}: {resp.status_code} {resp.text[:100]}')
+        except Exception as ex:
+            errs.append(str(ex)[:80])
+    return sent, '; '.join(errs) if errs else None
 
 def send_email(to_list, subject, html_body):
-    if not SENDGRID_API_KEY: return 0, 'No API key'
-    sent=0; errs=[]
-    for r in to_list:
-        try:
-            resp=_requests.post(
-                'https://api.sendgrid.com/v3/mail/send',
-                headers={'Authorization':f'Bearer {SENDGRID_API_KEY}','Content-Type':'application/json'},
-                json={'personalizations':[{'to':[{'email':r}]}],
-                      'from':{'email':SMTP_FROM,'name':SMTP_FROM_NAME},
-                      'subject':subject,
-                      'content':[{'type':'text/html','value':html_body}]},
-                timeout=15)
-            if resp.status_code in(200,202): sent+=1
-            else: errs.append(f'{r}:{resp.status_code}')
-        except Exception as ex: errs.append(str(ex)[:60])
-    return sent, '; '.join(errs) if errs else None
+    return _resend_send(to_list, subject, html_body)
 
 def send_email_with_attachment(to_list, subject, html_body, attachment_path=None, attachment_name=None):
-    if not SENDGRID_API_KEY: return 0, 'No API key'
-    attachments=[]
+    attachments = []
     if attachment_path and os.path.exists(attachment_path):
-        with open(attachment_path,'rb') as fp: data=fp.read()
-        attachments=[{'content':_b64.b64encode(data).decode(),
-                      'type':'application/pdf',
-                      'filename':attachment_name or os.path.basename(attachment_path),
-                      'disposition':'attachment'}]
-    sent=0; errs=[]
-    for r in to_list:
-        try:
-            body={'personalizations':[{'to':[{'email':r}]}],
-                  'from':{'email':SMTP_FROM,'name':SMTP_FROM_NAME},
-                  'subject':subject,
-                  'content':[{'type':'text/html','value':html_body}]}
-            if attachments: body['attachments']=attachments
-            resp=_requests.post(
-                'https://api.sendgrid.com/v3/mail/send',
-                headers={'Authorization':f'Bearer {SENDGRID_API_KEY}','Content-Type':'application/json'},
-                json=body, timeout=15)
-            if resp.status_code in(200,202): sent+=1
-            else: errs.append(f'{r}:{resp.status_code}:{resp.text[:80]}')
-        except Exception as ex: errs.append(str(ex)[:60])
-    return sent, '; '.join(errs) if errs else None
-
-# legacy stubs kept so old callers still work
-def _smtp_compat_stub(*a,**k): pass
-SMTP_HOST=os.environ.get('SMTP_HOST','')
-SMTP_PORT=int(os.environ.get('SMTP_PORT',587))
-SMTP_USER=os.environ.get('SMTP_USER','')
-SMTP_PASSWORD=os.environ.get('SMTP_PASSWORD','')
-
-
+        with open(attachment_path, 'rb') as fp:
+            data = fp.read()
+        attachments = [{
+            'filename': attachment_name or os.path.basename(attachment_path),
+            'content':  _b64.b64encode(data).decode('utf-8'),
+        }]
+    return _resend_send(to_list, subject, html_body, attachments or None)
 
 def get_recipients(dept_ids=None):
     q=DistributionList.query.filter_by(is_active=True)
